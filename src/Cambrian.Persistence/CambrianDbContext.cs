@@ -1,5 +1,4 @@
 using Cambrian.Domain.Entities;
-using Cambrian.Persistence.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;

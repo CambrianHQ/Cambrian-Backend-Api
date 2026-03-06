@@ -12,9 +12,24 @@ public sealed class S3ObjectStorage : IObjectStorage
         _options = options.Value;
     }
 
-    public Task<string> CreateUploadUrlAsync(string key, CancellationToken cancellationToken = default)
+    public Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
     {
+        // TODO: Implement S3 upload via AWS SDK
         var baseUrl = _options.Endpoint.TrimEnd('/');
-        return Task.FromResult($"{baseUrl}/{_options.Bucket}/{key}");
+        var url = $"{baseUrl}/{_options.Bucket}/{key}";
+        return Task.FromResult(url);
+    }
+
+    public string GenerateSignedUrl(string key)
+    {
+        // TODO: Implement signed URL generation via S3 pre-signed URLs
+        var baseUrl = _options.Endpoint.TrimEnd('/');
+        return $"{baseUrl}/{_options.Bucket}/{key}?signed=dev";
+    }
+
+    public Task DeleteAsync(string key)
+    {
+        // TODO: Implement S3 delete
+        return Task.CompletedTask;
     }
 }
