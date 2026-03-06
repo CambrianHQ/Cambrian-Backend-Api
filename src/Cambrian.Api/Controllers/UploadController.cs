@@ -1,11 +1,12 @@
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
 [ApiController]
-[Route("upload")]
+[Route("")]
 public class UploadController : ControllerBase
 {
     private readonly ICatalogService _catalog;
@@ -15,10 +16,11 @@ public class UploadController : ControllerBase
         _catalog = catalog;
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Upload(UploadTrackRequest req)
+    [Authorize(Roles = "Creator")]
+    [HttpPost("upload")]
+    public async Task<IActionResult> Upload([FromForm] UploadTrackRequest request)
     {
-        var result = await _catalog.UploadTrackAsync(req);
+        var result = await _catalog.UploadTrackAsync(request);
         return Ok(result);
     }
 }

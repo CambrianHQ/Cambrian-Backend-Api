@@ -42,8 +42,10 @@ public class CatalogService : ICatalogService
             Id = Guid.NewGuid(),
             Title = request.Title,
             Genre = request.Genre,
-            Price = (double)request.Price,
-            CreatorId = "" // Will be set from authenticated user in controller
+            Price = request.Price ?? 0,
+            Description = request.Description ?? "",
+            LicenseType = request.LicenseType ?? "streaming",
+            CreatorId = request.CreatorId ?? ""
         };
 
         await _tracks.AddAsync(track);

@@ -1,8 +1,12 @@
+using Cambrian.Application.DTOs.Admin;
+
 namespace Cambrian.Application.Interfaces;
 
 public interface IAdminService
 {
-    Task<object> GetDashboardAsync();
+    Task<AdminDashboardSummary> GetDashboardAsync();
 
-    Task<IReadOnlyCollection<object>> GetUsersAsync();
+    Task<IReadOnlyCollection<AdminAuditLog>> GetAuditLogsAsync();
+
+    Task<IReadOnlyCollection<AdminUser>> GetUsersAsync();
 }

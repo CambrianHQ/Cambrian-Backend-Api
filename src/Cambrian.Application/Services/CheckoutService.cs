@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 
@@ -5,7 +6,7 @@ namespace Cambrian.Application.Services;
 
 public class CheckoutService : ICheckoutService
 {
-    public Task<CheckoutResponse> CreateCheckoutAsync(CheckoutRequest request)
+    public Task<CheckoutResponse> CreateCheckoutAsync(CheckoutRequest request, ClaimsPrincipal user)
     {
         var response = new CheckoutResponse
         {

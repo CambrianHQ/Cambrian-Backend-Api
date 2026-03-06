@@ -1,11 +1,12 @@
 using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
 [ApiController]
-[Route("checkout")]
+[Route("")]
 public class CheckoutController : ControllerBase
 {
     private readonly ICheckoutService _checkout;
@@ -15,10 +16,11 @@ public class CheckoutController : ControllerBase
         _checkout = checkout;
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create(CheckoutRequest req)
+    [Authorize]
+    [HttpPost("checkout")]
+    public async Task<IActionResult> Checkout(CheckoutRequest request)
     {
-        var result = await _checkout.CreateCheckoutAsync(req);
-        return Ok(result);
+        var session = await _checkout.CreateCheckoutAsync(request, User);
+        return Ok(session);
     }
 }
