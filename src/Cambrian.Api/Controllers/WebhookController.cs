@@ -18,8 +18,9 @@ public class WebhookController : ControllerBase
     public async Task<IActionResult> Stripe()
     {
         using var reader = new StreamReader(Request.Body);
-        var payload = await reader.ReadToEndAsync();
-        await _webhooks.HandleStripeAsync(payload);
+        var json = await reader.ReadToEndAsync();
+
+        await _webhooks.HandleStripeAsync(json, Request.Headers["Stripe-Signature"]!);
         return Ok();
     }
 }
