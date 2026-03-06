@@ -1,0 +1,6 @@
+@Cambrian.Api_HostAddress = http://localhost:5234
+
+GET {{Cambrian.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
