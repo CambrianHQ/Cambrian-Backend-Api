@@ -12,10 +12,5 @@ public sealed class TrackConfiguration : IEntityTypeConfiguration<Track>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Title).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Price).HasPrecision(18, 2);
-        builder.OwnsMany(x => x.Files, file =>
-        {
-            file.WithOwner().HasForeignKey(x => x.TrackId);
-            file.Property(x => x.FileName).HasMaxLength(255);
-        });
     }
 }

@@ -1,4 +1,4 @@
-using Cambrian.Persistence.Identity;
+using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 
 namespace Cambrian.Infrastructure.Security;
