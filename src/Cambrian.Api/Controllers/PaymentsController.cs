@@ -1,12 +1,13 @@
 using Cambrian.Application.DTOs.Payments;
 using Cambrian.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
-[ApiController]
 [Route("payments")]
-public class PaymentsController : ControllerBase
+[Authorize]
+public class PaymentsController : BaseController
 {
     private readonly IPaymentService _payments;
 
@@ -19,27 +20,26 @@ public class PaymentsController : ControllerBase
     public async Task<IActionResult> Checkout(PaymentCheckoutRequest request)
     {
         var result = await _payments.CreateCheckoutAsync(request);
-        return Ok(result);
+        return OkResponse(result);
     }
 
     [HttpGet("state")]
     public async Task<IActionResult> State()
     {
-        var result = await _payments.GetStateAsync();
-        return Ok(result);
+        return OkResponse(await _payments.GetStateAsync());
     }
 
+    [AllowAnonymous]
     [HttpGet("result")]
     public async Task<IActionResult> Result([FromQuery] string? status, [FromQuery] string? trackId)
     {
-        var result = await _payments.GetResultAsync(status, trackId);
-        return Ok(result);
+        return OkResponse(await _payments.GetResultAsync(status, trackId));
     }
 
     [HttpPost("process")]
     public async Task<IActionResult> Process(PaymentProcessRequest request)
     {
         await _payments.ProcessAsync(request);
-        return Ok();
+        return MessageResponse("Payment processed.");
     }
 }

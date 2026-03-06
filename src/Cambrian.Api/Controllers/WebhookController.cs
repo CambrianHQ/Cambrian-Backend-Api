@@ -3,9 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
-[ApiController]
 [Route("webhook")]
-public class WebhookController : ControllerBase
+public class WebhookController : BaseController
 {
     private readonly IWebhookService _webhooks;
 
@@ -21,6 +20,6 @@ public class WebhookController : ControllerBase
         var json = await reader.ReadToEndAsync();
 
         await _webhooks.HandleStripeAsync(json, Request.Headers["Stripe-Signature"]!);
-        return Ok();
+        return MessageResponse("Received.");
     }
 }

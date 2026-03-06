@@ -5,9 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
-[ApiController]
 [Route("")]
-public class UploadController : ControllerBase
+public class UploadController : BaseController
 {
     private readonly ICatalogService _catalog;
 
@@ -21,6 +20,6 @@ public class UploadController : ControllerBase
     public async Task<IActionResult> Upload([FromForm] UploadTrackRequest request)
     {
         var result = await _catalog.UploadTrackAsync(request);
-        return Ok(result);
+        return CreatedResponse(result, "Track uploaded successfully.");
     }
 }
