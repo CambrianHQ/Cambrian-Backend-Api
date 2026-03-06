@@ -1,10 +1,12 @@
 using Cambrian.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
 [ApiController]
 [Route("admin")]
+[Authorize(Roles = "Admin")]
 public class AdminController : ControllerBase
 {
     private readonly IAdminService _admin;
@@ -17,14 +19,18 @@ public class AdminController : ControllerBase
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
     {
-        var result = await _admin.GetDashboardAsync();
-        return Ok(result);
+        return Ok(await _admin.GetDashboardAsync());
+    }
+
+    [HttpGet("audit")]
+    public async Task<IActionResult> Audit()
+    {
+        return Ok(await _admin.GetAuditLogsAsync());
     }
 
     [HttpGet("users")]
     public async Task<IActionResult> Users()
     {
-        var result = await _admin.GetUsersAsync();
-        return Ok(result);
+        return Ok(await _admin.GetUsersAsync());
     }
 }

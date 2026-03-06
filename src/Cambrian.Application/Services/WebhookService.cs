@@ -4,7 +4,7 @@ namespace Cambrian.Application.Services;
 
 public class WebhookService : IWebhookService
 {
-    public Task HandleStripeAsync(string payload)
+    public Task HandleStripeAsync(string payload, string signature)
     {
         return Task.CompletedTask;
     }

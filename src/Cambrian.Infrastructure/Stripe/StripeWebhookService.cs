@@ -19,12 +19,19 @@ public class StripeWebhookService : IWebhookService
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "";
     }
 
-    public async Task HandleStripeAsync(string payload)
+    public async Task HandleStripeAsync(string payload, string signature)
     {
-        // In production, verify signature with _webhookSecret:
-        // var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
+        Event stripeEvent;
 
-        var stripeEvent = EventUtility.ParseEvent(payload);
+        if (!string.IsNullOrEmpty(_webhookSecret) && !string.IsNullOrEmpty(signature))
+        {
+            stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
+        }
+        else
+        {
+            // Dev fallback — no signature verification
+            stripeEvent = EventUtility.ParseEvent(payload);
+        }
 
         switch (stripeEvent.Type)
         {
