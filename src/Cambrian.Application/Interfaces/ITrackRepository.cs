@@ -6,6 +6,8 @@ public interface ITrackRepository
 {
     Task<List<Track>> BrowseAsync();
 
+    Task<List<Track>> BrowseAsync(int page, int pageSize, string? genre, string? search, string? sort = null);
+
     Task<Track?> GetByIdAsync(Guid id);
 
     Task<List<Track>> GetByCreatorIdAsync(string creatorId);
