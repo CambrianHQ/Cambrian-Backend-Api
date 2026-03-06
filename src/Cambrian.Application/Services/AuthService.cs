@@ -43,7 +43,7 @@ public class AuthService : IAuthService
         };
     }
 
-    public async Task RegisterAsync(RegisterRequest request)
+    public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
         var user = new ApplicationUser
         {
@@ -59,6 +59,15 @@ public class AuthService : IAuthService
             var errors = string.Join("; ", result.Errors.Select(e => e.Description));
             throw new InvalidOperationException($"Registration failed: {errors}");
         }
+
+        var token = GenerateJwt(user);
+
+        return new AuthResponse
+        {
+            UserId = Guid.Parse(user.Id),
+            Email = user.Email ?? "",
+            Token = token
+        };
     }
 
     public async Task<UserProfileResponse> GetCurrentUserAsync(ClaimsPrincipal principal)
