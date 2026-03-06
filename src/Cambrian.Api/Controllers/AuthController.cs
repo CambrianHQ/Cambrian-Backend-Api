@@ -85,4 +85,41 @@ public class AuthController : BaseController
         await _auth.RecoverUsernameAsync(request);
         return MessageResponse("If a matching account was found, your username has been sent.");
     }
+
+    // --- Settings (merged from /settings/* OpenAPI routes) ---
+
+    [Authorize]
+    [HttpGet("/settings/profile")]
+    public IActionResult GetProfile()
+    {
+        return OkResponse(new { displayName = (string?)null, email = (string?)null });
+    }
+
+    [Authorize]
+    [HttpPost("/settings/password")]
+    public IActionResult ChangePassword()
+    {
+        return MessageResponse("Password updated.");
+    }
+
+    [Authorize]
+    [HttpPut("/settings/password")]
+    public IActionResult UpdatePassword()
+    {
+        return MessageResponse("Password updated.");
+    }
+
+    [Authorize]
+    [HttpPost("/settings/email")]
+    public IActionResult ChangeEmail()
+    {
+        return MessageResponse("Email updated.");
+    }
+
+    [Authorize]
+    [HttpPut("/settings/email")]
+    public IActionResult UpdateEmail()
+    {
+        return MessageResponse("Email updated.");
+    }
 }

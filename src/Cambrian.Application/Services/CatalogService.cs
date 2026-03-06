@@ -35,24 +35,6 @@ public class CatalogService : ICatalogService
         return track is null ? null : MapToResponse(track);
     }
 
-    public async Task<TrackResponse> UploadTrackAsync(UploadTrackRequest request)
-    {
-        var track = new Track
-        {
-            Id = Guid.NewGuid(),
-            Title = request.Title,
-            Genre = request.Genre,
-            Price = request.Price ?? 0,
-            Description = request.Description ?? "",
-            LicenseType = request.LicenseType ?? "streaming",
-            CreatorId = request.CreatorId ?? ""
-        };
-
-        await _tracks.AddAsync(track);
-
-        return MapToResponse(track);
-    }
-
     private static TrackResponse MapToResponse(Track t) => new()
     {
         Id = t.Id.ToString(),

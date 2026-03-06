@@ -9,6 +9,4 @@ public interface ICatalogService
     Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync(int page = 1, int pageSize = 20, string? genre = null, string? search = null);
 
     Task<TrackResponse?> GetTrackAsync(string trackId);
-
-    Task<TrackResponse> UploadTrackAsync(UploadTrackRequest request);
 }
