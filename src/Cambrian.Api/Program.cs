@@ -1,4 +1,23 @@
 using System.Text;
+using ApiAdminService = Cambrian.Api.Services.AdminService;
+using ApiApplicationDbContext = Cambrian.Api.Data.ApplicationDbContext;
+using ApiAuthService = Cambrian.Api.Services.AuthService;
+using ApiCatalogService = Cambrian.Api.Services.CatalogService;
+using ApiIAdminService = Cambrian.Api.Services.Interfaces.IAdminService;
+using ApiIAuthService = Cambrian.Api.Services.IAuthService;
+using ApiICatalogService = Cambrian.Api.Services.Interfaces.ICatalogService;
+using ApiIJwtService = Cambrian.Api.Security.IJwtService;
+using ApiILibraryService = Cambrian.Api.Services.Interfaces.ILibraryService;
+using ApiIObjectStorage = Cambrian.Api.Services.Interfaces.IObjectStorage;
+using ApiIPayoutService = Cambrian.Api.Services.Interfaces.IPayoutService;
+using ApiIStripeService = Cambrian.Api.Services.IStripeService;
+using ApiObjectStorage = Cambrian.Api.Infrastructure.R2ObjectStorage;
+using ApiJwtService = Cambrian.Api.Security.JwtService;
+using ApiLibraryService = Cambrian.Api.Services.LibraryService;
+using ApiPayoutService = Cambrian.Api.Services.PayoutService;
+using ApiStripeService = Cambrian.Api.Services.StripeService;
+using ApiIUserRepository = Cambrian.Api.Repositories.IUserRepository;
+using ApiUserRepository = Cambrian.Api.Repositories.UserRepository;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
@@ -17,6 +36,8 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? "Host=localhost;Port=5432;Database=cambrian;Username=postgres;Password=postgres";
 builder.Services.AddDbContext<CambrianDbContext>(options =>
     options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<ApiApplicationDbContext>(options =>
+    options.UseNpgsql(connectionString));
 
 // Identity
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -32,8 +53,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 // JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "cambrian-dev-secret-key-min-32-chars!!";
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+builder.Services.AddAuthentication("Bearer")
+    .AddJwtBearer("Bearer", options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -41,8 +62,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian-api",
-            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian-client",
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian",
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
@@ -55,6 +76,11 @@ builder.Services.AddSwaggerGen();
 
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ApiIAuthService, ApiAuthService>();
+builder.Services.AddScoped<ApiICatalogService, ApiCatalogService>();
+builder.Services.AddScoped<ApiIAdminService, ApiAdminService>();
+builder.Services.AddScoped<ApiILibraryService, ApiLibraryService>();
+builder.Services.AddScoped<ApiIPayoutService, ApiPayoutService>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
@@ -62,8 +88,12 @@ builder.Services.AddScoped<IPayoutService, PayoutService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
+builder.Services.AddScoped<ApiIJwtService, ApiJwtService>();
+builder.Services.AddScoped<ApiIStripeService, ApiStripeService>();
+builder.Services.AddScoped<ApiIObjectStorage, ApiObjectStorage>();
 
 // Repositories
+builder.Services.AddScoped<ApiIUserRepository, ApiUserRepository>();
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
 builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
 builder.Services.AddScoped<ILibraryRepository, LibraryRepository>();
