@@ -1,7 +1,28 @@
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
+using Cambrian.Domain.Entities;
+using Cambrian.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Database
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? "Data Source=cambrian.db";
+builder.Services.AddDbContext<CambrianDbContext>(options =>
+    options.UseSqlite(connectionString));
+
+// Identity
+builder.Services.AddIdentityCore<ApplicationUser>(options =>
+    {
+        options.Password.RequireDigit = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireNonAlphanumeric = true;
+        options.Password.RequiredLength = 8;
+        options.User.RequireUniqueEmail = true;
+    })
+    .AddEntityFrameworkStores<CambrianDbContext>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
