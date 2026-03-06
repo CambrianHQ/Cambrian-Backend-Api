@@ -1,54 +1,61 @@
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 
 namespace Cambrian.Application.Services;
 
 public class CatalogService : ICatalogService
 {
-    public Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync()
-    {
-        IReadOnlyCollection<TrackResponse> items =
-        [
-            new TrackResponse
-            {
-                Id = Guid.NewGuid().ToString(),
-                Title = "Starter Track",
-                Genre = "ambient",
-                Price = 19.99m
-            }
-        ];
+    private readonly ITrackRepository _tracks;
 
-        return Task.FromResult(items);
+    public CatalogService(ITrackRepository tracks)
+    {
+        _tracks = tracks;
     }
 
-    public Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync()
+    public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync()
     {
-        return GetCatalogAsync();
+        var tracks = await _tracks.BrowseAsync();
+
+        return tracks.Select(t => MapToResponse(t)).ToList();
     }
 
-    public Task<TrackResponse?> GetTrackAsync(string trackId)
+    public async Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync()
     {
-        TrackResponse response = new()
+        return await GetCatalogAsync();
+    }
+
+    public async Task<TrackResponse?> GetTrackAsync(string trackId)
+    {
+        if (!Guid.TryParse(trackId, out var id))
+            return null;
+
+        var track = await _tracks.GetByIdAsync(id);
+
+        return track is null ? null : MapToResponse(track);
+    }
+
+    public async Task<TrackResponse> UploadTrackAsync(UploadTrackRequest request)
+    {
+        var track = new Track
         {
-            Id = trackId,
-            Title = "Starter Track",
-            Genre = "ambient",
-            Price = 19.99m
-        };
-
-        return Task.FromResult<TrackResponse?>(response);
-    }
-
-    public Task<TrackResponse> UploadTrackAsync(UploadTrackRequest request)
-    {
-        var response = new TrackResponse
-        {
-            Id = Guid.NewGuid().ToString(),
+            Id = Guid.NewGuid(),
             Title = request.Title,
             Genre = request.Genre,
-            Price = request.Price
+            Price = (double)request.Price,
+            CreatorId = "" // Will be set from authenticated user in controller
         };
 
-        return Task.FromResult(response);
+        await _tracks.AddAsync(track);
+
+        return MapToResponse(track);
     }
+
+    private static TrackResponse MapToResponse(Track t) => new()
+    {
+        Id = t.Id.ToString(),
+        Title = t.Title,
+        Genre = t.Genre ?? "",
+        Price = (decimal)t.Price
+    };
 }
