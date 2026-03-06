@@ -128,6 +128,9 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<bool>("VerifiedCreator")
                         .HasColumnType("boolean");
 
+                    b.Property<long>("WalletBalanceCents")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
 
                     b.HasIndex("NormalizedEmail")
@@ -163,6 +166,46 @@ namespace Cambrian.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("AuditLogs");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.Invoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AmountCents")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PurchaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurchaseId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Invoices");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.LibraryItem", b =>
@@ -236,15 +279,25 @@ namespace Cambrian.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<double>("Amount")
-                        .HasColumnType("double precision");
+                    b.Property<int>("AmountCents")
+                        .HasColumnType("integer");
 
                     b.Property<string>("BuyerId")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasColumnType("text");
 
                     b.Property<string>("LicenseType")
                         .HasColumnType("text");
@@ -256,12 +309,23 @@ namespace Cambrian.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("StripeSessionId")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("TrackId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
                     b.HasIndex("BuyerId");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+                    b.HasIndex("StripeSessionId")
+                        .IsUnique()
+                        .HasFilter("\"StripeSessionId\" IS NOT NULL");
 
                     b.HasIndex("TrackId");
 
@@ -393,14 +457,17 @@ namespace Cambrian.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<double>("Amount")
-                        .HasColumnType("double precision");
+                    b.Property<long>("AmountCents")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("RelatedPurchaseId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -560,6 +627,25 @@ namespace Cambrian.Persistence.Migrations
                     b.Navigation("Track");
                 });
 
+            modelBuilder.Entity("Cambrian.Domain.Entities.Invoice", b =>
+                {
+                    b.HasOne("Cambrian.Domain.Entities.Purchase", "Purchase")
+                        .WithOne("Invoice")
+                        .HasForeignKey("Cambrian.Domain.Entities.Invoice", "PurchaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Cambrian.Domain.Entities.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Purchase");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Cambrian.Domain.Entities.LibraryItem", b =>
                 {
                     b.HasOne("Cambrian.Domain.Entities.Track", "Track")
@@ -713,6 +799,11 @@ namespace Cambrian.Persistence.Migrations
                     b.Navigation("Purchases");
 
                     b.Navigation("Tracks");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.Purchase", b =>
+                {
+                    b.Navigation("Invoice");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.Track", b =>
