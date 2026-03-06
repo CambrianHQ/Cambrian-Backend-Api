@@ -1,0 +1,73 @@
+{
+  "version": "v1",
+  "description": "Cambrian Architecture Compliance Policy",
+
+  "rules": [
+
+    {
+      "name": "frontend-must-use-openapi-client",
+      "description": "Frontend cannot call API endpoints directly. All calls must use the generated OpenAPI client.",
+      "forbiddenPatterns": [
+        "fetch(\"/auth",
+        "fetch(\"/billing",
+        "fetch(\"/tracks",
+        "fetch(\"/library",
+        "fetch(\"/checkout",
+        "fetch(\"/payments"
+      ],
+      "allowedDirectories": [
+        "src/api/generated",
+        "src/services"
+      ]
+    },
+
+    {
+      "name": "ui-cannot-access-api-directly",
+      "description": "UI components must call services, not the generated API client directly.",
+      "forbiddenImports": [
+        "src/api/generated"
+      ],
+      "restrictedDirectories": [
+        "src/pages",
+        "src/components",
+        "src/ui"
+      ]
+    },
+
+    {
+      "name": "services-layer-required",
+      "description": "All API operations must go through service layer abstraction.",
+      "requiredDirectories": [
+        "src/services"
+      ]
+    },
+
+    {
+      "name": "api-contract-cannot-be-broken",
+      "description": "Backend changes cannot break the OpenAPI contract.",
+      "contractFile": "contracts/openapi.v1.json",
+      "enforceBreakingChanges": true
+    },
+
+    {
+      "name": "manifest-must-match-openapi",
+      "description": "All endpoints in manifest must exist in OpenAPI.",
+      "manifestFile": "contracts/endpoint-manifest.v1.json"
+    },
+
+    {
+      "name": "admin-routes-require-auth",
+      "description": "All /admin routes must require JWT authorization.",
+      "pathPrefix": "/admin",
+      "requiredSecurity": "Bearer"
+    },
+
+    {
+      "name": "payout-routes-require-creator-role",
+      "description": "Payout endpoints require creator role.",
+      "pathPrefix": "/payouts",
+      "requiredRole": "creator"
+    }
+
+  ]
+}
