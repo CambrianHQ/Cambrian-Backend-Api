@@ -1,17 +1,24 @@
+using Cambrian.Application.Interfaces;
 using Stripe;
 using Stripe.Checkout;
 
 namespace Cambrian.Infrastructure.Stripe;
 
-public class StripeFacade
+public class StripeFacade : IPaymentGateway
 {
-    public async Task<string> CreateCheckoutSessionAsync(int amountInCents, string trackName)
+    public async Task<string> CreateCheckoutSessionAsync(
+        int amountInCents,
+        string productName,
+        string? clientReferenceId = null,
+        string? successUrl = null,
+        string? cancelUrl = null)
     {
         var options = new SessionCreateOptions
         {
             Mode = "payment",
-            SuccessUrl = "https://cambrian.app/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            CancelUrl = "https://cambrian.app/checkout/cancel",
+            SuccessUrl = successUrl ?? "https://cambrian.app/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+            CancelUrl = cancelUrl ?? "https://cambrian.app/checkout/cancel",
+            ClientReferenceId = clientReferenceId,
             LineItems = new List<SessionLineItemOptions>
             {
                 new()
@@ -22,7 +29,7 @@ public class StripeFacade
                         UnitAmount = amountInCents,
                         ProductData = new SessionLineItemPriceDataProductDataOptions
                         {
-                            Name = trackName
+                            Name = productName
                         }
                     },
                     Quantity = 1

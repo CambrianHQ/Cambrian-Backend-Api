@@ -6,14 +6,41 @@ namespace Cambrian.Application.Services;
 
 public class CheckoutService : ICheckoutService
 {
-    public Task<CheckoutResponse> CreateCheckoutAsync(CheckoutRequest request, ClaimsPrincipal user)
+    private readonly IPaymentGateway _gateway;
+    private readonly ITrackRepository _tracks;
+
+    public CheckoutService(IPaymentGateway gateway, ITrackRepository tracks)
     {
-        var response = new CheckoutResponse
+        _gateway = gateway;
+        _tracks = tracks;
+    }
+
+    public async Task<CheckoutResponse> CreateCheckoutAsync(CheckoutRequest request, ClaimsPrincipal user)
+    {
+        var track = await _tracks.GetByIdAsync(Guid.Parse(request.TrackId));
+
+        if (track is null)
+            throw new KeyNotFoundException($"Track {request.TrackId} not found.");
+
+        // Determine price based on license type
+        var amountCents = request.LicenseType switch
         {
-            CheckoutUrl = $"https://checkout.cambrian.local/{request.TrackId}",
-            Status = "created"
+            "exclusive" => track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100),
+            "non-exclusive" => track.NonExclusivePriceCents > 0 ? track.NonExclusivePriceCents : (int)(track.Price * 100),
+            _ => (int)(track.Price * 100)
         };
 
-        return Task.FromResult(response);
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        var url = await _gateway.CreateCheckoutSessionAsync(
+            amountCents,
+            track.Title,
+            clientReferenceId: $"{userId}:{request.TrackId}:{request.LicenseType}");
+
+        return new CheckoutResponse
+        {
+            CheckoutUrl = url,
+            Status = "created"
+        };
     }
 }
