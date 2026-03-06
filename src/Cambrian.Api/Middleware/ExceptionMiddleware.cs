@@ -1,10 +1,14 @@
 using System.Net;
 using System.Text.Json;
+using Cambrian.Api.Common;
 
 namespace Cambrian.Api.Middleware;
 
 public sealed class ExceptionMiddleware
 {
+    private static readonly JsonSerializerOptions _json =
+        new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionMiddleware> _logger;
 
@@ -22,11 +26,25 @@ public sealed class ExceptionMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled request exception");
-            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            _logger.LogError(ex, "Unhandled exception for {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+
             context.Response.ContentType = "application/json";
-            var payload = JsonSerializer.Serialize(new { error = "Internal server error" });
-            await context.Response.WriteAsync(payload);
+            context.Response.StatusCode = ex switch
+            {
+                UnauthorizedAccessException => (int)HttpStatusCode.Forbidden,
+                KeyNotFoundException        => (int)HttpStatusCode.NotFound,
+                ArgumentException           => (int)HttpStatusCode.BadRequest,
+                InvalidOperationException   => (int)HttpStatusCode.BadRequest,
+                _                           => (int)HttpStatusCode.InternalServerError
+            };
+
+            var message = context.Response.StatusCode == 500
+                ? "An unexpected error occurred."
+                : ex.Message;
+
+            await context.Response.WriteAsync(
+                JsonSerializer.Serialize(ApiResponse.Fail(message), _json));
         }
     }
 }

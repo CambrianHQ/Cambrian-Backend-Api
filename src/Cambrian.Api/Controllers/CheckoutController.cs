@@ -5,9 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
-[ApiController]
 [Route("")]
-public class CheckoutController : ControllerBase
+public class CheckoutController : BaseController
 {
     private readonly ICheckoutService _checkout;
 
@@ -21,6 +20,6 @@ public class CheckoutController : ControllerBase
     public async Task<IActionResult> Checkout(CheckoutRequest request)
     {
         var session = await _checkout.CreateCheckoutAsync(request, User);
-        return Ok(session);
+        return OkResponse(session);
     }
 }

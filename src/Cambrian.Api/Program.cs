@@ -1,4 +1,7 @@
 using System.Text;
+using Cambrian.Api.Common;
+using Cambrian.Api.Middleware;
+using Microsoft.AspNetCore.Mvc;
 using ApiAdminService = Cambrian.Api.Services.AdminService;
 using ApiApplicationDbContext = Cambrian.Api.Data.ApplicationDbContext;
 using ApiAuthService = Cambrian.Api.Services.AuthService;
@@ -71,6 +74,18 @@ builder.Services.AddAuthentication("Bearer")
 builder.Services.AddAuthorization();
 
 builder.Services.AddControllers();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var errors = context.ModelState
+            .Where(e => e.Value?.Errors.Count > 0)
+            .SelectMany(e => e.Value!.Errors.Select(x => x.ErrorMessage))
+            .ToList();
+        var response = ApiResponse.Fail(string.Join(" | ", errors));
+        return new BadRequestObjectResult(response);
+    };
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -111,6 +126,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<ExceptionMiddleware>();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();

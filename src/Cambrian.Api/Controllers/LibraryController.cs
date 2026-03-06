@@ -5,10 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
-[ApiController]
 [Route("library")]
 [Authorize]
-public class LibraryController : ControllerBase
+public class LibraryController : BaseController
 {
     private readonly ILibraryService _library;
 
@@ -20,35 +19,39 @@ public class LibraryController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetLibrary()
     {
-        var result = await _library.GetLibraryAsync(User);
-        return Ok(result);
+        return OkResponse(await _library.GetLibraryAsync(User));
     }
 
     [HttpPost]
     public async Task<IActionResult> Save(LibrarySaveRequest request)
     {
         await _library.SaveAsync(User, request);
-        return Ok();
+        return CreatedResponse<object?>(null, "Track saved to library.");
     }
 
     [HttpDelete("{trackId}")]
     public async Task<IActionResult> Remove(string trackId)
     {
+        if (!Guid.TryParse(trackId, out _))
+            return ErrorResponse("trackId must be a valid GUID.");
+
         await _library.RemoveAsync(User, trackId);
-        return Ok();
+        return MessageResponse("Track removed from library.");
     }
 
     [HttpPost("{trackId}")]
     public async Task<IActionResult> AddById(string trackId)
     {
+        if (!Guid.TryParse(trackId, out _))
+            return ErrorResponse("trackId must be a valid GUID.");
+
         await _library.SaveAsync(User, new LibrarySaveRequest { TrackId = trackId });
-        return Ok();
+        return CreatedResponse<object?>(null, "Track saved to library.");
     }
 
     [HttpGet("purchased-track-ids")]
     public async Task<IActionResult> PurchasedIds()
     {
-        var ids = await _library.GetPurchasedTrackIdsAsync(User);
-        return Ok(ids);
+        return OkResponse(await _library.GetPurchasedTrackIdsAsync(User));
     }
 }

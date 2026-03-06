@@ -5,10 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
-[ApiController]
 [Route("payouts")]
 [Authorize]
-public class PayoutController : ControllerBase
+public class PayoutController : BaseController
 {
     private readonly IPayoutService _payouts;
 
@@ -20,14 +19,13 @@ public class PayoutController : ControllerBase
     [HttpGet("earnings")]
     public async Task<IActionResult> Earnings()
     {
-        var result = await _payouts.GetEarningsAsync();
-        return Ok(result);
+        return OkResponse(await _payouts.GetEarningsAsync());
     }
 
     [HttpPost("request")]
     public async Task<IActionResult> RequestPayout(PayoutRequest req)
     {
         var result = await _payouts.RequestAsync(req);
-        return Ok(result);
+        return OkResponse(result);
     }
 }
