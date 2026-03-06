@@ -5,13 +5,11 @@ namespace Cambrian.Api.Controllers;
 
 [Route("invoices")]
 [Authorize]
-public class InvoicesController : BaseController
+public class InvoiceController : BaseController
 {
     [HttpGet]
-    public IActionResult List([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    public IActionResult List()
     {
-        if (page < 1) page = 1;
-        if (pageSize is < 1 or > 100) pageSize = 20;
         return OkResponse(Array.Empty<object>());
     }
 
