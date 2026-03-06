@@ -3,9 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
-[ApiController]
 [Route("stream")]
-public class StreamController : ControllerBase
+public class StreamController : BaseController
 {
     private readonly ICatalogService _catalog;
 
@@ -17,18 +16,18 @@ public class StreamController : ControllerBase
     [HttpGet("{trackId}")]
     public async Task<IActionResult> Stream(string trackId)
     {
-        var track = await _catalog.GetTrack(trackId);
+        if (!Guid.TryParse(trackId, out _))
+            return ErrorResponse("trackId must be a valid GUID.");
 
-        if (track == null)
-            return NotFound();
+        var track = await _catalog.GetTrack(trackId);
+        if (track is null)
+            return NotFoundResponse($"Track '{trackId}' not found.");
 
         var path = $"uploads/{track.AudioUrl}";
-
         if (!System.IO.File.Exists(path))
-            return NotFound();
+            return NotFoundResponse("Audio file not available.");
 
         var stream = System.IO.File.OpenRead(path);
-
         return File(stream, "audio/mpeg", enableRangeProcessing: true);
     }
 }

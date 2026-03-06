@@ -5,9 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
-[ApiController]
 [Route("auth")]
-public class AuthController : ControllerBase
+public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
 
@@ -20,14 +19,14 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Register(RegisterRequest request)
     {
         await _auth.RegisterAsync(request);
-        return Ok();
+        return CreatedResponse<object?>(null, "Account created successfully.");
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
         var result = await _auth.LoginAsync(request);
-        return Ok(result);
+        return OkResponse(result);
     }
 
     [Authorize]
@@ -35,53 +34,55 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Me()
     {
         var user = await _auth.GetCurrentUserAsync(User);
-        return Ok(user);
+        if (user is null)
+            return NotFoundResponse("User profile not found.");
+        return OkResponse(user);
     }
 
     [Authorize]
     [HttpPost("logout")]
     public IActionResult Logout()
     {
-        return Ok();
+        return MessageResponse("Logged out successfully.");
     }
 
     [HttpGet("health")]
     public IActionResult Health()
     {
-        return Ok(new { status = "ok" });
+        return OkResponse(new { status = "ok", timestamp = DateTime.UtcNow });
     }
 
     [HttpGet("csrf-token")]
     public IActionResult GetCsrfToken()
     {
-        return Ok(new { token = Guid.NewGuid() });
+        return OkResponse(new { token = Guid.NewGuid() });
     }
 
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request)
     {
         await _auth.ForgotPasswordAsync(request);
-        return Ok();
+        return MessageResponse("If a matching account was found, a reset code has been sent.");
     }
 
     [HttpPost("verify-code")]
     public async Task<IActionResult> VerifyCode(VerifyCodeRequest request)
     {
         await _auth.VerifyCodeAsync(request);
-        return Ok();
+        return MessageResponse("Code verified successfully.");
     }
 
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(ResetPasswordRequest request)
     {
         await _auth.ResetPasswordAsync(request);
-        return Ok();
+        return MessageResponse("Password reset successfully.");
     }
 
     [HttpPost("recover-username")]
     public async Task<IActionResult> RecoverUsername(RecoverUsernameRequest request)
     {
         await _auth.RecoverUsernameAsync(request);
-        return Ok();
+        return MessageResponse("If a matching account was found, your username has been sent.");
     }
 }
