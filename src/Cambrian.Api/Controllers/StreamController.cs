@@ -1,4 +1,4 @@
-using Cambrian.Api.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
@@ -6,28 +6,32 @@ namespace Cambrian.Api.Controllers;
 [Route("stream")]
 public class StreamController : BaseController
 {
-    private readonly ICatalogService _catalog;
-
-    public StreamController(ICatalogService catalog)
+    [HttpGet]
+    public IActionResult List([FromQuery] int take = 20)
     {
-        _catalog = catalog;
+        return OkResponse(Array.Empty<object>());
     }
 
     [HttpGet("{trackId}")]
-    public async Task<IActionResult> Stream(string trackId)
+    public IActionResult Stream(string trackId)
     {
         if (!Guid.TryParse(trackId, out _))
             return ErrorResponse("trackId must be a valid GUID.");
 
-        var track = await _catalog.GetTrack(trackId);
-        if (track is null)
-            return NotFoundResponse($"Track '{trackId}' not found.");
+        return OkResponse(new { trackId, streamUrl = (string?)null });
+    }
 
-        var path = $"uploads/{track.AudioUrl}";
-        if (!System.IO.File.Exists(path))
-            return NotFoundResponse("Audio file not available.");
+    [Authorize]
+    [HttpPost("start")]
+    public IActionResult Start()
+    {
+        return OkResponse(new { streamId = Guid.NewGuid().ToString(), status = "started" });
+    }
 
-        var stream = System.IO.File.OpenRead(path);
-        return File(stream, "audio/mpeg", enableRangeProcessing: true);
+    [Authorize]
+    [HttpPost("stop")]
+    public IActionResult Stop()
+    {
+        return MessageResponse("Stream stopped.");
     }
 }

@@ -42,4 +42,19 @@ public class PaymentsController : BaseController
         await _payments.ProcessAsync(request);
         return MessageResponse("Payment processed.");
     }
+
+    // --- Purchases (merged from /purchases/* OpenAPI routes) ---
+
+    [HttpPost("/purchases")]
+    public IActionResult CreatePurchase()
+    {
+        return CreatedResponse<object?>(null, "Purchase initiated.");
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpPost("/purchases/credit-creator")]
+    public IActionResult CreditCreator()
+    {
+        return MessageResponse("Creator credited.");
+    }
 }

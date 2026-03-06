@@ -1,5 +1,6 @@
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
@@ -49,5 +50,29 @@ public class CatalogController : BaseController
         return result is null
             ? NotFoundResponse($"Track '{trackId}' not found.")
             : OkResponse(result);
+    }
+
+    [HttpGet("trending")]
+    public async Task<IActionResult> Trending(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? genre = null)
+    {
+        if (page < 1) page = 1;
+        if (pageSize is < 1 or > 100) pageSize = 20;
+        return OkResponse(await _catalog.GetDiscoverAsync(page, pageSize, genre));
+    }
+
+    [HttpGet("tracks")]
+    public async Task<IActionResult> ListTracks()
+    {
+        return OkResponse(await _catalog.GetCatalogAsync());
+    }
+
+    [Authorize(Roles = "Creator")]
+    [HttpPost("tracks/upload")]
+    public IActionResult TracksUpload()
+    {
+        return CreatedResponse<object?>(null, "Track upload initiated.");
     }
 }

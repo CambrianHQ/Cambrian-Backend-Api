@@ -110,6 +110,7 @@ builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IPayoutService, PayoutService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
 builder.Services.AddScoped<ApiIJwtService, ApiJwtService>();
 builder.Services.AddScoped<ApiIStripeService, ApiStripeService>();
@@ -124,7 +125,9 @@ builder.Services.AddScoped<IPayoutRepository, PayoutRepository>();
 
 // Infrastructure
 builder.Services.AddSingleton<StripeFacade>();
-builder.Services.AddSingleton<IObjectStorage, R2ObjectStorage>();
+builder.Services.AddSingleton<Cambrian.Infrastructure.Storage.IObjectStorage, R2ObjectStorage>();
+builder.Services.AddSingleton<Cambrian.Application.Interfaces.IObjectStorage>(sp =>
+    (Cambrian.Application.Interfaces.IObjectStorage)sp.GetRequiredService<Cambrian.Infrastructure.Storage.IObjectStorage>());
 
 var app = builder.Build();
 
