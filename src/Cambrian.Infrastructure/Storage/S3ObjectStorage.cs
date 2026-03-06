@@ -1,3 +1,4 @@
+using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Options;
 using Microsoft.Extensions.Options;
 
