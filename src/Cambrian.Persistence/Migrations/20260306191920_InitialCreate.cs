@@ -37,6 +37,7 @@ namespace Cambrian.Persistence.Migrations
                     Tier = table.Column<string>(type: "text", nullable: false),
                     VerifiedCreator = table.Column<bool>(type: "boolean", nullable: false),
                     Plan = table.Column<string>(type: "text", nullable: true),
+                    WalletBalanceCents = table.Column<long>(type: "bigint", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -259,9 +260,10 @@ namespace Cambrian.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<string>(type: "text", nullable: false),
-                    Amount = table.Column<double>(type: "double precision", nullable: false),
+                    AmountCents = table.Column<long>(type: "bigint", nullable: false),
                     Type = table.Column<string>(type: "text", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: true),
+                    RelatedPurchaseId = table.Column<Guid>(type: "uuid", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -333,11 +335,15 @@ namespace Cambrian.Persistence.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     BuyerId = table.Column<string>(type: "text", nullable: false),
                     TrackId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Amount = table.Column<double>(type: "double precision", nullable: false),
+                    AmountCents = table.Column<int>(type: "integer", nullable: false),
+                    Currency = table.Column<string>(type: "text", nullable: false),
                     PaymentMethod = table.Column<string>(type: "text", nullable: true),
                     LicenseType = table.Column<string>(type: "text", nullable: true),
                     Status = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    StripeSessionId = table.Column<string>(type: "text", nullable: true),
+                    IdempotencyKey = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -374,6 +380,36 @@ namespace Cambrian.Persistence.Migrations
                         name: "FK_StreamSessions_Tracks_TrackId",
                         column: x => x.TrackId,
                         principalTable: "Tracks",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Invoices",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    PurchaseId = table.Column<Guid>(type: "uuid", nullable: false),
+                    AmountCents = table.Column<int>(type: "integer", nullable: false),
+                    Currency = table.Column<string>(type: "text", nullable: false),
+                    Status = table.Column<string>(type: "text", nullable: false),
+                    IssuedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    PaidAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Invoices", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Invoices_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Invoices_Purchases_PurchaseId",
+                        column: x => x.PurchaseId,
+                        principalTable: "Purchases",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -421,6 +457,17 @@ namespace Cambrian.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_Invoices_PurchaseId",
+                table: "Invoices",
+                column: "PurchaseId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Invoices_UserId",
+                table: "Invoices",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Library_TrackId",
                 table: "Library",
                 column: "TrackId");
@@ -440,6 +487,20 @@ namespace Cambrian.Persistence.Migrations
                 name: "IX_Purchases_BuyerId",
                 table: "Purchases",
                 column: "BuyerId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Purchases_IdempotencyKey",
+                table: "Purchases",
+                column: "IdempotencyKey",
+                unique: true,
+                filter: "\"IdempotencyKey\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Purchases_StripeSessionId",
+                table: "Purchases",
+                column: "StripeSessionId",
+                unique: true,
+                filter: "\"StripeSessionId\" IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Purchases_TrackId",
@@ -492,13 +553,13 @@ namespace Cambrian.Persistence.Migrations
                 name: "AuditLogs");
 
             migrationBuilder.DropTable(
+                name: "Invoices");
+
+            migrationBuilder.DropTable(
                 name: "Library");
 
             migrationBuilder.DropTable(
                 name: "Payouts");
-
-            migrationBuilder.DropTable(
-                name: "Purchases");
 
             migrationBuilder.DropTable(
                 name: "StreamSessions");
@@ -511,6 +572,9 @@ namespace Cambrian.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");
+
+            migrationBuilder.DropTable(
+                name: "Purchases");
 
             migrationBuilder.DropTable(
                 name: "Tracks");
