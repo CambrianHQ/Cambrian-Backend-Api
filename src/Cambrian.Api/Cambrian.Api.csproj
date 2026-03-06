@@ -22,4 +22,9 @@
     <ProjectReference Include="..\Cambrian.Infrastructure\Cambrian.Infrastructure.csproj" />
   </ItemGroup>
 
+  <!-- Generated stubs are reference only — excluded from compilation -->
+  <ItemGroup>
+    <Compile Remove="GeneratedControllers\**" />
+  </ItemGroup>
+
 </Project>

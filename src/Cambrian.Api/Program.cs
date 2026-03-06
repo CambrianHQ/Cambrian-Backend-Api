@@ -34,6 +34,14 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- TEMPORARY: generate controller stubs from OpenAPI spec ---
+if (args.Contains("--generate"))
+{
+    OpenApiControllerGenerator.Run();
+    return;
+}
+// --- END TEMPORARY ---
+
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Host=localhost;Port=5432;Database=cambrian;Username=postgres;Password=postgres";
