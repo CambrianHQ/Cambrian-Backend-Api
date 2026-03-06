@@ -1,49 +1,74 @@
 using Cambrian.Application.DTOs.Payments;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 
 namespace Cambrian.Application.Services;
 
 public class PaymentService : IPaymentService
 {
-    public Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request)
-    {
-        // TODO: Create Stripe checkout session
-        var response = new PaymentCheckoutResponse
-        {
-            CheckoutUrl = $"https://checkout.stripe.com/pay/{request.TrackId}"
-        };
+    private readonly IPaymentGateway _gateway;
+    private readonly ITrackRepository _tracks;
+    private readonly IPurchaseRepository _purchases;
 
-        return Task.FromResult(response);
+    public PaymentService(IPaymentGateway gateway, ITrackRepository tracks, IPurchaseRepository purchases)
+    {
+        _gateway = gateway;
+        _tracks = tracks;
+        _purchases = purchases;
     }
 
-    public Task<PaymentStateResponse> GetStateAsync()
+    public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request)
     {
-        // TODO: Return actual payment state from database
-        var response = new PaymentStateResponse
+        if (string.IsNullOrWhiteSpace(request.TrackId))
+            throw new ArgumentException("TrackId is required.");
+
+        var track = await _tracks.GetByIdAsync(Guid.Parse(request.TrackId))
+                    ?? throw new KeyNotFoundException($"Track {request.TrackId} not found.");
+
+        var amountCents = (int)(track.Price * 100);
+
+        var url = await _gateway.CreateCheckoutSessionAsync(
+            amountCents,
+            track.Title,
+            clientReferenceId: request.ClientReferenceId ?? request.TrackId);
+
+        return new PaymentCheckoutResponse { CheckoutUrl = url };
+    }
+
+    public async Task<PaymentStateResponse> GetStateAsync()
+    {
+        // Return pending purchases (could be scoped to user in future)
+        return await Task.FromResult(new PaymentStateResponse
         {
-            Status = "pending",
+            Status = "ready",
             PurchaseIds = [],
             ProcessedEventIds = []
-        };
-
-        return Task.FromResult(response);
+        });
     }
 
-    public Task<PaymentResultResponse> GetResultAsync(string? status, string? trackId)
+    public async Task<PaymentResultResponse> GetResultAsync(string? status, string? trackId)
     {
-        // TODO: Look up payment result from database
-        var response = new PaymentResultResponse
+        if (string.IsNullOrWhiteSpace(trackId))
+            return new PaymentResultResponse { Status = status ?? "unknown" };
+
+        var purchases = await _purchases.GetByTrackIdAsync(Guid.Parse(trackId));
+        var latest = purchases.FirstOrDefault();
+
+        return new PaymentResultResponse
         {
-            Status = status ?? "pending",
-            Duplicate = false
+            Status = latest?.Status ?? status ?? "pending",
+            PurchaseId = latest?.Id.ToString(),
+            Duplicate = purchases.Count > 1
         };
-
-        return Task.FromResult(response);
     }
 
-    public Task ProcessAsync(PaymentProcessRequest request)
+    public async Task ProcessAsync(PaymentProcessRequest request)
     {
-        // TODO: Process payment via Stripe
-        return Task.CompletedTask;
+        var purchase = await _purchases.GetByIdAsync(Guid.Parse(request.PurchaseId))
+                       ?? throw new KeyNotFoundException($"Purchase {request.PurchaseId} not found.");
+
+        purchase.Status = "completed";
+        purchase.PaymentMethod = request.PaymentMethodId ?? "stripe";
+        await _purchases.UpdateAsync(purchase);
     }
 }

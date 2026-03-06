@@ -1,43 +1,86 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Cambrian.Application.DTOs.Library;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 
 namespace Cambrian.Application.Services;
 
 public class LibraryService : ILibraryService
 {
-    public Task<IReadOnlyCollection<LibraryItemResponse>> GetLibraryAsync(ClaimsPrincipal user)
-    {
-        // TODO: Filter by authenticated user ID
-        IReadOnlyCollection<LibraryItemResponse> items =
-        [
-            new LibraryItemResponse
-            {
-                TrackId = Guid.NewGuid().ToString(),
-                Title = "Owned Track",
-                Artist = "Cambrian"
-            }
-        ];
+    private readonly ILibraryRepository _library;
+    private readonly IPurchaseRepository _purchases;
+    private readonly ITrackRepository _tracks;
 
-        return Task.FromResult(items);
+    public LibraryService(ILibraryRepository library, IPurchaseRepository purchases, ITrackRepository tracks)
+    {
+        _library = library;
+        _purchases = purchases;
+        _tracks = tracks;
     }
 
-    public Task SaveAsync(ClaimsPrincipal user, LibrarySaveRequest request)
+    public async Task<IReadOnlyCollection<LibraryItemResponse>> GetLibraryAsync(ClaimsPrincipal user)
     {
-        // TODO: Save to user's library
-        return Task.CompletedTask;
+        var userId = GetUserId(user);
+        var items = await _library.GetByUserIdAsync(userId);
+
+        return items.Select(i => new LibraryItemResponse
+        {
+            TrackId = i.TrackId.ToString(),
+            Title = i.Track?.Title ?? i.Title ?? "",
+            Artist = i.Track?.Creator?.DisplayName ?? i.Artist ?? ""
+        }).ToList();
     }
 
-    public Task RemoveAsync(ClaimsPrincipal user, string trackId)
+    public async Task SaveAsync(ClaimsPrincipal user, LibrarySaveRequest request)
     {
-        // TODO: Remove from user's library
-        return Task.CompletedTask;
+        var userId = GetUserId(user);
+        var trackId = Guid.Parse(request.TrackId);
+
+        // Prevent duplicates
+        var existing = await _library.GetByUserAndTrackAsync(userId, trackId);
+        if (existing is not null)
+            return;
+
+        var track = await _tracks.GetByIdAsync(trackId)
+                    ?? throw new KeyNotFoundException($"Track {request.TrackId} not found.");
+
+        var item = new LibraryItem
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TrackId = trackId,
+            Title = track.Title,
+            Artist = track.Creator?.DisplayName,
+            AudioUrl = track.AudioUrl
+        };
+
+        await _library.AddAsync(item);
     }
 
-    public Task<IReadOnlyCollection<string>> GetPurchasedTrackIdsAsync(ClaimsPrincipal user)
+    public async Task RemoveAsync(ClaimsPrincipal user, string trackId)
     {
-        // TODO: Return purchased track IDs for authenticated user
-        IReadOnlyCollection<string> ids = Array.Empty<string>();
-        return Task.FromResult(ids);
+        var userId = GetUserId(user);
+        var item = await _library.GetByUserAndTrackAsync(userId, Guid.Parse(trackId));
+
+        if (item is not null)
+            await _library.RemoveAsync(item.Id);
     }
+
+    public async Task<IReadOnlyCollection<string>> GetPurchasedTrackIdsAsync(ClaimsPrincipal user)
+    {
+        var userId = GetUserId(user);
+        var purchases = await _purchases.GetByBuyerIdAsync(userId);
+
+        return purchases
+            .Where(p => p.Status == "completed")
+            .Select(p => p.TrackId.ToString())
+            .Distinct()
+            .ToList();
+    }
+
+    private static string GetUserId(ClaimsPrincipal user) =>
+        user.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? user.FindFirstValue(JwtRegisteredClaimNames.Sub)
+        ?? throw new UnauthorizedAccessException("No user identity found.");
 }

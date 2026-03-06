@@ -1,34 +1,45 @@
 using Cambrian.Application.DTOs.Admin;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
 
 namespace Cambrian.Application.Services;
 
 public class AdminService : IAdminService
 {
-    public Task<AdminDashboardSummary> GetDashboardAsync()
-    {
-        var summary = new AdminDashboardSummary
-        {
-            TotalUsers = 0,
-            ActiveCreators = 0,
-            TracksUploaded = 0,
-            LicensesSold = 0,
-            TotalRevenue = 0,
-            PendingPayouts = 0
-        };
+    private readonly UserManager<ApplicationUser> _users;
+    private readonly ITrackRepository _tracks;
+    private readonly IPurchaseRepository _purchases;
+    private readonly IPayoutRepository _payouts;
+    private readonly IAdminRepository _admin;
 
-        return Task.FromResult(summary);
+    public AdminService(
+        UserManager<ApplicationUser> users,
+        ITrackRepository tracks,
+        IPurchaseRepository purchases,
+        IPayoutRepository payouts,
+        IAdminRepository admin)
+    {
+        _users = users;
+        _tracks = tracks;
+        _purchases = purchases;
+        _payouts = payouts;
+        _admin = admin;
     }
 
-    public Task<IReadOnlyCollection<AdminAuditLog>> GetAuditLogsAsync()
+    public async Task<AdminDashboardSummary> GetDashboardAsync()
     {
-        IReadOnlyCollection<AdminAuditLog> logs = [];
-        return Task.FromResult(logs);
+        var stats = await _admin.GetDashboardStatsAsync();
+        return stats;
     }
 
-    public Task<IReadOnlyCollection<AdminUser>> GetUsersAsync()
+    public async Task<IReadOnlyCollection<AdminAuditLog>> GetAuditLogsAsync()
     {
-        IReadOnlyCollection<AdminUser> users = [];
-        return Task.FromResult(users);
+        return await _admin.GetAuditLogsAsync();
+    }
+
+    public async Task<IReadOnlyCollection<AdminUser>> GetUsersAsync()
+    {
+        return await _admin.GetUsersAsync();
     }
 }

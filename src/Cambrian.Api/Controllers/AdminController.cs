@@ -1,3 +1,4 @@
+using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,24 +8,32 @@ namespace Cambrian.Api.Controllers;
 [Authorize(Roles = "Admin")]
 public class AdminController : BaseController
 {
-    [HttpGet("dashboard")]
-    public IActionResult Dashboard()
+    private readonly IAdminService _admin;
+
+    public AdminController(IAdminService admin)
     {
-        return OkResponse(new
-        {
-            totalUsers = 0,
-            activeCreators = 0,
-            tracksUploaded = 0,
-            licensesSold = 0,
-            totalRevenue = 0.0,
-            pendingPayouts = 0.0
-        });
+        _admin = admin;
+    }
+
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> Dashboard()
+    {
+        var summary = await _admin.GetDashboardAsync();
+        return OkResponse(summary);
     }
 
     [HttpGet("audit")]
-    public IActionResult Audit()
+    public async Task<IActionResult> Audit()
     {
-        return OkResponse(Array.Empty<object>());
+        var logs = await _admin.GetAuditLogsAsync();
+        return OkResponse(logs);
+    }
+
+    [HttpGet("users")]
+    public async Task<IActionResult> Users()
+    {
+        var users = await _admin.GetUsersAsync();
+        return OkResponse(users);
     }
 
     [HttpGet("settings")]
@@ -67,12 +76,6 @@ public class AdminController : BaseController
     }
 
     // --- User management ---
-
-    [HttpGet("users")]
-    public IActionResult Users()
-    {
-        return OkResponse(Array.Empty<object>());
-    }
 
     [HttpPost("users/{id}/role")]
     public IActionResult SetUserRole(string id)

@@ -1,3 +1,6 @@
+using System.Security.Claims;
+using Cambrian.Application.DTOs.Payouts;
+using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,6 +10,14 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 public class PayoutController : BaseController
 {
+    private readonly IPayoutService _payouts;
+    private readonly IPayoutRepository _payoutRepo;
+
+    public PayoutController(IPayoutService payouts, IPayoutRepository payoutRepo)
+    {
+        _payouts = payouts;
+        _payoutRepo = payoutRepo;
+    }
     [HttpPost("connect-stripe")]
     public IActionResult ConnectStripe()
     {
@@ -50,21 +61,35 @@ public class PayoutController : BaseController
     }
 
     [HttpGet("earnings")]
-    public IActionResult PayoutsEarnings()
+    public async Task<IActionResult> PayoutsEarnings()
     {
-        return OkResponse(new { total = 0m, pending = 0m, available = 0m });
+        var earnings = await _payouts.GetEarningsAsync();
+        return OkResponse(earnings);
     }
 
     [HttpPost("request")]
-    public IActionResult RequestPayout()
+    public async Task<IActionResult> RequestPayout(PayoutRequest request)
     {
-        return OkResponse(new { amount = 0m, status = "pending" });
+        var result = await _payouts.RequestAsync(request);
+        return OkResponse(result);
     }
 
     [HttpGet("history")]
-    public IActionResult History([FromQuery] int take = 50)
+    public async Task<IActionResult> History([FromQuery] int take = 50)
     {
-        return OkResponse(Array.Empty<object>());
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var payouts = await _payoutRepo.GetByCreatorIdAsync(userId);
+
+        var history = payouts.Take(take).Select(p => new
+        {
+            id = p.Id.ToString(),
+            amount = (decimal)p.Amount,
+            status = p.Status,
+            requestedAt = p.RequestedAt,
+            completedAt = p.CompletedAt
+        }).ToList();
+
+        return OkResponse(history);
     }
 
     [HttpPost("settings")]
@@ -81,8 +106,9 @@ public class PayoutController : BaseController
 
     /// <summary>GET /earnings — root-level alias for payout earnings.</summary>
     [HttpGet("/earnings")]
-    public IActionResult Earnings()
+    public async Task<IActionResult> Earnings()
     {
-        return OkResponse(new { total = 0m, pending = 0m, available = 0m });
+        var earnings = await _payouts.GetEarningsAsync();
+        return OkResponse(earnings);
     }
 }
