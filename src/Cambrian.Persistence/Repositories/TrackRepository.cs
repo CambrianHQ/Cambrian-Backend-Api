@@ -21,6 +21,31 @@ public class TrackRepository : ITrackRepository
             .ToListAsync();
     }
 
+    public async Task<List<Track>> BrowseAsync(int page, int pageSize, string? genre, string? search, string? sort = null)
+    {
+        var query = _db.Tracks
+            .Where(t => !t.ExclusiveSold && t.Visibility == "public");
+
+        if (!string.IsNullOrWhiteSpace(genre))
+            query = query.Where(t => t.Genre != null && t.Genre.ToLower() == genre.ToLower());
+
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(t => t.Title.ToLower().Contains(search.ToLower()));
+
+        query = sort?.ToLower() switch
+        {
+            "price" => query.OrderBy(t => t.Price),
+            "price_desc" => query.OrderByDescending(t => t.Price),
+            "title" => query.OrderBy(t => t.Title),
+            _ => query.OrderByDescending(t => t.CreatedAt)
+        };
+
+        return await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+    }
+
     public async Task<Track?> GetByIdAsync(Guid id)
     {
         return await _db.Tracks

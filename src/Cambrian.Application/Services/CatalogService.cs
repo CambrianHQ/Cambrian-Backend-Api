@@ -13,16 +13,16 @@ public class CatalogService : ICatalogService
         _tracks = tracks;
     }
 
-    public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync()
+    public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync(int page = 1, int pageSize = 50, string? genre = null, string? search = null, string? sort = null)
     {
-        var tracks = await _tracks.BrowseAsync();
+        var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort);
 
         return tracks.Select(t => MapToResponse(t)).ToList();
     }
 
-    public async Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync()
+    public async Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync(int page = 1, int pageSize = 20, string? genre = null, string? search = null)
     {
-        return await GetCatalogAsync();
+        return await GetCatalogAsync(page, pageSize, genre, search);
     }
 
     public async Task<TrackResponse?> GetTrackAsync(string trackId)
