@@ -1,0 +1,79 @@
+{
+  "version": "v1",
+  "project": "Cambrian Backend Architecture Policy",
+
+  "rules": [
+
+    {
+      "name": "openapi-contract-required",
+      "description": "All backend endpoints must exist in the OpenAPI contract.",
+      "contractFile": "contracts/openapi.v1.json",
+      "enforcement": "fail-build"
+    },
+
+    {
+      "name": "controller-layer-only-http",
+      "description": "HTTP logic must only exist inside controllers.",
+      "allowedDirectories": [
+        "Controllers"
+      ]
+    },
+
+    {
+      "name": "services-handle-business-logic",
+      "description": "Controllers must delegate logic to services.",
+      "requiredLayer": "Services"
+    },
+
+    {
+      "name": "repository-pattern-required",
+      "description": "Database access must only occur through repositories.",
+      "allowedDirectories": [
+        "Repositories"
+      ]
+    },
+
+    {
+      "name": "jwt-required-for-protected-routes",
+      "description": "All protected endpoints must require JWT authorization.",
+      "requiredAttribute": "[Authorize]"
+    },
+
+    {
+      "name": "admin-endpoints-require-role",
+      "description": "Admin endpoints must require admin role.",
+      "pathPrefix": "/admin",
+      "requiredAttribute": "[Authorize(Roles=\"Admin\")]"
+    },
+
+    {
+      "name": "creator-endpoints-require-role",
+      "description": "Creator features require creator role.",
+      "pathPrefixes": [
+        "/upload",
+        "/payouts",
+        "/creator"
+      ],
+      "requiredAttribute": "[Authorize(Roles=\"Creator\")]"
+    },
+
+    {
+      "name": "stripe-events-idempotent",
+      "description": "Stripe webhook handlers must verify idempotency keys.",
+      "requiredCheck": "EventIdExists"
+    },
+
+    {
+      "name": "no-direct-db-access-from-controllers",
+      "description": "Controllers cannot use DbContext directly.",
+      "forbiddenPattern": "DbContext"
+    },
+
+    {
+      "name": "dto-required",
+      "description": "Controllers must not expose domain entities.",
+      "requiredPattern": "Dto"
+    }
+
+  ]
+}
