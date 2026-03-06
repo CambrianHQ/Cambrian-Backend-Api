@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Cambrian.Domain\Cambrian.Domain.csproj" />
+    <ProjectReference Include="..\Cambrian.Application\Cambrian.Application.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -12,11 +13,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.12" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.12" />
+
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.12">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
   </ItemGroup>
 
 </Project>

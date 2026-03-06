@@ -20,6 +20,8 @@ public class Track
 
     public int ExclusivePriceCents { get; set; }
 
+    public bool ExclusiveSold { get; set; }
+
     public string Visibility { get; set; } = "public"; // public, limited, hidden
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
