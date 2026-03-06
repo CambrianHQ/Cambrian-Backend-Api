@@ -1,11 +1,11 @@
-using AppIObjectStorage = Cambrian.Application.Interfaces.IObjectStorage;
+using Cambrian.Application.Interfaces;
 
 namespace Cambrian.Infrastructure.Storage;
 
 /// <summary>
 /// Placeholder for Cloudflare R2 storage. Will be implemented when R2 credentials are available.
 /// </summary>
-public class R2ObjectStorage : IObjectStorage, AppIObjectStorage
+public class R2ObjectStorage : IObjectStorage
 {
     public Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
     {
