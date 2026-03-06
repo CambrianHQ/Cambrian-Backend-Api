@@ -18,8 +18,8 @@ public class AuthController : BaseController
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request)
     {
-        await _auth.RegisterAsync(request);
-        return CreatedResponse<object?>(null, "Account created successfully.");
+        var result = await _auth.RegisterAsync(request);
+        return CreatedResponse(result, "Account created successfully.");
     }
 
     [HttpPost("login")]
