@@ -15,17 +15,17 @@ public class CatalogController : ControllerBase
         _catalog = catalog;
     }
 
-    [HttpGet("catalog")]
-    public async Task<IActionResult> GetCatalog()
+    [HttpGet("discover")]
+    public async Task<IActionResult> Discover(int page = 1, int pageSize = 20, string? genre = null, string? search = null)
     {
-        var result = await _catalog.GetCatalogAsync();
+        var result = await _catalog.GetDiscoverAsync(page, pageSize, genre, search);
         return Ok(result);
     }
 
-    [HttpGet("discover")]
-    public async Task<IActionResult> Discover()
+    [HttpGet("catalog")]
+    public async Task<IActionResult> Catalog(int page = 1, int pageSize = 50, string? genre = null, string? search = null)
     {
-        var result = await _catalog.GetDiscoverAsync();
+        var result = await _catalog.GetCatalogAsync(page, pageSize, genre, search);
         return Ok(result);
     }
 

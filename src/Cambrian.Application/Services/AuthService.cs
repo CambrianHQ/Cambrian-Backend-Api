@@ -61,6 +61,65 @@ public class AuthService : IAuthService
         }
     }
 
+    public async Task<UserProfileResponse> GetCurrentUserAsync(ClaimsPrincipal principal)
+    {
+        var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+        if (userId is null)
+            throw new UnauthorizedAccessException("No user identity found");
+
+        var user = await _users.FindByIdAsync(userId)
+                   ?? throw new UnauthorizedAccessException("User not found");
+
+        return new UserProfileResponse
+        {
+            UserId = user.Id,
+            Email = user.Email ?? "",
+            DisplayName = user.DisplayName,
+            Role = user.Role,
+            Tier = user.Tier,
+            VerifiedCreator = user.VerifiedCreator
+        };
+    }
+
+    public Task ForgotPasswordAsync(ForgotPasswordRequest request)
+    {
+        // TODO: Send password reset code via email/SMS
+        return Task.CompletedTask;
+    }
+
+    public Task VerifyCodeAsync(VerifyCodeRequest request)
+    {
+        // TODO: Verify the code against stored reset codes
+        return Task.CompletedTask;
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        var user = request.Email is not null
+            ? await _users.FindByEmailAsync(request.Email)
+            : null;
+
+        if (user is null)
+            throw new InvalidOperationException("User not found");
+
+        var token = await _users.GeneratePasswordResetTokenAsync(user);
+        var result = await _users.ResetPasswordAsync(user, token, request.NewPassword);
+
+        if (!result.Succeeded)
+        {
+            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            throw new InvalidOperationException($"Password reset failed: {errors}");
+        }
+    }
+
+    public Task RecoverUsernameAsync(RecoverUsernameRequest request)
+    {
+        // TODO: Send username recovery via email/SMS
+        return Task.CompletedTask;
+    }
+
     private string GenerateJwt(ApplicationUser user)
     {
         var key = _config["Jwt:Key"] ?? "***REDACTED***";
