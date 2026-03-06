@@ -8,11 +8,13 @@ public class WalletTransaction
 
     public ApplicationUser User { get; set; } = null!;
 
-    public double Amount { get; set; }
+    public long AmountCents { get; set; }
 
     public string Type { get; set; } = ""; // credit, debit, withdrawal
 
     public string? Description { get; set; }
+
+    public Guid? RelatedPurchaseId { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -16,6 +16,8 @@ public class ApplicationUser : IdentityUser
 
     public string? Plan { get; set; }
 
+    public long WalletBalanceCents { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();
