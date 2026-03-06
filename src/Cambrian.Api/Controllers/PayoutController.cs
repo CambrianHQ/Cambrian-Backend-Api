@@ -1,11 +1,13 @@
 using Cambrian.Application.DTOs.Payouts;
 using Cambrian.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
 [ApiController]
 [Route("payouts")]
+[Authorize]
 public class PayoutController : ControllerBase
 {
     private readonly IPayoutService _payouts;
