@@ -2,15 +2,16 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Cambrian.Persistence;
+using Cambrian.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Data Source=cambrian.db";
+    ?? "Host=localhost;Port=5432;Database=cambrian;Username=postgres;Password=postgres";
 builder.Services.AddDbContext<CambrianDbContext>(options =>
-    options.UseSqlite(connectionString));
+    options.UseNpgsql(connectionString));
 
 // Identity
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -35,6 +36,12 @@ builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IPayoutService, PayoutService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IWebhookService, WebhookService>();
+
+// Repositories
+builder.Services.AddScoped<ITrackRepository, TrackRepository>();
+builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
+builder.Services.AddScoped<ILibraryRepository, LibraryRepository>();
+builder.Services.AddScoped<IPayoutRepository, PayoutRepository>();
 
 var app = builder.Build();
 
