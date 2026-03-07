@@ -27,9 +27,13 @@ if (args.Contains("--generate"))
 }
 // --- END TEMPORARY ---
 
-// Database
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "***REDACTED_DEV_DB_CONNECTION***";
+// Database — check ConnectionStrings:DefaultConnection, then DATABASE_URL (Render auto-sets this)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+    connectionString = Environment.GetEnvironmentVariable("DATABASE_URL");
+if (string.IsNullOrWhiteSpace(connectionString))
+    connectionString = "***REDACTED_DEV_DB_CONNECTION***";
+Console.WriteLine($"[Startup] DB connection source: {(connectionString.StartsWith("postgres") ? "URI" : "ADO.NET")}");
 
 // Render provides postgres:// URI — convert to Npgsql ADO.NET format
 if (connectionString.StartsWith("postgres://") || connectionString.StartsWith("postgresql://"))
@@ -55,11 +59,16 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddEntityFrameworkStores<CambrianDbContext>();
 
 // --- Startup validation: require critical secrets in non-Development ---
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "";
+Console.WriteLine($"[Startup] Environment: {builder.Environment.EnvironmentName}");
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? Environment.GetEnvironmentVariable("Jwt__Key")
+    ?? Environment.GetEnvironmentVariable("JWT_KEY")
+    ?? "";
+Console.WriteLine($"[Startup] JWT key present: {!string.IsNullOrWhiteSpace(jwtKey)} (len={jwtKey.Length})");
 var isNonProd = builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Staging";
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
-    if (builder.Environment.IsDevelopment())
+    if (isNonProd)
         jwtKey = "***REDACTED_DEV_JWT_KEY***";
     else
         throw new InvalidOperationException("Jwt:Key must be set via environment variable or secret store.");
