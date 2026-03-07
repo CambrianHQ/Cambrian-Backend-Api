@@ -1,4 +1,5 @@
 using Cambrian.Application.Interfaces;
+using Microsoft.Extensions.Configuration;
 using Stripe;
 using Stripe.Checkout;
 
@@ -6,6 +7,13 @@ namespace Cambrian.Infrastructure.Stripe;
 
 public class StripeFacade : IPaymentGateway
 {
+    private readonly string _frontendUrl;
+
+    public StripeFacade(IConfiguration configuration)
+    {
+        _frontendUrl = configuration["App:FrontendUrl"] ?? "http://localhost:5173";
+    }
+
     public async Task<string> CreateCheckoutSessionAsync(
         int amountInCents,
         string productName,
@@ -27,8 +35,8 @@ public class StripeFacade : IPaymentGateway
         {
             Mode = "payment",
             Customer = customer.Id,
-            SuccessUrl = successUrl ?? "http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            CancelUrl = cancelUrl ?? "http://localhost:5173/checkout/cancel",
+            SuccessUrl = successUrl ?? $"{_frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+            CancelUrl = cancelUrl ?? $"{_frontendUrl}/checkout/cancel",
             ClientReferenceId = clientReferenceId,
             LineItems = new List<SessionLineItemOptions>
             {
