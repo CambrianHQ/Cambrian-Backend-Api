@@ -1,0 +1,71 @@
+# Render Infrastructure-as-Code blueprint
+# Docs: https://docs.render.com/infrastructure-as-code
+#
+# Deploy:
+#   1. Push to default branch
+#   2. Render Dashboard → Blueprints → New Blueprint Instance
+#   3. Select this repo → confirm
+
+databases:
+  - name: cambrian-db
+    plan: starter
+    region: oregon
+    databaseName: cambrian
+    user: cambrian
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: cambrian-api-staging
+    runtime: docker
+    repo: https://github.com/loganbryanx/Cambrian-Backend-Api
+    branch: main
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      # Render injects PORT — Dockerfile entrypoint uses it
+      - key: PORT
+        value: "10000"
+      # .NET environment
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Staging
+      # Database — auto-wired from the managed Render PostgreSQL
+      - key: ConnectionStrings__DefaultConnection
+        fromDatabase:
+          name: cambrian-db
+          property: connectionString
+      # JWT — generate a strong secret and paste it into the Render dashboard
+      - key: Jwt__Key
+        sync: false   # must be set manually in dashboard
+      - key: Jwt__Issuer
+        value: cambrian-api
+      - key: Jwt__Audience
+        value: cambrian-client
+      # Stripe (optional for staging — leave blank to skip payments)
+      - key: Stripe__SecretKey
+        sync: false
+      - key: Stripe__WebhookSecret
+        sync: false
+      # Object storage — default to local for staging
+      - key: Storage__Provider
+        value: local
+      # Email — console logger for staging
+      - key: Email__Provider
+        value: console
+      # Rate limiting — relaxed for staging
+      - key: RateLimiting__GlobalPermitLimit
+        value: "500"
+      - key: RateLimiting__AuthPermitLimit
+        value: "100"
+      # CORS — allow the Vercel staging frontend
+      - key: App__FrontendUrl
+        value: https://cambrian-staging.vercel.app
+      - key: App__CorsOrigins
+        value: "https://cambrian-staging.vercel.app,https://cambrianmusic.com,https://www.cambrianmusic.com"
+    buildFilter:
+      paths:
+        - src/**
+        - Dockerfile
+        - Cambrian.sln
