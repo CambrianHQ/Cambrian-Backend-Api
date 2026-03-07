@@ -40,11 +40,12 @@ public class BillingController : BaseController
         if (priceInCents == 0)
             return ErrorResponse("Invalid tier. Choose 'paid' or 'creator'.");
 
+        var frontendBase = _config["App:FrontendUrl"] ?? "http://localhost:5173";
+
         // If Stripe is configured, create a real checkout session
         var stripeKey = _config["Stripe:SecretKey"];
         if (!string.IsNullOrWhiteSpace(stripeKey))
         {
-            var frontendBase = "http://localhost:5173";
             var successUrl = $"{frontendBase}/payment?payment_success=true&tier={tier}&session_id={{CHECKOUT_SESSION_ID}}";
             var cancelUrl = $"{frontendBase}/payment?cancelled=true";
 
@@ -74,7 +75,7 @@ public class BillingController : BaseController
         };
         await _subscriptions.CreateAsync(subscription);
 
-        var devSuccessUrl = $"http://localhost:5173/payment?payment_success=true&tier={tier}&session_id={subscription.Id}";
+        var devSuccessUrl = $"{frontendBase}/payment?payment_success=true&tier={tier}&session_id={subscription.Id}";
         return Ok(new { url = devSuccessUrl });
     }
 

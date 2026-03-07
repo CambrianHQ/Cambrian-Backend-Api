@@ -23,6 +23,29 @@ if (args.Contains("--generate"))
 }
 // --- END TEMPORARY ---
 
+// ───────────────────────────────────────────────────────────────
+// Configuration validation — fail fast if required values missing
+// ───────────────────────────────────────────────────────────────
+if (!builder.Environment.IsDevelopment())
+{
+    string[] required =
+    {
+        "ConnectionStrings:DefaultConnection",
+        "Jwt:Key",
+        "Stripe:SecretKey",
+        "Stripe:WebhookSecret"
+    };
+
+    var missing = required
+        .Where(k => string.IsNullOrWhiteSpace(builder.Configuration[k]))
+        .ToList();
+
+    if (missing.Count > 0)
+        throw new InvalidOperationException(
+            $"Missing required configuration: {string.Join(", ", missing)}. " +
+            "Set them via environment variables, user-secrets, or appsettings.{Environment}.json.");
+}
+
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Host=localhost;Port=5432;Database=cambrian;Username=postgres;Password=postgres";
@@ -52,8 +75,8 @@ builder.Services.AddAuthentication("Bearer")
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian",
-            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian",
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian-api",
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian-client",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
@@ -76,12 +99,13 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS — allow the Vite frontend in development
+// CORS — read allowed origins from configuration
+var corsOrigins = builder.Configuration["App:CorsOrigins"] ?? "http://localhost:5173";
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins(corsOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -121,6 +145,15 @@ if (!string.IsNullOrWhiteSpace(stripeKey))
 }
 
 var app = builder.Build();
+
+// ───────────────────────────────────────────────────────────────
+// Database migration — apply pending migrations on startup
+// ───────────────────────────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+    db.Database.Migrate();
+}
 
 if (app.Environment.IsDevelopment())
 {
