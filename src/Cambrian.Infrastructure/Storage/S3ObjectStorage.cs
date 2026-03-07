@@ -1,36 +1,66 @@
+using Amazon.S3;
+using Amazon.S3.Model;
 using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Options;
 using Microsoft.Extensions.Options;
 
 namespace Cambrian.Infrastructure.Storage;
 
+/// <summary>
+/// S3-compatible object storage (works with AWS S3 and Cloudflare R2).
+/// </summary>
 public sealed class S3ObjectStorage : IObjectStorage
 {
     private readonly StorageOptions _options;
+    private readonly AmazonS3Client _client;
 
     public S3ObjectStorage(IOptions<StorageOptions> options)
     {
         _options = options.Value;
+
+        var config = new AmazonS3Config
+        {
+            ServiceURL = _options.Endpoint,
+            ForcePathStyle = _options.UsePathStyle,
+        };
+        if (!string.IsNullOrWhiteSpace(_options.Region) && _options.Region != "auto")
+            config.AuthenticationRegion = _options.Region;
+
+        _client = new AmazonS3Client(
+            _options.AccessKey,
+            _options.SecretKey,
+            config);
     }
 
-    public Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
+    public async Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
     {
-        // TODO: Implement S3 upload via AWS SDK
+        var request = new PutObjectRequest
+        {
+            BucketName = _options.Bucket,
+            Key = key,
+            InputStream = file,
+            ContentType = contentType,
+        };
+        await _client.PutObjectAsync(request);
+
         var baseUrl = _options.Endpoint.TrimEnd('/');
-        var url = $"{baseUrl}/{_options.Bucket}/{key}";
-        return Task.FromResult(url);
+        return $"{baseUrl}/{_options.Bucket}/{key}";
     }
 
     public string GenerateSignedUrl(string key)
     {
-        // TODO: Implement signed URL generation via S3 pre-signed URLs
-        var baseUrl = _options.Endpoint.TrimEnd('/');
-        return $"{baseUrl}/{_options.Bucket}/{key}?signed=dev";
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = _options.Bucket,
+            Key = key,
+            Expires = DateTime.UtcNow.AddHours(1),
+            Verb = HttpVerb.GET,
+        };
+        return _client.GetPreSignedURL(request);
     }
 
-    public Task DeleteAsync(string key)
+    public async Task DeleteAsync(string key)
     {
-        // TODO: Implement S3 delete
-        return Task.CompletedTask;
+        await _client.DeleteObjectAsync(_options.Bucket, key);
     }
 }
