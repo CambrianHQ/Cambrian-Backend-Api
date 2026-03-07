@@ -47,6 +47,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 // --- Startup validation: require critical secrets in non-Development ---
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "";
+var isNonProd = builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Staging";
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
     if (builder.Environment.IsDevelopment())
@@ -60,8 +61,10 @@ if (jwtKey.Length < 32)
 var stripeKey = builder.Configuration["Stripe:SecretKey"] ?? "";
 if (!string.IsNullOrWhiteSpace(stripeKey))
     Stripe.StripeConfiguration.ApiKey = stripeKey;
-else if (!builder.Environment.IsDevelopment())
+else if (!isNonProd)
     Console.WriteLine("[WARN] Stripe:SecretKey is not configured — payment endpoints will fail.");
+else
+    Console.WriteLine("[INFO] Stripe:SecretKey not set — payment endpoints will return mock responses.");
 
 // JWT Authentication
 builder.Services.AddAuthentication("Bearer")
@@ -127,12 +130,18 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// CORS - allow the Vite frontend in development (and Playwright preview)
+// CORS - allow the Vite frontend + any configured origins (staging / production)
 var corsOrigins = builder.Configuration.GetSection("App:CorsOrigins").Value?
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     ?? Array.Empty<string>();
+var frontendUrl = builder.Configuration["App:FrontendUrl"] ?? "";
 var defaultOrigins = new[] { "http://localhost:5173", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173" };
-var allOrigins = defaultOrigins.Concat(corsOrigins).Distinct().ToArray();
+var allOrigins = defaultOrigins
+    .Concat(corsOrigins)
+    .Concat(string.IsNullOrWhiteSpace(frontendUrl) ? Array.Empty<string>() : new[] { frontendUrl })
+    .Where(o => !string.IsNullOrWhiteSpace(o))
+    .Distinct()
+    .ToArray();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -200,7 +209,7 @@ switch (emailProvider)
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Staging")
 {
     app.UseSwagger();
     app.UseSwaggerUI();
