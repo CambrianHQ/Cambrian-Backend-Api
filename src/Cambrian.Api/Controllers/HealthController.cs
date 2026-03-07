@@ -1,13 +1,41 @@
+using Cambrian.Persistence;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
 [Route("health")]
-public class HealthController : BaseController
+public class HealthController : ControllerBase
 {
-    [HttpGet]
-    public IActionResult Get()
+    private readonly CambrianDbContext _db;
+    private readonly IWebHostEnvironment _env;
+
+    public HealthController(CambrianDbContext db, IWebHostEnvironment env)
     {
-        return OkResponse(new { status = "ok", timestamp = DateTime.UtcNow });
+        _db = db;
+        _env = env;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Get()
+    {
+        var dbHealthy = false;
+        try
+        {
+            dbHealthy = await _db.Database.CanConnectAsync();
+        }
+        catch
+        {
+            // DB unreachable
+        }
+
+        var result = new
+        {
+            status = dbHealthy ? "ok" : "degraded",
+            timestamp = DateTime.UtcNow,
+            environment = _env.EnvironmentName,
+            database = dbHealthy ? "connected" : "unreachable"
+        };
+
+        return dbHealthy ? Ok(result) : StatusCode(503, result);
     }
 }
