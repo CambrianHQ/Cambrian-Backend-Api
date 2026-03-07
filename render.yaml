@@ -32,10 +32,11 @@ services:
       - key: ASPNETCORE_ENVIRONMENT
         value: Staging
       # Database — auto-wired from the managed Render PostgreSQL
+      # Free tier has no private networking — must use external hostname
       - key: ConnectionStrings__DefaultConnection
         fromDatabase:
           name: cambrian-db
-          property: connectionString
+          property: externalConnectionString
       # JWT — generate a strong secret and paste it into the Render dashboard
       - key: Jwt__Key
         sync: false   # must be set manually in dashboard
