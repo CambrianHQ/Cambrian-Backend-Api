@@ -43,9 +43,18 @@ public class PayoutController : BaseController
     }
 
     [HttpPost("connect")]
-    public IActionResult Connect()
+    public IActionResult Connect([FromBody] PayoutConnectRequest? request = null)
     {
-        return OkResponse(new { connectUrl = (string?)null });
+        // In production, this would initiate Stripe Connect OAuth or Plaid linking
+        return OkResponse(new { connectUrl = (string?)null, status = "pending" });
+    }
+
+    public class PayoutConnectRequest
+    {
+        public string? PlaidPublicToken { get; set; }
+        public string? AccountId { get; set; }
+        public string? AccountHolderName { get; set; }
+        public string? AccountType { get; set; }
     }
 
     [HttpDelete("disconnect")]
@@ -93,18 +102,24 @@ public class PayoutController : BaseController
     }
 
     [HttpPost("settings")]
-    public IActionResult CreateSettings()
+    public IActionResult CreateSettings([FromBody] PayoutSettingsRequest? request = null)
     {
         return MessageResponse("Payout settings saved.");
     }
 
     [HttpPut("settings")]
-    public IActionResult UpdateSettings()
+    public IActionResult UpdateSettings([FromBody] PayoutSettingsRequest? request = null)
     {
         return MessageResponse("Payout settings updated.");
     }
 
-    /// <summary>GET /earnings — root-level alias for payout earnings.</summary>
+    public class PayoutSettingsRequest
+    {
+        public decimal? Threshold { get; set; }
+        public string? Schedule { get; set; } // weekly, biweekly, monthly
+    }
+
+    /// <summary>GET /earnings - root-level alias for payout earnings.</summary>
     [HttpGet("/earnings")]
     public async Task<IActionResult> Earnings()
     {

@@ -23,29 +23,6 @@ if (args.Contains("--generate"))
 }
 // --- END TEMPORARY ---
 
-// ───────────────────────────────────────────────────────────────
-// Configuration validation — fail fast if required values missing
-// ───────────────────────────────────────────────────────────────
-if (!builder.Environment.IsDevelopment())
-{
-    string[] required =
-    {
-        "ConnectionStrings:DefaultConnection",
-        "Jwt:Key",
-        "Stripe:SecretKey",
-        "Stripe:WebhookSecret"
-    };
-
-    var missing = required
-        .Where(k => string.IsNullOrWhiteSpace(builder.Configuration[k]))
-        .ToList();
-
-    if (missing.Count > 0)
-        throw new InvalidOperationException(
-            $"Missing required configuration: {string.Join(", ", missing)}. " +
-            "Set them via environment variables, user-secrets, or appsettings.{Environment}.json.");
-}
-
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Host=localhost;Port=5432;Database=cambrian;Username=postgres;Password=postgres";
@@ -75,8 +52,8 @@ builder.Services.AddAuthentication("Bearer")
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian-api",
-            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian-client",
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian",
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
@@ -99,13 +76,12 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS — read allowed origins from configuration
-var corsOrigins = builder.Configuration["App:CorsOrigins"] ?? "http://localhost:5173";
+// CORS - allow the Vite frontend in development
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(corsOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        policy.WithOrigins("http://localhost:5173")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -122,6 +98,7 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
+builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
@@ -132,28 +109,13 @@ builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IStreamRepository, StreamRepository>();
 builder.Services.AddScoped<IWalletRepository, WalletRepository>();
 builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 
 // Infrastructure
 builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
 builder.Services.AddSingleton<IObjectStorage, R2ObjectStorage>();
 
-// Stripe
-var stripeKey = builder.Configuration["Stripe:SecretKey"];
-if (!string.IsNullOrWhiteSpace(stripeKey))
-{
-    Stripe.StripeConfiguration.ApiKey = stripeKey;
-}
-
 var app = builder.Build();
-
-// ───────────────────────────────────────────────────────────────
-// Database migration — apply pending migrations on startup
-// ───────────────────────────────────────────────────────────────
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-    db.Database.Migrate();
-}
 
 if (app.Environment.IsDevelopment())
 {
@@ -162,9 +124,57 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<ExceptionMiddleware>();
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection(); // disabled for local dev
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// ── Seed demo tracks if the table is empty ──
+{
+    Console.WriteLine("[Seed] Checking for tracks...");
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var hasVisible = db.Tracks.Any(t => !t.ExclusiveSold && t.Visibility == "public");
+        Console.WriteLine($"[Seed] Has visible tracks: {hasVisible}");
+        if (!hasVisible)
+        {
+            // Fix any existing tracks to be visible instead of deleting (FK constraints)
+            var broken = db.Tracks.Where(t => t.ExclusiveSold || t.Visibility != "public").ToList();
+            foreach (var t in broken) { t.ExclusiveSold = false; t.Visibility = "public"; }
+            if (broken.Any()) { db.SaveChanges(); Console.WriteLine($"[Seed] Fixed {broken.Count} existing tracks"); }
+
+            var um = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
+            var creator = um.Users.FirstOrDefault();
+            var creatorId = creator?.Id;
+            Console.WriteLine($"[Seed] Creator: {creatorId} ({creator?.Email})");
+            if (creatorId != null)
+            {
+                var tracks = new List<Track>
+            {
+                new() { Id = Guid.NewGuid(), Title = "Midnight Drive",       Genre = "Lo-Fi",       Price = 29, Duration = "3:42", CreatorId = creatorId, AudioUrl = "/audio/demo1.mp3", NonExclusivePriceCents = 2900, ExclusivePriceCents = 49900, Description = "Chill late-night vibes" },
+                new() { Id = Guid.NewGuid(), Title = "Neon Skyline",         Genre = "Electronic",  Price = 39, Duration = "4:15", CreatorId = creatorId, AudioUrl = "/audio/demo2.mp3", NonExclusivePriceCents = 3900, ExclusivePriceCents = 59900, Description = "Synthwave-inspired beat" },
+                new() { Id = Guid.NewGuid(), Title = "Golden Hour",          Genre = "R&B",         Price = 34, Duration = "3:58", CreatorId = creatorId, AudioUrl = "/audio/demo3.mp3", NonExclusivePriceCents = 3400, ExclusivePriceCents = 54900, Description = "Smooth R&B groove" },
+                new() { Id = Guid.NewGuid(), Title = "Concrete Jungle",      Genre = "Hip-Hop",     Price = 49, Duration = "3:20", CreatorId = creatorId, AudioUrl = "/audio/demo4.mp3", NonExclusivePriceCents = 4900, ExclusivePriceCents = 74900, Description = "Hard-hitting trap beat" },
+                new() { Id = Guid.NewGuid(), Title = "Summer Breeze",        Genre = "Pop",         Price = 24, Duration = "3:35", CreatorId = creatorId, AudioUrl = "/audio/demo5.mp3", NonExclusivePriceCents = 2400, ExclusivePriceCents = 39900, Description = "Upbeat pop instrumental" },
+                new() { Id = Guid.NewGuid(), Title = "Rainy Afternoon",      Genre = "Jazz",        Price = 19, Duration = "5:10", CreatorId = creatorId, AudioUrl = "/audio/demo6.mp3", NonExclusivePriceCents = 1900, ExclusivePriceCents = 29900, Description = "Smooth jazz session" },
+                new() { Id = Guid.NewGuid(), Title = "Electric Dreams",      Genre = "Electronic",  Price = 44, Duration = "4:45", CreatorId = creatorId, AudioUrl = "/audio/demo7.mp3", NonExclusivePriceCents = 4400, ExclusivePriceCents = 69900, Description = "Future bass production" },
+                new() { Id = Guid.NewGuid(), Title = "Starlight",            Genre = "Indie",       Price = 29, Duration = "4:02", CreatorId = creatorId, AudioUrl = "/audio/demo8.mp3", NonExclusivePriceCents = 2900, ExclusivePriceCents = 44900, Description = "Dreamy indie beat" },
+                new() { Id = Guid.NewGuid(), Title = "Urban Echoes",         Genre = "Hip-Hop",     Price = 54, Duration = "3:15", CreatorId = creatorId, AudioUrl = "/audio/demo9.mp3", NonExclusivePriceCents = 5400, ExclusivePriceCents = 84900, Description = "Atmospheric boom-bap" },
+                new() { Id = Guid.NewGuid(), Title = "Velvet Sunset",        Genre = "Lo-Fi",       Price = 22, Duration = "3:50", CreatorId = creatorId, AudioUrl = "/audio/demo10.mp3", NonExclusivePriceCents = 2200, ExclusivePriceCents = 34900, Description = "Warm lo-fi textures" },
+            };
+            db.Tracks.AddRange(tracks);
+            db.SaveChanges();
+            Console.WriteLine($"[Seed] Created {tracks.Count} demo tracks for creator {creatorId}");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Seed] ERROR: {ex.Message}");
+    }
+}
+
 app.Run();
