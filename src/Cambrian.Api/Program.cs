@@ -113,6 +113,13 @@ builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
 builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
 builder.Services.AddSingleton<IObjectStorage, R2ObjectStorage>();
 
+// Stripe
+var stripeKey = builder.Configuration["Stripe:SecretKey"];
+if (!string.IsNullOrWhiteSpace(stripeKey))
+{
+    Stripe.StripeConfiguration.ApiKey = stripeKey;
+}
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
