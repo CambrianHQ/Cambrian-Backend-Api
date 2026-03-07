@@ -1,16 +1,20 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Cambrian.Api.Common;
 using Cambrian.Api.Middleware;
 using Microsoft.AspNetCore.Mvc;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
+using Cambrian.Infrastructure.Email;
+using Cambrian.Infrastructure.Options;
 using Cambrian.Infrastructure.Storage;
 using Cambrian.Infrastructure.Stripe;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,8 +45,25 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     })
     .AddEntityFrameworkStores<CambrianDbContext>();
 
+// --- Startup validation: require critical secrets in non-Development ---
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "";
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    if (builder.Environment.IsDevelopment())
+        jwtKey = "***REDACTED***";
+    else
+        throw new InvalidOperationException("Jwt:Key must be set via environment variable or secret store.");
+}
+if (jwtKey.Length < 32)
+    throw new InvalidOperationException("Jwt:Key must be at least 32 characters.");
+
+var stripeKey = builder.Configuration["Stripe:SecretKey"] ?? "";
+if (!string.IsNullOrWhiteSpace(stripeKey))
+    Stripe.StripeConfiguration.ApiKey = stripeKey;
+else if (!builder.Environment.IsDevelopment())
+    Console.WriteLine("[WARN] Stripe:SecretKey is not configured — payment endpoints will fail.");
+
 // JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "***REDACTED***";
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
@@ -76,12 +97,47 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS - allow the Vite frontend in development
+// Rate Limiting (configurable via RateLimiting section)
+var globalLimit = builder.Configuration.GetValue("RateLimiting:GlobalPermitLimit", 100);
+var authLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Global fixed-window per IP
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = globalLimit,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    // Strict limiter for auth endpoints (login/register)
+    options.AddPolicy("auth", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authLimit,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+});
+
+// CORS - allow the Vite frontend in development (and Playwright preview)
+var corsOrigins = builder.Configuration.GetSection("App:CorsOrigins").Value?
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? Array.Empty<string>();
+var defaultOrigins = new[] { "http://localhost:5173", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173" };
+var allOrigins = defaultOrigins.Concat(corsOrigins).Distinct().ToArray();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins(allOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -95,6 +151,7 @@ builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IPayoutService, PayoutService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IPurchaseService, PurchaseService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
@@ -113,7 +170,33 @@ builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 
 // Infrastructure
 builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
-builder.Services.AddSingleton<IObjectStorage, R2ObjectStorage>();
+
+// Storage — choose provider based on config
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+var storageProvider = builder.Configuration["Storage:Provider"]?.ToLowerInvariant() ?? "local";
+switch (storageProvider)
+{
+    case "s3":
+    case "r2":
+        builder.Services.AddSingleton<IObjectStorage, S3ObjectStorage>();
+        break;
+    default:
+        builder.Services.AddSingleton<IObjectStorage, LocalObjectStorage>();
+        break;
+}
+
+// Email — choose provider based on config
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+var emailProvider = builder.Configuration["Email:Provider"]?.ToLowerInvariant() ?? "console";
+switch (emailProvider)
+{
+    case "smtp":
+        builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
+        break;
+    default:
+        builder.Services.AddSingleton<IEmailService, ConsoleEmailService>();
+        break;
+}
 
 var app = builder.Build();
 
@@ -125,7 +208,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionMiddleware>();
 // app.UseHttpsRedirection(); // disabled for local dev
+app.UseStaticFiles(); // serve uploaded files from wwwroot
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

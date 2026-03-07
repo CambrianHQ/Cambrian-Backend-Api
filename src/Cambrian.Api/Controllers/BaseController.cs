@@ -32,4 +32,8 @@ public class BaseController : ControllerBase
     /// <summary>403 Forbidden with error envelope.</summary>
     protected IActionResult ForbiddenResponse(string error = "Access denied.") =>
         StatusCode(403, ApiResponse.Fail(error));
+
+    /// <summary>409 Conflict with error envelope.</summary>
+    protected IActionResult ConflictResponse(string error = "Resource already exists.") =>
+        StatusCode(409, ApiResponse.Fail(error));
 }

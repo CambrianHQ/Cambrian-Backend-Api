@@ -2,6 +2,7 @@ using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cambrian.Api.Controllers;
 
@@ -17,6 +18,7 @@ public class AuthController : BaseController
         _subscriptions = subscriptions;
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request)
     {
@@ -24,6 +26,7 @@ public class AuthController : BaseController
         return StatusCode(201, ToSession(result));
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
