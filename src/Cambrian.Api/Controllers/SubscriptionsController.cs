@@ -23,35 +23,33 @@ public class SubscriptionsController : BaseController
     [HttpGet("plans")]
     public IActionResult Plans()
     {
-        var plans = new List<PlanResponse>
+        // Frontend expects: SubscriptionPlan[] = [{ id, name, priceMonthly, features }]
+        var plans = new[]
         {
-            new()
+            new
             {
-                Name = "free",
-                Description = "Basic access to the Cambrian marketplace.",
-                PriceCents = 0,
-                Interval = "month",
-                Features = ["Browse catalog", "Stream tracks", "Purchase licenses"]
+                id = "free",
+                name = "Free",
+                priceMonthly = 0.00m,
+                features = new[] { "Browse catalog", "Stream tracks", "Purchase licenses" }
             },
-            new()
+            new
             {
-                Name = "paid",
-                Description = "Enhanced listener experience with downloads and playlists.",
-                PriceCents = 999,
-                Interval = "month",
-                Features = ["Everything in Free", "Unlimited downloads", "Offline listening", "Priority support"]
+                id = "paid",
+                name = "Paid",
+                priceMonthly = 9.99m,
+                features = new[] { "Everything in Free", "Unlimited downloads", "Offline listening", "Priority support" }
             },
-            new()
+            new
             {
-                Name = "creator",
-                Description = "Full creator toolkit for uploading and selling beats.",
-                PriceCents = 1999,
-                Interval = "month",
-                Features = ["Everything in Paid", "Upload tracks", "Sell licenses", "Analytics dashboard", "Payout access"]
+                id = "creator",
+                name = "Creator",
+                priceMonthly = 19.99m,
+                features = new[] { "Everything in Paid", "Upload tracks", "Sell licenses", "Analytics dashboard", "Payout access" }
             }
         };
 
-        return OkResponse(plans);
+        return Ok(plans);
     }
 
     /// <summary>Get the current user's active subscription.</summary>
@@ -61,24 +59,12 @@ public class SubscriptionsController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var sub = await _subscriptions.GetActiveAsync(userId);
 
-        if (sub is null)
+        // Frontend expects: SubscriptionInfo { plan, status, nextBilling }
+        return Ok(new
         {
-            return OkResponse(new SubscriptionResponse
-            {
-                Id = Guid.Empty,
-                Plan = "free",
-                Status = "active",
-                StartedAt = DateTime.UtcNow
-            });
-        }
-
-        return OkResponse(new SubscriptionResponse
-        {
-            Id = sub.Id,
-            Plan = sub.Plan,
-            Status = sub.Status,
-            StartedAt = sub.StartedAt,
-            ExpiresAt = sub.ExpiresAt
+            plan = sub?.Plan ?? "free",
+            status = sub?.Status ?? "active",
+            nextBilling = sub?.ExpiresAt?.ToString("o") ?? ""
         });
     }
 
@@ -92,7 +78,7 @@ public class SubscriptionsController : BaseController
         if (existing is not null)
         {
             if (existing.Plan == request.Plan)
-                return ErrorResponse("You are already on this plan.");
+                return BadRequest(new { success = false, plan = existing.Plan, message = "You are already on this plan." });
 
             // Cancel the old subscription before creating the new one
             await _subscriptions.CancelAsync(existing.Id);
@@ -101,13 +87,7 @@ public class SubscriptionsController : BaseController
         if (request.Plan == "free")
         {
             // Downgrading to free — no new subscription row needed
-            return OkResponse(new SubscriptionResponse
-            {
-                Id = Guid.Empty,
-                Plan = "free",
-                Status = "active",
-                StartedAt = DateTime.UtcNow
-            });
+            return Ok(new { success = true, plan = "free", message = "Downgraded to free plan." });
         }
 
         var subscription = new Subscription
@@ -122,14 +102,8 @@ public class SubscriptionsController : BaseController
 
         await _subscriptions.CreateAsync(subscription);
 
-        return OkResponse(new SubscriptionResponse
-        {
-            Id = subscription.Id,
-            Plan = subscription.Plan,
-            Status = subscription.Status,
-            StartedAt = subscription.StartedAt,
-            ExpiresAt = subscription.ExpiresAt
-        }, "Subscription updated.");
+        // Frontend expects: { success, plan, message }
+        return Ok(new { success = true, plan = subscription.Plan, message = "Subscription updated." });
     }
 
     /// <summary>Cancel the current subscription.</summary>
@@ -140,10 +114,10 @@ public class SubscriptionsController : BaseController
         var existing = await _subscriptions.GetActiveAsync(userId);
 
         if (existing is null)
-            return ErrorResponse("No active subscription to cancel.");
+            return BadRequest(new { success = false, message = "No active subscription to cancel." });
 
         await _subscriptions.CancelAsync(existing.Id);
-        return MessageResponse("Subscription cancelled.");
+        return Ok(new { success = true, message = "Subscription cancelled." });
     }
 
     /// <summary>Get the user's subscription history.</summary>
@@ -153,15 +127,15 @@ public class SubscriptionsController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var history = await _subscriptions.GetHistoryAsync(userId);
 
-        var items = history.Select(s => new SubscriptionResponse
+        var items = history.Select(s => new
         {
-            Id = s.Id,
-            Plan = s.Plan,
-            Status = s.Status,
-            StartedAt = s.StartedAt,
-            ExpiresAt = s.ExpiresAt
+            id = s.Id,
+            plan = s.Plan,
+            status = s.Status,
+            startedAt = s.StartedAt.ToString("o"),
+            expiresAt = s.ExpiresAt?.ToString("o")
         });
 
-        return OkResponse(items);
+        return Ok(items);
     }
 }
