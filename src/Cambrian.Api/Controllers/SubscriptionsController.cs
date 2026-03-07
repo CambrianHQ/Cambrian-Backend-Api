@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Subscriptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
@@ -12,10 +13,12 @@ namespace Cambrian.Api.Controllers;
 public class SubscriptionsController : BaseController
 {
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly UserManager<ApplicationUser> _users;
 
-    public SubscriptionsController(ISubscriptionRepository subscriptions)
+    public SubscriptionsController(ISubscriptionRepository subscriptions, UserManager<ApplicationUser> users)
     {
         _subscriptions = subscriptions;
+        _users = users;
     }
 
     /// <summary>List available subscription plans.</summary>
@@ -75,10 +78,22 @@ public class SubscriptionsController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var existing = await _subscriptions.GetActiveAsync(userId);
 
+        // Look up the user so we can update the Tier field
+        var user = await _users.FindByIdAsync(userId);
+
         if (existing is not null)
         {
             if (existing.Plan == request.Plan)
-                return BadRequest(new { success = false, plan = existing.Plan, message = "You are already on this plan." });
+            {
+                // Subscription already matches — but make sure the user's Tier
+                // field is in sync (it may have been missed on a prior update).
+                if (user is not null && user.Tier != request.Plan)
+                {
+                    user.Tier = request.Plan;
+                    await _users.UpdateAsync(user);
+                }
+                return Ok(new { success = true, plan = existing.Plan, message = "Subscription confirmed." });
+            }
 
             // Cancel the old subscription before creating the new one
             await _subscriptions.CancelAsync(existing.Id);
@@ -87,6 +102,7 @@ public class SubscriptionsController : BaseController
         if (request.Plan == "free")
         {
             // Downgrading to free — no new subscription row needed
+            if (user is not null) { user.Tier = "free"; await _users.UpdateAsync(user); }
             return Ok(new { success = true, plan = "free", message = "Downgraded to free plan." });
         }
 
@@ -101,6 +117,9 @@ public class SubscriptionsController : BaseController
         };
 
         await _subscriptions.CreateAsync(subscription);
+
+        // Keep the user entity's Tier in sync
+        if (user is not null) { user.Tier = request.Plan; await _users.UpdateAsync(user); }
 
         // Frontend expects: { success, plan, message }
         return Ok(new { success = true, plan = subscription.Plan, message = "Subscription updated." });

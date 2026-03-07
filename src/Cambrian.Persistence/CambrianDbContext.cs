@@ -20,6 +20,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Payout> Payouts => Set<Payout>();
 
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+
     public DbSet<AbuseReport> AbuseReports => Set<AbuseReport>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -110,6 +112,19 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany()
                 .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Invoice>(e =>
+        {
+            e.HasKey(i => i.Id);
+            e.HasOne(i => i.User)
+                .WithMany()
+                .HasForeignKey(i => i.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(i => i.Purchase)
+                .WithMany()
+                .HasForeignKey(i => i.PurchaseId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<StreamSession>(e =>
