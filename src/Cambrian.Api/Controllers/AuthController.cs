@@ -19,25 +19,46 @@ public class AuthController : BaseController
     public async Task<IActionResult> Register(RegisterRequest request)
     {
         var result = await _auth.RegisterAsync(request);
-        return CreatedResponse(result, "Account created successfully.");
+        return StatusCode(201, ToSession(result));
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
         var result = await _auth.LoginAsync(request);
-        return OkResponse(result);
+        return Ok(ToSession(result));
     }
 
     [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
-        var user = await _auth.GetCurrentUserAsync(User);
-        if (user is null)
+        var profile = await _auth.GetCurrentUserAsync(User);
+        if (profile is null)
             return NotFoundResponse("User profile not found.");
-        return OkResponse(user);
+
+        return Ok(new
+        {
+            token = Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
+            user = new
+            {
+                id = profile.UserId,
+                email = profile.Email,
+                tier = (profile.Tier ?? "free").ToLowerInvariant()
+            }
+        });
     }
+
+    private static object ToSession(AuthResponse auth) => new
+    {
+        token = auth.Token,
+        user = new
+        {
+            id = auth.UserId.ToString(),
+            email = auth.Email,
+            tier = "free"
+        }
+    };
 
     [Authorize]
     [HttpPost("logout")]
