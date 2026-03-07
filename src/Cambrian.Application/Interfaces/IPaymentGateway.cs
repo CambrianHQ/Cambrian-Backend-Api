@@ -7,7 +7,7 @@ namespace Cambrian.Application.Interfaces;
 public interface IPaymentGateway
 {
     /// <summary>
-    /// Create a hosted checkout session and return the redirect URL.
+    /// Create a hosted checkout session for a one-time payment and return the redirect URL.
     /// </summary>
     Task<string> CreateCheckoutSessionAsync(
         int amountInCents,
@@ -15,4 +15,14 @@ public interface IPaymentGateway
         string? clientReferenceId = null,
         string? successUrl = null,
         string? cancelUrl = null);
+
+    /// <summary>
+    /// Create a hosted checkout session for a recurring subscription and return the redirect URL.
+    /// </summary>
+    Task<string> CreateSubscriptionCheckoutAsync(
+        int amountInCents,
+        string planName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl);
 }
