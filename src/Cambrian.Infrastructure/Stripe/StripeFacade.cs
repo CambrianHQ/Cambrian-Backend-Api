@@ -13,11 +13,22 @@ public class StripeFacade : IPaymentGateway
         string? successUrl = null,
         string? cancelUrl = null)
     {
+        // Stripe Accounts V2 requires a Customer for test-mode Checkout sessions
+        var customerService = new CustomerService();
+        var customer = await customerService.CreateAsync(new CustomerCreateOptions
+        {
+            Metadata = new Dictionary<string, string>
+            {
+                { "cambrian_ref", clientReferenceId ?? "" }
+            }
+        });
+
         var options = new SessionCreateOptions
         {
             Mode = "payment",
-            SuccessUrl = successUrl ?? "https://cambrian.app/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            CancelUrl = cancelUrl ?? "https://cambrian.app/checkout/cancel",
+            Customer = customer.Id,
+            SuccessUrl = successUrl ?? "http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+            CancelUrl = cancelUrl ?? "http://localhost:5173/checkout/cancel",
             ClientReferenceId = clientReferenceId,
             LineItems = new List<SessionLineItemOptions>
             {

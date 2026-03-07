@@ -15,11 +15,15 @@ public class CheckoutController : BaseController
         _checkout = checkout;
     }
 
+    /// <summary>
+    /// Create a Stripe Checkout session for a track purchase.
+    /// Returns { url } for redirect to Stripe.
+    /// </summary>
     [Authorize]
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(CheckoutRequest request)
     {
         var session = await _checkout.CreateCheckoutAsync(request, User);
-        return OkResponse(session);
+        return Ok(new { url = session.CheckoutUrl, status = session.Status });
     }
 }
