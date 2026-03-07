@@ -1,0 +1,36 @@
+# Build artifacts
+**/bin/
+**/obj/
+**/out/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Tests (not needed in Docker image)
+tests/
+
+# CI / docs
+*.md
+LICENSE
+.github/
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+docker-compose.*.yml

@@ -18,7 +18,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
-ENV ASPNETCORE_URLS=http://+:8080
+# Render injects PORT=10000; locally defaults to 8080
+ENV PORT=8080
 EXPOSE 8080
 
-ENTRYPOINT ["dotnet", "Cambrian.Api.dll"]
+# Use shell form so $PORT is expanded at runtime
+ENTRYPOINT sh -c "ASPNETCORE_URLS=http://+:$PORT dotnet Cambrian.Api.dll"
