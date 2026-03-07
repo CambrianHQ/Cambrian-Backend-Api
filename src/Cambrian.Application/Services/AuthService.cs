@@ -49,7 +49,7 @@ public class AuthService : IAuthService
         {
             Email = request.Email,
             UserName = request.Email,
-            DisplayName = request.DisplayName
+            DisplayName = request.DisplayName ?? request.Email.Split('@')[0]
         };
 
         var result = await _users.CreateAsync(user, request.Password);
