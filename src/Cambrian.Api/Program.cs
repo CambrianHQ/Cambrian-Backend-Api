@@ -166,7 +166,21 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(allOrigins)
+        var originSet = new HashSet<string>(allOrigins, StringComparer.OrdinalIgnoreCase);
+
+        policy.SetIsOriginAllowed(origin =>
+            {
+                // Exact match against configured origins
+                if (originSet.Contains(origin))
+                    return true;
+
+                // Allow any Vercel preview deployment for the project
+                if (Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+                    && uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                return false;
+            })
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
