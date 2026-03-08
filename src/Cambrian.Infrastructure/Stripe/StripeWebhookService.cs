@@ -79,8 +79,15 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
+        // BillingController sets clientReferenceId = "userId:subscription:tier"
         // CheckoutService sets clientReferenceId = "userId:trackId:licenseType"
         var parts = clientReferenceId.Split(':');
+        if (parts.Length == 3 && parts[1] == "subscription")
+        {
+            await HandleSubscriptionCheckout(parts[0], parts[2]);
+            return;
+        }
+
         if (parts.Length == 3)
         {
             await HandleTrackPurchase(parts[0], parts[1], parts[2], amountTotal);
@@ -168,5 +175,47 @@ public class StripeWebhookService : IWebhookService
         _logger.LogInformation(
             "Purchase created & track added to library: User={UserId} Track={TrackId} License={License}",
             userId, trackId, licenseType);
+    }
+
+    /// <summary>
+    /// Handle a subscription checkout: create or update the user's Subscription record
+    /// and upgrade their tier on the ApplicationUser.
+    /// </summary>
+    private async Task HandleSubscriptionCheckout(string userId, string tier)
+    {
+        // Cancel any existing subscription for this user
+        var existing = await _db.Subscriptions
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == "active");
+
+        if (existing is not null)
+        {
+            existing.Status = "cancelled";
+            existing.ExpiresAt = DateTime.UtcNow;
+        }
+
+        // Create new subscription
+        var subscription = new Cambrian.Domain.Entities.Subscription
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Plan = tier,
+            Status = "active",
+            StartedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddMonths(1)
+        };
+        _db.Subscriptions.Add(subscription);
+
+        // Update user tier
+        var user = await _db.Users.FindAsync(userId);
+        if (user is not null)
+        {
+            user.Tier = tier;
+        }
+
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Subscription activated: User={UserId} Plan={Plan}",
+            userId, tier);
     }
 }
