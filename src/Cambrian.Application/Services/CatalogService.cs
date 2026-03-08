@@ -39,7 +39,17 @@ public class CatalogService : ICatalogService
     {
         Id = t.Id.ToString(),
         Title = t.Title,
+        Description = t.Description,
         Genre = t.Genre ?? "",
-        Price = (decimal)t.Price
+        Price = (decimal)t.Price,
+        NonExclusivePrice = t.NonExclusivePriceCents / 100m,
+        ExclusivePrice = t.ExclusivePriceCents / 100m,
+        ExclusiveSold = t.ExclusiveSold,
+        LicenseType = t.LicenseType,
+        Duration = t.Duration,
+        AudioUrl = t.AudioUrl,
+        CreatorId = t.CreatorId,
+        Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
+        CreatedAt = t.CreatedAt,
     };
 }
