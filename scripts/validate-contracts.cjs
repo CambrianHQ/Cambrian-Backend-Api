@@ -180,6 +180,9 @@ function checkWebhookIdempotency(controllerFiles) {
 
       const ssrc = readText(sf);
 
+      // Skip interfaces — they are not implementations
+      if (/^\s*public\s+interface\s+/m.test(ssrc)) continue;
+
       // Look for patterns indicating idempotency: event ID tracking, duplicate check
       const hasIdempotency =
         /[Ee]vent[Ii]d|idempoten|[Dd]uplicate|[Pp]rocessed|[Aa]lready/i.test(
@@ -232,11 +235,19 @@ function checkRoutesInContract(controllerFiles, openApi) {
 
     for (const match of actionRoutes) {
       const actionPath = match[2] || "";
-      let fullPath = "/" + [baseRoute, actionPath]
-        .filter(Boolean)
-        .join("/")
-        .replace(/\/+/g, "/")
-        .replace(/\/$/, "");
+
+      // In ASP.NET Core, a template starting with "/" is absolute
+      // and overrides the controller-level [Route] prefix.
+      let fullPath;
+      if (actionPath.startsWith("/")) {
+        fullPath = actionPath;
+      } else {
+        fullPath = "/" + [baseRoute, actionPath]
+          .filter(Boolean)
+          .join("/")
+          .replace(/\/+/g, "/")
+          .replace(/\/$/, "");
+      }
 
       // Normalize path parameters: {id:guid} → {id}, {trackId:int} → {trackId}
       fullPath = fullPath.replace(/\{([^}:]+):[^}]+\}/g, "{$1}");
