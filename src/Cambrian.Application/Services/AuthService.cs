@@ -39,7 +39,8 @@ public class AuthService : IAuthService
         {
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
-            Token = token
+            Token = token,
+            Tier = (user.Tier ?? "free").ToLowerInvariant()
         };
     }
 
@@ -66,7 +67,8 @@ public class AuthService : IAuthService
         {
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
-            Token = token
+            Token = token,
+            Tier = (user.Tier ?? "free").ToLowerInvariant()
         };
     }
 
