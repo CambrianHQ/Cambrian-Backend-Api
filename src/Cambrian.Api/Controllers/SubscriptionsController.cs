@@ -26,7 +26,6 @@ public class SubscriptionsController : BaseController
     [HttpGet("plans")]
     public IActionResult Plans()
     {
-        // Frontend expects: SubscriptionPlan[] = [{ id, name, priceMonthly, features }]
         var plans = new[]
         {
             new
@@ -40,19 +39,19 @@ public class SubscriptionsController : BaseController
             {
                 id = "paid",
                 name = "Paid",
-                priceMonthly = 9.99m,
+                priceMonthly = 4.99m,
                 features = new[] { "Everything in Free", "Unlimited downloads", "Offline listening", "Priority support" }
             },
             new
             {
                 id = "creator",
                 name = "Creator",
-                priceMonthly = 19.99m,
+                priceMonthly = 9.99m,
                 features = new[] { "Everything in Paid", "Upload tracks", "Sell licenses", "Analytics dashboard", "Payout access" }
             }
         };
 
-        return Ok(plans);
+        return OkResponse(plans);
     }
 
     /// <summary>Get the current user's active subscription.</summary>
@@ -62,8 +61,7 @@ public class SubscriptionsController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var sub = await _subscriptions.GetActiveAsync(userId);
 
-        // Frontend expects: SubscriptionInfo { plan, status, nextBilling }
-        return Ok(new
+        return OkResponse(new
         {
             plan = sub?.Plan ?? "free",
             status = sub?.Status ?? "active",
@@ -92,7 +90,7 @@ public class SubscriptionsController : BaseController
                     user.Tier = request.Plan;
                     await _users.UpdateAsync(user);
                 }
-                return Ok(new { success = true, plan = existing.Plan, message = "Subscription confirmed." });
+                return OkResponse(new { plan = existing.Plan }, "Subscription confirmed.");
             }
 
             // Cancel the old subscription before creating the new one
@@ -103,7 +101,7 @@ public class SubscriptionsController : BaseController
         {
             // Downgrading to free — no new subscription row needed
             if (user is not null) { user.Tier = "free"; await _users.UpdateAsync(user); }
-            return Ok(new { success = true, plan = "free", message = "Downgraded to free plan." });
+            return OkResponse(new { plan = "free" }, "Downgraded to free plan.");
         }
 
         var subscription = new Subscription
@@ -121,11 +119,10 @@ public class SubscriptionsController : BaseController
         // Keep the user entity's Tier in sync
         if (user is not null) { user.Tier = request.Plan; await _users.UpdateAsync(user); }
 
-        // Frontend expects: { success, plan, message }
-        return Ok(new { success = true, plan = subscription.Plan, message = "Subscription updated." });
+        return OkResponse(new { plan = subscription.Plan }, "Subscription updated.");
     }
 
-    /// <summary>Cancel the current subscription.</summary>
+    /// <summary>Cancel the current subscription and reset tier to free.</summary>
     [HttpPost("cancel")]
     public async Task<IActionResult> Cancel()
     {
@@ -133,10 +130,19 @@ public class SubscriptionsController : BaseController
         var existing = await _subscriptions.GetActiveAsync(userId);
 
         if (existing is null)
-            return BadRequest(new { success = false, message = "No active subscription to cancel." });
+            return ErrorResponse("No active subscription to cancel.");
 
         await _subscriptions.CancelAsync(existing.Id);
-        return Ok(new { success = true, message = "Subscription cancelled." });
+
+        // Reset the user's tier back to free
+        var user = await _users.FindByIdAsync(userId);
+        if (user is not null)
+        {
+            user.Tier = "free";
+            await _users.UpdateAsync(user);
+        }
+
+        return MessageResponse("Subscription cancelled.");
     }
 
     /// <summary>Get the user's subscription history.</summary>
@@ -155,6 +161,6 @@ public class SubscriptionsController : BaseController
             expiresAt = s.ExpiresAt?.ToString("o")
         });
 
-        return Ok(items);
+        return OkResponse(items);
     }
 }
