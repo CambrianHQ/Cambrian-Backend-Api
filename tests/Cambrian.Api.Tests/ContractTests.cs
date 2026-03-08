@@ -76,11 +76,17 @@ public sealed class ContractTests
                 foreach (var attr in httpAttrs)
                 {
                     var template = attr.Template;
-                    var path = string.IsNullOrEmpty(template)
-                        ? $"/{prefix}"
-                        : $"/{prefix}/{template}";
 
-                    // Normalize path parameters: {id} → {id}
+                    // In ASP.NET Core, a template starting with "/" is absolute
+                    // and overrides the controller-level [Route] prefix.
+                    string path;
+                    if (!string.IsNullOrEmpty(template) && template.StartsWith("/"))
+                        path = template;
+                    else if (string.IsNullOrEmpty(template))
+                        path = $"/{prefix}";
+                    else
+                        path = $"/{prefix}/{template}";
+
                     path = path.Replace("//", "/");
 
                     foreach (var httpMethod in attr.HttpMethods)
