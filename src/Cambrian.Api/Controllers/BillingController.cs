@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Billing;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Cambrian.Api.Controllers;
 
@@ -11,22 +12,58 @@ namespace Cambrian.Api.Controllers;
 public class BillingController : BaseController
 {
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly IPaymentGateway _gateway;
+    private readonly string _frontendUrl;
 
-    public BillingController(ISubscriptionRepository subscriptions)
+    public BillingController(
+        ISubscriptionRepository subscriptions,
+        IPaymentGateway gateway,
+        IConfiguration configuration)
     {
         _subscriptions = subscriptions;
+        _gateway = gateway;
+        _frontendUrl = configuration["App:FrontendUrl"] ?? "http://localhost:5173";
     }
 
+    /// <summary>
+    /// Create a Stripe Checkout Session for a subscription upgrade.
+    /// Returns { url } for redirect to Stripe.
+    /// </summary>
     [HttpPost("checkout")]
-    public IActionResult Checkout(BillingCheckoutRequest request)
+    public async Task<IActionResult> Checkout(BillingCheckoutRequest request)
     {
-        return OkResponse(new { success = true, paymentId = Guid.NewGuid().ToString(), invoiceId = Guid.NewGuid().ToString() });
+        var tier = request.Tier?.ToLowerInvariant() ?? "";
+        var (amountCents, planName) = tier switch
+        {
+            "paid" => (499, "Paid Listener"),
+            "creator" => (999, "Creator"),
+            _ => (0, "")
+        };
+
+        if (amountCents == 0)
+            return ErrorResponse("Invalid tier. Choose 'paid' or 'creator'.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var successUrl = $"{_frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}";
+        var cancelUrl = $"{_frontendUrl}/checkout/cancel";
+
+        var url = await _gateway.CreateSubscriptionCheckoutAsync(
+            amountCents,
+            planName,
+            clientReferenceId: $"{userId}:subscription:{tier}",
+            successUrl,
+            cancelUrl);
+
+        return OkResponse(new { url });
     }
 
+    /// <summary>
+    /// Alias for checkout — same Stripe flow.
+    /// </summary>
     [HttpPost("checkout-session")]
-    public IActionResult CheckoutSession(BillingCheckoutRequest request)
+    public async Task<IActionResult> CheckoutSession(BillingCheckoutRequest request)
     {
-        return OkResponse(new { success = true, paymentId = Guid.NewGuid().ToString(), invoiceId = Guid.NewGuid().ToString() });
+        return await Checkout(request);
     }
 
     [HttpGet("status")]
