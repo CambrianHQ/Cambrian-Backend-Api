@@ -63,11 +63,12 @@ public class AuthController : BaseController
     private static object ToSession(AuthResponse auth) => new
     {
         token = auth.Token,
+        tier = auth.Tier,
         user = new
         {
             id = auth.UserId.ToString(),
             email = auth.Email,
-            tier = "free"
+            tier = auth.Tier
         }
     };
 
