@@ -11,11 +11,13 @@ public sealed class ExceptionMiddleware
 
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionMiddleware> _logger;
+    private readonly bool _isProduction;
 
-    public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger)
+    public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger, IHostEnvironment env)
     {
         _next = next;
         _logger = logger;
+        _isProduction = env.IsProduction();
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -39,7 +41,7 @@ public sealed class ExceptionMiddleware
                 _                           => (int)HttpStatusCode.InternalServerError
             };
 
-            var message = context.Response.StatusCode == 500
+            var message = context.Response.StatusCode == 500 && _isProduction
                 ? "An unexpected error occurred."
                 : ex.Message;
 
