@@ -244,6 +244,22 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// ── Auto-migrate database in non-production environments ──
+if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Staging")
+{
+    try
+    {
+        using var migrateScope = app.Services.CreateScope();
+        var migrateDb = migrateScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        migrateDb.Database.Migrate();
+        Console.WriteLine("[Startup] Database migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Startup] Migration error: {ex.Message}");
+    }
+}
+
 // ── Seed demo tracks if the table is empty ──
 {
     Console.WriteLine("[Seed] Checking for tracks...");
