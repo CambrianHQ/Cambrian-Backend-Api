@@ -2,7 +2,7 @@
 
 > A **contract-driven**, **policy-compliant**, and **test-verified** REST API built with ASP.NET Core 8.
 
-[![CI](https://github.com/loganbryanx/Cambrian-Backend-Api/actions/workflows/ci.yml/badge.svg)](https://github.com/loganbryanx/Cambrian-Backend-Api/actions/workflows/ci.yml)
+[![CI](https://github.com/cambrian/Cambrian-Backend-Api/actions/workflows/ci.yml/badge.svg)](https://github.com/cambrian/Cambrian-Backend-Api/actions/workflows/ci.yml)
 
 ---
 
@@ -90,7 +90,7 @@ Dependencies flow **inward only**: `Api` → `Application` → `Domain`. Infrast
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/loganbryanx/Cambrian-Backend-Api.git
+git clone https://github.com/cambrian/Cambrian-Backend-Api.git
 cd Cambrian-Backend-Api
 
 # 2. Copy and configure environment variables

@@ -18,7 +18,7 @@ services:
   - type: web
     name: cambrian-api-staging
     runtime: docker
-    repo: https://github.com/loganbryanx/Cambrian-Backend-Api
+    repo: https://github.com/cambrian/Cambrian-Backend-Api
     branch: main
     plan: free
     region: oregon
