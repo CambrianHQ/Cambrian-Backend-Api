@@ -60,9 +60,9 @@ services:
         value: "100"
       # CORS — allow the Vercel staging frontend
       - key: App__FrontendUrl
-        value: https://cambrian-staging.vercel.app
+        value: https://cambrian-test.vercel.app
       - key: App__CorsOrigins
-        value: "https://cambrian-staging.vercel.app,https://cambrianmusic.com,https://www.cambrianmusic.com"
+        value: "https://cambrian-test.vercel.app,https://cambrian-staging.vercel.app,https://cambrianmusic.com,https://www.cambrianmusic.com"
     buildFilter:
       paths:
         - src/**
