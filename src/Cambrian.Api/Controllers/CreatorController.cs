@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Cambrian.Api.Middleware;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,7 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Cambrian.Api.Controllers;
 
 [Route("creator")]
-[Authorize(Roles = "Creator")]
+[Authorize]
+[RequireCreatorTier]
 public class CreatorController : BaseController
 {
     private readonly ICreatorService _creator;

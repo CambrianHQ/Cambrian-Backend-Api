@@ -20,4 +20,7 @@ public interface IAuthService
     Task ResetPasswordAsync(ResetPasswordRequest request);
 
     Task RecoverUsernameAsync(RecoverUsernameRequest request);
+
+    /// <summary>Generate a fresh JWT for the given userId (includes updated tier/role claims).</summary>
+    Task<string?> GenerateFreshTokenAsync(string userId);
 }

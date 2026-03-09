@@ -42,7 +42,8 @@ public class AuthService : IAuthService
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
             Token = token,
-            Tier = (user.Tier ?? "free").ToLowerInvariant()
+            Tier = (user.Tier ?? "free").ToLowerInvariant(),
+            Role = user.Role ?? "User"
         };
     }
 
@@ -70,7 +71,8 @@ public class AuthService : IAuthService
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
             Token = token,
-            Tier = (user.Tier ?? "free").ToLowerInvariant()
+            Tier = "free",
+            Role = "User"
         };
     }
 
@@ -159,6 +161,7 @@ public class AuthService : IAuthService
             new(JwtRegisteredClaimNames.Sub, user.Id),
             new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
             new(ClaimTypes.Role, user.Role),
+            new("tier", (user.Tier ?? "free").ToLowerInvariant()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -173,5 +176,12 @@ public class AuthService : IAuthService
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public async Task<string?> GenerateFreshTokenAsync(string userId)
+    {
+        var user = await _users.FindByIdAsync(userId);
+        if (user is null) return null;
+        return GenerateJwt(user);
     }
 }
