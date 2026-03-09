@@ -11,11 +11,13 @@ public sealed class PaymentServiceTests
     private readonly IPaymentGateway _gateway = Substitute.For<IPaymentGateway>();
     private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
     private readonly IPurchaseRepository _purchases = Substitute.For<IPurchaseRepository>();
+    private readonly ILibraryRepository _library = Substitute.For<ILibraryRepository>();
+    private readonly IInvoiceRepository _invoices = Substitute.For<IInvoiceRepository>();
     private readonly PaymentService _sut;
 
     public PaymentServiceTests()
     {
-        _sut = new PaymentService(_gateway, _tracks, _purchases);
+        _sut = new PaymentService(_gateway, _tracks, _purchases, _library, _invoices);
     }
 
     [Fact]
@@ -167,16 +169,22 @@ public sealed class PaymentServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_UpdatesStatusToCompleted()
+    public async Task ProcessAsync_UpdatesStatusToCompleted_AndCreatesLibraryAndInvoice()
     {
+        var trackId = Guid.NewGuid();
+        var track = new Track { Id = trackId, Title = "Beat", CreatorId = "c1", Price = 29.99 };
         var purchase = new Purchase
         {
             Id = Guid.NewGuid(),
-            TrackId = Guid.NewGuid(),
+            TrackId = trackId,
             BuyerId = "user-1",
+            Amount = 29.99,
+            LicenseType = "non-exclusive",
             Status = "pending"
         };
         _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
+        _tracks.GetByIdAsync(trackId).Returns(track);
+        _library.GetByUserAndTrackAsync("user-1", trackId).Returns((LibraryItem?)null);
 
         await _sut.ProcessAsync(new PaymentProcessRequest
         {
@@ -187,19 +195,51 @@ public sealed class PaymentServiceTests
         Assert.Equal("completed", purchase.Status);
         Assert.Equal("pm_test", purchase.PaymentMethod);
         await _purchases.Received(1).UpdateAsync(purchase);
+        await _library.Received(1).AddAsync(Arg.Is<LibraryItem>(l =>
+            l.UserId == "user-1" && l.TrackId == trackId));
+        await _invoices.Received(1).AddAsync(Arg.Is<Invoice>(i =>
+            i.UserId == "user-1" && i.PurchaseId == purchase.Id));
     }
 
     [Fact]
-    public async Task ProcessAsync_DefaultsPaymentMethodToStripe()
+    public async Task ProcessAsync_SkipsLibraryAndInvoice_WhenAlreadyCompleted()
     {
         var purchase = new Purchase
         {
             Id = Guid.NewGuid(),
             TrackId = Guid.NewGuid(),
             BuyerId = "user-1",
+            Amount = 10,
+            Status = "completed"
+        };
+        _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
+
+        await _sut.ProcessAsync(new PaymentProcessRequest
+        {
+            PurchaseId = purchase.Id.ToString(),
+            PaymentMethodId = "pm_test"
+        });
+
+        await _library.DidNotReceive().AddAsync(Arg.Any<LibraryItem>());
+        await _invoices.DidNotReceive().AddAsync(Arg.Any<Invoice>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DefaultsPaymentMethodToStripe()
+    {
+        var trackId = Guid.NewGuid();
+        var purchase = new Purchase
+        {
+            Id = Guid.NewGuid(),
+            TrackId = trackId,
+            BuyerId = "user-1",
+            Amount = 10,
+            LicenseType = "non-exclusive",
             Status = "pending"
         };
         _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
+        _tracks.GetByIdAsync(trackId).Returns(new Track { Id = trackId, Title = "B", CreatorId = "c1" });
+        _library.GetByUserAndTrackAsync("user-1", trackId).Returns((LibraryItem?)null);
 
         await _sut.ProcessAsync(new PaymentProcessRequest
         {
@@ -208,5 +248,33 @@ public sealed class PaymentServiceTests
         });
 
         Assert.Equal("stripe", purchase.PaymentMethod);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MarksExclusiveSoldAndHidden_WhenExclusiveLicense()
+    {
+        var trackId = Guid.NewGuid();
+        var track = new Track { Id = trackId, Title = "Beat", CreatorId = "c1", Price = 500, Visibility = "public" };
+        var purchase = new Purchase
+        {
+            Id = Guid.NewGuid(),
+            TrackId = trackId,
+            BuyerId = "user-1",
+            Amount = 500,
+            LicenseType = "exclusive",
+            Status = "pending"
+        };
+        _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
+        _tracks.GetByIdAsync(trackId).Returns(track);
+        _library.GetByUserAndTrackAsync("user-1", trackId).Returns((LibraryItem?)null);
+
+        await _sut.ProcessAsync(new PaymentProcessRequest
+        {
+            PurchaseId = purchase.Id.ToString()
+        });
+
+        Assert.True(track.ExclusiveSold);
+        Assert.Equal("hidden", track.Visibility);
+        await _tracks.Received(1).UpdateAsync(track);
     }
 }

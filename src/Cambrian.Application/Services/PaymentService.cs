@@ -9,12 +9,21 @@ public class PaymentService : IPaymentService
     private readonly IPaymentGateway _gateway;
     private readonly ITrackRepository _tracks;
     private readonly IPurchaseRepository _purchases;
+    private readonly ILibraryRepository _library;
+    private readonly IInvoiceRepository _invoices;
 
-    public PaymentService(IPaymentGateway gateway, ITrackRepository tracks, IPurchaseRepository purchases)
+    public PaymentService(
+        IPaymentGateway gateway,
+        ITrackRepository tracks,
+        IPurchaseRepository purchases,
+        ILibraryRepository library,
+        IInvoiceRepository invoices)
     {
         _gateway = gateway;
         _tracks = tracks;
         _purchases = purchases;
+        _library = library;
+        _invoices = invoices;
     }
 
     public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request)
@@ -67,8 +76,47 @@ public class PaymentService : IPaymentService
         var purchase = await _purchases.GetByIdAsync(Guid.Parse(request.PurchaseId))
                        ?? throw new KeyNotFoundException($"Purchase {request.PurchaseId} not found.");
 
+        var wasAlreadyCompleted = purchase.Status == "completed";
         purchase.Status = "completed";
         purchase.PaymentMethod = request.PaymentMethodId ?? "stripe";
         await _purchases.UpdateAsync(purchase);
+
+        if (wasAlreadyCompleted) return;
+
+        var track = await _tracks.GetByIdAsync(purchase.TrackId);
+
+        var existingLib = await _library.GetByUserAndTrackAsync(purchase.BuyerId, purchase.TrackId);
+        if (existingLib is null)
+        {
+            await _library.AddAsync(new LibraryItem
+            {
+                Id = Guid.NewGuid(),
+                UserId = purchase.BuyerId,
+                TrackId = purchase.TrackId,
+                Title = track?.Title ?? "",
+                Artist = track?.Creator?.DisplayName ?? "",
+                AudioUrl = track?.AudioUrl,
+                SavedAt = DateTime.UtcNow
+            });
+        }
+
+        await _invoices.AddAsync(new Invoice
+        {
+            Id = Guid.NewGuid(),
+            UserId = purchase.BuyerId,
+            PurchaseId = purchase.Id,
+            AmountCents = (int)(purchase.Amount * 100),
+            Currency = "usd",
+            Status = "paid",
+            IssuedAt = DateTime.UtcNow,
+            PaidAt = DateTime.UtcNow
+        });
+
+        if (track is not null && purchase.LicenseType == "exclusive" && !track.ExclusiveSold)
+        {
+            track.ExclusiveSold = true;
+            track.Visibility = "hidden";
+            await _tracks.UpdateAsync(track);
+        }
     }
 }

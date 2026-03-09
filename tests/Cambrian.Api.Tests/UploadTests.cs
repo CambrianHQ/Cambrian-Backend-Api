@@ -20,10 +20,10 @@ public sealed class UploadTests : IClassFixture<CambrianApiFixture>
     [Fact]
     public async Task Upload_AsCreator_ReturnsCreated()
     {
-        // Register + promote to Creator
         var email = "upload-creator@cambrian.com";
         var client = await _factory.CreateAuthenticatedClientAsync(email, "Test1234!@");
         await _factory.SetUserRoleAsync(email, "Creator");
+        await _factory.SetUserTierAsync(email, "creator");
 
         // Re-login to get a fresh token with the Creator role
         var loginRes = await _factory.CreateClient().PostAsJsonAsync("/auth/login", new

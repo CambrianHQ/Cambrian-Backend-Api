@@ -10,17 +10,20 @@ public class PurchaseService : IPurchaseService
     private readonly ITrackRepository _tracks;
     private readonly ILibraryRepository _library;
     private readonly IInvoiceRepository _invoiceRepo;
+    private readonly IWalletRepository _wallet;
 
     public PurchaseService(
         IPurchaseRepository purchases,
         ITrackRepository tracks,
         ILibraryRepository library,
-        IInvoiceRepository invoiceRepo)
+        IInvoiceRepository invoiceRepo,
+        IWalletRepository wallet)
     {
         _purchases = purchases;
         _tracks = tracks;
         _library = library;
         _invoiceRepo = invoiceRepo;
+        _wallet = wallet;
     }
 
     public async Task<PurchaseResponse> CreateAsync(PurchaseCreateRequest request, string userId)
@@ -65,10 +68,10 @@ public class PurchaseService : IPurchaseService
             SavedAt = DateTime.UtcNow
         });
 
-        // Mark exclusive if applicable
         if (request.LicenseType == "exclusive")
         {
             track.ExclusiveSold = true;
+            track.Visibility = "hidden";
             await _tracks.UpdateAsync(track);
         }
 
@@ -113,10 +116,23 @@ public class PurchaseService : IPurchaseService
         }).ToList();
     }
 
-    public Task CreditCreatorAsync(CreditCreatorRequest request)
+    public async Task CreditCreatorAsync(CreditCreatorRequest request)
     {
-        // In a real implementation this would credit the creator's wallet.
-        // For now, acknowledge the request.
-        return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(request.CreatorId))
+            throw new ArgumentException("CreatorId is required.");
+
+        if (request.AmountCents <= 0)
+            throw new ArgumentException("AmountCents must be positive.");
+
+        await _wallet.AddTransactionAsync(new WalletTransaction
+        {
+            Id = Guid.NewGuid(),
+            UserId = request.CreatorId,
+            AmountCents = request.AmountCents,
+            Type = "credit",
+            Description = $"Sale of \"{request.TrackTitle}\" ({request.LicenseType ?? "non-exclusive"})",
+            RelatedPurchaseId = Guid.TryParse(request.TrackId, out var tid) ? tid : null,
+            CreatedAt = DateTime.UtcNow
+        });
     }
 }

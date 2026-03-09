@@ -19,16 +19,15 @@ public sealed class DownloadTests : IClassFixture<CambrianApiFixture>
     [Fact]
     public async Task Download_WithPurchase_ReturnsSignedUrl()
     {
-        // Seed creator + track
         var creatorEmail = "dl-creator@cambrian.com";
         await _factory.RegisterUserAsync(creatorEmail, "Test1234!@");
         var creatorId = await _factory.GetUserIdAsync(creatorEmail);
         var trackId = await _factory.SeedTrackAsync(creatorId, "Download Beat");
 
-        // Register buyer + add to library (simulates completed purchase)
         var buyerEmail = "dl-buyer@cambrian.com";
         var client = await _factory.CreateAuthenticatedClientAsync(buyerEmail, "Test1234!@");
         var buyerId = await _factory.GetUserIdAsync(buyerEmail);
+        await _factory.SeedPurchaseAsync(buyerId, trackId);
         await _factory.SeedLibraryItemAsync(buyerId, trackId);
 
         var res = await client.GetAsync($"/download/{trackId}");
@@ -81,16 +80,15 @@ public sealed class DownloadTests : IClassFixture<CambrianApiFixture>
     [Fact]
     public async Task SignedUrl_WithPurchase_ReturnsUrlAndExpiry()
     {
-        // Seed creator + track
         var creatorEmail = "dl-signed-creator@cambrian.com";
         await _factory.RegisterUserAsync(creatorEmail, "Test1234!@");
         var creatorId = await _factory.GetUserIdAsync(creatorEmail);
         var trackId = await _factory.SeedTrackAsync(creatorId, "Signed URL Beat");
 
-        // Buyer with library item
         var buyerEmail = "dl-signed-buyer@cambrian.com";
         var client = await _factory.CreateAuthenticatedClientAsync(buyerEmail, "Test1234!@");
         var buyerId = await _factory.GetUserIdAsync(buyerEmail);
+        await _factory.SeedPurchaseAsync(buyerId, trackId);
         await _factory.SeedLibraryItemAsync(buyerId, trackId);
 
         var res = await client.GetAsync($"/download/{trackId}/signed");

@@ -8,16 +8,47 @@ public class PayoutService : IPayoutService
 {
     private readonly IPayoutRepository _payouts;
     private readonly IPurchaseRepository _purchases;
+    private readonly ITrackRepository _tracks;
 
-    public PayoutService(IPayoutRepository payouts, IPurchaseRepository purchases)
+    public PayoutService(IPayoutRepository payouts, IPurchaseRepository purchases, ITrackRepository tracks)
     {
         _payouts = payouts;
         _purchases = purchases;
+        _tracks = tracks;
     }
 
-    public async Task<object> GetEarningsAsync()
+    public async Task<object> GetEarningsAsync(string creatorId)
     {
-        return await Task.FromResult(new { balance = 0m, pending = 0m, available = 0m, currency = "USD" });
+        var tracks = await _tracks.GetByCreatorIdAsync(creatorId);
+        var trackIds = tracks.Select(t => t.Id).ToHashSet();
+
+        double totalRevenue = 0;
+        foreach (var trackId in trackIds)
+        {
+            var purchases = await _purchases.GetByTrackIdAsync(trackId);
+            totalRevenue += purchases
+                .Where(p => p.Status == "completed")
+                .Sum(p => p.Amount);
+        }
+
+        var payouts = await _payouts.GetByCreatorIdAsync(creatorId);
+        var totalPaidOut = payouts
+            .Where(p => p.Status == "completed" || p.Status == "approved")
+            .Sum(p => p.Amount);
+        var totalPending = payouts
+            .Where(p => p.Status == "pending")
+            .Sum(p => p.Amount);
+
+        var available = totalRevenue - totalPaidOut - totalPending;
+
+        return new
+        {
+            balance = Math.Round(totalRevenue, 2),
+            pending = Math.Round(totalPending, 2),
+            paidOut = Math.Round(totalPaidOut, 2),
+            available = Math.Round(Math.Max(0, available), 2),
+            currency = "USD"
+        };
     }
 
     public async Task<PayoutResponse> RequestAsync(PayoutRequest request, string creatorId)
@@ -27,6 +58,28 @@ public class PayoutService : IPayoutService
 
         if (string.IsNullOrWhiteSpace(creatorId))
             throw new ArgumentException("Creator ID is required for payout requests.");
+
+        var tracks = await _tracks.GetByCreatorIdAsync(creatorId);
+        var trackIds = tracks.Select(t => t.Id).ToHashSet();
+
+        double totalRevenue = 0;
+        foreach (var trackId in trackIds)
+        {
+            var purchases = await _purchases.GetByTrackIdAsync(trackId);
+            totalRevenue += purchases
+                .Where(p => p.Status == "completed")
+                .Sum(p => p.Amount);
+        }
+
+        var payouts = await _payouts.GetByCreatorIdAsync(creatorId);
+        var totalPaidOrPending = payouts
+            .Where(p => p.Status == "completed" || p.Status == "approved" || p.Status == "pending")
+            .Sum(p => p.Amount);
+
+        var available = totalRevenue - totalPaidOrPending;
+        if ((double)request.Amount > available)
+            throw new InvalidOperationException(
+                $"Payout amount {request.Amount:F2} exceeds available balance {available:F2}.");
 
         var payout = new Payout
         {

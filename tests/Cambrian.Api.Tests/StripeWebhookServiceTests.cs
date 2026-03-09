@@ -117,6 +117,17 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var lib = await _db.Library.FirstOrDefaultAsync(l => l.UserId == userId);
         Assert.NotNull(lib);
         Assert.Equal(trackId, lib.TrackId);
+
+        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.PurchaseId == purchase.Id);
+        Assert.NotNull(invoice);
+        Assert.Equal(2999, invoice.AmountCents);
+        Assert.Equal("paid", invoice.Status);
+
+        var walletTx = await _db.WalletTransactions.FirstOrDefaultAsync(w => w.RelatedPurchaseId == purchase.Id);
+        Assert.NotNull(walletTx);
+        Assert.Equal(2999, walletTx.AmountCents);
+        Assert.Equal("credit", walletTx.Type);
+        Assert.Equal("creator-1", walletTx.UserId);
     }
 
     [Fact]
@@ -147,6 +158,34 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.NotNull(sub);
         Assert.Equal("active", sub.Status);
         Assert.Equal("creator", sub.Plan);
+    }
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_ExclusivePurchase_SetsVisibilityHidden()
+    {
+        var trackId = Guid.NewGuid();
+        var userId = "user-excl";
+        _db.Tracks.Add(new Track { Id = trackId, Title = "Exclusive Beat", CreatorId = "creator-1", Visibility = "public" });
+        await _db.SaveChangesAsync();
+
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = $$"""
+        {
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "{{userId}}:{{trackId}}:exclusive",
+                    "amount_total": 50000
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+
+        var track = await _db.Tracks.FindAsync(trackId);
+        Assert.True(track!.ExclusiveSold);
+        Assert.Equal("hidden", track.Visibility);
     }
 
     // ── HandleCheckoutCompleted routing: legacy GUID path ──

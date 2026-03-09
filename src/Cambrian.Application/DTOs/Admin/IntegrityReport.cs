@@ -37,4 +37,6 @@ public class IntegritySummary
     public int PurchasesWithoutInvoice { get; set; }
 
     public int ExclusivePurchasesWithoutFlag { get; set; }
+
+    public int WalletCreditMismatches { get; set; }
 }

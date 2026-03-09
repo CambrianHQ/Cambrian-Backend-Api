@@ -26,6 +26,7 @@ public class MarketplaceIntegrityService : IMarketplaceIntegrityService
         await CheckOrphanedLibraryItems(report);
         await CheckCompletedPurchasesHaveInvoices(report);
         await CheckExclusivePurchasesHaveTrackFlag(report);
+        await CheckWalletCreditsMatchPurchases(report);
 
         report.Summary = new IntegritySummary
         {
@@ -41,6 +42,8 @@ public class MarketplaceIntegrityService : IMarketplaceIntegrityService
                 .Count(v => v.Rule == "purchase-invoice-link"),
             ExclusivePurchasesWithoutFlag = report.Violations
                 .Count(v => v.Rule == "exclusive-purchase-flag"),
+            WalletCreditMismatches = report.Violations
+                .Count(v => v.Rule == "wallet-credit-mismatch"),
         };
 
         _logger.LogInformation(
@@ -101,12 +104,12 @@ public class MarketplaceIntegrityService : IMarketplaceIntegrityService
             report.Violations.Add(new IntegrityViolation
             {
                 Rule = "exclusive-visibility",
-                Severity = "warning",
+                Severity = "error",
                 EntityType = "Track",
                 EntityId = track.Id.ToString(),
                 Description = $"Track \"{track.Title}\" ({track.Id}) is marked ExclusiveSold " +
-                              "but still has Visibility=\"public\". The BrowseAsync filter handles this, " +
-                              "but Visibility should ideally be updated for consistency."
+                              "but still has Visibility=\"public\". Visibility must be \"hidden\" " +
+                              "to prevent the track from appearing in browse results."
             });
         }
     }
@@ -246,6 +249,40 @@ public class MarketplaceIntegrityService : IMarketplaceIntegrityService
                     EntityId = purchase.TrackId.ToString(),
                     Description = $"Track {purchase.TrackId} has a completed exclusive purchase " +
                                   $"({purchase.Id}) but ExclusiveSold is false."
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Rule: each completed purchase should have a corresponding wallet credit for the track's creator.
+    /// </summary>
+    private async Task CheckWalletCreditsMatchPurchases(IntegrityReport report)
+    {
+        var completedPurchases = await _db.Purchases
+            .Where(p => p.Status == "completed")
+            .Select(p => new { p.Id, p.TrackId, p.Amount })
+            .ToListAsync();
+
+        var creditsByPurchase = (await _db.WalletTransactions
+            .Where(w => w.Type == "credit" && w.RelatedPurchaseId != null)
+            .Select(w => new { w.RelatedPurchaseId, w.AmountCents })
+            .ToListAsync())
+            .GroupBy(w => w.RelatedPurchaseId!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(w => w.AmountCents));
+
+        foreach (var purchase in completedPurchases)
+        {
+            if (!creditsByPurchase.ContainsKey(purchase.Id))
+            {
+                report.Violations.Add(new IntegrityViolation
+                {
+                    Rule = "wallet-credit-mismatch",
+                    Severity = "warning",
+                    EntityType = "Purchase",
+                    EntityId = purchase.Id.ToString(),
+                    Description = $"Completed purchase {purchase.Id} for track {purchase.TrackId} " +
+                                  "has no corresponding wallet credit for the creator."
                 });
             }
         }

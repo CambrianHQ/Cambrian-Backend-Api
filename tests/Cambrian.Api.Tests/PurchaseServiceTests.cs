@@ -12,11 +12,12 @@ public sealed class PurchaseServiceTests
     private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
     private readonly ILibraryRepository _library = Substitute.For<ILibraryRepository>();
     private readonly IInvoiceRepository _invoices = Substitute.For<IInvoiceRepository>();
+    private readonly IWalletRepository _wallet = Substitute.For<IWalletRepository>();
     private readonly PurchaseService _sut;
 
     public PurchaseServiceTests()
     {
-        _sut = new PurchaseService(_purchases, _tracks, _library, _invoices);
+        _sut = new PurchaseService(_purchases, _tracks, _library, _invoices, _wallet);
     }
 
     private Track MakeTrack(Guid? id = null) => new()
@@ -120,7 +121,7 @@ public sealed class PurchaseServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_MarksExclusiveSold_WhenLicenseIsExclusive()
+    public async Task CreateAsync_MarksExclusiveSoldAndHidesTrack_WhenLicenseIsExclusive()
     {
         var trackId = Guid.NewGuid();
         var track = MakeTrack(trackId);
@@ -136,6 +137,7 @@ public sealed class PurchaseServiceTests
         await _sut.CreateAsync(request, "user-1");
 
         Assert.True(track.ExclusiveSold);
+        Assert.Equal("hidden", track.Visibility);
         await _tracks.Received(1).UpdateAsync(track);
     }
 
@@ -204,5 +206,40 @@ public sealed class PurchaseServiceTests
 
         Assert.Single(result);
         Assert.Equal(2999, result.First().AmountCents);
+    }
+
+    [Fact]
+    public async Task CreditCreatorAsync_CreatesWalletTransaction()
+    {
+        var request = new CreditCreatorRequest
+        {
+            CreatorId = "creator-1",
+            TrackTitle = "Hot Beat",
+            AmountCents = 2999,
+            LicenseType = "non-exclusive"
+        };
+
+        await _sut.CreditCreatorAsync(request);
+
+        await _wallet.Received(1).AddTransactionAsync(Arg.Is<WalletTransaction>(t =>
+            t.UserId == "creator-1" &&
+            t.AmountCents == 2999 &&
+            t.Type == "credit"));
+    }
+
+    [Fact]
+    public async Task CreditCreatorAsync_ThrowsWhenCreatorIdEmpty()
+    {
+        var request = new CreditCreatorRequest { CreatorId = "", AmountCents = 100 };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreditCreatorAsync(request));
+    }
+
+    [Fact]
+    public async Task CreditCreatorAsync_ThrowsWhenAmountNotPositive()
+    {
+        var request = new CreditCreatorRequest { CreatorId = "c1", AmountCents = 0 };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreditCreatorAsync(request));
     }
 }

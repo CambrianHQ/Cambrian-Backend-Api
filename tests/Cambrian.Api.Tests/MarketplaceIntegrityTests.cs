@@ -279,6 +279,93 @@ public sealed class MarketplaceIntegrityTests : IDisposable
         Assert.DoesNotContain(report.Violations, v => v.Rule == "exclusive-purchase-flag");
     }
 
+    // ── Rule: wallet credit must exist for completed purchases ──
+
+    [Fact]
+    public async Task Audit_DetectsCompletedPurchaseWithoutWalletCredit()
+    {
+        var trackId = Guid.NewGuid();
+        var purchaseId = Guid.NewGuid();
+        _db.Tracks.Add(new Track { Id = trackId, Title = "Beat", CreatorId = "c1" });
+        _db.Purchases.Add(new Purchase
+        {
+            Id = purchaseId,
+            BuyerId = "buyer-1",
+            TrackId = trackId,
+            Amount = 10,
+            Status = "completed"
+        });
+        _db.Library.Add(new LibraryItem
+        {
+            Id = Guid.NewGuid(),
+            UserId = "buyer-1",
+            TrackId = trackId,
+            Title = "Beat"
+        });
+        _db.Invoices.Add(new Invoice
+        {
+            Id = Guid.NewGuid(),
+            UserId = "buyer-1",
+            PurchaseId = purchaseId,
+            AmountCents = 1000,
+            Currency = "usd",
+            Status = "paid",
+            IssuedAt = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
+
+        var report = await _sut.RunAuditAsync();
+
+        Assert.Contains(report.Violations, v => v.Rule == "wallet-credit-mismatch");
+        Assert.True(report.Summary.WalletCreditMismatches > 0);
+    }
+
+    [Fact]
+    public async Task Audit_NoViolation_WhenWalletCreditExists()
+    {
+        var trackId = Guid.NewGuid();
+        var purchaseId = Guid.NewGuid();
+        _db.Tracks.Add(new Track { Id = trackId, Title = "Beat", CreatorId = "c1" });
+        _db.Purchases.Add(new Purchase
+        {
+            Id = purchaseId,
+            BuyerId = "buyer-1",
+            TrackId = trackId,
+            Amount = 10,
+            Status = "completed"
+        });
+        _db.Library.Add(new LibraryItem
+        {
+            Id = Guid.NewGuid(),
+            UserId = "buyer-1",
+            TrackId = trackId,
+            Title = "Beat"
+        });
+        _db.Invoices.Add(new Invoice
+        {
+            Id = Guid.NewGuid(),
+            UserId = "buyer-1",
+            PurchaseId = purchaseId,
+            AmountCents = 1000,
+            Currency = "usd",
+            Status = "paid",
+            IssuedAt = DateTime.UtcNow
+        });
+        _db.WalletTransactions.Add(new WalletTransaction
+        {
+            Id = Guid.NewGuid(),
+            UserId = "c1",
+            AmountCents = 1000,
+            Type = "credit",
+            RelatedPurchaseId = purchaseId
+        });
+        await _db.SaveChangesAsync();
+
+        var report = await _sut.RunAuditAsync();
+
+        Assert.DoesNotContain(report.Violations, v => v.Rule == "wallet-credit-mismatch");
+    }
+
     // ── Clean state produces zero violations ──
 
     [Fact]
@@ -329,6 +416,14 @@ public sealed class MarketplaceIntegrityTests : IDisposable
             Currency = "usd",
             Status = "paid",
             IssuedAt = DateTime.UtcNow
+        });
+        _db.WalletTransactions.Add(new WalletTransaction
+        {
+            Id = Guid.NewGuid(),
+            UserId = "c1",
+            AmountCents = 1000,
+            Type = "credit",
+            RelatedPurchaseId = purchaseId
         });
         await _db.SaveChangesAsync();
 

@@ -252,13 +252,12 @@ public class StripeWebhookService : IWebhookService
         };
         _db.Purchases.Add(purchase);
 
-        // Mark track as exclusively sold when an exclusive license is purchased
         if (licenseType == "exclusive")
         {
             track.ExclusiveSold = true;
+            track.Visibility = "hidden";
         }
 
-        // Add to library (if not already there)
         var existingLib = await _db.Library
             .FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == trackId);
 
@@ -275,6 +274,33 @@ public class StripeWebhookService : IWebhookService
                 SavedAt = DateTime.UtcNow
             };
             _db.Library.Add(libraryItem);
+        }
+
+        _db.Invoices.Add(new Cambrian.Domain.Entities.Invoice
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            PurchaseId = purchase.Id,
+            AmountCents = (int)(purchase.Amount * 100),
+            Currency = "usd",
+            Status = "paid",
+            IssuedAt = DateTime.UtcNow,
+            PaidAt = DateTime.UtcNow
+        });
+
+        var creatorWalletCreditCents = (long)(purchase.Amount * 100);
+        if (creatorWalletCreditCents > 0 && !string.IsNullOrWhiteSpace(track.CreatorId))
+        {
+            _db.WalletTransactions.Add(new WalletTransaction
+            {
+                Id = Guid.NewGuid(),
+                UserId = track.CreatorId,
+                AmountCents = creatorWalletCreditCents,
+                Type = "credit",
+                Description = $"Sale of \"{track.Title}\" ({licenseType})",
+                RelatedPurchaseId = purchase.Id,
+                CreatedAt = DateTime.UtcNow
+            });
         }
 
         await _db.SaveChangesAsync();
