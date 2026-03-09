@@ -8,46 +8,25 @@ namespace Cambrian.Api.Controllers;
 [Route("stream")]
 public class StreamController : BaseController
 {
-    private readonly ITrackRepository _tracks;
-    private readonly IObjectStorage _storage;
-    private readonly IStreamRepository _streams;
+    private readonly IStreamService _streams;
 
-    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams)
+    public StreamController(IStreamService streams)
     {
-        _tracks = tracks;
-        _storage = storage;
         _streams = streams;
     }
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int take = 20)
     {
-        // Return recent tracks from the catalog as streamable content
-        var tracks = await _tracks.BrowseAsync();
-        var result = tracks.Take(take).Select(t => new
-        {
-            id = t.Id.ToString(),
-            title = t.Title,
-            artist = t.Creator?.DisplayName ?? t.Creator?.Email ?? "Unknown",
-            genre = t.Genre,
-            duration = t.Duration,
-            audioUrl = t.AudioUrl
-        }).ToList();
+        var result = await _streams.ListStreamableAsync(take);
         return OkResponse(result);
     }
 
     [HttpGet("{trackId}")]
     public async Task<IActionResult> Stream(string trackId)
     {
-        if (!Guid.TryParse(trackId, out var id))
-            return ErrorResponse("trackId must be a valid GUID.");
-
-        var track = await _tracks.GetByIdAsync(id);
-        if (track?.AudioUrl is null)
-            return NotFoundResponse("Track not found.");
-
-        var streamUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return OkResponse(new { trackId, streamUrl });
+        var result = await _streams.GetStreamUrlAsync(trackId);
+        return OkResponse(result);
     }
 
     [Authorize]
@@ -55,12 +34,9 @@ public class StreamController : BaseController
     public async Task<IActionResult> Start([FromBody] StreamStartRequest? body = null, [FromQuery] string? trackId = null)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        // Accept trackId from JSON body (frontend) or query string (fallback)
         var rawTrackId = body?.TrackId ?? trackId;
-        Guid parsedTrackId = Guid.TryParse(rawTrackId, out var tid) ? tid : Guid.Empty;
-
-        var session = await _streams.StartAsync(parsedTrackId, userId);
-        return OkResponse(new { streamId = session.Id.ToString(), status = "started" });
+        var result = await _streams.StartAsync(rawTrackId, userId);
+        return OkResponse(result);
     }
 
     public class StreamStartRequest
@@ -73,9 +49,7 @@ public class StreamController : BaseController
     [HttpPost("stop")]
     public async Task<IActionResult> Stop([FromQuery] string? streamId = null)
     {
-        if (Guid.TryParse(streamId, out var sid))
-            await _streams.StopAsync(sid);
-
+        await _streams.StopAsync(streamId);
         return MessageResponse("Stream stopped.");
     }
 }

@@ -1,5 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using Cambrian.Application.DTOs.Payouts;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
@@ -19,7 +17,6 @@ public class PayoutService : IPayoutService
 
     public async Task<object> GetEarningsAsync()
     {
-        // Will be scoped to user once we thread ClaimsPrincipal through
         return await Task.FromResult(new { balance = 0m, pending = 0m, available = 0m, currency = "USD" });
     }
 
@@ -31,7 +28,6 @@ public class PayoutService : IPayoutService
         var payout = new Payout
         {
             Id = Guid.NewGuid(),
-            // CreatorId will be set by controller once we add user context
             CreatorId = "",
             Amount = (double)request.Amount,
             Status = "pending"
@@ -44,5 +40,16 @@ public class PayoutService : IPayoutService
             Amount = request.Amount,
             Status = "pending"
         };
+    }
+
+    public async Task<IReadOnlyCollection<PayoutResponse>> GetHistoryAsync(string userId, int take = 50)
+    {
+        var payouts = await _payouts.GetByCreatorIdAsync(userId);
+
+        return payouts.Take(take).Select(p => new PayoutResponse
+        {
+            Amount = (decimal)p.Amount,
+            Status = p.Status
+        }).ToList();
     }
 }
