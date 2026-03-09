@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -18,7 +19,9 @@ public sealed class CheckoutTests
 
     public CheckoutTests()
     {
-        _sut = new CheckoutService(_gateway, _tracks);
+        var config = Substitute.For<IConfiguration>();
+        config["App:FrontendUrl"].Returns("http://localhost:5173");
+        _sut = new CheckoutService(_gateway, _tracks, config);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
@@ -47,14 +50,14 @@ public sealed class CheckoutTests
             CreatorId = "c1"
         };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns("https://stripe.test/checkout");
 
         var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "non-exclusive" };
         await _sut.CreateCheckoutAsync(request, MakeUser());
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            2000, "Beat", Arg.Any<string>(), null, null);
+            2000, "Beat", Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -63,7 +66,7 @@ public sealed class CheckoutTests
         var trackId = Guid.NewGuid();
         var track = new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns("https://stripe.test/checkout");
 
         var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "exclusive" };
@@ -72,6 +75,6 @@ public sealed class CheckoutTests
         await _gateway.Received(1).CreateCheckoutSessionAsync(
             Arg.Any<int>(), Arg.Any<string>(),
             Arg.Is<string>(s => s == $"buyer-99:{trackId}:exclusive"),
-            null, null);
+            Arg.Any<string?>(), Arg.Any<string?>());
     }
 }

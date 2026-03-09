@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -15,7 +16,9 @@ public sealed class CheckoutServiceTests
 
     public CheckoutServiceTests()
     {
-        _sut = new CheckoutService(_gateway, _tracks);
+        var config = Substitute.For<IConfiguration>();
+        config["App:FrontendUrl"].Returns("http://localhost:5173");
+        _sut = new CheckoutService(_gateway, _tracks, config);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
@@ -47,14 +50,14 @@ public sealed class CheckoutServiceTests
             CreatorId = "c1"
         };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns("https://stripe.test/checkout");
 
         var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "exclusive" };
         await _sut.CreateCheckoutAsync(request, MakeUser());
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            50000, "Beat", Arg.Any<string>(), null, null);
+            50000, "Beat", Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -71,14 +74,14 @@ public sealed class CheckoutServiceTests
             CreatorId = "c1"
         };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns("https://stripe.test/checkout");
 
         var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "non-exclusive" };
         await _sut.CreateCheckoutAsync(request, MakeUser());
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            2999, "Beat", Arg.Any<string>(), null, null);
+            2999, "Beat", Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -95,14 +98,14 @@ public sealed class CheckoutServiceTests
             CreatorId = "c1"
         };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns("https://stripe.test/checkout");
 
         var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "exclusive" };
         await _sut.CreateCheckoutAsync(request, MakeUser());
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            2500, "Beat", Arg.Any<string>(), null, null);
+            2500, "Beat", Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -119,14 +122,14 @@ public sealed class CheckoutServiceTests
             CreatorId = "c1"
         };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns("https://stripe.test/checkout");
 
         var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "standard" };
         await _sut.CreateCheckoutAsync(request, MakeUser());
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            1500, "Beat", Arg.Any<string>(), null, null);
+            1500, "Beat", Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -135,7 +138,7 @@ public sealed class CheckoutServiceTests
         var trackId = Guid.NewGuid();
         var track = new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns("https://stripe.test/checkout");
 
         var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "standard" };
@@ -144,7 +147,7 @@ public sealed class CheckoutServiceTests
         await _gateway.Received(1).CreateCheckoutSessionAsync(
             Arg.Any<int>(), Arg.Any<string>(),
             Arg.Is<string>(s => s.Contains("user-42") && s.Contains(trackId.ToString())),
-            null, null);
+            Arg.Any<string?>(), Arg.Any<string?>());
     }
 
     [Fact]
@@ -153,7 +156,7 @@ public sealed class CheckoutServiceTests
         var trackId = Guid.NewGuid();
         var track = new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns("https://stripe.test/session-123");
 
         var result = await _sut.CreateCheckoutAsync(

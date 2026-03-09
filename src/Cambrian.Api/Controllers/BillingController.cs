@@ -41,8 +41,8 @@ public class BillingController : BaseController
             return ErrorResponse("Invalid tier. Choose 'paid' or 'creator'.");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var successUrl = $"{_frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}";
-        var cancelUrl = $"{_frontendUrl}/checkout/cancel";
+        var successUrl = $"{_frontendUrl}/hub?payment_success=true&session_id={{CHECKOUT_SESSION_ID}}";
+        var cancelUrl = $"{_frontendUrl}/payment?plan={tier}";
 
         var url = await _gateway.CreateSubscriptionCheckoutAsync(
             amountCents,
