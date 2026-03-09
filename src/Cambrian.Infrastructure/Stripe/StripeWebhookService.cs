@@ -33,6 +33,7 @@ public class StripeWebhookService : IWebhookService
     public async Task HandleStripeAsync(string payload, string signature)
     {
         string eventType;
+        string? eventId;
         string? clientReferenceId;
         long? amountTotal;
 
@@ -41,15 +42,18 @@ public class StripeWebhookService : IWebhookService
         {
             var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
             eventType = stripeEvent.Type;
+            eventId = stripeEvent.Id;
+            clientReferenceId = null;
+            amountTotal = null;
 
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
                 var session = stripeEvent.Data.Object as Session;
                 clientReferenceId = session?.ClientReferenceId;
                 amountTotal = session?.AmountTotal;
-                await HandleCheckoutCompleted(clientReferenceId, amountTotal);
             }
 
+            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal);
             _logger.LogInformation("Stripe webhook received (verified): {EventType}", eventType);
             return;
         }
@@ -73,6 +77,9 @@ public class StripeWebhookService : IWebhookService
         var root = doc.RootElement;
 
         eventType = root.GetProperty("type").GetString() ?? "";
+        eventId = root.TryGetProperty("id", out var eventIdElement) ? eventIdElement.GetString() : null;
+        clientReferenceId = null;
+        amountTotal = null;
         _logger.LogInformation("Stripe webhook received (dev): {EventType}", eventType);
 
         if (eventType == "checkout.session.completed")
@@ -80,7 +87,82 @@ public class StripeWebhookService : IWebhookService
             var dataObj = root.GetProperty("data").GetProperty("object");
             clientReferenceId = dataObj.TryGetProperty("client_reference_id", out var cri) ? cri.GetString() : null;
             amountTotal = dataObj.TryGetProperty("amount_total", out var at) ? at.GetInt64() : null;
-            await HandleCheckoutCompleted(clientReferenceId, amountTotal);
+        }
+
+        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal);
+    }
+
+    private async Task ProcessEventAsync(
+        string? eventId,
+        string eventType,
+        string? clientReferenceId,
+        long? amountTotal)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            _logger.LogWarning(
+                "Stripe webhook received without an event ID; idempotency unavailable for {EventType}",
+                eventType);
+
+            if (eventType == EventTypes.CheckoutSessionCompleted)
+            {
+                await HandleCheckoutCompleted(clientReferenceId, amountTotal);
+            }
+
+            return;
+        }
+
+        var alreadyProcessed = await _db.StripeWebhookEvents
+            .AsNoTracking()
+            .AnyAsync(e => e.EventId == eventId);
+
+        if (alreadyProcessed)
+        {
+            _logger.LogInformation("Skipping duplicate Stripe webhook event {EventId}", eventId);
+            return;
+        }
+
+        var transaction = _db.Database.IsRelational()
+            ? await _db.Database.BeginTransactionAsync()
+            : null;
+
+        try
+        {
+            _db.StripeWebhookEvents.Add(new StripeWebhookEvent
+            {
+                Id = Guid.NewGuid(),
+                EventId = eventId,
+                EventType = eventType,
+                ProcessedAt = DateTime.UtcNow
+            });
+
+            if (eventType == EventTypes.CheckoutSessionCompleted)
+            {
+                await HandleCheckoutCompleted(clientReferenceId, amountTotal);
+            }
+
+            await _db.SaveChangesAsync();
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync();
+            }
+        }
+        catch
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync();
+            }
+
+            throw;
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
         }
     }
 
