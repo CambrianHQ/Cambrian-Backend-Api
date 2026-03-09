@@ -56,7 +56,12 @@ public class StreamController : BaseController
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var rawTrackId = body?.TrackId ?? trackId;
-        Guid parsedTrackId = Guid.TryParse(rawTrackId, out var tid) ? tid : Guid.Empty;
+        if (string.IsNullOrWhiteSpace(rawTrackId) || !Guid.TryParse(rawTrackId, out var parsedTrackId))
+            return ErrorResponse("trackId must be a valid GUID.");
+
+        var track = await _tracks.GetByIdAsync(parsedTrackId);
+        if (track?.AudioUrl is null)
+            return NotFoundResponse("Track not found.");
 
         var session = await _streams.StartAsync(parsedTrackId, userId);
         return OkResponse(new { streamId = session.Id.ToString(), status = "started" });
@@ -72,8 +77,10 @@ public class StreamController : BaseController
     [HttpPost("stop")]
     public async Task<IActionResult> Stop([FromQuery] string? streamId = null)
     {
-        if (Guid.TryParse(streamId, out var sid))
-            await _streams.StopAsync(sid);
+        if (string.IsNullOrWhiteSpace(streamId) || !Guid.TryParse(streamId, out var sid))
+            return ErrorResponse("streamId must be a valid GUID.");
+
+        await _streams.StopAsync(sid);
 
         return MessageResponse("Stream stopped.");
     }

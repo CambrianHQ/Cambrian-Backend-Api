@@ -80,7 +80,8 @@ public sealed class BillingControllerTests
         SetupUser("buyer-1");
         _gateway.CreateSubscriptionCheckoutAsync(
             499, "Paid Listener", "buyer-1:subscription:paid",
-            Arg.Any<string>(), Arg.Any<string>())
+            "https://app.test/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+            "https://app.test/checkout/cancel")
             .Returns("https://stripe.test/session");
 
         var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = "paid" });
@@ -88,7 +89,8 @@ public sealed class BillingControllerTests
         Assert.IsType<OkObjectResult>(result);
         await _gateway.Received(1).CreateSubscriptionCheckoutAsync(
             499, "Paid Listener", "buyer-1:subscription:paid",
-            Arg.Any<string>(), Arg.Any<string>());
+            "https://app.test/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+            "https://app.test/checkout/cancel");
     }
 
     [Fact]
@@ -117,6 +119,42 @@ public sealed class BillingControllerTests
         var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = "PAID" });
 
         Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Checkout_UsesLocalhostFallback_WhenFrontendUrlBlank()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = " "
+            })
+            .Build();
+        var controller = new BillingController(_subscriptions, _gateway, config);
+        var context = new DefaultHttpContext();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "buyer-2")
+        }, "Test"));
+        controller.ControllerContext = new ControllerContext { HttpContext = context };
+
+        _gateway.CreateSubscriptionCheckoutAsync(
+            499,
+            "Paid Listener",
+            "buyer-2:subscription:paid",
+            "http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+            "http://localhost:5173/checkout/cancel")
+            .Returns("https://stripe.test/session");
+
+        var result = await controller.Checkout(new BillingCheckoutRequest { Tier = "paid" });
+
+        Assert.IsType<OkObjectResult>(result);
+        await _gateway.Received(1).CreateSubscriptionCheckoutAsync(
+            499,
+            "Paid Listener",
+            "buyer-2:subscription:paid",
+            "http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
+            "http://localhost:5173/checkout/cancel");
     }
 
     // ── CheckoutSession (alias) ──
