@@ -77,7 +77,8 @@ public class PayoutController : BaseController
     [HttpPost("request")]
     public async Task<IActionResult> RequestPayout(PayoutRequest request)
     {
-        var result = await _payouts.RequestAsync(request);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await _payouts.RequestAsync(request, userId);
         return OkResponse(result);
     }
 
