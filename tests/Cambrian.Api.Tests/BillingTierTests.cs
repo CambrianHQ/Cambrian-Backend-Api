@@ -1,12 +1,9 @@
+using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
+using NSubstitute;
 
 namespace Cambrian.Api.Tests;
 
-/// <summary>
-/// Tests for billing tier mapping logic used in BillingController.
-/// The controller maps tier strings to (amountCents, planName) tuples.
-/// We test the same logic inline since it's inlined in the controller.
-/// </summary>
 public sealed class BillingTierTests
 {
     private static (int amountCents, string planName) MapTier(string? tier)
@@ -48,14 +45,49 @@ public sealed class BillingTierTests
     }
 
     [Fact]
-    public async Task BillingService_ReturnsPortalUrl()
+    public async Task BillingService_CreateCheckout_ThrowsForInvalidTier()
     {
-        var sut = new BillingService();
-        var userId = Guid.NewGuid();
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        var gateway = Substitute.For<IPaymentGateway>();
+        var sut = new BillingService(subscriptions, gateway);
 
-        var result = await sut.CreateBillingPortalAsync(userId);
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => sut.CreateCheckoutAsync("enterprise", "user-1", "http://localhost"));
+    }
 
-        Assert.Contains(userId.ToString("N"), result);
-        Assert.StartsWith("https://billing.stripe.test/portal/", result);
+    [Fact]
+    public async Task BillingService_CreateCheckout_CallsGatewayForValidTier()
+    {
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        var gateway = Substitute.For<IPaymentGateway>();
+        gateway.CreateSubscriptionCheckoutAsync(
+                Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>())
+            .Returns("https://checkout.stripe.com/session123");
+
+        var sut = new BillingService(subscriptions, gateway);
+
+        var result = await sut.CreateCheckoutAsync("paid", "user-1", "http://localhost:5173");
+
+        Assert.Equal("https://checkout.stripe.com/session123", result.CheckoutUrl);
+        await gateway.Received(1).CreateSubscriptionCheckoutAsync(
+            499, "Paid Listener",
+            "user-1:subscription:paid",
+            Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task BillingService_GetStatus_ReturnsFreeWhenNoSubscription()
+    {
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        var gateway = Substitute.For<IPaymentGateway>();
+        subscriptions.GetActiveAsync("user-1").Returns((Domain.Entities.Subscription?)null);
+
+        var sut = new BillingService(subscriptions, gateway);
+
+        var result = await sut.GetStatusAsync("user-1");
+
+        Assert.Equal("free", result.Tier);
+        Assert.Equal("active", result.Status);
     }
 }

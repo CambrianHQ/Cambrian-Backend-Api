@@ -199,6 +199,11 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
+builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+builder.Services.AddScoped<ICreatorService, CreatorService>();
+builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<IWalletService, WalletService>();
 
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();

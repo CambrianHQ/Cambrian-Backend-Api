@@ -1,9 +1,7 @@
 using System.Security.Claims;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Cambrian.Domain.Entities;
 
 namespace Cambrian.Api.Controllers;
 
@@ -11,31 +9,27 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 public class DataController : BaseController
 {
-    private readonly UserManager<ApplicationUser> _users;
-    private readonly ISubscriptionRepository _subscriptions;
+    private readonly IAccountService _account;
 
-    public DataController(UserManager<ApplicationUser> users, ISubscriptionRepository subscriptions)
+    public DataController(IAccountService account)
     {
-        _users = users;
-        _subscriptions = subscriptions;
+        _account = account;
     }
 
     [HttpGet("account")]
     public async Task<IActionResult> GetAccount()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var user = await _users.FindByIdAsync(userId);
-        if (user is null) return NotFoundResponse("User not found.");
 
-        var sub = await _subscriptions.GetActiveAsync(userId);
-        return OkResponse(new
+        try
         {
-            id = user.Id,
-            email = user.Email,
-            plan = sub?.Plan ?? user.Tier ?? "free",
-            region = "US",
-            status = user.Status ?? "active"
-        });
+            var account = await _account.GetAccountAsync(userId);
+            return OkResponse(account);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFoundResponse("User not found.");
+        }
     }
 
     [Authorize(Roles = "Admin")]
