@@ -205,6 +205,7 @@ builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IStreamService, StreamService>();
 builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
+builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
 
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
