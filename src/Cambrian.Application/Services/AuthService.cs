@@ -103,13 +103,15 @@ public class AuthService : IAuthService
         var profile = await GetCurrentUserAsync(principal);
         var sub = await _subscriptions.GetActiveAsync(profile.UserId);
         var tier = sub?.Plan ?? profile.Tier ?? "free";
+        var freshToken = await GenerateFreshTokenAsync(profile.UserId);
 
         return new AuthResponse
         {
             UserId = Guid.Parse(profile.UserId),
             Email = profile.Email,
-            Token = "",
-            Tier = tier.ToLowerInvariant()
+            Token = freshToken ?? "",
+            Tier = tier.ToLowerInvariant(),
+            Role = profile.Role ?? "User"
         };
     }
 

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -11,12 +10,10 @@ namespace Cambrian.Api.Controllers;
 public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
-    private readonly ISubscriptionRepository _subscriptions;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions)
+    public AuthController(IAuthService auth)
     {
         _auth = auth;
-        _subscriptions = subscriptions;
     }
 
     [EnableRateLimiting("auth")]
@@ -39,28 +36,8 @@ public class AuthController : BaseController
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
-        var profile = await _auth.GetCurrentUserAsync(User);
-
-        if (profile is null)
-            return NotFoundResponse("User not found.");
-
-        // Re-issue a fresh JWT so the frontend gets updated tier/role claims
-        var freshToken = await _auth.GenerateFreshTokenAsync(profile.UserId);
-
-        var sub = await _subscriptions.GetActiveAsync(profile.UserId);
-        var tier = sub?.Plan ?? profile.Tier ?? "free";
-
-        return Ok(new
-        {
-            token = freshToken ?? Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
-            user = new
-            {
-                id = profile.UserId,
-                email = profile.Email,
-                tier = tier.ToLowerInvariant(),
-                role = profile.Role ?? "User"
-            }
-        });
+        var session = await _auth.GetSessionAsync(User);
+        return Ok(ToSession(session));
     }
 
     private static object ToSession(AuthResponse auth) => new
