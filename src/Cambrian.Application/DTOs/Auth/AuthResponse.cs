@@ -9,4 +9,6 @@ public class AuthResponse
     public string Token { get; set; } = string.Empty;
 
     public string Tier { get; set; } = "free";
+
+    public string Role { get; set; } = "User";
 }
