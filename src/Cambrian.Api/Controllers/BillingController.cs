@@ -4,6 +4,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace Cambrian.Api.Controllers;
 
@@ -59,7 +60,6 @@ public class BillingController : BaseController
     {
         return await Checkout(request);
     }
-
     [HttpGet("status")]
     public async Task<IActionResult> Status()
     {

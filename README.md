@@ -49,12 +49,14 @@ All routes that handle sensitive data are protected by authentication and author
 ### ✅ Test Compliance
 Every feature area has a corresponding test class. The CI pipeline will **block merges** when any test fails. The current test suites are:
 
-| Test Suite | File |
-|---|---|
-| 🔐 Authentication | `tests/Cambrian.Api.Tests/AuthTests.cs` |
-| 🛒 Checkout | `tests/Cambrian.Api.Tests/CheckoutTests.cs` |
-| 📚 Library | `tests/Cambrian.Api.Tests/LibraryTests.cs` |
-| 📜 Contract | `tests/Cambrian.Api.Tests/ContractTests.cs` |
+| Test Suite | File | What it verifies |
+|---|---|---|
+| 🔐 Auth | `tests/Cambrian.Api.Tests/AuthTests.cs` | Register, Login, /auth/me, tier, 401 guards |
+| 🛒 Purchase | `tests/Cambrian.Api.Tests/CheckoutTests.cs` | POST /checkout → Stripe URL, auth gating, validation |
+| 📚 Library | `tests/Cambrian.Api.Tests/LibraryTests.cs` | GET/POST/DELETE /library, purchased-track-ids |
+| ⬆️ Upload | `tests/Cambrian.Api.Tests/UploadTests.cs` | Multipart upload, Creator role gate, validation |
+| ⬇️ Download | `tests/Cambrian.Api.Tests/DownloadTests.cs` | Signed URL generation, purchase-gate, 403/401 |
+| 📜 Contract | `tests/Cambrian.Api.Tests/ContractTests.cs` | All routes match OpenAPI spec |
 
 ---
 
@@ -150,13 +152,38 @@ The API will be available at `http://localhost:8080`.
 
 ## 🧪 Testing
 
-Run the full test suite locally:
+### Quick run (all tests)
 
 ```bash
 dotnet test Cambrian.sln --configuration Release
 ```
 
-Tests are organised by feature area and include contract compliance checks to verify that the implementation matches the published API contract. **All tests must pass before a pull request can be merged.**
+### Pre-deploy checklist (recommended)
+
+Run the integration checklist script before every deploy:
+
+```powershell
+.\scripts\pre-deploy-tests.ps1            # run all
+.\scripts\pre-deploy-tests.ps1 -Filter Auth  # run only Auth tests
+.\scripts\pre-deploy-tests.ps1 -Verbose       # detailed output
+```
+
+The script:
+1. Builds the test project
+2. Runs all integration tests against an **in-memory test server** (no database or Stripe keys needed)
+3. Prints a clear **PASS / FAIL** verdict
+
+### Run a single suite
+
+```bash
+dotnet test tests/Cambrian.Api.Tests --filter "FullyQualifiedName~AuthTests"
+dotnet test tests/Cambrian.Api.Tests --filter "FullyQualifiedName~CheckoutTests"
+dotnet test tests/Cambrian.Api.Tests --filter "FullyQualifiedName~LibraryTests"
+dotnet test tests/Cambrian.Api.Tests --filter "FullyQualifiedName~UploadTests"
+dotnet test tests/Cambrian.Api.Tests --filter "FullyQualifiedName~DownloadTests"
+```
+
+Tests use `WebApplicationFactory<Program>` with in-memory SQLite — no external services required. **All tests must pass before a pull request can be merged.**
 
 ---
 

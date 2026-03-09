@@ -24,11 +24,27 @@ public class LibraryService : ILibraryService
         var userId = GetUserId(user);
         var items = await _library.GetByUserIdAsync(userId);
 
-        return items.Select(i => new LibraryItemResponse
+        // Cross-reference with purchases to mark purchased items
+        var purchases = await _purchases.GetByBuyerIdAsync(userId);
+        var completedPurchases = purchases
+            .Where(p => p.Status == "completed")
+            .GroupBy(p => p.TrackId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.CreatedAt).First());
+
+        return items.Select(i =>
         {
-            TrackId = i.TrackId.ToString(),
-            Title = i.Track?.Title ?? i.Title ?? "",
-            Artist = i.Track?.Creator?.DisplayName ?? i.Artist ?? ""
+            completedPurchases.TryGetValue(i.TrackId, out var purchase);
+
+            return new LibraryItemResponse
+            {
+                TrackId = i.TrackId.ToString(),
+                Title = i.Track?.Title ?? i.Title ?? "",
+                Artist = i.Track?.Creator?.DisplayName ?? i.Artist ?? "",
+                Purchased = purchase is not null,
+                PurchasedOn = purchase?.CreatedAt.ToString("o"),
+                AudioUrl = i.Track?.AudioUrl ?? i.AudioUrl,
+                Genre = i.Track?.Genre
+            };
         }).ToList();
     }
 

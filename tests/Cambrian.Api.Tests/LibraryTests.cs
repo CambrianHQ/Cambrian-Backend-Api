@@ -8,6 +8,13 @@ using NSubstitute;
 
 namespace Cambrian.Api.Tests;
 
+/// <summary>
+/// Integration tests for the Library:
+///   GET /library → list saved tracks
+///   POST /library → save a track
+///   DELETE /library/{trackId} → remove a track
+///   GET /library/purchased-track-ids → purchased id list
+/// </summary>
 public sealed class LibraryTests
 {
     private readonly ILibraryRepository _library = Substitute.For<ILibraryRepository>();

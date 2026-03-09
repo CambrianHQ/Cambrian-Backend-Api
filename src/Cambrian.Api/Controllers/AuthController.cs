@@ -44,19 +44,21 @@ public class AuthController : BaseController
         if (profile is null)
             return NotFoundResponse("User not found.");
 
-        var bearerToken = Request.Headers.Authorization.ToString().Replace("Bearer ", "");
+        // Re-issue a fresh JWT so the frontend gets updated tier/role claims
+        var freshToken = await _auth.GenerateFreshTokenAsync(profile.UserId);
 
         var sub = await _subscriptions.GetActiveAsync(profile.UserId);
         var tier = sub?.Plan ?? profile.Tier ?? "free";
 
         return Ok(new
         {
-            token = bearerToken,
+            token = freshToken ?? Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
             user = new
             {
                 id = profile.UserId,
                 email = profile.Email,
-                tier = tier
+                tier = tier.ToLowerInvariant(),
+                role = profile.Role ?? "User"
             }
         });
     }
@@ -69,7 +71,8 @@ public class AuthController : BaseController
         {
             id = auth.UserId.ToString(),
             email = auth.Email,
-            tier = auth.Tier
+            tier = (auth.Tier ?? "free").ToLowerInvariant(),
+            role = auth.Role ?? "User"
         }
     };
 

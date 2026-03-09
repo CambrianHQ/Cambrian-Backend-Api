@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Cambrian.Application.DTOs.Payments;
 using Cambrian.Application.DTOs.Purchases;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

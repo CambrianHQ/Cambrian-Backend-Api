@@ -12,6 +12,11 @@ using NSubstitute;
 
 namespace Cambrian.Api.Tests;
 
+/// <summary>
+/// Integration tests for the Auth flow:
+///   Register → Login → /auth/me → Logout
+/// Ensures tier and role are returned correctly.
+/// </summary>
 public sealed class AuthTests
 {
     private readonly UserManager<ApplicationUser> _users;

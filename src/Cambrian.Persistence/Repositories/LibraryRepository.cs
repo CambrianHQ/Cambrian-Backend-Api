@@ -17,6 +17,7 @@ public class LibraryRepository : ILibraryRepository
     {
         return await _db.Library
             .Include(l => l.Track)
+                .ThenInclude(t => t.Creator)
             .Where(l => l.UserId == userId)
             .OrderByDescending(l => l.SavedAt)
             .ToListAsync();

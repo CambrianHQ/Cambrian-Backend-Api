@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -16,7 +17,8 @@ public class UploadController : BaseController
         _upload = upload;
     }
 
-    [Authorize(Roles = "Creator")]
+    [Authorize]
+    [RequireCreatorTier]
     [HttpPost("upload")]
     public async Task<IActionResult> Upload([FromForm] UploadTrackRequest request)
     {

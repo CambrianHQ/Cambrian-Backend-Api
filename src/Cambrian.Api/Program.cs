@@ -329,3 +329,6 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Stagi
 }
 
 app.Run();
+
+// Expose the implicit Program class for WebApplicationFactory<Program> in integration tests
+public partial class Program { }

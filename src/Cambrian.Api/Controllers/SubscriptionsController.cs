@@ -114,7 +114,6 @@ public class SubscriptionsController : BaseController
             return ErrorResponse("No active subscription to cancel.");
 
         await _subscriptions.CancelAsync(existing.Id);
-
         var user = await _users.FindByIdAsync(userId);
         if (user is not null)
         {
