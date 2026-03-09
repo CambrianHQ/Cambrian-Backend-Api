@@ -28,6 +28,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
 
+    public DbSet<StripeWebhookEvent> StripeWebhookEvents => Set<StripeWebhookEvent>();
+
     public DbSet<StreamSession> StreamSessions => Set<StreamSession>();
 
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
@@ -112,6 +114,14 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany()
                 .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<StripeWebhookEvent>(e =>
+        {
+            e.HasKey(w => w.Id);
+            e.Property(w => w.EventId).HasMaxLength(255).IsRequired();
+            e.Property(w => w.EventType).HasMaxLength(100).IsRequired();
+            e.HasIndex(w => w.EventId).IsUnique();
         });
 
         builder.Entity<Invoice>(e =>
