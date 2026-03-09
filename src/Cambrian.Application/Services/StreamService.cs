@@ -44,14 +44,22 @@ public class StreamService : IStreamService
 
     public async Task<object> StartAsync(string? trackId, string? userId)
     {
-        Guid parsedTrackId = Guid.TryParse(trackId, out var tid) ? tid : Guid.Empty;
+        if (string.IsNullOrWhiteSpace(trackId) || !Guid.TryParse(trackId, out var parsedTrackId))
+            throw new ArgumentException("trackId must be a valid GUID.");
+
+        var track = await _tracks.GetByIdAsync(parsedTrackId);
+        if (track?.AudioUrl is null)
+            throw new KeyNotFoundException("Track not found.");
+
         var session = await _streams.StartAsync(parsedTrackId, userId);
         return new { streamId = session.Id.ToString(), status = "started" };
     }
 
     public async Task StopAsync(string? streamId)
     {
-        if (Guid.TryParse(streamId, out var sid))
-            await _streams.StopAsync(sid);
+        if (string.IsNullOrWhiteSpace(streamId) || !Guid.TryParse(streamId, out var sid))
+            throw new ArgumentException("streamId must be a valid GUID.");
+
+        await _streams.StopAsync(sid);
     }
 }

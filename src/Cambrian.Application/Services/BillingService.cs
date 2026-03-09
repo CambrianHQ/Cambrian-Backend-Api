@@ -17,7 +17,7 @@ public sealed class BillingService : IBillingService
     {
         _subscriptions = subscriptions;
         _gateway = gateway;
-        _frontendUrl = configuration["App:FrontendUrl"] ?? "http://localhost:5173";
+        _frontendUrl = ResolveFrontendUrl(configuration);
     }
 
     public async Task<CheckoutResponse> CreateCheckoutAsync(BillingCheckoutRequest request, string userId)
@@ -55,5 +55,13 @@ public sealed class BillingService : IBillingService
             Status = sub?.Status ?? "active",
             ExpiresAt = sub?.ExpiresAt
         };
+    }
+
+    private static string ResolveFrontendUrl(IConfiguration configuration)
+    {
+        var configuredUrl = configuration["App:FrontendUrl"];
+        return string.IsNullOrWhiteSpace(configuredUrl)
+            ? "http://localhost:5173"
+            : configuredUrl.TrimEnd('/');
     }
 }
