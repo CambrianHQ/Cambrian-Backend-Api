@@ -36,7 +36,7 @@ public class StripeWebhookService : IWebhookService
         string? clientReferenceId;
         long? amountTotal;
 
-        // In production, verify signature with Stripe SDK
+        // ── Verified path: both secret and signature present ──
         if (!string.IsNullOrEmpty(_webhookSecret) && !string.IsNullOrEmpty(signature))
         {
             var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
@@ -54,8 +54,21 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        // Dev fallback — parse JSON manually (no Stripe signature verification)
-        _logger.LogWarning("Processing webhook without signature verification (dev mode)");
+        // ── Non-Development: REJECT unverified webhooks ──
+        if (!_isDevelopment)
+        {
+            _logger.LogError(
+                "Stripe webhook rejected: signature verification failed. "
+                + "WebhookSecret configured={SecretPresent}, Stripe-Signature header present={SigPresent}",
+                !string.IsNullOrEmpty(_webhookSecret),
+                !string.IsNullOrEmpty(signature));
+            throw new InvalidOperationException(
+                "Stripe webhook signature verification failed. "
+                + "Ensure Stripe:WebhookSecret is configured and the request includes a valid Stripe-Signature header.");
+        }
+
+        // ── Development-only fallback: parse JSON without signature ──
+        _logger.LogWarning("Processing webhook WITHOUT signature verification (Development only)");
         using var doc = JsonDocument.Parse(payload);
         var root = doc.RootElement;
 
