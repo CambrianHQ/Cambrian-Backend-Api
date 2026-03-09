@@ -36,7 +36,10 @@ public class WalletController : BaseController
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var balanceCents = await _wallet.GetBalanceAsync(userId);
-        var amountCents = (long)(request.Amount * 100);
+        var amountCents = (long)Math.Round(request.Amount * 100, MidpointRounding.AwayFromZero);
+
+        if (amountCents <= 0)
+            return ErrorResponse("Withdrawal amount must be greater than zero.");
 
         if (amountCents > balanceCents)
             return ErrorResponse("Insufficient balance.");
@@ -61,7 +64,9 @@ public class WalletController : BaseController
         if (pageSize is < 1 or > 100) pageSize = 20;
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var result = await _wallet.GetHistoryAsync(userId, pageSize);
-        return OkResponse(result);
+        var skip = (page - 1) * pageSize;
+        var take = skip + pageSize;
+        var result = await _wallet.GetHistoryAsync(userId, take);
+        return OkResponse(result.Skip(skip).Take(pageSize).ToList());
     }
 }

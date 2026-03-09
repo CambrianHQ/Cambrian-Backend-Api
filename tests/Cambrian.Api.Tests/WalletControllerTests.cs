@@ -104,6 +104,23 @@ public sealed class WalletControllerTests
         Assert.IsType<OkObjectResult>(result);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(0.001)]
+    public async Task Withdraw_Returns400_WhenAmountNotPositive(double amount)
+    {
+        SetupUser();
+        _wallet.GetBalanceAsync("user-1").Returns(5000L);
+
+        var result = await _controller.Withdraw(new WithdrawRequest { Amount = amount });
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
+        Assert.Contains("greater than zero", envelope.Error);
+        await _wallet.DidNotReceive().AddTransactionAsync(Arg.Any<WalletTransaction>());
+    }
+
     // ── History ──
 
     [Fact]
@@ -136,5 +153,28 @@ public sealed class WalletControllerTests
         var result = await _controller.History();
 
         Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task History_AppliesPageOffset()
+    {
+        SetupUser();
+        var transactions = new List<WalletTransaction>
+        {
+            new() { Id = Guid.NewGuid(), UserId = "user-1", AmountCents = 100, Type = "credit", Description = "1" },
+            new() { Id = Guid.NewGuid(), UserId = "user-1", AmountCents = 200, Type = "credit", Description = "2" },
+            new() { Id = Guid.NewGuid(), UserId = "user-1", AmountCents = 300, Type = "credit", Description = "3" },
+            new() { Id = Guid.NewGuid(), UserId = "user-1", AmountCents = 400, Type = "credit", Description = "4" }
+        };
+        _wallet.GetHistoryAsync("user-1", 4).Returns(transactions);
+
+        var result = await _controller.History(page: 2, pageSize: 2);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var envelope = Assert.IsType<ApiResponse<List<WalletTransaction>>>(ok.Value);
+        Assert.Equal(2, envelope.Data!.Count);
+        Assert.Equal(300, envelope.Data[0].AmountCents);
+        Assert.Equal(400, envelope.Data[1].AmountCents);
+        await _wallet.Received(1).GetHistoryAsync("user-1", 4);
     }
 }
