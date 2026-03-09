@@ -3,7 +3,6 @@ using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
@@ -19,12 +18,11 @@ namespace Cambrian.Api.Tests;
 public sealed class AuthControllerTests
 {
     private readonly IAuthService _auth = Substitute.For<IAuthService>();
-    private readonly ISubscriptionRepository _subscriptions = Substitute.For<ISubscriptionRepository>();
     private readonly AuthController _controller;
 
     public AuthControllerTests()
     {
-        _controller = new AuthController(_auth, _subscriptions);
+        _controller = new AuthController(_auth);
     }
 
     private void SetupUser(string userId, string? bearerToken = null)
@@ -116,67 +114,37 @@ public sealed class AuthControllerTests
     // ── Me ──
 
     [Fact]
-    public async Task Me_ReturnsUserProfile_WithSubscriptionTier()
+    public async Task Me_ReturnsSession_WithResolvedTier()
     {
-        var userId = Guid.NewGuid().ToString();
-        SetupUser(userId, "test-bearer-token");
+        var userId = Guid.NewGuid();
+        SetupUser(userId.ToString(), "test-bearer-token");
 
-        _auth.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>()).Returns(new UserProfileResponse
+        _auth.GetSessionAsync(Arg.Any<ClaimsPrincipal>()).Returns(new AuthResponse
         {
             UserId = userId,
             Email = "me@test.com",
-            Tier = "free",
+            Token = "fresh-jwt-token",
+            Tier = "creator",
             Role = "User"
-        });
-
-        _subscriptions.GetActiveAsync(userId).Returns(new Subscription
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Plan = "creator",
-            Status = "active"
         });
 
         var result = await _controller.Me();
 
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.NotNull(ok.Value);
+        await _auth.Received(1).GetSessionAsync(Arg.Any<ClaimsPrincipal>());
     }
 
     [Fact]
-    public async Task Me_FallsBackToProfileTier_WhenNoActiveSubscription()
+    public async Task Me_PropagatesUnauthorized_WhenUserNotFound()
     {
-        var userId = Guid.NewGuid().ToString();
-        SetupUser(userId, "test-bearer-token");
+        SetupUser(Guid.NewGuid().ToString());
 
-        _auth.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>()).Returns(new UserProfileResponse
-        {
-            UserId = userId,
-            Email = "me@test.com",
-            Tier = "paid",
-            Role = "User"
-        });
+        _auth.GetSessionAsync(Arg.Any<ClaimsPrincipal>())
+            .ThrowsAsync(new UnauthorizedAccessException("User not found"));
 
-        _subscriptions.GetActiveAsync(userId).Returns((Subscription?)null);
-
-        var result = await _controller.Me();
-
-        Assert.IsType<OkObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task Me_Returns404_WhenProfileIsNull()
-    {
-        var userId = Guid.NewGuid().ToString();
-        SetupUser(userId);
-
-        _auth.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>()).Returns((UserProfileResponse?)null);
-
-        var result = await _controller.Me();
-
-        var notFound = Assert.IsType<NotFoundObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(notFound.Value);
-        Assert.False(envelope.Success);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            _controller.Me());
     }
 
     // ── Logout ──

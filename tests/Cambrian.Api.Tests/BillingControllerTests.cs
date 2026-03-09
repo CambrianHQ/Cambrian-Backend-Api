@@ -3,11 +3,10 @@ using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Billing;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
@@ -17,20 +16,12 @@ namespace Cambrian.Api.Tests;
 /// </summary>
 public sealed class BillingControllerTests
 {
-    private readonly ISubscriptionRepository _subscriptions = Substitute.For<ISubscriptionRepository>();
-    private readonly IPaymentGateway _gateway = Substitute.For<IPaymentGateway>();
+    private readonly IBillingService _billing = Substitute.For<IBillingService>();
     private readonly BillingController _controller;
 
     public BillingControllerTests()
     {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["App:FrontendUrl"] = "https://app.test"
-            })
-            .Build();
-
-        _controller = new BillingController(_subscriptions, _gateway, config);
+        _controller = new BillingController(_billing);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -46,61 +37,60 @@ public sealed class BillingControllerTests
     // ── Checkout ──
 
     [Fact]
-    public async Task Checkout_Returns400_WhenTierInvalid()
+    public async Task Checkout_PropagatesArgumentException_WhenTierInvalid()
     {
         SetupUser();
-        var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = "enterprise" });
+        _billing.CreateCheckoutAsync(Arg.Any<BillingCheckoutRequest>(), "user-1")
+            .ThrowsAsync(new ArgumentException("Invalid tier. Choose 'paid' or 'creator'."));
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
-        Assert.Contains("Invalid tier", envelope.Error);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _controller.Checkout(new BillingCheckoutRequest { Tier = "enterprise" }));
     }
 
     [Fact]
-    public async Task Checkout_Returns400_WhenTierNull()
+    public async Task Checkout_PropagatesArgumentException_WhenTierNull()
     {
         SetupUser();
-        var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = null });
+        _billing.CreateCheckoutAsync(Arg.Any<BillingCheckoutRequest>(), "user-1")
+            .ThrowsAsync(new ArgumentException("Invalid tier. Choose 'paid' or 'creator'."));
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _controller.Checkout(new BillingCheckoutRequest { Tier = null }));
     }
 
     [Fact]
-    public async Task Checkout_Returns400_WhenTierFree()
+    public async Task Checkout_PropagatesArgumentException_WhenTierFree()
     {
         SetupUser();
-        var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = "free" });
+        _billing.CreateCheckoutAsync(Arg.Any<BillingCheckoutRequest>(), "user-1")
+            .ThrowsAsync(new ArgumentException("Invalid tier. Choose 'paid' or 'creator'."));
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _controller.Checkout(new BillingCheckoutRequest { Tier = "free" }));
     }
 
     [Fact]
-    public async Task Checkout_CreatesStripeSession_ForPaidTier()
+    public async Task Checkout_ReturnsOk_ForPaidTier()
     {
         SetupUser("buyer-1");
-        _gateway.CreateSubscriptionCheckoutAsync(
-            499, "Paid Listener", "buyer-1:subscription:paid",
-            "https://app.test/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            "https://app.test/checkout/cancel")
-            .Returns("https://stripe.test/session");
+        _billing.CreateCheckoutAsync(
+            Arg.Is<BillingCheckoutRequest>(r => r.Tier == "paid"), "buyer-1")
+            .Returns(new CheckoutResponse { CheckoutUrl = "https://stripe.test/session" });
 
         var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = "paid" });
 
         Assert.IsType<OkObjectResult>(result);
-        await _gateway.Received(1).CreateSubscriptionCheckoutAsync(
-            499, "Paid Listener", "buyer-1:subscription:paid",
-            "https://app.test/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            "https://app.test/checkout/cancel");
+        await _billing.Received(1).CreateCheckoutAsync(
+            Arg.Is<BillingCheckoutRequest>(r => r.Tier == "paid"), "buyer-1");
     }
 
     [Fact]
-    public async Task Checkout_CreatesStripeSession_ForCreatorTier()
+    public async Task Checkout_ReturnsOk_ForCreatorTier()
     {
         SetupUser("creator-1");
-        _gateway.CreateSubscriptionCheckoutAsync(
-            999, "Creator", "creator-1:subscription:creator",
-            Arg.Any<string>(), Arg.Any<string>())
-            .Returns("https://stripe.test/session");
+        _billing.CreateCheckoutAsync(
+            Arg.Any<BillingCheckoutRequest>(), "creator-1")
+            .Returns(new CheckoutResponse { CheckoutUrl = "https://stripe.test/session" });
 
         var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = "creator" });
 
@@ -108,53 +98,17 @@ public sealed class BillingControllerTests
     }
 
     [Fact]
-    public async Task Checkout_IsCaseInsensitive()
+    public async Task Checkout_DelegatesToService_CaseInsensitive()
     {
         SetupUser();
-        _gateway.CreateSubscriptionCheckoutAsync(
-            Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>())
-            .Returns("https://stripe.test/session");
+        _billing.CreateCheckoutAsync(Arg.Any<BillingCheckoutRequest>(), "user-1")
+            .Returns(new CheckoutResponse { CheckoutUrl = "https://stripe.test/session" });
 
         var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = "PAID" });
 
         Assert.IsType<OkObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task Checkout_UsesLocalhostFallback_WhenFrontendUrlBlank()
-    {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["App:FrontendUrl"] = " "
-            })
-            .Build();
-        var controller = new BillingController(_subscriptions, _gateway, config);
-        var context = new DefaultHttpContext();
-        context.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, "buyer-2")
-        }, "Test"));
-        controller.ControllerContext = new ControllerContext { HttpContext = context };
-
-        _gateway.CreateSubscriptionCheckoutAsync(
-            499,
-            "Paid Listener",
-            "buyer-2:subscription:paid",
-            "http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            "http://localhost:5173/checkout/cancel")
-            .Returns("https://stripe.test/session");
-
-        var result = await controller.Checkout(new BillingCheckoutRequest { Tier = "paid" });
-
-        Assert.IsType<OkObjectResult>(result);
-        await _gateway.Received(1).CreateSubscriptionCheckoutAsync(
-            499,
-            "Paid Listener",
-            "buyer-2:subscription:paid",
-            "http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            "http://localhost:5173/checkout/cancel");
+        await _billing.Received(1).CreateCheckoutAsync(
+            Arg.Is<BillingCheckoutRequest>(r => r.Tier == "PAID"), "user-1");
     }
 
     // ── CheckoutSession (alias) ──
@@ -163,10 +117,8 @@ public sealed class BillingControllerTests
     public async Task CheckoutSession_DelegatesToCheckout()
     {
         SetupUser();
-        _gateway.CreateSubscriptionCheckoutAsync(
-            Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>())
-            .Returns("https://stripe.test/session");
+        _billing.CreateCheckoutAsync(Arg.Any<BillingCheckoutRequest>(), "user-1")
+            .Returns(new CheckoutResponse { CheckoutUrl = "https://stripe.test/session" });
 
         var result = await _controller.CheckoutSession(new BillingCheckoutRequest { Tier = "paid" });
 
@@ -179,7 +131,11 @@ public sealed class BillingControllerTests
     public async Task Status_ReturnsFree_WhenNoSubscription()
     {
         SetupUser();
-        _subscriptions.GetActiveAsync("user-1").Returns((Subscription?)null);
+        _billing.GetStatusAsync("user-1").Returns(new BillingStatusResponse
+        {
+            Tier = "free",
+            Status = "active"
+        });
 
         var result = await _controller.Status();
 
@@ -190,12 +146,10 @@ public sealed class BillingControllerTests
     public async Task Status_ReturnsActivePlan()
     {
         SetupUser();
-        _subscriptions.GetActiveAsync("user-1").Returns(new Subscription
+        _billing.GetStatusAsync("user-1").Returns(new BillingStatusResponse
         {
-            Id = Guid.NewGuid(),
-            Plan = "creator",
-            Status = "active",
-            UserId = "user-1"
+            Tier = "creator",
+            Status = "active"
         });
 
         var result = await _controller.Status();

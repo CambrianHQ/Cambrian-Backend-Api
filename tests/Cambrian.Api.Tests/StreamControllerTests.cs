@@ -2,28 +2,26 @@ using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
 /// <summary>
 /// Tests for StreamController covering stream listing, signed URL generation,
-/// session start, and session stop. Validates GUID validation and
-/// authorization of start/stop endpoints.
+/// session start, and session stop. Validates input delegation to the service
+/// layer and correct HTTP responses.
 /// </summary>
 public sealed class StreamControllerTests
 {
-    private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
-    private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
-    private readonly IStreamRepository _streams = Substitute.For<IStreamRepository>();
+    private readonly IStreamService _stream = Substitute.For<IStreamService>();
     private readonly StreamController _controller;
 
     public StreamControllerTests()
     {
-        _controller = new StreamController(_tracks, _storage, _streams);
+        _controller = new StreamController(_stream);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -41,13 +39,9 @@ public sealed class StreamControllerTests
     [Fact]
     public async Task List_ReturnsOk()
     {
-        _tracks.BrowseAsync().Returns(new List<Track>
+        _stream.ListStreamableAsync(20).Returns(new List<object>
         {
-            new()
-            {
-                Id = Guid.NewGuid(), Title = "Beat 1", AudioUrl = "url1",
-                Creator = new ApplicationUser { DisplayName = "DJ" }, CreatorId = "c1"
-            }
+            new { id = Guid.NewGuid().ToString(), title = "Beat 1", artist = "DJ" }
         });
 
         var result = await _controller.List();
@@ -58,35 +52,32 @@ public sealed class StreamControllerTests
     // ── Stream by ID ──
 
     [Fact]
-    public async Task Stream_Returns400_WhenTrackIdNotGuid()
+    public async Task Stream_PropagatesArgumentException_WhenTrackIdNotGuid()
     {
-        var result = await _controller.Stream("invalid");
+        _stream.GetStreamUrlAsync("invalid")
+            .ThrowsAsync(new ArgumentException("trackId must be a valid GUID."));
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
-        Assert.Contains("GUID", envelope.Error);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _controller.Stream("invalid"));
     }
 
     [Fact]
-    public async Task Stream_Returns404_WhenTrackNotFound()
+    public async Task Stream_PropagatesKeyNotFound_WhenTrackNotFound()
     {
         var id = Guid.NewGuid();
-        _tracks.GetByIdAsync(id).Returns((Track?)null);
+        _stream.GetStreamUrlAsync(id.ToString())
+            .ThrowsAsync(new KeyNotFoundException("Track not found."));
 
-        var result = await _controller.Stream(id.ToString());
-
-        Assert.IsType<NotFoundObjectResult>(result);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            _controller.Stream(id.ToString()));
     }
 
     [Fact]
-    public async Task Stream_ReturnsSignedUrl_WhenFound()
+    public async Task Stream_ReturnsOk_WhenFound()
     {
         var id = Guid.NewGuid();
-        _tracks.GetByIdAsync(id).Returns(new Track
-        {
-            Id = id, Title = "Beat", AudioUrl = "audio/beat.mp3", CreatorId = "c1"
-        });
-        _storage.GenerateSignedUrl("audio/beat.mp3").Returns("https://cdn.test/signed");
+        _stream.GetStreamUrlAsync(id.ToString())
+            .Returns(new { trackId = id.ToString(), streamUrl = "https://cdn.test/signed" });
 
         var result = await _controller.Stream(id.ToString());
 
@@ -96,49 +87,27 @@ public sealed class StreamControllerTests
     // ── Start (Authorize) ──
 
     [Fact]
-    public async Task Start_CreatesSession_FromBody()
+    public async Task Start_DelegatesToService_FromBody()
     {
         SetupUser();
         var trackId = Guid.NewGuid();
-        _tracks.GetByIdAsync(trackId).Returns(new Track
-        {
-            Id = trackId,
-            Title = "Beat",
-            AudioUrl = "audio/beat.mp3",
-            CreatorId = "c1"
-        });
-        _streams.StartAsync(trackId, "user-1").Returns(new StreamSession
-        {
-            Id = Guid.NewGuid(),
-            TrackId = trackId,
-            UserId = "user-1"
-        });
+        _stream.StartAsync(trackId.ToString(), "user-1")
+            .Returns(new { streamId = Guid.NewGuid().ToString(), status = "started" });
 
         var result = await _controller.Start(
             new StreamController.StreamStartRequest { TrackId = trackId.ToString() });
 
         Assert.IsType<OkObjectResult>(result);
-        await _streams.Received(1).StartAsync(trackId, "user-1");
+        await _stream.Received(1).StartAsync(trackId.ToString(), "user-1");
     }
 
     [Fact]
-    public async Task Start_CreatesSession_FromQueryString()
+    public async Task Start_DelegatesToService_FromQueryString()
     {
         SetupUser();
         var trackId = Guid.NewGuid();
-        _tracks.GetByIdAsync(trackId).Returns(new Track
-        {
-            Id = trackId,
-            Title = "Beat",
-            AudioUrl = "audio/beat.mp3",
-            CreatorId = "c1"
-        });
-        _streams.StartAsync(trackId, "user-1").Returns(new StreamSession
-        {
-            Id = Guid.NewGuid(),
-            TrackId = trackId,
-            UserId = "user-1"
-        });
+        _stream.StartAsync(trackId.ToString(), "user-1")
+            .Returns(new { streamId = Guid.NewGuid().ToString(), status = "started" });
 
         var result = await _controller.Start(null, trackId.ToString());
 
@@ -146,57 +115,53 @@ public sealed class StreamControllerTests
     }
 
     [Fact]
-    public async Task Start_Returns400_WhenTrackIdInvalid()
+    public async Task Start_PropagatesArgumentException_WhenTrackIdInvalid()
     {
         SetupUser();
+        _stream.StartAsync("not-a-guid", "user-1")
+            .ThrowsAsync(new ArgumentException("trackId must be a valid GUID."));
 
-        var result = await _controller.Start(
-            new StreamController.StreamStartRequest { TrackId = "not-a-guid" });
-
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
-        Assert.Contains("trackId must be a valid GUID", envelope.Error);
-        await _streams.DidNotReceive().StartAsync(Arg.Any<Guid>(), Arg.Any<string?>());
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _controller.Start(
+                new StreamController.StreamStartRequest { TrackId = "not-a-guid" }));
     }
 
     [Fact]
-    public async Task Start_Returns404_WhenTrackMissing()
+    public async Task Start_PropagatesKeyNotFound_WhenTrackMissing()
     {
         SetupUser();
         var trackId = Guid.NewGuid();
-        _tracks.GetByIdAsync(trackId).Returns((Track?)null);
+        _stream.StartAsync(trackId.ToString(), "user-1")
+            .ThrowsAsync(new KeyNotFoundException("Track not found."));
 
-        var result = await _controller.Start(
-            new StreamController.StreamStartRequest { TrackId = trackId.ToString() });
-
-        Assert.IsType<NotFoundObjectResult>(result);
-        await _streams.DidNotReceive().StartAsync(Arg.Any<Guid>(), Arg.Any<string?>());
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            _controller.Start(
+                new StreamController.StreamStartRequest { TrackId = trackId.ToString() }));
     }
 
     // ── Stop (Authorize) ──
 
     [Fact]
-    public async Task Stop_StopsSession_WhenIdValid()
+    public async Task Stop_DelegatesToService_WhenIdValid()
     {
         SetupUser();
         var sessionId = Guid.NewGuid();
+        _stream.StopAsync(sessionId.ToString()).Returns(Task.CompletedTask);
 
         var result = await _controller.Stop(sessionId.ToString());
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        await _streams.Received(1).StopAsync(sessionId);
+        await _stream.Received(1).StopAsync(sessionId.ToString());
     }
 
     [Fact]
-    public async Task Stop_Returns400_WhenStreamIdInvalid()
+    public async Task Stop_PropagatesArgumentException_WhenStreamIdInvalid()
     {
         SetupUser();
+        _stream.StopAsync("bad-guid")
+            .ThrowsAsync(new ArgumentException("streamId must be a valid GUID."));
 
-        var result = await _controller.Stop("bad-guid");
-
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
-        Assert.Contains("streamId must be a valid GUID", envelope.Error);
-        await _streams.DidNotReceive().StopAsync(Arg.Any<Guid>());
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _controller.Stop("bad-guid"));
     }
 }
