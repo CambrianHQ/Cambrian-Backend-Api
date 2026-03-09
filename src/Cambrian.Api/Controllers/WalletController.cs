@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Cambrian.Application.DTOs.Wallet;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,9 +11,9 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 public class WalletController : BaseController
 {
-    private readonly IWalletService _wallet;
+    private readonly IWalletRepository _wallet;
 
-    public WalletController(IWalletService wallet)
+    public WalletController(IWalletRepository wallet)
     {
         _wallet = wallet;
     }
@@ -21,15 +22,35 @@ public class WalletController : BaseController
     public async Task<IActionResult> Get()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var response = await _wallet.GetBalanceAsync(userId);
-        return OkResponse(response);
+        var balanceCents = await _wallet.GetBalanceAsync(userId);
+
+        return OkResponse(new WalletResponse
+        {
+            BalanceCents = balanceCents,
+            Currency = "usd"
+        });
     }
 
     [HttpPost("withdraw")]
     public async Task<IActionResult> Withdraw(WithdrawRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        await _wallet.WithdrawAsync(request.Amount, userId);
+        var balanceCents = await _wallet.GetBalanceAsync(userId);
+        var amountCents = (long)(request.Amount * 100);
+
+        if (amountCents > balanceCents)
+            return ErrorResponse("Insufficient balance.");
+
+        var txn = new WalletTransaction
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            AmountCents = -amountCents,
+            Type = "withdrawal",
+            Description = $"Withdrawal of ${request.Amount:F2}"
+        };
+
+        await _wallet.AddTransactionAsync(txn);
         return OkResponse(new { status = "pending" });
     }
 

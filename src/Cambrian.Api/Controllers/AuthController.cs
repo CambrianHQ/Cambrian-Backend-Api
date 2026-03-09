@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -10,10 +11,12 @@ namespace Cambrian.Api.Controllers;
 public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
+    private readonly ISubscriptionRepository _subscriptions;
 
-    public AuthController(IAuthService auth)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions)
     {
         _auth = auth;
+        _subscriptions = subscriptions;
     }
 
     [EnableRateLimiting("auth")]
@@ -36,18 +39,24 @@ public class AuthController : BaseController
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
-        var session = await _auth.GetSessionAsync(User);
+        var profile = await _auth.GetCurrentUserAsync(User);
+
+        if (profile is null)
+            return NotFoundResponse("User not found.");
 
         var bearerToken = Request.Headers.Authorization.ToString().Replace("Bearer ", "");
+
+        var sub = await _subscriptions.GetActiveAsync(profile.UserId);
+        var tier = sub?.Plan ?? profile.Tier ?? "free";
 
         return Ok(new
         {
             token = bearerToken,
             user = new
             {
-                id = session.UserId.ToString(),
-                email = session.Email,
-                tier = session.Tier
+                id = profile.UserId,
+                email = profile.Email,
+                tier = tier
             }
         });
     }
