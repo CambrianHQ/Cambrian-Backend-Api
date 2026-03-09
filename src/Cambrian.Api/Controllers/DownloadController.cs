@@ -9,15 +9,11 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 public class DownloadController : BaseController
 {
-    private readonly ITrackRepository _tracks;
-    private readonly IObjectStorage _storage;
-    private readonly ILibraryRepository _library;
+    private readonly IDownloadService _download;
 
-    public DownloadController(ITrackRepository tracks, IObjectStorage storage, ILibraryRepository library)
+    public DownloadController(IDownloadService download)
     {
-        _tracks = tracks;
-        _storage = storage;
-        _library = library;
+        _download = download;
     }
 
     [HttpGet("{trackId}")]
@@ -28,16 +24,19 @@ public class DownloadController : BaseController
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
-        if (libraryItem is null)
-            return ForbiddenResponse("You must purchase this track before downloading.");
-
-        var track = await _tracks.GetByIdAsync(id);
-        if (track?.AudioUrl is null)
-            return NotFoundResponse("Track audio not found.");
-
-        var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return OkResponse(new { url = signedUrl });
+        try
+        {
+            var result = await _download.GetDownloadUrlAsync(id, userId);
+            return OkResponse(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return ForbiddenResponse(ex.Message);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFoundResponse(ex.Message);
+        }
     }
 
     [HttpGet("{trackId}/signed")]
@@ -48,15 +47,18 @@ public class DownloadController : BaseController
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
-        var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
-        if (libraryItem is null)
-            return ForbiddenResponse("You must purchase this track before downloading.");
-
-        var track = await _tracks.GetByIdAsync(id);
-        if (track?.AudioUrl is null)
-            return NotFoundResponse("Track audio not found.");
-
-        var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return OkResponse(new { signedUrl, expiresAt = DateTime.UtcNow.AddMinutes(15) });
+        try
+        {
+            var result = await _download.GetSignedUrlAsync(id, userId);
+            return OkResponse(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return ForbiddenResponse(ex.Message);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFoundResponse(ex.Message);
+        }
     }
 }

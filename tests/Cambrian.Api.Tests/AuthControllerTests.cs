@@ -3,7 +3,6 @@ using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
@@ -19,12 +18,11 @@ namespace Cambrian.Api.Tests;
 public sealed class AuthControllerTests
 {
     private readonly IAuthService _auth = Substitute.For<IAuthService>();
-    private readonly ISubscriptionRepository _subscriptions = Substitute.For<ISubscriptionRepository>();
     private readonly AuthController _controller;
 
     public AuthControllerTests()
     {
-        _controller = new AuthController(_auth, _subscriptions);
+        _controller = new AuthController(_auth);
     }
 
     private void SetupUser(string userId, string? bearerToken = null)
@@ -129,12 +127,11 @@ public sealed class AuthControllerTests
             Role = "User"
         });
 
-        _subscriptions.GetActiveAsync(userId).Returns(new Subscription
+        _auth.GetSessionAsync(Arg.Any<ClaimsPrincipal>()).Returns(new AuthResponse
         {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Plan = "creator",
-            Status = "active"
+            UserId = Guid.Parse(userId),
+            Email = "me@test.com",
+            Tier = "creator"
         });
 
         var result = await _controller.Me();
@@ -157,7 +154,12 @@ public sealed class AuthControllerTests
             Role = "User"
         });
 
-        _subscriptions.GetActiveAsync(userId).Returns((Subscription?)null);
+        _auth.GetSessionAsync(Arg.Any<ClaimsPrincipal>()).Returns(new AuthResponse
+        {
+            UserId = Guid.Parse(userId),
+            Email = "me@test.com",
+            Tier = "paid"
+        });
 
         var result = await _controller.Me();
 

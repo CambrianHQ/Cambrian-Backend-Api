@@ -11,12 +11,10 @@ namespace Cambrian.Api.Controllers;
 public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
-    private readonly ISubscriptionRepository _subscriptions;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions)
+    public AuthController(IAuthService auth)
     {
         _auth = auth;
-        _subscriptions = subscriptions;
     }
 
     [EnableRateLimiting("auth")]
@@ -45,9 +43,7 @@ public class AuthController : BaseController
             return NotFoundResponse("User not found.");
 
         var bearerToken = Request.Headers.Authorization.ToString().Replace("Bearer ", "");
-
-        var sub = await _subscriptions.GetActiveAsync(profile.UserId);
-        var tier = sub?.Plan ?? profile.Tier ?? "free";
+        var session = await _auth.GetSessionAsync(User);
 
         return Ok(new
         {
@@ -56,7 +52,7 @@ public class AuthController : BaseController
             {
                 id = profile.UserId,
                 email = profile.Email,
-                tier = tier
+                tier = session.Tier
             }
         });
     }

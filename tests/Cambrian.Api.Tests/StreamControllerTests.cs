@@ -2,10 +2,10 @@ using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
@@ -16,14 +16,12 @@ namespace Cambrian.Api.Tests;
 /// </summary>
 public sealed class StreamControllerTests
 {
-    private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
-    private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
-    private readonly IStreamRepository _streams = Substitute.For<IStreamRepository>();
+    private readonly IStreamService _stream = Substitute.For<IStreamService>();
     private readonly StreamController _controller;
 
     public StreamControllerTests()
     {
-        _controller = new StreamController(_tracks, _storage, _streams);
+        _controller = new StreamController(_stream);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -41,13 +39,9 @@ public sealed class StreamControllerTests
     [Fact]
     public async Task List_ReturnsOk()
     {
-        _tracks.BrowseAsync().Returns(new List<Track>
+        _stream.ListStreamableAsync(20).Returns(new List<object>
         {
-            new()
-            {
-                Id = Guid.NewGuid(), Title = "Beat 1", AudioUrl = "url1",
-                Creator = new ApplicationUser { DisplayName = "DJ" }, CreatorId = "c1"
-            }
+            new { id = Guid.NewGuid().ToString(), title = "Beat 1", artist = "DJ", genre = (string?)null, duration = (int?)null, audioUrl = "url1" }
         });
 
         var result = await _controller.List();
@@ -71,7 +65,8 @@ public sealed class StreamControllerTests
     public async Task Stream_Returns404_WhenTrackNotFound()
     {
         var id = Guid.NewGuid();
-        _tracks.GetByIdAsync(id).Returns((Track?)null);
+        _stream.GetStreamUrlAsync(id.ToString())
+            .ThrowsAsync(new KeyNotFoundException("Track not found."));
 
         var result = await _controller.Stream(id.ToString());
 
@@ -82,11 +77,8 @@ public sealed class StreamControllerTests
     public async Task Stream_ReturnsSignedUrl_WhenFound()
     {
         var id = Guid.NewGuid();
-        _tracks.GetByIdAsync(id).Returns(new Track
-        {
-            Id = id, Title = "Beat", AudioUrl = "audio/beat.mp3", CreatorId = "c1"
-        });
-        _storage.GenerateSignedUrl("audio/beat.mp3").Returns("https://cdn.test/signed");
+        _stream.GetStreamUrlAsync(id.ToString())
+            .Returns(new { trackId = id.ToString(), streamUrl = "https://cdn.test/signed" });
 
         var result = await _controller.Stream(id.ToString());
 
@@ -100,18 +92,14 @@ public sealed class StreamControllerTests
     {
         SetupUser();
         var trackId = Guid.NewGuid();
-        _streams.StartAsync(trackId, "user-1").Returns(new StreamSession
-        {
-            Id = Guid.NewGuid(),
-            TrackId = trackId,
-            UserId = "user-1"
-        });
+        _stream.StartAsync(trackId.ToString(), "user-1")
+            .Returns(new { streamId = Guid.NewGuid().ToString(), status = "started" });
 
         var result = await _controller.Start(
             new StreamController.StreamStartRequest { TrackId = trackId.ToString() });
 
         Assert.IsType<OkObjectResult>(result);
-        await _streams.Received(1).StartAsync(trackId, "user-1");
+        await _stream.Received(1).StartAsync(trackId.ToString(), "user-1");
     }
 
     [Fact]
@@ -119,12 +107,8 @@ public sealed class StreamControllerTests
     {
         SetupUser();
         var trackId = Guid.NewGuid();
-        _streams.StartAsync(trackId, "user-1").Returns(new StreamSession
-        {
-            Id = Guid.NewGuid(),
-            TrackId = trackId,
-            UserId = "user-1"
-        });
+        _stream.StartAsync(trackId.ToString(), "user-1")
+            .Returns(new { streamId = Guid.NewGuid().ToString(), status = "started" });
 
         var result = await _controller.Start(null, trackId.ToString());
 
@@ -135,18 +119,14 @@ public sealed class StreamControllerTests
     public async Task Start_UsesEmptyGuid_WhenTrackIdInvalid()
     {
         SetupUser();
-        _streams.StartAsync(Guid.Empty, "user-1").Returns(new StreamSession
-        {
-            Id = Guid.NewGuid(),
-            TrackId = Guid.Empty,
-            UserId = "user-1"
-        });
+        _stream.StartAsync("not-a-guid", "user-1")
+            .Returns(new { streamId = Guid.NewGuid().ToString(), status = "started" });
 
         var result = await _controller.Start(
             new StreamController.StreamStartRequest { TrackId = "not-a-guid" });
 
         Assert.IsType<OkObjectResult>(result);
-        await _streams.Received(1).StartAsync(Guid.Empty, "user-1");
+        await _stream.Received(1).StartAsync("not-a-guid", "user-1");
     }
 
     // ── Stop (Authorize) ──
@@ -160,7 +140,7 @@ public sealed class StreamControllerTests
         var result = await _controller.Stop(sessionId.ToString());
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        await _streams.Received(1).StopAsync(sessionId);
+        await _stream.Received(1).StopAsync(sessionId.ToString());
     }
 
     [Fact]
@@ -171,6 +151,6 @@ public sealed class StreamControllerTests
         var result = await _controller.Stop("bad-guid");
 
         Assert.IsType<OkObjectResult>(result);
-        await _streams.DidNotReceive().StopAsync(Arg.Any<Guid>());
+        await _stream.Received(1).StopAsync("bad-guid");
     }
 }

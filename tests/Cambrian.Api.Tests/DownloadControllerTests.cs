@@ -2,10 +2,10 @@ using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
@@ -16,14 +16,12 @@ namespace Cambrian.Api.Tests;
 /// </summary>
 public sealed class DownloadControllerTests
 {
-    private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
-    private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
-    private readonly ILibraryRepository _library = Substitute.For<ILibraryRepository>();
+    private readonly IDownloadService _download = Substitute.For<IDownloadService>();
     private readonly DownloadController _controller;
 
     public DownloadControllerTests()
     {
-        _controller = new DownloadController(_tracks, _storage, _library);
+        _controller = new DownloadController(_download);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -54,7 +52,8 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser("user-no-access");
-        _library.GetByUserAndTrackAsync("user-no-access", trackId).Returns((LibraryItem?)null);
+        _download.GetDownloadUrlAsync(trackId, "user-no-access")
+            .ThrowsAsync(new UnauthorizedAccessException("You must purchase this track before downloading."));
 
         var result = await _controller.Download(trackId.ToString());
 
@@ -69,9 +68,8 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
-        _tracks.GetByIdAsync(trackId).Returns((Track?)null);
+        _download.GetDownloadUrlAsync(trackId, "user-1")
+            .ThrowsAsync(new KeyNotFoundException("Track audio not found."));
 
         var result = await _controller.Download(trackId.ToString());
 
@@ -83,15 +81,8 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
-        _tracks.GetByIdAsync(trackId).Returns(new Track
-        {
-            Id = trackId,
-            Title = "Beat",
-            AudioUrl = null,
-            CreatorId = "c1"
-        });
+        _download.GetDownloadUrlAsync(trackId, "user-1")
+            .ThrowsAsync(new KeyNotFoundException("Track audio not found."));
 
         var result = await _controller.Download(trackId.ToString());
 
@@ -103,16 +94,8 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
-        _tracks.GetByIdAsync(trackId).Returns(new Track
-        {
-            Id = trackId,
-            Title = "Beat",
-            AudioUrl = "tracks/beat.mp3",
-            CreatorId = "c1"
-        });
-        _storage.GenerateSignedUrl("tracks/beat.mp3").Returns("https://cdn.test/signed/beat.mp3");
+        _download.GetDownloadUrlAsync(trackId, "user-1")
+            .Returns(new { url = "https://cdn.test/signed/beat.mp3" });
 
         var result = await _controller.Download(trackId.ToString());
 
@@ -135,7 +118,8 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId).Returns((LibraryItem?)null);
+        _download.GetSignedUrlAsync(trackId, "user-1")
+            .ThrowsAsync(new UnauthorizedAccessException("You must purchase this track before downloading."));
 
         var result = await _controller.SignedUrl(trackId.ToString());
 
@@ -148,16 +132,8 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
-        _tracks.GetByIdAsync(trackId).Returns(new Track
-        {
-            Id = trackId,
-            Title = "Beat",
-            AudioUrl = "tracks/beat.mp3",
-            CreatorId = "c1"
-        });
-        _storage.GenerateSignedUrl("tracks/beat.mp3").Returns("https://cdn.test/signed");
+        _download.GetSignedUrlAsync(trackId, "user-1")
+            .Returns(new { signedUrl = "https://cdn.test/signed", expiresAt = DateTime.UtcNow.AddMinutes(15) });
 
         var result = await _controller.SignedUrl(trackId.ToString());
 

@@ -3,10 +3,10 @@ using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Wallet;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
@@ -16,7 +16,7 @@ namespace Cambrian.Api.Tests;
 /// </summary>
 public sealed class WalletControllerTests
 {
-    private readonly IWalletRepository _wallet = Substitute.For<IWalletRepository>();
+    private readonly IWalletService _wallet = Substitute.For<IWalletService>();
     private readonly WalletController _controller;
 
     public WalletControllerTests()
@@ -40,7 +40,8 @@ public sealed class WalletControllerTests
     public async Task Get_ReturnsBalance()
     {
         SetupUser();
-        _wallet.GetBalanceAsync("user-1").Returns(5000L);
+        _wallet.GetBalanceAsync("user-1")
+            .Returns(new WalletResponse { BalanceCents = 5000, Currency = "usd" });
 
         var result = await _controller.Get();
 
@@ -54,7 +55,8 @@ public sealed class WalletControllerTests
     public async Task Get_ReturnsZero_WhenNoTransactions()
     {
         SetupUser();
-        _wallet.GetBalanceAsync("user-1").Returns(0L);
+        _wallet.GetBalanceAsync("user-1")
+            .Returns(new WalletResponse { BalanceCents = 0, Currency = "usd" });
 
         var result = await _controller.Get();
 
@@ -69,7 +71,8 @@ public sealed class WalletControllerTests
     public async Task Withdraw_Returns400_WhenInsufficientBalance()
     {
         SetupUser();
-        _wallet.GetBalanceAsync("user-1").Returns(1000L);
+        _wallet.WithdrawAsync(50.00, "user-1")
+            .ThrowsAsync(new InvalidOperationException("Insufficient balance."));
 
         var result = await _controller.Withdraw(new WithdrawRequest { Amount = 50.00 });
 
@@ -82,22 +85,17 @@ public sealed class WalletControllerTests
     public async Task Withdraw_Succeeds_WhenBalanceIsSufficient()
     {
         SetupUser();
-        _wallet.GetBalanceAsync("user-1").Returns(10000L);
 
         var result = await _controller.Withdraw(new WithdrawRequest { Amount = 50.00 });
 
         Assert.IsType<OkObjectResult>(result);
-        await _wallet.Received(1).AddTransactionAsync(Arg.Is<WalletTransaction>(t =>
-            t.UserId == "user-1" &&
-            t.AmountCents == -5000 &&
-            t.Type == "withdrawal"));
+        await _wallet.Received(1).WithdrawAsync(50.00, "user-1");
     }
 
     [Fact]
     public async Task Withdraw_Succeeds_WhenAmountEqualsBalance()
     {
         SetupUser();
-        _wallet.GetBalanceAsync("user-1").Returns(5000L);
 
         var result = await _controller.Withdraw(new WithdrawRequest { Amount = 50.00 });
 
@@ -110,12 +108,11 @@ public sealed class WalletControllerTests
     public async Task History_ReturnsList()
     {
         SetupUser();
-        _wallet.GetHistoryAsync("user-1", 20).Returns(new List<WalletTransaction>
+        _wallet.GetHistoryAsync("user-1", 20).Returns(new List<WalletTransactionResponse>
         {
             new()
             {
-                Id = Guid.NewGuid(),
-                UserId = "user-1",
+                Id = Guid.NewGuid().ToString(),
                 AmountCents = 2999,
                 Type = "purchase_credit",
                 Description = "Sale of Beat"
@@ -131,7 +128,7 @@ public sealed class WalletControllerTests
     public async Task History_ReturnsEmptyList_WhenNoTransactions()
     {
         SetupUser();
-        _wallet.GetHistoryAsync("user-1", 20).Returns(new List<WalletTransaction>());
+        _wallet.GetHistoryAsync("user-1", 20).Returns(new List<WalletTransactionResponse>());
 
         var result = await _controller.History();
 
