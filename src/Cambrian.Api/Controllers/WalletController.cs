@@ -10,9 +10,9 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 public class WalletController : BaseController
 {
-    private readonly IWalletRepository _wallet;
+    private readonly IWalletService _wallet;
 
-    public WalletController(IWalletRepository wallet)
+    public WalletController(IWalletService wallet)
     {
         _wallet = wallet;
     }
@@ -21,35 +21,15 @@ public class WalletController : BaseController
     public async Task<IActionResult> Get()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var balanceCents = await _wallet.GetBalanceAsync(userId);
-
-        return OkResponse(new WalletResponse
-        {
-            BalanceCents = balanceCents,
-            Currency = "usd"
-        });
+        var response = await _wallet.GetBalanceAsync(userId);
+        return OkResponse(response);
     }
 
     [HttpPost("withdraw")]
     public async Task<IActionResult> Withdraw(WithdrawRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var balanceCents = await _wallet.GetBalanceAsync(userId);
-        var amountCents = (long)(request.Amount * 100);
-
-        if (amountCents > balanceCents)
-            return ErrorResponse("Insufficient balance.");
-
-        var txn = new Domain.Entities.WalletTransaction
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            AmountCents = -amountCents,
-            Type = "withdrawal",
-            Description = $"Withdrawal of ${request.Amount:F2}"
-        };
-
-        await _wallet.AddTransactionAsync(txn);
+        await _wallet.WithdrawAsync(request.Amount, userId);
         return OkResponse(new { status = "pending" });
     }
 
@@ -60,17 +40,7 @@ public class WalletController : BaseController
         if (pageSize is < 1 or > 100) pageSize = 20;
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var transactions = await _wallet.GetHistoryAsync(userId, pageSize);
-
-        var result = transactions.Select(t => new WalletTransactionResponse
-        {
-            Id = t.Id.ToString(),
-            AmountCents = t.AmountCents,
-            Type = t.Type,
-            Description = t.Description,
-            CreatedAt = t.CreatedAt
-        }).ToList();
-
+        var result = await _wallet.GetHistoryAsync(userId, pageSize);
         return OkResponse(result);
     }
 }

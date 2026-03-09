@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Cambrian.Application.DTOs.Auth;
+using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -15,6 +16,7 @@ public sealed class AuthTests
 {
     private readonly UserManager<ApplicationUser> _users;
     private readonly IConfiguration _config;
+    private readonly ISubscriptionRepository _subscriptions;
     private readonly AuthService _sut;
 
     public AuthTests()
@@ -32,7 +34,8 @@ public sealed class AuthTests
             })
             .Build();
 
-        _sut = new AuthService(_users, _config);
+        _subscriptions = Substitute.For<ISubscriptionRepository>();
+        _sut = new AuthService(_users, _config, _subscriptions);
     }
 
     [Fact]
