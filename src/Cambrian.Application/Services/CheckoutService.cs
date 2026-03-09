@@ -22,8 +22,12 @@ public class CheckoutService : ICheckoutService
         if (track is null)
             throw new KeyNotFoundException($"Track {request.TrackId} not found.");
 
+        var licenseType = request.LicenseType.Trim().ToLowerInvariant();
+        if (licenseType == "exclusive" && track.ExclusiveSold)
+            throw new InvalidOperationException("This exclusive license has already been sold.");
+
         // Determine price based on license type
-        var amountCents = request.LicenseType switch
+        var amountCents = licenseType switch
         {
             "exclusive" => track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100),
             "non-exclusive" => track.NonExclusivePriceCents > 0 ? track.NonExclusivePriceCents : (int)(track.Price * 100),
@@ -35,7 +39,7 @@ public class CheckoutService : ICheckoutService
         var url = await _gateway.CreateCheckoutSessionAsync(
             amountCents,
             track.Title,
-            clientReferenceId: $"{userId}:{request.TrackId}:{request.LicenseType}");
+            clientReferenceId: $"{userId}:{request.TrackId}:{licenseType}");
 
         return new CheckoutResponse
         {

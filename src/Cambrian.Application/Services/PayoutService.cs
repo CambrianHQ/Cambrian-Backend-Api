@@ -20,7 +20,7 @@ public class PayoutService : IPayoutService
         return await Task.FromResult(new { balance = 0m, pending = 0m, available = 0m, currency = "USD" });
     }
 
-    public async Task<PayoutResponse> RequestAsync(PayoutRequest request)
+    public async Task<PayoutResponse> RequestAsync(PayoutRequest request, string userId)
     {
         if (request.Amount <= 0)
             throw new ArgumentException("Amount must be greater than zero.");
@@ -28,7 +28,7 @@ public class PayoutService : IPayoutService
         var payout = new Payout
         {
             Id = Guid.NewGuid(),
-            CreatorId = "",
+            CreatorId = userId,
             Amount = (double)request.Amount,
             Status = "pending"
         };

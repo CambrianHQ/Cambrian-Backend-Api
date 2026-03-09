@@ -59,16 +59,20 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<SubscriptionResponse> UpdateAsync(UpdateSubscriptionRequest request, string userId)
     {
+        var requestedPlan = request.Plan?.Trim().ToLowerInvariant() ?? "";
+        if (requestedPlan != "free")
+            throw new InvalidOperationException("Paid plans must be activated through Stripe checkout.");
+
         var existing = await _subscriptions.GetActiveAsync(userId);
         var user = await _users.FindByIdAsync(userId);
 
         if (existing is not null)
         {
-            if (existing.Plan == request.Plan)
+            if (existing.Plan == requestedPlan)
             {
-                if (user is not null && user.Tier != request.Plan)
+                if (user is not null && user.Tier != requestedPlan)
                 {
-                    user.Tier = request.Plan;
+                    user.Tier = requestedPlan;
                     await _users.UpdateAsync(user);
                 }
                 return new SubscriptionResponse { Plan = existing.Plan, Status = existing.Status };
@@ -77,7 +81,7 @@ public class SubscriptionService : ISubscriptionService
             await _subscriptions.CancelAsync(existing.Id);
         }
 
-        if (request.Plan == "free")
+        if (requestedPlan == "free")
         {
             if (user is not null) { user.Tier = "free"; await _users.UpdateAsync(user); }
             return new SubscriptionResponse { Plan = "free", Status = "active" };

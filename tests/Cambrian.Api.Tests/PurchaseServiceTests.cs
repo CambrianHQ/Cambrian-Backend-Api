@@ -24,6 +24,8 @@ public sealed class PurchaseServiceTests
         Id = id ?? Guid.NewGuid(),
         Title = "Test Beat",
         Price = 29.99,
+        NonExclusivePriceCents = 2999,
+        ExclusivePriceCents = 5999,
         CreatorId = "creator-1",
         Creator = new ApplicationUser { DisplayName = "DJ Creator", Email = "dj@test.com" },
         AudioUrl = "https://cdn.test/beat.mp3"
@@ -121,6 +123,24 @@ public sealed class PurchaseServiceTests
 
         Assert.True(track.ExclusiveSold);
         await _tracks.Received(1).UpdateAsync(track);
+    }
+
+    [Fact]
+    public async Task CreateAsync_UsesExclusivePriceCents_WhenLicenseIsExclusive()
+    {
+        var trackId = Guid.NewGuid();
+        var track = MakeTrack(trackId);
+        _tracks.GetByIdAsync(trackId).Returns(track);
+        _purchases.GetByBuyerIdAsync("user-1").Returns(new List<Purchase>());
+
+        var result = await _sut.CreateAsync(new PurchaseCreateRequest
+        {
+            TrackId = trackId.ToString(),
+            LicenseType = "exclusive"
+        }, "user-1");
+
+        Assert.Equal(5999, result.AmountCents);
+        await _invoices.Received(1).AddAsync(Arg.Is<Invoice>(i => i.AmountCents == 5999));
     }
 
     [Fact]

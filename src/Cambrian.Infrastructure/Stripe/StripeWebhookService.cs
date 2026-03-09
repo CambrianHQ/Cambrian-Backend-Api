@@ -33,6 +33,8 @@ public class StripeWebhookService : IWebhookService
     public async Task HandleStripeAsync(string payload, string signature)
     {
         string eventType;
+        string? eventKey;
+        string? stripeSessionId = null;
         string? clientReferenceId;
         long? amountTotal;
 
@@ -45,10 +47,24 @@ public class StripeWebhookService : IWebhookService
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
                 var session = stripeEvent.Data.Object as Session;
+                stripeSessionId = session?.Id;
                 clientReferenceId = session?.ClientReferenceId;
                 amountTotal = session?.AmountTotal;
-                await HandleCheckoutCompleted(clientReferenceId, amountTotal);
             }
+            else
+            {
+                clientReferenceId = null;
+                amountTotal = null;
+            }
+
+            eventKey = BuildEventKey(stripeEvent.Id, eventType, stripeSessionId);
+            if (await HasProcessedEventAsync(eventKey))
+                return;
+
+            if (eventType == EventTypes.CheckoutSessionCompleted)
+                await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
+
+            await RecordProcessedEventAsync(eventKey, eventType);
 
             _logger.LogInformation("Stripe webhook received (verified): {EventType}", eventType);
             return;
@@ -74,17 +90,32 @@ public class StripeWebhookService : IWebhookService
 
         eventType = root.GetProperty("type").GetString() ?? "";
         _logger.LogInformation("Stripe webhook received (dev): {EventType}", eventType);
+        eventKey = root.TryGetProperty("id", out var eventIdProp) ? eventIdProp.GetString() : null;
 
         if (eventType == "checkout.session.completed")
         {
             var dataObj = root.GetProperty("data").GetProperty("object");
+            stripeSessionId = dataObj.TryGetProperty("id", out var sid) ? sid.GetString() : null;
             clientReferenceId = dataObj.TryGetProperty("client_reference_id", out var cri) ? cri.GetString() : null;
             amountTotal = dataObj.TryGetProperty("amount_total", out var at) ? at.GetInt64() : null;
-            await HandleCheckoutCompleted(clientReferenceId, amountTotal);
+            eventKey = BuildEventKey(eventKey, eventType, stripeSessionId);
+
+            if (await HasProcessedEventAsync(eventKey))
+                return;
+
+            await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
+            await RecordProcessedEventAsync(eventKey, eventType);
+        }
+        else if (!string.IsNullOrWhiteSpace(eventKey))
+        {
+            if (await HasProcessedEventAsync(eventKey))
+                return;
+
+            await RecordProcessedEventAsync(eventKey, eventType);
         }
     }
 
-    private async Task HandleCheckoutCompleted(string? clientReferenceId, long? amountTotal)
+    private async Task HandleCheckoutCompleted(string? clientReferenceId, long? amountTotal, string? stripeSessionId)
     {
         if (clientReferenceId is null)
         {
@@ -103,7 +134,7 @@ public class StripeWebhookService : IWebhookService
 
         if (parts.Length == 3)
         {
-            await HandleTrackPurchase(parts[0], parts[1], parts[2], amountTotal);
+            await HandleTrackPurchase(parts[0], parts[1], parts[2], amountTotal, stripeSessionId);
             return;
         }
 
@@ -123,7 +154,12 @@ public class StripeWebhookService : IWebhookService
     /// <summary>
     /// Handle a track purchase: create Purchase record + add to Library.
     /// </summary>
-    private async Task HandleTrackPurchase(string userId, string trackIdStr, string licenseType, long? amountTotal)
+    private async Task HandleTrackPurchase(
+        string userId,
+        string trackIdStr,
+        string licenseType,
+        long? amountTotal,
+        string? stripeSessionId)
     {
         if (!Guid.TryParse(trackIdStr, out var trackId))
         {
@@ -138,31 +174,54 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
+        var normalizedLicenseType = string.IsNullOrWhiteSpace(licenseType)
+            ? "non-exclusive"
+            : licenseType.Trim().ToLowerInvariant();
+        var expectedAmountCents = normalizedLicenseType == "exclusive"
+            ? (track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)Math.Round(track.Price * 100, MidpointRounding.AwayFromZero))
+            : (track.NonExclusivePriceCents > 0 ? track.NonExclusivePriceCents : (int)Math.Round(track.Price * 100, MidpointRounding.AwayFromZero));
+        var finalAmountCents = amountTotal.HasValue && amountTotal.Value > 0
+            ? (int)amountTotal.Value
+            : expectedAmountCents;
+
         // Prevent duplicate purchases for the same track/user/license
         var existingPurchase = await _db.Purchases
-            .FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId && p.LicenseType == licenseType);
+            .FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId && p.LicenseType == normalizedLicenseType);
+
+        if (normalizedLicenseType == "exclusive" && track.ExclusiveSold && existingPurchase is null)
+        {
+            _logger.LogWarning("Exclusive track {TrackId} already sold; webhook ignored", trackId);
+            return;
+        }
+
+        Purchase purchase;
 
         if (existingPurchase is not null)
         {
             _logger.LogInformation("Duplicate purchase skipped for user {UserId} track {TrackId}", userId, trackId);
             existingPurchase.Status = "completed";
-            await _db.SaveChangesAsync();
-            return;
+            existingPurchase.Amount = finalAmountCents / 100.0;
+            existingPurchase.PaymentMethod = "stripe";
+            existingPurchase.StripeSessionId = stripeSessionId ?? existingPurchase.StripeSessionId;
+            purchase = existingPurchase;
         }
-
-        // Create completed Purchase
-        var purchase = new Purchase
+        else
         {
-            Id = Guid.NewGuid(),
-            BuyerId = userId,
-            TrackId = trackId,
-            Amount = (amountTotal ?? 0) / 100.0,
-            PaymentMethod = "stripe",
-            LicenseType = licenseType,
-            Status = "completed",
-            CreatedAt = DateTime.UtcNow
-        };
-        _db.Purchases.Add(purchase);
+            // Create completed Purchase
+            purchase = new Purchase
+            {
+                Id = Guid.NewGuid(),
+                BuyerId = userId,
+                TrackId = trackId,
+                Amount = finalAmountCents / 100.0,
+                PaymentMethod = "stripe",
+                StripeSessionId = stripeSessionId,
+                LicenseType = normalizedLicenseType,
+                Status = "completed",
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.Purchases.Add(purchase);
+        }
 
         // Add to library (if not already there)
         var existingLib = await _db.Library
@@ -183,11 +242,30 @@ public class StripeWebhookService : IWebhookService
             _db.Library.Add(libraryItem);
         }
 
+        if (normalizedLicenseType == "exclusive" && !track.ExclusiveSold)
+            track.ExclusiveSold = true;
+
+        var invoiceExists = await _db.Invoices.AnyAsync(i => i.PurchaseId == purchase.Id);
+        if (!invoiceExists)
+        {
+            _db.Invoices.Add(new Cambrian.Domain.Entities.Invoice
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                PurchaseId = purchase.Id,
+                AmountCents = finalAmountCents,
+                Currency = "usd",
+                Status = "paid",
+                IssuedAt = DateTime.UtcNow,
+                PaidAt = DateTime.UtcNow
+            });
+        }
+
         await _db.SaveChangesAsync();
 
         _logger.LogInformation(
             "Purchase created & track added to library: User={UserId} Track={TrackId} License={License}",
-            userId, trackId, licenseType);
+            userId, trackId, normalizedLicenseType);
     }
 
     /// <summary>
@@ -230,5 +308,43 @@ public class StripeWebhookService : IWebhookService
         _logger.LogInformation(
             "Subscription activated: User={UserId} Plan={Plan}",
             userId, tier);
+    }
+
+    private static string? BuildEventKey(string? eventId, string eventType, string? stripeSessionId)
+    {
+        if (!string.IsNullOrWhiteSpace(eventId))
+            return $"evt:{eventId}";
+
+        if (eventType == EventTypes.CheckoutSessionCompleted && !string.IsNullOrWhiteSpace(stripeSessionId))
+            return $"checkout:{stripeSessionId}";
+
+        return null;
+    }
+
+    private async Task<bool> HasProcessedEventAsync(string? eventKey)
+    {
+        if (string.IsNullOrWhiteSpace(eventKey))
+            return false;
+
+        var alreadyProcessed = await _db.StripeWebhookEvents.AnyAsync(e => e.EventId == eventKey);
+        if (alreadyProcessed)
+            _logger.LogInformation("Duplicate Stripe webhook ignored: {EventKey}", eventKey);
+
+        return alreadyProcessed;
+    }
+
+    private async Task RecordProcessedEventAsync(string? eventKey, string eventType)
+    {
+        if (string.IsNullOrWhiteSpace(eventKey))
+            return;
+
+        _db.StripeWebhookEvents.Add(new StripeWebhookEvent
+        {
+            EventId = eventKey,
+            EventType = eventType,
+            ProcessedAt = DateTime.UtcNow
+        });
+
+        await _db.SaveChangesAsync();
     }
 }

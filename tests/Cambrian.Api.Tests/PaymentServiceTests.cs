@@ -23,7 +23,7 @@ public sealed class PaymentServiceTests
     {
         var request = new PaymentCheckoutRequest { TrackId = "" };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request));
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request, "user-1"));
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public sealed class PaymentServiceTests
     {
         var request = new PaymentCheckoutRequest { TrackId = null };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request));
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request, "user-1"));
     }
 
     [Fact]
@@ -42,22 +42,29 @@ public sealed class PaymentServiceTests
 
         var request = new PaymentCheckoutRequest { TrackId = trackId.ToString() };
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.CreateCheckoutAsync(request));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.CreateCheckoutAsync(request, "user-1"));
     }
 
     [Fact]
-    public async Task CreateCheckout_ConvertsTrackPriceToCents()
+    public async Task CreateCheckout_UsesBackendNonExclusivePriceCents()
     {
         var trackId = Guid.NewGuid();
-        var track = new Track { Id = trackId, Title = "Beat", Price = 49.99, CreatorId = "c1" };
+        var track = new Track
+        {
+            Id = trackId,
+            Title = "Beat",
+            Price = 49.99,
+            NonExclusivePriceCents = 4200,
+            CreatorId = "c1"
+        };
         _tracks.GetByIdAsync(trackId).Returns(track);
         _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
             .Returns("https://stripe.test/session");
 
-        await _sut.CreateCheckoutAsync(new PaymentCheckoutRequest { TrackId = trackId.ToString() });
+        await _sut.CreateCheckoutAsync(new PaymentCheckoutRequest { TrackId = trackId.ToString() }, "user-1");
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            4999, "Beat", Arg.Any<string>(), null, null);
+            4200, "Beat", Arg.Any<string>(), null, null);
     }
 
     [Fact]
@@ -73,14 +80,14 @@ public sealed class PaymentServiceTests
         {
             TrackId = trackId.ToString(),
             ClientReferenceId = "custom-ref"
-        });
+        }, "user-1");
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
             1000, "Beat", "custom-ref", null, null);
     }
 
     [Fact]
-    public async Task CreateCheckout_FallsBackToTrackIdAsClientRef()
+    public async Task CreateCheckout_FallsBackToStructuredClientReferenceId()
     {
         var trackId = Guid.NewGuid();
         var track = new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" };
@@ -92,10 +99,10 @@ public sealed class PaymentServiceTests
         {
             TrackId = trackId.ToString(),
             ClientReferenceId = null
-        });
+        }, "user-99");
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            1000, "Beat", trackId.ToString(), null, null);
+            1000, "Beat", $"user-99:{trackId}:non-exclusive", null, null);
     }
 
     [Fact]

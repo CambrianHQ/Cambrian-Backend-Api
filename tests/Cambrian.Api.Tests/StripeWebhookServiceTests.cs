@@ -95,9 +95,11 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var svc = CreateService(webhookSecret: "", isDevelopment: true);
         var payload = $$"""
         {
+            "id": "evt_checkout_1",
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "id": "cs_test_1",
                     "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
                     "amount_total": 2999
                 }
@@ -113,10 +115,17 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Equal("non-exclusive", purchase.LicenseType);
         Assert.Equal(29.99, purchase.Amount);
         Assert.Equal(trackId, purchase.TrackId);
+        Assert.Equal("cs_test_1", purchase.StripeSessionId);
 
         var lib = await _db.Library.FirstOrDefaultAsync(l => l.UserId == userId);
         Assert.NotNull(lib);
         Assert.Equal(trackId, lib.TrackId);
+
+        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.PurchaseId == purchase.Id);
+        Assert.NotNull(invoice);
+        Assert.Equal(2999, invoice!.AmountCents);
+
+        Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
     }
 
     [Fact]
@@ -129,9 +138,11 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var svc = CreateService(webhookSecret: "", isDevelopment: true);
         var payload = $$"""
         {
+            "id": "evt_subscription_1",
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "id": "cs_sub_1",
                     "client_reference_id": "{{userId}}:subscription:creator"
                 }
             }
@@ -169,9 +180,11 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var svc = CreateService(webhookSecret: "", isDevelopment: true);
         var payload = $$"""
         {
+            "id": "evt_legacy_1",
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "id": "cs_legacy_1",
                     "client_reference_id": "{{purchaseId}}"
                 }
             }
@@ -223,9 +236,11 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var svc = CreateService(webhookSecret: "", isDevelopment: true);
         var payload = $$"""
         {
+            "id": "evt_dup_purchase_1",
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "id": "cs_dup_purchase_1",
                     "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
                     "amount_total": 1000
                 }
@@ -262,9 +277,11 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var svc = CreateService(webhookSecret: "", isDevelopment: true);
         var payload = $$"""
         {
+            "id": "evt_subscription_upgrade_1",
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "id": "cs_sub_upgrade_1",
                     "client_reference_id": "{{userId}}:subscription:creator"
                 }
             }
@@ -284,5 +301,34 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
         var user = await _db.Users.FindAsync(userId);
         Assert.Equal("creator", user!.Tier);
+    }
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_DuplicateEventId_IsIgnored()
+    {
+        var userId = "user-idempotent";
+        _db.Users.Add(new ApplicationUser { Id = userId, UserName = userId, Tier = "free" });
+        await _db.SaveChangesAsync();
+
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = $$"""
+        {
+            "id": "evt_same_subscription",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "id": "cs_same_subscription",
+                    "client_reference_id": "{{userId}}:subscription:paid"
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+        await svc.HandleStripeAsync(payload, "");
+
+        var subs = await _db.Subscriptions.Where(s => s.UserId == userId).ToListAsync();
+        Assert.Single(subs);
+        Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
     }
 }

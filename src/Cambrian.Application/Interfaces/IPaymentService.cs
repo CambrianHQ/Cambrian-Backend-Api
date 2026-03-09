@@ -4,7 +4,7 @@ namespace Cambrian.Application.Interfaces;
 
 public interface IPaymentService
 {
-    Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request);
+    Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request, string userId);
 
     Task<PaymentStateResponse> GetStateAsync();
 

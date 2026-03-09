@@ -58,6 +58,27 @@ public sealed class CheckoutServiceTests
     }
 
     [Fact]
+    public async Task CreateCheckout_ThrowsWhenExclusiveLicenseAlreadySold()
+    {
+        var trackId = Guid.NewGuid();
+        var track = new Track
+        {
+            Id = trackId,
+            Title = "Beat",
+            Price = 30,
+            ExclusivePriceCents = 50000,
+            ExclusiveSold = true,
+            CreatorId = "c1"
+        };
+        _tracks.GetByIdAsync(trackId).Returns(track);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.CreateCheckoutAsync(
+                new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "exclusive" },
+                MakeUser()));
+    }
+
+    [Fact]
     public async Task CreateCheckout_UsesNonExclusivePrice_WhenLicenseIsNonExclusive()
     {
         var trackId = Guid.NewGuid();

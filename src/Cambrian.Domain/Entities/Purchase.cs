@@ -16,6 +16,8 @@ public class Purchase
 
     public string? PaymentMethod { get; set; }
 
+    public string? StripeSessionId { get; set; }
+
     public string? LicenseType { get; set; }
 
     public string Status { get; set; } = "pending"; // pending, completed, refunded

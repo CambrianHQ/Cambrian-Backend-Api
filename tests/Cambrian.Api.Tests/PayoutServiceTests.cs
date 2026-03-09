@@ -24,18 +24,20 @@ public sealed class PayoutServiceTests
     public async Task RequestAsync_ThrowsArgumentException_WhenAmountNotPositive(decimal amount)
     {
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            _sut.RequestAsync(new PayoutRequest { Amount = amount }));
+            _sut.RequestAsync(new PayoutRequest { Amount = amount }, "creator-1"));
     }
 
     [Fact]
     public async Task RequestAsync_CreatesPendingPayout()
     {
-        var result = await _sut.RequestAsync(new PayoutRequest { Amount = 50.00m });
+        var result = await _sut.RequestAsync(new PayoutRequest { Amount = 50.00m }, "creator-1");
 
         Assert.Equal(50.00m, result.Amount);
         Assert.Equal("pending", result.Status);
         await _payouts.Received(1).AddAsync(Arg.Is<Payout>(p =>
-            p.Amount == 50.0 && p.Status == "pending"));
+            p.CreatorId == "creator-1" &&
+            p.Amount == 50.0 &&
+            p.Status == "pending"));
     }
 
     [Fact]

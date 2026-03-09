@@ -31,10 +31,27 @@ public class PurchaseService : IPurchaseService
         var track = await _tracks.GetByIdAsync(trackId)
             ?? throw new KeyNotFoundException("Track not found.");
 
+        var licenseType = string.IsNullOrWhiteSpace(request.LicenseType)
+            ? "non-exclusive"
+            : request.LicenseType.Trim().ToLowerInvariant();
+
+        if (licenseType == "exclusive" && track.ExclusiveSold)
+            throw new InvalidOperationException("This exclusive license has already been sold.");
+
         // Duplicate check
         var existing = await _purchases.GetByBuyerIdAsync(userId);
-        if (existing.Any(p => p.TrackId == trackId))
+        if (existing.Any(p => p.TrackId == trackId && (p.LicenseType ?? "non-exclusive") == licenseType))
             throw new InvalidOperationException("You already own this track.");
+
+        var amountCents = licenseType switch
+        {
+            "exclusive" => track.ExclusivePriceCents > 0
+                ? track.ExclusivePriceCents
+                : (int)Math.Round(track.Price * 100, MidpointRounding.AwayFromZero),
+            _ => track.NonExclusivePriceCents > 0
+                ? track.NonExclusivePriceCents
+                : (int)Math.Round(track.Price * 100, MidpointRounding.AwayFromZero)
+        };
 
         // Create purchase record
         var purchase = new Purchase
@@ -42,8 +59,8 @@ public class PurchaseService : IPurchaseService
             Id = Guid.NewGuid(),
             BuyerId = userId,
             TrackId = trackId,
-            Amount = track.Price,
-            LicenseType = request.LicenseType ?? "non-exclusive",
+            Amount = amountCents / 100.0,
+            LicenseType = licenseType,
             PaymentMethod = request.PaymentMethod,
             Status = "completed",
             CreatedAt = DateTime.UtcNow
@@ -63,7 +80,7 @@ public class PurchaseService : IPurchaseService
         });
 
         // Mark exclusive if applicable
-        if (request.LicenseType == "exclusive")
+        if (licenseType == "exclusive")
         {
             track.ExclusiveSold = true;
             await _tracks.UpdateAsync(track);
@@ -75,7 +92,7 @@ public class PurchaseService : IPurchaseService
             Id = Guid.NewGuid(),
             UserId = userId,
             PurchaseId = purchase.Id,
-            AmountCents = (int)(purchase.Amount * 100),
+            AmountCents = amountCents,
             Currency = "usd",
             Status = "paid",
             IssuedAt = DateTime.UtcNow,
@@ -88,7 +105,7 @@ public class PurchaseService : IPurchaseService
             Id = purchase.Id.ToString(),
             TrackId = purchase.TrackId.ToString(),
             TrackTitle = track.Title,
-            AmountCents = (int)(purchase.Amount * 100),
+            AmountCents = amountCents,
             LicenseType = purchase.LicenseType ?? "non-exclusive",
             Status = purchase.Status,
             CreatedAt = purchase.CreatedAt,

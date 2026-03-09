@@ -17,7 +17,7 @@ public class PaymentService : IPaymentService
         _purchases = purchases;
     }
 
-    public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request)
+    public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request, string userId)
     {
         if (string.IsNullOrWhiteSpace(request.TrackId))
             throw new ArgumentException("TrackId is required.");
@@ -25,12 +25,18 @@ public class PaymentService : IPaymentService
         var track = await _tracks.GetByIdAsync(Guid.Parse(request.TrackId))
                     ?? throw new KeyNotFoundException($"Track {request.TrackId} not found.");
 
-        var amountCents = (int)(track.Price * 100);
+        var amountCents = track.NonExclusivePriceCents > 0
+            ? track.NonExclusivePriceCents
+            : (int)Math.Round(track.Price * 100, MidpointRounding.AwayFromZero);
+
+        var clientReferenceId = string.IsNullOrWhiteSpace(request.ClientReferenceId)
+            ? $"{userId}:{track.Id}:non-exclusive"
+            : request.ClientReferenceId;
 
         var url = await _gateway.CreateCheckoutSessionAsync(
             amountCents,
             track.Title,
-            clientReferenceId: request.ClientReferenceId ?? request.TrackId);
+            clientReferenceId: clientReferenceId);
 
         return new PaymentCheckoutResponse { CheckoutUrl = url };
     }

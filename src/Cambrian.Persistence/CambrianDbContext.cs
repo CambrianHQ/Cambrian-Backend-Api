@@ -32,6 +32,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
 
+    public DbSet<StripeWebhookEvent> StripeWebhookEvents => Set<StripeWebhookEvent>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -58,6 +60,9 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<Purchase>(e =>
         {
             e.HasKey(p => p.Id);
+            e.HasIndex(p => p.StripeSessionId)
+                .IsUnique()
+                .HasFilter("\"StripeSessionId\" IS NOT NULL");
             e.HasOne(p => p.Buyer)
                 .WithMany(u => u.Purchases)
                 .HasForeignKey(p => p.BuyerId)
@@ -143,6 +148,13 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany()
                 .HasForeignKey(w => w.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<StripeWebhookEvent>(e =>
+        {
+            e.HasKey(w => w.EventId);
+            e.Property(w => w.EventId).HasMaxLength(255);
+            e.Property(w => w.EventType).HasMaxLength(100).IsRequired();
         });
     }
 }

@@ -25,7 +25,8 @@ public class PaymentsController : BaseController
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(PaymentCheckoutRequest request)
     {
-        var result = await _payments.CreateCheckoutAsync(request);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await _payments.CreateCheckoutAsync(request, userId);
         return OkResponse(result);
     }
 
@@ -42,6 +43,7 @@ public class PaymentsController : BaseController
         return OkResponse(await _payments.GetResultAsync(status, trackId));
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("process")]
     public async Task<IActionResult> Process(PaymentProcessRequest request)
     {
@@ -51,6 +53,7 @@ public class PaymentsController : BaseController
 
     // --- Purchases (merged from /purchases/* OpenAPI routes) ---
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("/purchases")]
     public async Task<IActionResult> CreatePurchase(PurchaseCreateRequest request)
     {
@@ -59,6 +62,7 @@ public class PaymentsController : BaseController
         return CreatedResponse(result, "Purchase completed.");
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("/purchases/credit-creator")]
     public async Task<IActionResult> CreditCreator(CreditCreatorRequest request)
     {
