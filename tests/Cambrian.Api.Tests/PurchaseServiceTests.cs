@@ -49,6 +49,22 @@ public sealed class PurchaseServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_ThrowsInvalidOperation_WhenTrackExclusiveSold()
+    {
+        var trackId = Guid.NewGuid();
+        var track = MakeTrack(trackId);
+        track.ExclusiveSold = true;
+        _tracks.GetByIdAsync(trackId).Returns(track);
+
+        var request = new PurchaseCreateRequest { TrackId = trackId.ToString() };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.CreateAsync(request, "user-1"));
+
+        Assert.Contains("exclusive license", ex.Message);
+    }
+
+    [Fact]
     public async Task CreateAsync_ThrowsInvalidOperation_WhenDuplicatePurchase()
     {
         var trackId = Guid.NewGuid();

@@ -9,10 +9,12 @@ namespace Cambrian.Api.Controllers;
 public class AdminController : BaseController
 {
     private readonly IAdminService _admin;
+    private readonly IMarketplaceIntegrityService _integrity;
 
-    public AdminController(IAdminService admin)
+    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity)
     {
         _admin = admin;
+        _integrity = integrity;
     }
 
     [HttpGet("dashboard")]
@@ -27,6 +29,13 @@ public class AdminController : BaseController
     {
         var logs = await _admin.GetAuditLogsAsync();
         return OkResponse(logs);
+    }
+
+    [HttpGet("integrity")]
+    public async Task<IActionResult> IntegrityAudit()
+    {
+        var report = await _integrity.RunAuditAsync();
+        return OkResponse(report);
     }
 
     [HttpGet("users")]

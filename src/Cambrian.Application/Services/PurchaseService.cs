@@ -31,6 +31,9 @@ public class PurchaseService : IPurchaseService
         var track = await _tracks.GetByIdAsync(trackId)
             ?? throw new KeyNotFoundException("Track not found.");
 
+        if (track.ExclusiveSold)
+            throw new InvalidOperationException("This track has already been sold under an exclusive license.");
+
         // Duplicate check
         var existing = await _purchases.GetByBuyerIdAsync(userId);
         if (existing.Any(p => p.TrackId == trackId))
