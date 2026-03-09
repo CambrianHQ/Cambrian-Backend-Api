@@ -20,17 +20,21 @@ public class PayoutService : IPayoutService
         return await Task.FromResult(new { balance = 0m, pending = 0m, available = 0m, currency = "USD" });
     }
 
-    public async Task<PayoutResponse> RequestAsync(PayoutRequest request)
+    public async Task<PayoutResponse> RequestAsync(PayoutRequest request, string creatorId)
     {
         if (request.Amount <= 0)
             throw new ArgumentException("Amount must be greater than zero.");
 
+        if (string.IsNullOrWhiteSpace(creatorId))
+            throw new ArgumentException("Creator ID is required for payout requests.");
+
         var payout = new Payout
         {
             Id = Guid.NewGuid(),
-            CreatorId = "",
+            CreatorId = creatorId,
             Amount = (double)request.Amount,
-            Status = "pending"
+            Status = "pending",
+            RequestedAt = DateTime.UtcNow
         };
 
         await _payouts.AddAsync(payout);

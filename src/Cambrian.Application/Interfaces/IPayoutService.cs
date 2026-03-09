@@ -6,7 +6,7 @@ public interface IPayoutService
 {
     Task<object> GetEarningsAsync();
 
-    Task<PayoutResponse> RequestAsync(PayoutRequest request);
+    Task<PayoutResponse> RequestAsync(PayoutRequest request, string creatorId);
 
     Task<IReadOnlyCollection<PayoutResponse>> GetHistoryAsync(string userId, int take = 50);
 }
