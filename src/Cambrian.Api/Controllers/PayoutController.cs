@@ -11,13 +11,12 @@ namespace Cambrian.Api.Controllers;
 public class PayoutController : BaseController
 {
     private readonly IPayoutService _payouts;
-    private readonly IPayoutRepository _payoutRepo;
 
-    public PayoutController(IPayoutService payouts, IPayoutRepository payoutRepo)
+    public PayoutController(IPayoutService payouts)
     {
         _payouts = payouts;
-        _payoutRepo = payoutRepo;
     }
+
     [HttpPost("connect-stripe")]
     public IActionResult ConnectStripe()
     {
@@ -45,7 +44,6 @@ public class PayoutController : BaseController
     [HttpPost("connect")]
     public IActionResult Connect([FromBody] PayoutConnectRequest? request = null)
     {
-        // In production, this would initiate Stripe Connect OAuth or Plaid linking
         return OkResponse(new { connectUrl = (string?)null, status = "pending" });
     }
 
@@ -87,17 +85,7 @@ public class PayoutController : BaseController
     public async Task<IActionResult> History([FromQuery] int take = 50)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var payouts = await _payoutRepo.GetByCreatorIdAsync(userId);
-
-        var history = payouts.Take(take).Select(p => new
-        {
-            id = p.Id.ToString(),
-            amount = (decimal)p.Amount,
-            status = p.Status,
-            requestedAt = p.RequestedAt,
-            completedAt = p.CompletedAt
-        }).ToList();
-
+        var history = await _payouts.GetHistoryAsync(userId, take);
         return OkResponse(history);
     }
 
@@ -116,10 +104,9 @@ public class PayoutController : BaseController
     public class PayoutSettingsRequest
     {
         public decimal? Threshold { get; set; }
-        public string? Schedule { get; set; } // weekly, biweekly, monthly
+        public string? Schedule { get; set; }
     }
 
-    /// <summary>GET /earnings - root-level alias for payout earnings.</summary>
     [HttpGet("/earnings")]
     public async Task<IActionResult> Earnings()
     {

@@ -14,11 +14,13 @@ public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _users;
     private readonly IConfiguration _config;
+    private readonly ISubscriptionRepository _subscriptions;
 
-    public AuthService(UserManager<ApplicationUser> users, IConfiguration config)
+    public AuthService(UserManager<ApplicationUser> users, IConfiguration config, ISubscriptionRepository subscriptions)
     {
         _users = users;
         _config = config;
+        _subscriptions = subscriptions;
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -91,6 +93,21 @@ public class AuthService : IAuthService
             Role = user.Role,
             Tier = user.Tier,
             VerifiedCreator = user.VerifiedCreator
+        };
+    }
+
+    public async Task<AuthResponse> GetSessionAsync(ClaimsPrincipal principal)
+    {
+        var profile = await GetCurrentUserAsync(principal);
+        var sub = await _subscriptions.GetActiveAsync(profile.UserId);
+        var tier = sub?.Plan ?? profile.Tier ?? "free";
+
+        return new AuthResponse
+        {
+            UserId = Guid.Parse(profile.UserId),
+            Email = profile.Email,
+            Token = "",
+            Tier = tier.ToLowerInvariant()
         };
     }
 
