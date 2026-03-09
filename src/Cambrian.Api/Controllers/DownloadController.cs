@@ -9,11 +9,15 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 public class DownloadController : BaseController
 {
-    private readonly IDownloadService _download;
+    private readonly ITrackRepository _tracks;
+    private readonly IObjectStorage _storage;
+    private readonly ILibraryRepository _library;
 
-    public DownloadController(IDownloadService download)
+    public DownloadController(ITrackRepository tracks, IObjectStorage storage, ILibraryRepository library)
     {
-        _download = download;
+        _tracks = tracks;
+        _storage = storage;
+        _library = library;
     }
 
     [HttpGet("{trackId}")]
@@ -23,8 +27,17 @@ public class DownloadController : BaseController
             return ErrorResponse("trackId must be a valid GUID.");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var result = await _download.GetDownloadUrlAsync(id, userId);
-        return OkResponse(result);
+
+        var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
+        if (libraryItem is null)
+            return ForbiddenResponse("You must purchase this track before downloading.");
+
+        var track = await _tracks.GetByIdAsync(id);
+        if (track?.AudioUrl is null)
+            return NotFoundResponse("Track audio not found.");
+
+        var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
+        return OkResponse(new { url = signedUrl });
     }
 
     [HttpGet("{trackId}/signed")]
@@ -34,7 +47,16 @@ public class DownloadController : BaseController
             return ErrorResponse("trackId must be a valid GUID.");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var result = await _download.GetSignedUrlAsync(id, userId);
-        return OkResponse(result);
+
+        var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
+        if (libraryItem is null)
+            return ForbiddenResponse("You must purchase this track before downloading.");
+
+        var track = await _tracks.GetByIdAsync(id);
+        if (track?.AudioUrl is null)
+            return NotFoundResponse("Track audio not found.");
+
+        var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
+        return OkResponse(new { signedUrl, expiresAt = DateTime.UtcNow.AddMinutes(15) });
     }
 }
