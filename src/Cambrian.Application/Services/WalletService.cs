@@ -43,7 +43,10 @@ public class WalletService : IWalletService
             throw new ArgumentException("Withdrawal amount must be greater than zero.");
 
         var balanceCents = await _wallet.GetBalanceAsync(userId);
-        var amountCents = (long)(amount * 100);
+        var amountCents = (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero);
+
+        if (amountCents <= 0)
+            throw new ArgumentException("Withdrawal amount must be greater than zero.");
 
         if (amountCents > balanceCents)
             throw new InvalidOperationException("Insufficient balance.");

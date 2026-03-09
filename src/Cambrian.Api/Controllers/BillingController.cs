@@ -22,7 +22,7 @@ public class BillingController : BaseController
     {
         _subscriptions = subscriptions;
         _gateway = gateway;
-        _frontendUrl = configuration["App:FrontendUrl"] ?? "http://localhost:5173";
+        _frontendUrl = ResolveFrontendUrl(configuration);
     }
 
     [HttpPost("checkout")]
@@ -79,5 +79,13 @@ public class BillingController : BaseController
         if (string.IsNullOrWhiteSpace(sessionId))
             return ErrorResponse("sessionId is required.");
         return OkResponse(new { sessionId });
+    }
+
+    private static string ResolveFrontendUrl(IConfiguration configuration)
+    {
+        var configuredUrl = configuration["App:FrontendUrl"];
+        return string.IsNullOrWhiteSpace(configuredUrl)
+            ? "http://localhost:5173"
+            : configuredUrl.TrimEnd('/');
     }
 }
