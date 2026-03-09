@@ -16,10 +16,23 @@ public class WebhookController : BaseController
     [HttpPost("stripe")]
     public async Task<IActionResult> Stripe()
     {
+        var signature = Request.Headers["Stripe-Signature"].FirstOrDefault();
+
         using var reader = new StreamReader(Request.Body);
         var json = await reader.ReadToEndAsync();
 
-        await _webhooks.HandleStripeAsync(json, Request.Headers["Stripe-Signature"]!);
-        return MessageResponse("Received.");
+        try
+        {
+            await _webhooks.HandleStripeAsync(json, signature ?? "");
+            return MessageResponse("Received.");
+        }
+        catch (Stripe.StripeException)
+        {
+            return ErrorResponse("Invalid webhook signature.");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("signature verification"))
+        {
+            return ErrorResponse("Webhook signature verification failed.");
+        }
     }
 }
