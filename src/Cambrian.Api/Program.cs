@@ -7,6 +7,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Email;
+using Cambrian.Infrastructure.Health;
 using Cambrian.Infrastructure.Options;
 using Cambrian.Infrastructure.Storage;
 using Cambrian.Infrastructure.Stripe;
@@ -190,13 +191,18 @@ builder.Services.AddCors(options =>
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
+builder.Services.AddScoped<ICreatorService, CreatorService>();
+builder.Services.AddScoped<IHealthService, DatabaseHealthService>();
 builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IPayoutService, PayoutService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IPurchaseService, PurchaseService>();
+builder.Services.AddScoped<IStreamService, StreamService>();
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
+builder.Services.AddScoped<IWalletService, WalletService>();
 builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 

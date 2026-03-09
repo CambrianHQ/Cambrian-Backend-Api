@@ -3,7 +3,6 @@ using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Cambrian.Domain.Entities;
 
 namespace Cambrian.Api.Controllers;
 
@@ -11,10 +10,12 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 public class DataController : BaseController
 {
-    private readonly UserManager<ApplicationUser> _users;
+    private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _users;
     private readonly ISubscriptionRepository _subscriptions;
 
-    public DataController(UserManager<ApplicationUser> users, ISubscriptionRepository subscriptions)
+    public DataController(
+        UserManager<Cambrian.Domain.Entities.ApplicationUser> users,
+        ISubscriptionRepository subscriptions)
     {
         _users = users;
         _subscriptions = subscriptions;

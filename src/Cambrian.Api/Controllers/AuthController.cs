@@ -10,12 +10,10 @@ namespace Cambrian.Api.Controllers;
 public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
-    private readonly ISubscriptionRepository _subscriptions;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions)
+    public AuthController(IAuthService auth)
     {
         _auth = auth;
-        _subscriptions = subscriptions;
     }
 
     [EnableRateLimiting("auth")]
@@ -42,12 +40,6 @@ public class AuthController : BaseController
         if (profile is null)
             return NotFoundResponse("User profile not found.");
 
-        // Read the authoritative tier from the active subscription (if any).
-        // The user entity's Tier field may be stale if it wasn't updated at
-        // subscription-creation time.
-        var sub = await _subscriptions.GetActiveAsync(profile.UserId);
-        var tier = sub?.Plan ?? profile.Tier ?? "free";
-
         return Ok(new
         {
             token = Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
@@ -55,7 +47,7 @@ public class AuthController : BaseController
             {
                 id = profile.UserId,
                 email = profile.Email,
-                tier = tier.ToLowerInvariant()
+                tier = (profile.Tier ?? "free").ToLowerInvariant()
             }
         });
     }

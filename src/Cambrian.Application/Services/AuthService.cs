@@ -14,11 +14,16 @@ public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _users;
     private readonly IConfiguration _config;
+    private readonly ISubscriptionRepository _subscriptions;
 
-    public AuthService(UserManager<ApplicationUser> users, IConfiguration config)
+    public AuthService(
+        UserManager<ApplicationUser> users,
+        IConfiguration config,
+        ISubscriptionRepository subscriptions)
     {
         _users = users;
         _config = config;
+        _subscriptions = subscriptions;
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -82,6 +87,7 @@ public class AuthService : IAuthService
 
         var user = await _users.FindByIdAsync(userId)
                    ?? throw new UnauthorizedAccessException("User not found");
+        var subscription = await _subscriptions.GetActiveAsync(user.Id);
 
         return new UserProfileResponse
         {
@@ -89,7 +95,7 @@ public class AuthService : IAuthService
             Email = user.Email ?? "",
             DisplayName = user.DisplayName,
             Role = user.Role,
-            Tier = user.Tier,
+            Tier = subscription?.Plan ?? user.Tier ?? "free",
             VerifiedCreator = user.VerifiedCreator
         };
     }

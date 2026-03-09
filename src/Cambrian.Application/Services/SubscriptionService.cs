@@ -1,0 +1,175 @@
+using Cambrian.Application.DTOs.Subscriptions;
+using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
+
+namespace Cambrian.Application.Services;
+
+public class SubscriptionService : ISubscriptionService
+{
+    private static readonly IReadOnlyCollection<SubscriptionPlanResponse> Plans =
+    [
+        new SubscriptionPlanResponse
+        {
+            Id = "free",
+            Name = "Free",
+            PriceMonthly = 0.00m,
+            Features =
+            [
+                "Browse catalog",
+                "Stream tracks",
+                "Purchase licenses"
+            ]
+        },
+        new SubscriptionPlanResponse
+        {
+            Id = "paid",
+            Name = "Paid",
+            PriceMonthly = 4.99m,
+            Features =
+            [
+                "Everything in Free",
+                "Unlimited downloads",
+                "Offline listening",
+                "Priority support"
+            ]
+        },
+        new SubscriptionPlanResponse
+        {
+            Id = "creator",
+            Name = "Creator",
+            PriceMonthly = 9.99m,
+            Features =
+            [
+                "Everything in Paid",
+                "Upload tracks",
+                "Sell licenses",
+                "Analytics dashboard",
+                "Payout access"
+            ]
+        }
+    ];
+
+    private readonly ISubscriptionRepository _subscriptions;
+    private readonly UserManager<ApplicationUser> _users;
+
+    public SubscriptionService(ISubscriptionRepository subscriptions, UserManager<ApplicationUser> users)
+    {
+        _subscriptions = subscriptions;
+        _users = users;
+    }
+
+    public IReadOnlyCollection<SubscriptionPlanResponse> GetPlans()
+    {
+        return Plans;
+    }
+
+    public async Task<CurrentSubscriptionResponse> GetCurrentAsync(string userId)
+    {
+        var subscription = await _subscriptions.GetActiveAsync(userId);
+
+        return ToCurrentResponse(subscription);
+    }
+
+    public async Task<CurrentSubscriptionResponse> UpdateAsync(string userId, UpdateSubscriptionRequest request)
+    {
+        var existing = await _subscriptions.GetActiveAsync(userId);
+        var user = await _users.FindByIdAsync(userId);
+
+        if (existing is not null)
+        {
+            if (existing.Plan == request.Plan)
+            {
+                if (user is not null && user.Tier != request.Plan)
+                {
+                    user.Tier = request.Plan;
+                    await _users.UpdateAsync(user);
+                }
+
+                return ToCurrentResponse(existing);
+            }
+
+            await _subscriptions.CancelAsync(existing.Id);
+        }
+
+        if (request.Plan == "free")
+        {
+            if (user is not null)
+            {
+                user.Tier = "free";
+                await _users.UpdateAsync(user);
+            }
+
+            return new CurrentSubscriptionResponse
+            {
+                Plan = "free",
+                Status = "active",
+                NextBilling = ""
+            };
+        }
+
+        var subscription = new Subscription
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Plan = request.Plan,
+            Status = "active",
+            StartedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddMonths(1)
+        };
+
+        await _subscriptions.CreateAsync(subscription);
+
+        if (user is not null)
+        {
+            user.Tier = request.Plan;
+            await _users.UpdateAsync(user);
+        }
+
+        return ToCurrentResponse(subscription);
+    }
+
+    public async Task CancelAsync(string userId)
+    {
+        var existing = await _subscriptions.GetActiveAsync(userId);
+        if (existing is null)
+        {
+            throw new InvalidOperationException("No active subscription to cancel.");
+        }
+
+        await _subscriptions.CancelAsync(existing.Id);
+
+        var user = await _users.FindByIdAsync(userId);
+        if (user is not null)
+        {
+            user.Tier = "free";
+            await _users.UpdateAsync(user);
+        }
+    }
+
+    public async Task<IReadOnlyCollection<SubscriptionResponse>> GetHistoryAsync(string userId)
+    {
+        var history = await _subscriptions.GetHistoryAsync(userId);
+
+        return history
+            .Select(subscription => new SubscriptionResponse
+            {
+                Id = subscription.Id,
+                Plan = subscription.Plan,
+                Status = subscription.Status,
+                StartedAt = subscription.StartedAt,
+                ExpiresAt = subscription.ExpiresAt
+            })
+            .ToList();
+    }
+
+    private static CurrentSubscriptionResponse ToCurrentResponse(Subscription? subscription)
+    {
+        return new CurrentSubscriptionResponse
+        {
+            Plan = subscription?.Plan ?? "free",
+            Status = subscription?.Status ?? "active",
+            NextBilling = subscription?.ExpiresAt?.ToString("o") ?? ""
+        };
+    }
+}

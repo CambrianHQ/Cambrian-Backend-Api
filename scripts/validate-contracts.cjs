@@ -11,6 +11,8 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const CONTRACT = path.join(ROOT, "contracts", "openapi.v1.json");
+const CONTRACT_POLICY = path.join(ROOT, "contracts", "policy.v1.json");
+const MANIFEST = path.join(ROOT, "contracts", "endpoint-manifest.v1.json");
 const POLICY = path.join(ROOT, "governance", "backend-policy.v1.json");
 const CONTROLLERS_DIR = path.join(ROOT, "src", "Cambrian.Api", "Controllers");
 const SERVICES_DIR = path.join(ROOT, "src", "Cambrian.Application");
@@ -22,12 +24,16 @@ function readText(filePath) {
 }
 
 function findCsFiles(dir) {
+  return findFiles(dir, (entry) => entry.name.endsWith(".cs"));
+}
+
+function findFiles(dir, predicate) {
   if (!fs.existsSync(dir)) return [];
   const results = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) results.push(...findCsFiles(full));
-    else if (entry.name.endsWith(".cs")) results.push(full);
+    if (entry.isDirectory()) results.push(...findFiles(full, predicate));
+    else if (predicate(entry)) results.push(full);
   }
   return results;
 }
@@ -56,6 +62,27 @@ function checkContractExists() {
     fail("openapi-contract-required", null, "contracts/openapi.v1.json is not valid JSON");
     return null;
   }
+}
+
+function checkContractPolicyExists() {
+  if (!fs.existsSync(CONTRACT_POLICY)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(readText(CONTRACT_POLICY));
+  } catch {
+    fail("contract-policy-invalid", null, "contracts/policy.v1.json is not valid JSON");
+    return null;
+  }
+}
+
+function buildOpenApiRouteSet(openApi) {
+  return new Set(
+    Object.entries(openApi.paths || {}).flatMap(([route, methods]) =>
+      Object.keys(methods).map((method) => `${method.toUpperCase()} ${route.toLowerCase()}`)
+    )
+  );
 }
 
 // 2. Controllers must not use DbContext directly
@@ -211,18 +238,156 @@ function checkWebhookIdempotency(controllerFiles) {
   }
 }
 
-// 8. All controller routes must exist in OpenAPI contract
+// 8. Endpoint manifest must match the OpenAPI contract
+function checkManifestMatchesOpenApi(openApi) {
+  if (!openApi) return;
+
+  if (!fs.existsSync(MANIFEST)) {
+    fail("manifest-must-match-openapi", null, "contracts/endpoint-manifest.v1.json is missing");
+    return;
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(readText(MANIFEST));
+  } catch {
+    fail("manifest-must-match-openapi", null, "contracts/endpoint-manifest.v1.json is not valid JSON");
+    return;
+  }
+
+  const contractRoutes = buildOpenApiRouteSet(openApi);
+  for (const endpoint of manifest.endpoints || []) {
+    const routeKey = `${String(endpoint.method || "").toUpperCase()} ${String(endpoint.path || "").toLowerCase()}`;
+    if (!contractRoutes.has(routeKey)) {
+      fail(
+        "manifest-must-match-openapi",
+        MANIFEST,
+        `Manifest endpoint ${routeKey} is not defined in openapi.v1.json`
+      );
+    }
+  }
+}
+
+// 9. Creator-only routes must require [Authorize(Roles = "Creator")]
+function checkCreatorRole(controllerFiles, policy) {
+  const creatorRule = (policy.rules || []).find(
+    (rule) => rule.name === "creator-endpoints-require-role"
+  );
+  if (!creatorRule) return;
+
+  const requiredPrefixes = (creatorRule.pathPrefixes || []).map((prefix) =>
+    `/${String(prefix).replace(/^\/+/, "")}`.toLowerCase()
+  );
+  if (requiredPrefixes.length === 0) return;
+
+  for (const f of controllerFiles) {
+    const src = readText(f);
+    const baseRouteMatch = src.match(/\[Route\("([^"]*)"\)\]/);
+    const baseRoute = (baseRouteMatch?.[1] || "").replace(/^\/+/, "");
+    const hasCreatorAuth =
+      /\[Authorize\s*\(\s*Roles\s*=\s*"Creator"\s*\)\s*\]/i.test(src);
+    const actionRoutes = [
+      ...src.matchAll(
+        /\[Http(Get|Post|Put|Delete|Patch)\s*(?:\("([^"]*)"\))?\s*\]/gi
+      ),
+    ];
+
+    const hasCreatorRoute = actionRoutes.some((match) => {
+      const actionPath = match[2] || "";
+      const fullPath = actionPath.startsWith("/")
+        ? actionPath
+        : "/" + [baseRoute, actionPath].filter(Boolean).join("/");
+      const normalized = fullPath.replace(/\/+/g, "/").replace(/\/$/, "").toLowerCase();
+
+      return requiredPrefixes.some(
+        (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`)
+      );
+    });
+
+    if (hasCreatorRoute && !hasCreatorAuth) {
+      fail(
+        "creator-endpoints-require-role",
+        f,
+        'Creator routes must require [Authorize(Roles = "Creator")]'
+      );
+    }
+  }
+}
+
+// 10. Frontend/UI code cannot bypass service/openapi client boundaries
+function checkFrontendBoundaries(contractPolicy) {
+  if (!contractPolicy) return;
+
+  const directHttpRule = (contractPolicy.rules || []).find(
+    (rule) => rule.name === "frontend-must-use-openapi-client"
+  );
+  const directImportRule = (contractPolicy.rules || []).find(
+    (rule) => rule.name === "ui-cannot-access-api-directly"
+  );
+
+  const restrictedDirs = [
+    ...(directHttpRule?.allowedDirectories || []),
+    ...(directImportRule?.restrictedDirectories || []),
+  ];
+  const existingRoots = [...new Set(restrictedDirs)]
+    .map((dir) => path.join(ROOT, dir))
+    .filter((dir) => fs.existsSync(dir));
+
+  if (existingRoots.length === 0) {
+    console.log("UI policy: skipped (no frontend directories found)");
+    return;
+  }
+
+  const sourceRoot = path.join(ROOT, "src");
+  const uiFiles = findFiles(sourceRoot, (entry) => /\.(ts|tsx|js|jsx)$/.test(entry.name));
+  const allowedRoots = (directHttpRule?.allowedDirectories || []).map((dir) =>
+    path.join(ROOT, dir)
+  );
+  const restrictedRoots = (directImportRule?.restrictedDirectories || []).map((dir) =>
+    path.join(ROOT, dir)
+  );
+
+  for (const f of uiFiles) {
+    const src = readText(f);
+    const inAllowedDirectory = allowedRoots.some((dir) => f.startsWith(dir));
+    const inRestrictedDirectory = restrictedRoots.some((dir) => f.startsWith(dir));
+
+    if (!inAllowedDirectory) {
+      for (const pattern of directHttpRule?.forbiddenPatterns || []) {
+        if (src.includes(pattern)) {
+          fail(
+            directHttpRule.name,
+            f,
+            `Frontend file makes a direct HTTP call with forbidden pattern: ${pattern}`
+          );
+        }
+      }
+    }
+
+    if (inRestrictedDirectory) {
+      for (const forbiddenImport of directImportRule?.forbiddenImports || []) {
+        if (src.includes(forbiddenImport)) {
+          fail(
+            directImportRule.name,
+            f,
+            `UI file imports generated API client directly: ${forbiddenImport}`
+          );
+        }
+      }
+    }
+  }
+}
+
+// 11. All controller routes must exist in OpenAPI contract
 function checkRoutesInContract(controllerFiles, openApi) {
   if (!openApi) return;
 
-  const contractPaths = Object.keys(openApi.paths || {}).map((p) =>
-    p.toLowerCase()
-  );
+  const contractPaths = Object.keys(openApi.paths || {}).map((p) => p.toLowerCase());
 
   for (const f of controllerFiles) {
     const src = readText(f);
 
-    // Extract class-level [Route("...")] 
+    // Extract class-level [Route("...")]
     const routeMatch = src.match(/\[Route\("([^"]*)"\)\]/);
     const baseRoute = routeMatch ? routeMatch[1] : "";
 
@@ -277,6 +442,7 @@ if (!fs.existsSync(POLICY)) {
   process.exit(1);
 }
 const policy = JSON.parse(readText(POLICY));
+const contractPolicy = checkContractPolicyExists();
 console.log(`Policy: ${policy.project} (${policy.version})`);
 console.log(`Rules:  ${policy.rules.length}\n`);
 
@@ -298,6 +464,9 @@ checkAdminAuth(controllerFiles);
 checkProtectedAuth(controllerFiles);
 checkControllersDelegateToServices(controllerFiles);
 checkWebhookIdempotency(controllerFiles);
+checkManifestMatchesOpenApi(openApi);
+checkCreatorRole(controllerFiles, policy);
+checkFrontendBoundaries(contractPolicy);
 checkRoutesInContract(controllerFiles, openApi);
 
 // ── Report ────────────────────────────────────────────────

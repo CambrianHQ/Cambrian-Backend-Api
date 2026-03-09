@@ -7,17 +7,16 @@ using Microsoft.AspNetCore.Mvc;
 namespace Cambrian.Api.Controllers;
 
 [Route("payouts")]
-[Authorize]
+[Authorize(Roles = "Creator")]
 public class PayoutController : BaseController
 {
     private readonly IPayoutService _payouts;
-    private readonly IPayoutRepository _payoutRepo;
 
-    public PayoutController(IPayoutService payouts, IPayoutRepository payoutRepo)
+    public PayoutController(IPayoutService payouts)
     {
         _payouts = payouts;
-        _payoutRepo = payoutRepo;
     }
+
     [HttpPost("connect-stripe")]
     public IActionResult ConnectStripe()
     {
@@ -87,18 +86,7 @@ public class PayoutController : BaseController
     public async Task<IActionResult> History([FromQuery] int take = 50)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var payouts = await _payoutRepo.GetByCreatorIdAsync(userId);
-
-        var history = payouts.Take(take).Select(p => new
-        {
-            id = p.Id.ToString(),
-            amount = (decimal)p.Amount,
-            status = p.Status,
-            requestedAt = p.RequestedAt,
-            completedAt = p.CompletedAt
-        }).ToList();
-
-        return OkResponse(history);
+        return OkResponse(await _payouts.GetHistoryAsync(userId, take));
     }
 
     [HttpPost("settings")]

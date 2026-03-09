@@ -45,4 +45,26 @@ public class PayoutService : IPayoutService
             Status = "pending"
         };
     }
+
+    public async Task<IReadOnlyCollection<PayoutHistoryItemResponse>> GetHistoryAsync(string userId, int take = 50)
+    {
+        if (take < 1)
+        {
+            take = 50;
+        }
+
+        var payouts = await _payouts.GetByCreatorIdAsync(userId);
+
+        return payouts
+            .Take(take)
+            .Select(payout => new PayoutHistoryItemResponse
+            {
+                Id = payout.Id.ToString(),
+                Amount = (decimal)payout.Amount,
+                Status = payout.Status,
+                RequestedAt = payout.RequestedAt,
+                CompletedAt = payout.CompletedAt
+            })
+            .ToList();
+    }
 }

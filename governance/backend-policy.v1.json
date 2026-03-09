@@ -12,6 +12,13 @@
     },
 
     {
+      "name": "manifest-must-match-openapi",
+      "description": "The endpoint manifest must stay aligned with the OpenAPI contract.",
+      "manifestFile": "contracts/endpoint-manifest.v1.json",
+      "enforcement": "fail-build"
+    },
+
+    {
       "name": "controller-layer-only-http",
       "description": "HTTP logic must only exist inside controllers.",
       "allowedDirectories": [

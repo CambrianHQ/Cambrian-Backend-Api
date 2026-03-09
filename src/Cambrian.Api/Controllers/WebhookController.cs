@@ -16,14 +16,16 @@ public class WebhookController : BaseController
     [HttpPost("stripe")]
     public async Task<IActionResult> Stripe()
     {
-        var signature = Request.Headers["Stripe-Signature"].FirstOrDefault();
+        var signature = Request.Headers.TryGetValue("Stripe-Signature", out var values)
+            ? values.ToString()
+            : "";
 
         using var reader = new StreamReader(Request.Body);
         var json = await reader.ReadToEndAsync();
 
         try
         {
-            await _webhooks.HandleStripeAsync(json, signature ?? "");
+            await _webhooks.HandleStripeAsync(json, signature);
             return MessageResponse("Received.");
         }
         catch (Stripe.StripeException)
