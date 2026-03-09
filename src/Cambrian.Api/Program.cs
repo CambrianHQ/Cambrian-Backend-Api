@@ -328,3 +328,5 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Stagi
 }
 
 app.Run();
+
+public partial class Program { }
