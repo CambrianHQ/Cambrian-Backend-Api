@@ -59,16 +59,23 @@ public class SubscriptionService : ISubscriptionService
 
     public async Task<SubscriptionResponse> UpdateAsync(UpdateSubscriptionRequest request, string userId)
     {
+        var requestedPlan = request.Plan?.Trim().ToLowerInvariant() ?? "";
+        if (string.IsNullOrWhiteSpace(requestedPlan))
+            throw new ArgumentException("Plan is required.");
+
+        if (requestedPlan != "free")
+            throw new InvalidOperationException("Paid plan changes must be completed through billing checkout.");
+
         var existing = await _subscriptions.GetActiveAsync(userId);
         var user = await _users.FindByIdAsync(userId);
 
         if (existing is not null)
         {
-            if (existing.Plan == request.Plan)
+            if (existing.Plan == requestedPlan)
             {
-                if (user is not null && user.Tier != request.Plan)
+                if (user is not null && user.Tier != requestedPlan)
                 {
-                    user.Tier = request.Plan;
+                    user.Tier = requestedPlan;
                     await _users.UpdateAsync(user);
                 }
                 return new SubscriptionResponse { Plan = existing.Plan, Status = existing.Status };
@@ -77,34 +84,13 @@ public class SubscriptionService : ISubscriptionService
             await _subscriptions.CancelAsync(existing.Id);
         }
 
-        if (request.Plan == "free")
+        if (user is not null)
         {
-            if (user is not null) { user.Tier = "free"; await _users.UpdateAsync(user); }
-            return new SubscriptionResponse { Plan = "free", Status = "active" };
+            user.Tier = "free";
+            await _users.UpdateAsync(user);
         }
 
-        var subscription = new Subscription
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Plan = request.Plan,
-            Status = "active",
-            StartedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddMonths(1)
-        };
-
-        await _subscriptions.CreateAsync(subscription);
-
-        if (user is not null) { user.Tier = request.Plan; await _users.UpdateAsync(user); }
-
-        return new SubscriptionResponse
-        {
-            Id = subscription.Id,
-            Plan = subscription.Plan,
-            Status = subscription.Status,
-            StartedAt = subscription.StartedAt,
-            ExpiresAt = subscription.ExpiresAt
-        };
+        return new SubscriptionResponse { Plan = "free", Status = "active" };
     }
 
     public async Task CancelAsync(string userId)

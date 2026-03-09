@@ -67,7 +67,9 @@ var jwtKey = builder.Configuration["Jwt:Key"]
     ?? Environment.GetEnvironmentVariable("JWT_KEY")
     ?? "";
 Console.WriteLine($"[Startup] JWT key present: {!string.IsNullOrWhiteSpace(jwtKey)} (len={jwtKey.Length})");
-var isNonProd = builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Staging";
+var isNonProd = builder.Environment.IsDevelopment()
+    || builder.Environment.IsEnvironment("Staging")
+    || builder.Environment.IsEnvironment("Testing");
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
     if (isNonProd)

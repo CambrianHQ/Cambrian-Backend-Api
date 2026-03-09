@@ -120,6 +120,35 @@ public sealed class AuthTests
     }
 
     [Fact]
+    public async Task LoginAsync_PrefersActiveSubscriptionTier_ForResponseAndJwt()
+    {
+        var userId = Guid.NewGuid().ToString();
+        var user = new ApplicationUser
+        {
+            Id = userId,
+            Email = "subscriber@test.com",
+            Tier = "free",
+            Role = "User"
+        };
+        _users.FindByEmailAsync("subscriber@test.com").Returns(user);
+        _users.CheckPasswordAsync(user, "pass").Returns(true);
+        _subscriptions.GetActiveAsync(userId).Returns(new Subscription
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Plan = "creator",
+            Status = "active"
+        });
+
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "subscriber@test.com", Password = "pass" });
+
+        Assert.Equal("creator", result.Tier);
+
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(result.Token);
+        Assert.Equal("creator", token.Claims.First(c => c.Type == "tier").Value);
+    }
+
+    [Fact]
     public async Task RegisterAsync_ThrowsInvalidOperation_WhenRegistrationFails()
     {
         _users.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
@@ -273,5 +302,32 @@ public sealed class AuthTests
         Assert.Equal("Creator", result.Role);
         Assert.Equal("paid", result.Tier);
         Assert.True(result.VerifiedCreator);
+    }
+
+    [Fact]
+    public async Task GenerateFreshTokenAsync_PrefersActiveSubscriptionTier()
+    {
+        var userId = Guid.NewGuid().ToString();
+        var user = new ApplicationUser
+        {
+            Id = userId,
+            Email = "refresh@test.com",
+            Tier = "free",
+            Role = "User"
+        };
+        _users.FindByIdAsync(userId).Returns(user);
+        _subscriptions.GetActiveAsync(userId).Returns(new Subscription
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Plan = "paid",
+            Status = "active"
+        });
+
+        var tokenString = await _sut.GenerateFreshTokenAsync(userId);
+
+        Assert.NotNull(tokenString);
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(tokenString);
+        Assert.Equal("paid", token.Claims.First(c => c.Type == "tier").Value);
     }
 }

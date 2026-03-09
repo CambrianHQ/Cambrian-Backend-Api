@@ -50,7 +50,7 @@ public class AuthController : BaseController
         var sub = await _subscriptions.GetActiveAsync(profile.UserId);
         var tier = sub?.Plan ?? profile.Tier ?? "free";
 
-        return Ok(new
+        return OkResponse(new
         {
             token = freshToken ?? Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
             user = new

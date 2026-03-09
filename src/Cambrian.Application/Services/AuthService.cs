@@ -35,14 +35,15 @@ public class AuthService : IAuthService
         if (!valid)
             throw new UnauthorizedAccessException("Invalid credentials");
 
-        var token = GenerateJwt(user);
+        var effectiveTier = await GetEffectiveTierAsync(user);
+        var token = GenerateJwt(user, effectiveTier);
 
         return new AuthResponse
         {
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
             Token = token,
-            Tier = (user.Tier ?? "free").ToLowerInvariant(),
+            Tier = effectiveTier,
             Role = user.Role ?? "User"
         };
     }
@@ -150,18 +151,28 @@ public class AuthService : IAuthService
         return Task.CompletedTask;
     }
 
-    private string GenerateJwt(ApplicationUser user)
+    private string GenerateJwt(ApplicationUser user, string? overrideTier = null)
     {
-        var key = _config["Jwt:Key"] ?? "cambrian-dev-secret-key-min-32-chars!!";
-        var issuer = _config["Jwt:Issuer"] ?? "cambrian-api";
-        var audience = _config["Jwt:Audience"] ?? "cambrian-client";
+        var key = string.IsNullOrWhiteSpace(_config["Jwt:Key"])
+            ? "cambrian-dev-secret-key-min-32-chars!!"
+            : _config["Jwt:Key"]!;
+        var issuer = string.IsNullOrWhiteSpace(_config["Jwt:Issuer"])
+            ? "cambrian-api"
+            : _config["Jwt:Issuer"]!;
+        var audience = string.IsNullOrWhiteSpace(_config["Jwt:Audience"])
+            ? "cambrian-client"
+            : _config["Jwt:Audience"]!;
+        var effectiveTier = string.IsNullOrWhiteSpace(overrideTier)
+            ? (user.Tier ?? "free").ToLowerInvariant()
+            : overrideTier.ToLowerInvariant();
+        var role = string.IsNullOrWhiteSpace(user.Role) ? "User" : user.Role;
 
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id),
             new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-            new(ClaimTypes.Role, user.Role),
-            new("tier", (user.Tier ?? "free").ToLowerInvariant()),
+            new(ClaimTypes.Role, role),
+            new("tier", effectiveTier),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -182,6 +193,13 @@ public class AuthService : IAuthService
     {
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return null;
-        return GenerateJwt(user);
+        var effectiveTier = await GetEffectiveTierAsync(user);
+        return GenerateJwt(user, effectiveTier);
+    }
+
+    private async Task<string> GetEffectiveTierAsync(ApplicationUser user)
+    {
+        var sub = await _subscriptions.GetActiveAsync(user.Id);
+        return (sub?.Plan ?? user.Tier ?? "free").ToLowerInvariant();
     }
 }

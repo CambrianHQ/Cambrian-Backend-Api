@@ -136,11 +136,19 @@ public sealed class AuthControllerTests
             Plan = "creator",
             Status = "active"
         });
+        _auth.GenerateFreshTokenAsync(userId).Returns("fresh-token");
 
         var result = await _controller.Me();
 
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.NotNull(ok.Value);
+        Assert.Equal(true, ok.Value.GetType().GetProperty("Success")?.GetValue(ok.Value));
+        var data = ok.Value.GetType().GetProperty("Data")?.GetValue(ok.Value);
+        Assert.NotNull(data);
+        Assert.Equal("fresh-token", data!.GetType().GetProperty("token")?.GetValue(data));
+        var user = data.GetType().GetProperty("user")?.GetValue(data);
+        Assert.NotNull(user);
+        Assert.Equal("creator", user!.GetType().GetProperty("tier")?.GetValue(user));
     }
 
     [Fact]
@@ -158,10 +166,17 @@ public sealed class AuthControllerTests
         });
 
         _subscriptions.GetActiveAsync(userId).Returns((Subscription?)null);
+        _auth.GenerateFreshTokenAsync(userId).Returns((string?)null);
 
         var result = await _controller.Me();
 
-        Assert.IsType<OkObjectResult>(result);
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var data = ok.Value?.GetType().GetProperty("Data")?.GetValue(ok.Value);
+        Assert.NotNull(data);
+        Assert.Equal("test-bearer-token", data!.GetType().GetProperty("token")?.GetValue(data));
+        var user = data.GetType().GetProperty("user")?.GetValue(data);
+        Assert.NotNull(user);
+        Assert.Equal("paid", user!.GetType().GetProperty("tier")?.GetValue(user));
     }
 
     [Fact]

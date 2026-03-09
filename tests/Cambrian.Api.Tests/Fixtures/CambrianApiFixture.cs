@@ -133,6 +133,23 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Update a user's subscription tier claim source.</summary>
+    public async Task SetUserTierAsync(string email, string tier)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == email);
+        user.Tier = tier;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Grant both legacy role-based and current tier-based creator access.</summary>
+    public async Task PromoteToCreatorAsync(string email)
+    {
+        await SetUserRoleAsync(email, "Creator");
+        await SetUserTierAsync(email, "creator");
+    }
+
     /// <summary>Add a LibraryItem directly to the database.</summary>
     public async Task SeedLibraryItemAsync(string userId, Guid trackId)
     {
@@ -163,6 +180,16 @@ internal sealed class FakePaymentGateway : IPaymentGateway
     {
         // Return a deterministic fake URL so checkout tests can verify redirects
         return Task.FromResult($"https://checkout.stripe.com/fake?ref={clientReferenceId}");
+    }
+
+    public Task<string> CreateSubscriptionCheckoutAsync(
+        int amountInCents,
+        string planName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl)
+    {
+        return Task.FromResult($"https://checkout.stripe.com/fake-subscription?ref={clientReferenceId}");
     }
 }
 
