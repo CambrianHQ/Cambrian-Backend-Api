@@ -61,7 +61,7 @@ public sealed class CheckoutTests
     public async Task CreateCheckout_ClientRefFormat_ContainsLicenseType()
     {
         var trackId = Guid.NewGuid();
-        var track = new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" };
+        var track = new Track { Id = trackId, Title = "Beat", Price = 10, ExclusivePriceCents = 50000, CreatorId = "c1" };
         _tracks.GetByIdAsync(trackId).Returns(track);
         _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
             .Returns("https://stripe.test/checkout");

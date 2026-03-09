@@ -72,14 +72,16 @@ public class PayoutController : BaseController
     [HttpGet("earnings")]
     public async Task<IActionResult> PayoutsEarnings()
     {
-        var earnings = await _payouts.GetEarningsAsync();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var earnings = await _payouts.GetEarningsAsync(userId);
         return OkResponse(earnings);
     }
 
     [HttpPost("request")]
     public async Task<IActionResult> RequestPayout(PayoutRequest request)
     {
-        var result = await _payouts.RequestAsync(request);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await _payouts.RequestAsync(request, userId);
         return OkResponse(result);
     }
 
@@ -123,7 +125,8 @@ public class PayoutController : BaseController
     [HttpGet("/earnings")]
     public async Task<IActionResult> Earnings()
     {
-        var earnings = await _payouts.GetEarningsAsync();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var earnings = await _payouts.GetEarningsAsync(userId);
         return OkResponse(earnings);
     }
 }

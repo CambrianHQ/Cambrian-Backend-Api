@@ -82,7 +82,7 @@ public sealed class CheckoutServiceTests
     }
 
     [Fact]
-    public async Task CreateCheckout_FallsBackToBasePrice_WhenExclusivePriceIsZero()
+    public async Task CreateCheckout_ThrowsInvalidOp_WhenExclusivePriceIsZero()
     {
         var trackId = Guid.NewGuid();
         var track = new Track
@@ -95,14 +95,32 @@ public sealed class CheckoutServiceTests
             CreatorId = "c1"
         };
         _tracks.GetByIdAsync(trackId).Returns(track);
-        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
-            .Returns("https://stripe.test/checkout");
 
         var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "exclusive" };
-        await _sut.CreateCheckoutAsync(request, MakeUser());
 
-        await _gateway.Received(1).CreateCheckoutSessionAsync(
-            2500, "Beat", Arg.Any<string>(), null, null);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.CreateCheckoutAsync(request, MakeUser()));
+    }
+
+    [Fact]
+    public async Task CreateCheckout_ThrowsInvalidOp_WhenTrackAlreadyExclusivelySold()
+    {
+        var trackId = Guid.NewGuid();
+        var track = new Track
+        {
+            Id = trackId,
+            Title = "Beat",
+            Price = 25,
+            ExclusivePriceCents = 50000,
+            ExclusiveSold = true,
+            CreatorId = "c1"
+        };
+        _tracks.GetByIdAsync(trackId).Returns(track);
+
+        var request = new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "exclusive" };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.CreateCheckoutAsync(request, MakeUser()));
     }
 
     [Fact]

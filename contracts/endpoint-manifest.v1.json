@@ -148,6 +148,48 @@
     },
     {
       "method": "GET",
+      "path": "/admin/data-integrity/audit",
+      "requiresAuth": true,
+      "tag": "DataIntegrity"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/data-integrity/check/purchase-library",
+      "requiresAuth": true,
+      "tag": "DataIntegrity"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/data-integrity/check/exclusive-licensing",
+      "requiresAuth": true,
+      "tag": "DataIntegrity"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/data-integrity/check/payout-integrity",
+      "requiresAuth": true,
+      "tag": "DataIntegrity"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/data-integrity/check/orphaned-payouts",
+      "requiresAuth": true,
+      "tag": "DataIntegrity"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/data-integrity/repair/missing-library-entries",
+      "requiresAuth": true,
+      "tag": "DataIntegrity"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/data-integrity/repair/exclusive-flags",
+      "requiresAuth": true,
+      "tag": "DataIntegrity"
+    },
+    {
+      "method": "GET",
       "path": "/ai/playlist",
       "requiresAuth": true,
       "tag": "Ai"

@@ -183,6 +183,12 @@ public class StripeWebhookService : IWebhookService
             _db.Library.Add(libraryItem);
         }
 
+        if (string.Equals(licenseType, "exclusive", StringComparison.OrdinalIgnoreCase))
+        {
+            track.ExclusiveSold = true;
+            _logger.LogInformation("Track {TrackId} marked as exclusively sold via webhook", trackId);
+        }
+
         await _db.SaveChangesAsync();
 
         _logger.LogInformation(
