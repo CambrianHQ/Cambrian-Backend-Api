@@ -11,6 +11,8 @@ public interface IAuthService
 
     Task<UserProfileResponse> GetCurrentUserAsync(ClaimsPrincipal principal);
 
+    Task<AuthResponse> GetSessionAsync(ClaimsPrincipal principal);
+
     Task ForgotPasswordAsync(ForgotPasswordRequest request);
 
     Task VerifyCodeAsync(VerifyCodeRequest request);
