@@ -220,6 +220,12 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
+        if (track.ExclusiveSold)
+        {
+            _logger.LogWarning("Track {TrackId} already sold exclusively — skipping purchase for user {UserId}", trackId, userId);
+            return;
+        }
+
         // Prevent duplicate purchases for the same track/user/license
         var existingPurchase = await _db.Purchases
             .FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId && p.LicenseType == licenseType);
@@ -245,6 +251,12 @@ public class StripeWebhookService : IWebhookService
             CreatedAt = DateTime.UtcNow
         };
         _db.Purchases.Add(purchase);
+
+        // Mark track as exclusively sold when an exclusive license is purchased
+        if (licenseType == "exclusive")
+        {
+            track.ExclusiveSold = true;
+        }
 
         // Add to library (if not already there)
         var existingLib = await _db.Library

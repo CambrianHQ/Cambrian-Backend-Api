@@ -25,6 +25,9 @@ public class CheckoutService : ICheckoutService
         if (track is null)
             throw new KeyNotFoundException($"Track {request.TrackId} not found.");
 
+        if (request.LicenseType == "exclusive" && track.ExclusiveSold)
+            throw new InvalidOperationException("This track has already been sold under an exclusive license.");
+
         // Determine price based on license type
         var amountCents = request.LicenseType switch
         {
