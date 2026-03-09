@@ -242,6 +242,44 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Equal("completed", purchases[0].Status);
     }
 
+    [Fact]
+    public async Task HandleStripeAsync_Dev_ReplayedEventId_DoesNotReprocessTrackPurchase()
+    {
+        var trackId = Guid.NewGuid();
+        var userId = "user-replay";
+        _db.Tracks.Add(new Track { Id = trackId, Title = "Replay Beat", CreatorId = "creator-1" });
+        await _db.SaveChangesAsync();
+
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = $$"""
+        {
+            "id": "evt_replay_purchase",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
+                    "amount_total": 2500
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+        await svc.HandleStripeAsync(payload, "");
+
+        var purchases = await _db.Purchases
+            .Where(p => p.BuyerId == userId && p.TrackId == trackId)
+            .ToListAsync();
+        var libraryItems = await _db.Library
+            .Where(l => l.UserId == userId && l.TrackId == trackId)
+            .ToListAsync();
+
+        Assert.Single(purchases);
+        Assert.Equal(25.0, purchases[0].Amount);
+        Assert.Single(libraryItems);
+        Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
+    }
+
     // ── Subscription upgrade cancels existing subscription ──
 
     [Fact]
@@ -284,5 +322,39 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
         var user = await _db.Users.FindAsync(userId);
         Assert.Equal("creator", user!.Tier);
+    }
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_ReplayedEventId_DoesNotCreateSecondSubscription()
+    {
+        var userId = "user-replay-sub";
+        _db.Users.Add(new ApplicationUser { Id = userId, UserName = userId, Tier = "free" });
+        await _db.SaveChangesAsync();
+
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = $$"""
+        {
+            "id": "evt_replay_subscription",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "{{userId}}:subscription:creator"
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+        await svc.HandleStripeAsync(payload, "");
+
+        var subscriptions = await _db.Subscriptions
+            .Where(s => s.UserId == userId)
+            .OrderByDescending(s => s.StartedAt)
+            .ToListAsync();
+
+        Assert.Single(subscriptions);
+        Assert.Equal("active", subscriptions[0].Status);
+        Assert.Equal("creator", subscriptions[0].Plan);
+        Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
     }
 }
