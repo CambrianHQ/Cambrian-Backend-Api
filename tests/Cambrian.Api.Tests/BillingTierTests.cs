@@ -1,12 +1,12 @@
+using Cambrian.Application.DTOs.Billing;
+using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
+using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Configuration;
+using NSubstitute;
 
 namespace Cambrian.Api.Tests;
 
-/// <summary>
-/// Tests for billing tier mapping logic used in BillingController.
-/// The controller maps tier strings to (amountCents, planName) tuples.
-/// We test the same logic inline since it's inlined in the controller.
-/// </summary>
 public sealed class BillingTierTests
 {
     private static (int amountCents, string planName) MapTier(string? tier)
@@ -48,14 +48,41 @@ public sealed class BillingTierTests
     }
 
     [Fact]
-    public async Task BillingService_ReturnsPortalUrl()
+    public async Task BillingService_GetStatus_ReturnsFreeWhenNoSubscription()
     {
-        var sut = new BillingService();
-        var userId = Guid.NewGuid();
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        subscriptions.GetActiveAsync("user-1").Returns((Subscription?)null);
+        var gateway = Substitute.For<IPaymentGateway>();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173"
+            })
+            .Build();
 
-        var result = await sut.CreateBillingPortalAsync(userId);
+        var sut = new BillingService(subscriptions, gateway, config);
 
-        Assert.Contains(userId.ToString("N"), result);
-        Assert.StartsWith("https://billing.stripe.test/portal/", result);
+        var result = await sut.GetStatusAsync("user-1");
+
+        Assert.Equal("free", result.Tier);
+        Assert.Equal("active", result.Status);
+    }
+
+    [Fact]
+    public async Task BillingService_CreateCheckout_ThrowsForInvalidTier()
+    {
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        var gateway = Substitute.For<IPaymentGateway>();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173"
+            })
+            .Build();
+
+        var sut = new BillingService(subscriptions, gateway, config);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = "enterprise" }, "user-1"));
     }
 }
