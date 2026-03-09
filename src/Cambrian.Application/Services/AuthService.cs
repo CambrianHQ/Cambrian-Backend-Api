@@ -152,7 +152,8 @@ public class AuthService : IAuthService
 
     private string GenerateJwt(ApplicationUser user)
     {
-        var key = _config["Jwt:Key"] ?? "cambrian-dev-secret-key-min-32-chars!!";
+        var rawKey = _config["Jwt:Key"];
+        var key = string.IsNullOrWhiteSpace(rawKey) ? "cambrian-dev-secret-key-min-32-chars!!" : rawKey;
         var issuer = _config["Jwt:Issuer"] ?? "cambrian-api";
         var audience = _config["Jwt:Audience"] ?? "cambrian-client";
 

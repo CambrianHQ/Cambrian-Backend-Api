@@ -24,8 +24,7 @@ public class LibraryService : ILibraryService
         var userId = GetUserId(user);
         var items = await _library.GetByUserIdAsync(userId);
 
-        // Cross-reference with purchases to mark purchased items
-        var purchases = await _purchases.GetByBuyerIdAsync(userId);
+        var purchases = await _purchases.GetByBuyerIdAsync(userId) ?? new List<Purchase>();
         var completedPurchases = purchases
             .Where(p => p.Status == "completed")
             .GroupBy(p => p.TrackId)
