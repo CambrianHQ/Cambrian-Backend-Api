@@ -43,6 +43,7 @@ public sealed class LibraryTests
     public async Task GetLibraryAsync_ReturnsEmptyList_WhenNoItems()
     {
         _library.GetByUserIdAsync("user-1").Returns(new List<LibraryItem>());
+        _purchases.GetByBuyerIdAsync("user-1").Returns(new List<Purchase>());
 
         var result = await _sut.GetLibraryAsync(MakeUser());
 
@@ -69,6 +70,7 @@ public sealed class LibraryTests
             }
         };
         _library.GetByUserIdAsync("user-1").Returns(items);
+        _purchases.GetByBuyerIdAsync("user-1").Returns(new List<Purchase>());
 
         var result = await _sut.GetLibraryAsync(MakeUser());
 
@@ -93,6 +95,7 @@ public sealed class LibraryTests
             }
         };
         _library.GetByUserIdAsync("user-1").Returns(items);
+        _purchases.GetByBuyerIdAsync("user-1").Returns(new List<Purchase>());
 
         var result = await _sut.GetLibraryAsync(MakeUser());
 
@@ -211,6 +214,7 @@ public sealed class LibraryTests
             new Claim(JwtRegisteredClaimNames.Sub, "user-sub-1")
         }));
         _library.GetByUserIdAsync("user-sub-1").Returns(new List<LibraryItem>());
+        _purchases.GetByBuyerIdAsync("user-sub-1").Returns(new List<Purchase>());
 
         var result = await _sut.GetLibraryAsync(user);
 

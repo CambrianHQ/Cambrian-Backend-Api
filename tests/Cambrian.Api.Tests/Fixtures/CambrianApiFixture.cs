@@ -24,7 +24,7 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment("Development");
 
         builder.ConfigureServices(services =>
         {
@@ -133,6 +133,16 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Set the subscription tier for a user.</summary>
+    public async Task SetUserTierAsync(string email, string tier)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == email);
+        user.Tier = tier;
+        await db.SaveChangesAsync();
+    }
+
     /// <summary>Add a LibraryItem directly to the database.</summary>
     public async Task SeedLibraryItemAsync(string userId, Guid trackId)
     {
@@ -161,8 +171,17 @@ internal sealed class FakePaymentGateway : IPaymentGateway
         string? successUrl = null,
         string? cancelUrl = null)
     {
-        // Return a deterministic fake URL so checkout tests can verify redirects
         return Task.FromResult($"https://checkout.stripe.com/fake?ref={clientReferenceId}");
+    }
+
+    public Task<string> CreateSubscriptionCheckoutAsync(
+        int amountInCents,
+        string planName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl)
+    {
+        return Task.FromResult($"https://checkout.stripe.com/fake-sub?ref={clientReferenceId}");
     }
 }
 

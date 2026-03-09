@@ -26,14 +26,6 @@
     <ProjectReference Include="..\..\src\Cambrian.Api\Cambrian.Api.csproj" />
   </ItemGroup>
 
-  <!-- Exclude pre-existing broken test files that reference outdated controller constructors -->
-  <ItemGroup>
-    <Compile Remove="AuthControllerTests.cs" />
-    <Compile Remove="BillingControllerTests.cs" />
-    <Compile Remove="DownloadControllerTests.cs" />
-    <Compile Remove="WalletControllerTests.cs" />
-    <Compile Remove="StreamControllerTests.cs" />
-    <Compile Remove="SubscriptionFlowTests.cs" />
-  </ItemGroup>
+  <!-- All previously excluded test files have been fixed and re-enabled -->
 
 </Project>

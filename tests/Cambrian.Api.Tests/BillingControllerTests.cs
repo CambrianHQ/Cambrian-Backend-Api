@@ -80,8 +80,8 @@ public sealed class BillingControllerTests
         SetupUser("buyer-1");
         _gateway.CreateSubscriptionCheckoutAsync(
             499, "Paid Listener", "buyer-1:subscription:paid",
-            "https://app.test/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            "https://app.test/checkout/cancel")
+            "https://app.test/hub?payment_success=true&session_id={CHECKOUT_SESSION_ID}",
+            "https://app.test/payment?plan=paid")
             .Returns("https://stripe.test/session");
 
         var result = await _controller.Checkout(new BillingCheckoutRequest { Tier = "paid" });
@@ -89,8 +89,8 @@ public sealed class BillingControllerTests
         Assert.IsType<OkObjectResult>(result);
         await _gateway.Received(1).CreateSubscriptionCheckoutAsync(
             499, "Paid Listener", "buyer-1:subscription:paid",
-            "https://app.test/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            "https://app.test/checkout/cancel");
+            "https://app.test/hub?payment_success=true&session_id={CHECKOUT_SESSION_ID}",
+            "https://app.test/payment?plan=paid");
     }
 
     [Fact]
@@ -142,8 +142,8 @@ public sealed class BillingControllerTests
             499,
             "Paid Listener",
             "buyer-2:subscription:paid",
-            "http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            "http://localhost:5173/checkout/cancel")
+            "http://localhost:5173/hub?payment_success=true&session_id={CHECKOUT_SESSION_ID}",
+            "http://localhost:5173/payment?plan=paid")
             .Returns("https://stripe.test/session");
 
         var result = await controller.Checkout(new BillingCheckoutRequest { Tier = "paid" });
@@ -153,8 +153,8 @@ public sealed class BillingControllerTests
             499,
             "Paid Listener",
             "buyer-2:subscription:paid",
-            "http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-            "http://localhost:5173/checkout/cancel");
+            "http://localhost:5173/hub?payment_success=true&session_id={CHECKOUT_SESSION_ID}",
+            "http://localhost:5173/payment?plan=paid");
     }
 
     // ── CheckoutSession (alias) ──
