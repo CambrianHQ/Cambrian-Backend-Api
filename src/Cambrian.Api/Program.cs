@@ -277,8 +277,8 @@ app.Use(async (context, next) =>
 });
 
 // app.UseHttpsRedirection(); // disabled for local dev
-app.UseStaticFiles(); // serve uploaded files from wwwroot
 app.UseCors();
+app.UseStaticFiles(); // serve uploaded files from wwwroot (after CORS so headers apply)
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

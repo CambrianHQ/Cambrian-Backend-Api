@@ -19,7 +19,11 @@ public class LibraryController : BaseController
     [HttpGet]
     public async Task<IActionResult> GetLibrary()
     {
-        return OkResponse(await _library.GetLibraryAsync(User));
+        var items = await _library.GetLibraryAsync(User);
+        // Resolve relative audio URLs to absolute so the frontend can fetch them cross-origin
+        foreach (var item in items)
+            item.AudioUrl = ResolveAbsoluteUrl(item.AudioUrl);
+        return OkResponse(items);
     }
 
     [HttpPost]
