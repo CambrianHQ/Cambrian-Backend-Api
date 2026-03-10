@@ -119,7 +119,7 @@ public class MarketplaceIntegrityService : IMarketplaceIntegrityService
         var creatorPayouts = await _db.Payouts
             .Where(p => p.Status == "completed" || p.Status == "approved")
             .GroupBy(p => p.CreatorId)
-            .Select(g => new { CreatorId = g.Key, TotalPaid = g.Sum(p => p.Amount) })
+            .Select(g => new { CreatorId = g.Key, TotalPaid = g.Sum(p => p.AmountCents) / 100.0 })
             .ToListAsync();
 
         foreach (var payout in creatorPayouts)

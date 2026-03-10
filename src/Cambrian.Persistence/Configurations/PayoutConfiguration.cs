@@ -10,6 +10,6 @@ public sealed class PayoutConfiguration : IEntityTypeConfiguration<Payout>
     {
         builder.ToTable("payouts");
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.AmountCents).IsRequired();
     }
 }
