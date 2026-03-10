@@ -198,6 +198,32 @@ internal sealed class FakePaymentGateway : IPaymentGateway
             AmountTotal = 0
         });
     }
+
+    // ── Stripe Connect fakes ──
+
+    public Task<string> CreateConnectAccountAsync(string email)
+        => Task.FromResult("acct_fake_123");
+
+    public Task<string> CreateAccountOnboardingLinkAsync(string accountId, string returnUrl, string refreshUrl)
+        => Task.FromResult($"https://connect.stripe.com/fake-onboarding?account={accountId}");
+
+    public Task<ConnectAccountStatus> GetConnectAccountStatusAsync(string accountId)
+        => Task.FromResult(new ConnectAccountStatus
+        {
+            AccountId = accountId,
+            Status = "active",
+            ChargesEnabled = true,
+            PayoutsEnabled = true
+        });
+
+    public Task<string> CreateExpressDashboardLinkAsync(string accountId)
+        => Task.FromResult($"https://connect.stripe.com/fake-dashboard?account={accountId}");
+
+    public Task<string> CreateTransferAsync(string destinationAccountId, long amountCents, string description)
+        => Task.FromResult("tr_fake_123");
+
+    public Task DeleteConnectedAccountAsync(string accountId)
+        => Task.CompletedTask;
 }
 
 internal sealed class FakeObjectStorage : IObjectStorage
