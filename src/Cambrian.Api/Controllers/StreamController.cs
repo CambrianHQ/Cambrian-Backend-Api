@@ -31,7 +31,7 @@ public class StreamController : BaseController
             artist = t.Creator?.DisplayName ?? t.Creator?.Email ?? "Unknown",
             genre = t.Genre,
             duration = t.Duration,
-            audioUrl = t.AudioUrl
+            audioUrl = ResolveAbsoluteUrl(t.AudioUrl)
         }).ToList();
 
         return OkResponse(result);
@@ -49,7 +49,7 @@ public class StreamController : BaseController
             return NotFoundResponse("Track not found.");
 
         var streamUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return OkResponse(new { trackId, streamUrl });
+        return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl) });
     }
 
     [Authorize]

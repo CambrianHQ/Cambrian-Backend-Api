@@ -37,7 +37,7 @@ public class DownloadController : BaseController
             return NotFoundResponse("Track audio not found.");
 
         var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return OkResponse(new { url = signedUrl });
+        return OkResponse(new { url = ResolveAbsoluteUrl(signedUrl) });
     }
 
     [HttpGet("{trackId}/signed")]
@@ -57,6 +57,6 @@ public class DownloadController : BaseController
             return NotFoundResponse("Track audio not found.");
 
         var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return OkResponse(new { signedUrl, expiresAt = DateTime.UtcNow.AddMinutes(15) });
+        return OkResponse(new { signedUrl = ResolveAbsoluteUrl(signedUrl), expiresAt = DateTime.UtcNow.AddMinutes(15) });
     }
 }
