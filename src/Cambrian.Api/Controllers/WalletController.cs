@@ -1,7 +1,5 @@
 using System.Security.Claims;
-using Cambrian.Application.DTOs.Wallet;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,9 +9,9 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 public class WalletController : BaseController
 {
-    private readonly IWalletRepository _wallet;
+    private readonly IWalletService _wallet;
 
-    public WalletController(IWalletRepository wallet)
+    public WalletController(IWalletService wallet)
     {
         _wallet = wallet;
     }
@@ -22,39 +20,28 @@ public class WalletController : BaseController
     public async Task<IActionResult> Get()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var balanceCents = await _wallet.GetBalanceAsync(userId);
-
-        return OkResponse(new WalletResponse
-        {
-            BalanceCents = balanceCents,
-            Currency = "usd"
-        });
+        var balance = await _wallet.GetBalanceAsync(userId);
+        return OkResponse(balance);
     }
 
     [HttpPost("withdraw")]
-    public async Task<IActionResult> Withdraw(WithdrawRequest request)
+    public async Task<IActionResult> Withdraw([FromBody] Application.DTOs.Wallet.WithdrawRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var balanceCents = await _wallet.GetBalanceAsync(userId);
-        var amountCents = (long)Math.Round(request.Amount * 100, MidpointRounding.AwayFromZero);
 
-        if (amountCents <= 0)
-            return ErrorResponse("Withdrawal amount must be greater than zero.");
-
-        if (amountCents > balanceCents)
-            return ErrorResponse("Insufficient balance.");
-
-        var txn = new WalletTransaction
+        try
         {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            AmountCents = -amountCents,
-            Type = "withdrawal",
-            Description = $"Withdrawal of ${request.Amount:F2}"
-        };
-
-        await _wallet.AddTransactionAsync(txn);
-        return OkResponse(new { status = "pending" });
+            await _wallet.WithdrawAsync(request.Amount, userId);
+            return OkResponse(new { status = "pending" });
+        }
+        catch (ArgumentException ex)
+        {
+            return ErrorResponse(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErrorResponse(ex.Message);
+        }
     }
 
     [HttpGet("history")]
@@ -64,9 +51,7 @@ public class WalletController : BaseController
         if (pageSize is < 1 or > 100) pageSize = 20;
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var skip = (page - 1) * pageSize;
-        var take = skip + pageSize;
-        var result = await _wallet.GetHistoryAsync(userId, take);
-        return OkResponse(result.Skip(skip).Take(pageSize).ToList());
+        var history = await _wallet.GetHistoryAsync(userId, pageSize);
+        return OkResponse(history);
     }
 }
