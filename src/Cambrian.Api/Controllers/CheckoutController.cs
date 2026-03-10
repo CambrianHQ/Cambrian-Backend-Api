@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -25,5 +26,22 @@ public class CheckoutController : BaseController
     {
         var session = await _checkout.CreateCheckoutAsync(request, User);
         return OkResponse(new { checkoutUrl = session.CheckoutUrl, status = session.Status });
+    }
+
+    /// <summary>
+    /// Confirm a completed Stripe checkout session.
+    /// Called by the frontend after Stripe redirects back with session_id.
+    /// Creates Purchase + LibraryItem + creator wallet credit if payment succeeded.
+    /// </summary>
+    [Authorize]
+    [HttpGet("checkout/session/{sessionId}")]
+    public async Task<IActionResult> ConfirmSession(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return ErrorResponse("sessionId is required.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await _checkout.ConfirmAsync(sessionId, userId);
+        return OkResponse(result);
     }
 }
