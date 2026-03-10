@@ -155,10 +155,11 @@ public class StripeFacade : IPaymentGateway
         var service = new AccountService();
         var account = await service.CreateAsync(new AccountCreateOptions
         {
-            Type = "express",
+            Type = "standard",
             Email = email,
             Capabilities = new AccountCapabilitiesOptions
             {
+                CardPayments = new AccountCapabilitiesCardPaymentsOptions { Requested = true },
                 Transfers = new AccountCapabilitiesTransfersOptions { Requested = true }
             }
         });
