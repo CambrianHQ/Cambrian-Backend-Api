@@ -98,8 +98,8 @@ builder.Services.AddAuthentication("Bearer")
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian",
-            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian",
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian-api",
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian-client",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
