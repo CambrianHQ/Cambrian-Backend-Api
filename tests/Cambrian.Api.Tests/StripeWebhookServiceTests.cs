@@ -111,7 +111,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.NotNull(purchase);
         Assert.Equal("completed", purchase.Status);
         Assert.Equal("non-exclusive", purchase.LicenseType);
-        Assert.Equal(29.99, purchase.Amount);
+        Assert.Equal(2999, purchase.AmountCents);
         Assert.Equal(trackId, purchase.TrackId);
 
         var lib = await _db.Library.FirstOrDefaultAsync(l => l.UserId == userId);
@@ -161,7 +161,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
             Id = purchaseId,
             BuyerId = "buyer-1",
             TrackId = trackId,
-            Amount = 10,
+            AmountCents = 1000,
             Status = "pending"
         });
         await _db.SaveChangesAsync();
@@ -214,7 +214,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
             Id = Guid.NewGuid(),
             BuyerId = userId,
             TrackId = trackId,
-            Amount = 10,
+            AmountCents = 1000,
             LicenseType = "non-exclusive",
             Status = "pending"
         });
@@ -275,7 +275,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
             .ToListAsync();
 
         Assert.Single(purchases);
-        Assert.Equal(25.0, purchases[0].Amount);
+        Assert.Equal(2500, purchases[0].AmountCents);
         Assert.Single(libraryItems);
         Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
     }

@@ -193,7 +193,7 @@ public sealed class PurchaseServiceTests
             {
                 Id = Guid.NewGuid(),
                 TrackId = Guid.NewGuid(),
-                Amount = 29.99,
+                AmountCents = 2999,
                 LicenseType = "non-exclusive",
                 Status = "completed",
                 CreatedAt = DateTime.UtcNow

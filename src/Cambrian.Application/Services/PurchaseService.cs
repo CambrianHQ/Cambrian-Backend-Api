@@ -39,13 +39,21 @@ public class PurchaseService : IPurchaseService
         if (existing.Any(p => p.TrackId == trackId))
             throw new InvalidOperationException("You already own this track.");
 
+        // Resolve price in cents based on license type
+        var amountCents = (request.LicenseType ?? "non-exclusive") switch
+        {
+            "exclusive" when track.ExclusivePriceCents > 0 => track.ExclusivePriceCents,
+            "non-exclusive" when track.NonExclusivePriceCents > 0 => track.NonExclusivePriceCents,
+            _ => (int)Math.Round(track.Price * 100, MidpointRounding.AwayFromZero)
+        };
+
         // Create purchase record
         var purchase = new Purchase
         {
             Id = Guid.NewGuid(),
             BuyerId = userId,
             TrackId = trackId,
-            Amount = track.Price,
+            AmountCents = amountCents,
             LicenseType = request.LicenseType ?? "non-exclusive",
             PaymentMethod = request.PaymentMethod,
             Status = "completed",
@@ -78,7 +86,7 @@ public class PurchaseService : IPurchaseService
             Id = Guid.NewGuid(),
             UserId = userId,
             PurchaseId = purchase.Id,
-            AmountCents = (int)(purchase.Amount * 100),
+            AmountCents = purchase.AmountCents,
             Currency = "usd",
             Status = "paid",
             IssuedAt = DateTime.UtcNow,
@@ -91,7 +99,7 @@ public class PurchaseService : IPurchaseService
             Id = purchase.Id.ToString(),
             TrackId = purchase.TrackId.ToString(),
             TrackTitle = track.Title,
-            AmountCents = (int)(purchase.Amount * 100),
+            AmountCents = purchase.AmountCents,
             LicenseType = purchase.LicenseType ?? "non-exclusive",
             Status = purchase.Status,
             CreatedAt = purchase.CreatedAt,
@@ -106,7 +114,7 @@ public class PurchaseService : IPurchaseService
         {
             Id = p.Id.ToString(),
             TrackId = p.TrackId.ToString(),
-            AmountCents = (int)(p.Amount * 100),
+            AmountCents = p.AmountCents,
             LicenseType = p.LicenseType ?? "non-exclusive",
             Status = p.Status,
             CreatedAt = p.CreatedAt,

@@ -46,7 +46,7 @@ public sealed class DatabaseConsistencyTests : IDisposable
             Id = purchaseId,
             BuyerId = userId,
             TrackId = trackId,
-            Amount = 29.99,
+            AmountCents = 2999,
             LicenseType = "non-exclusive",
             Status = "completed",
             PaymentMethod = "stripe"
@@ -232,7 +232,7 @@ public sealed class DatabaseConsistencyTests : IDisposable
             Id = Guid.NewGuid(),
             BuyerId = "buyer-1",
             TrackId = trackId,
-            Amount = 499.99,
+            AmountCents = 49999,
             LicenseType = "exclusive",
             Status = "completed"
         });
@@ -265,7 +265,7 @@ public sealed class DatabaseConsistencyTests : IDisposable
             Id = purchaseId,
             BuyerId = "user-1",
             TrackId = trackId,
-            Amount = 10,
+            AmountCents = 1000,
             Status = "completed"
         });
         _db.Invoices.Add(new Invoice
@@ -342,7 +342,7 @@ public sealed class DatabaseConsistencyTests : IDisposable
                 Id = Guid.NewGuid(),
                 BuyerId = "buyer-1",
                 TrackId = trackId,
-                Amount = 10,
+                AmountCents = 1000,
                 LicenseType = "non-exclusive",
                 Status = "completed"
             },
@@ -351,7 +351,7 @@ public sealed class DatabaseConsistencyTests : IDisposable
                 Id = Guid.NewGuid(),
                 BuyerId = "buyer-2",
                 TrackId = trackId,
-                Amount = 10,
+                AmountCents = 1000,
                 LicenseType = "non-exclusive",
                 Status = "completed"
             }

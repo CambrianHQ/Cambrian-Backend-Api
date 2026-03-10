@@ -244,7 +244,7 @@ public class StripeWebhookService : IWebhookService
             Id = Guid.NewGuid(),
             BuyerId = userId,
             TrackId = trackId,
-            Amount = (amountTotal ?? 0) / 100.0,
+            AmountCents = (int)(amountTotal ?? 0),
             PaymentMethod = "stripe",
             LicenseType = licenseType,
             Status = "completed",
@@ -275,6 +275,31 @@ public class StripeWebhookService : IWebhookService
                 SavedAt = DateTime.UtcNow
             };
             _db.Library.Add(libraryItem);
+        }
+
+        // ── Credit creator wallet (platform takes 15% fee) ──
+        if (!string.IsNullOrEmpty(track.CreatorId) && amountTotal.HasValue && amountTotal.Value > 0)
+        {
+            const decimal platformFeeRate = 0.15m;
+            var grossCents = amountTotal.Value;
+            var creatorCents = (long)Math.Floor(grossCents * (1 - platformFeeRate));
+
+            if (creatorCents > 0)
+            {
+                _db.WalletTransactions.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = track.CreatorId,
+                    AmountCents = creatorCents,
+                    Type = "credit",
+                    Description = $"Sale: {track.Title} ({licenseType})",
+                    RelatedPurchaseId = purchase.Id,
+                    CreatedAt = DateTime.UtcNow
+                });
+                _logger.LogInformation(
+                    "Credited creator {CreatorId} with {AmountCents} cents for track {TrackId}",
+                    track.CreatorId, creatorCents, trackId);
+            }
         }
 
         await _db.SaveChangesAsync();

@@ -10,6 +10,6 @@ public sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
     {
         builder.ToTable("purchases");
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.AmountCents).IsRequired();
     }
 }

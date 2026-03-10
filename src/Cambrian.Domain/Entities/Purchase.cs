@@ -12,7 +12,8 @@ public class Purchase
 
     public Track Track { get; set; } = null!;
 
-    public double Amount { get; set; }
+    /// <summary>Amount in cents (e.g. 2999 = $29.99). Avoids floating-point rounding issues.</summary>
+    public int AmountCents { get; set; }
 
     public string? PaymentMethod { get; set; }
 
