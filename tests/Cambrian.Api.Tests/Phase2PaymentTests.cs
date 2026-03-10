@@ -7,6 +7,7 @@ using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -26,7 +27,9 @@ public sealed class Phase2PaymentTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["App:FrontendUrl"] = "http://localhost:5173" })
             .Build();
-        var sut = new BillingService(subs, gateway, config);
+        var subService = Substitute.For<ISubscriptionService>();
+        var logger = Substitute.For<ILogger<BillingService>>();
+        var sut = new BillingService(subs, subService, gateway, config, logger);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = "invalid" }, "user-1"));
@@ -45,7 +48,9 @@ public sealed class Phase2PaymentTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["App:FrontendUrl"] = "http://localhost:5173" })
             .Build();
-        var sut = new BillingService(subs, gateway, config);
+        var subService = Substitute.For<ISubscriptionService>();
+        var logger = Substitute.For<ILogger<BillingService>>();
+        var sut = new BillingService(subs, subService, gateway, config, logger);
 
         var result = await sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = tier }, "user-1");
 

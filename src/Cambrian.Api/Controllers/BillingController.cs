@@ -48,10 +48,13 @@ public class BillingController : BaseController
     }
 
     [HttpGet("checkout-session/{sessionId}")]
-    public IActionResult GetSession(string sessionId)
+    public async Task<IActionResult> GetSession(string sessionId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
             return ErrorResponse("sessionId is required.");
-        return OkResponse(new { sessionId });
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await _billing.ConfirmCheckoutAsync(sessionId, userId);
+        return OkResponse(result);
     }
 }
