@@ -19,6 +19,7 @@ public class StreamController : BaseController
         _streams = streams;
     }
 
+    [Authorize]
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int take = 20)
     {
@@ -36,6 +37,7 @@ public class StreamController : BaseController
         return OkResponse(result);
     }
 
+    [Authorize]
     [HttpGet("{trackId}")]
     public async Task<IActionResult> Stream(string trackId)
     {
