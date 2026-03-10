@@ -4,6 +4,9 @@ public class LibraryItemResponse
 {
     public string TrackId { get; set; } = string.Empty;
 
+    /// <summary>Alias for TrackId — some frontend components reference "id".</summary>
+    public string Id => TrackId;
+
     public string Title { get; set; } = string.Empty;
 
     public string Artist { get; set; } = string.Empty;
