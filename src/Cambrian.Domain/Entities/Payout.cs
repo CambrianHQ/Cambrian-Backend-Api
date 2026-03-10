@@ -8,7 +8,8 @@ public class Payout
 
     public ApplicationUser Creator { get; set; } = null!;
 
-    public double Amount { get; set; }
+    /// <summary>Amount in cents (e.g. 2999 = $29.99). Avoids floating-point rounding issues.</summary>
+    public int AmountCents { get; set; }
 
     public string Status { get; set; } = "pending"; // pending, approved, rejected, completed
 

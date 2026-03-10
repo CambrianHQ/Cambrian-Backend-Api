@@ -31,8 +31,8 @@ public class PayoutService : IPayoutService
         var totalEarned = allPurchases.Sum(p => p.AmountCents) / 100m;
 
         var payouts = await _payouts.GetByCreatorIdAsync(userId);
-        var paidOut = (decimal)payouts.Where(p => p.Status == "completed").Sum(p => p.Amount);
-        var pendingPayouts = (decimal)payouts.Where(p => p.Status == "pending").Sum(p => p.Amount);
+        var paidOut = payouts.Where(p => p.Status == "completed").Sum(p => p.AmountCents) / 100m;
+        var pendingPayouts = payouts.Where(p => p.Status == "pending").Sum(p => p.AmountCents) / 100m;
         var available = totalEarned - paidOut - pendingPayouts;
 
         return new
@@ -56,7 +56,7 @@ public class PayoutService : IPayoutService
         {
             Id = Guid.NewGuid(),
             CreatorId = creatorId,
-            Amount = (double)request.Amount,
+            AmountCents = (int)Math.Round(request.Amount * 100, MidpointRounding.AwayFromZero),
             Status = "pending",
             RequestedAt = DateTime.UtcNow
         };
@@ -76,7 +76,7 @@ public class PayoutService : IPayoutService
 
         return payouts.Take(take).Select(p => new PayoutResponse
         {
-            Amount = (decimal)p.Amount,
+            Amount = p.AmountCents / 100m,
             Status = p.Status
         }).ToList();
     }

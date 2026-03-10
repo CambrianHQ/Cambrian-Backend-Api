@@ -136,6 +136,9 @@ public sealed class Phase2PaymentTests
         var tracks = Substitute.For<ITrackRepository>();
         var library = Substitute.For<ILibraryRepository>();
         var invoices = Substitute.For<IInvoiceRepository>();
+        var gateway = Substitute.For<IPaymentGateway>();
+        gateway.GetCheckoutSessionAsync(Arg.Any<string>())
+            .Returns(new CheckoutSessionInfo { SessionId = "sess_test", Status = "paid" });
 
         var trackId = Guid.NewGuid();
         tracks.GetByIdAsync(trackId).Returns(new Track
@@ -148,9 +151,10 @@ public sealed class Phase2PaymentTests
         });
         purchases.GetByBuyerIdAsync("buyer-1").Returns(new List<Purchase>());
 
-        var sut = new PurchaseService(purchases, tracks, library, invoices);
+        var sut = new PurchaseService(purchases, tracks, library, invoices,
+            gateway, Substitute.For<Microsoft.Extensions.Logging.ILogger<PurchaseService>>());
         var result = await sut.CreateAsync(
-            new Application.DTOs.Purchases.PurchaseCreateRequest { TrackId = trackId.ToString(), LicenseType = "non-exclusive" },
+            new Application.DTOs.Purchases.PurchaseCreateRequest { TrackId = trackId.ToString(), LicenseType = "non-exclusive", StripeSessionId = "sess_test" },
             "buyer-1");
 
         Assert.Equal(2999, result.AmountCents);
@@ -164,6 +168,9 @@ public sealed class Phase2PaymentTests
         var tracks = Substitute.For<ITrackRepository>();
         var library = Substitute.For<ILibraryRepository>();
         var invoices = Substitute.For<IInvoiceRepository>();
+        var gateway = Substitute.For<IPaymentGateway>();
+        gateway.GetCheckoutSessionAsync(Arg.Any<string>())
+            .Returns(new CheckoutSessionInfo { SessionId = "sess_test", Status = "paid" });
 
         var trackId = Guid.NewGuid();
         tracks.GetByIdAsync(trackId).Returns(new Track
@@ -177,9 +184,10 @@ public sealed class Phase2PaymentTests
         });
         purchases.GetByBuyerIdAsync("buyer-1").Returns(new List<Purchase>());
 
-        var sut = new PurchaseService(purchases, tracks, library, invoices);
+        var sut = new PurchaseService(purchases, tracks, library, invoices,
+            gateway, Substitute.For<Microsoft.Extensions.Logging.ILogger<PurchaseService>>());
         var result = await sut.CreateAsync(
-            new Application.DTOs.Purchases.PurchaseCreateRequest { TrackId = trackId.ToString(), LicenseType = "exclusive" },
+            new Application.DTOs.Purchases.PurchaseCreateRequest { TrackId = trackId.ToString(), LicenseType = "exclusive", StripeSessionId = "sess_test" },
             "buyer-1");
 
         Assert.Equal(5000, result.AmountCents);

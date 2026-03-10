@@ -25,7 +25,7 @@ public class AdminRepository : IAdminRepository
         var completedPurchases = await _db.Purchases.Where(p => p.Status == "completed").ToListAsync();
         var licensesSold = completedPurchases.Count;
         var totalRevenue = completedPurchases.Sum(p => p.AmountCents) / 100.0;
-        var pendingPayouts = await _db.Payouts.Where(p => p.Status == "pending").SumAsync(p => p.Amount);
+        var pendingPayouts = await _db.Payouts.Where(p => p.Status == "pending").SumAsync(p => p.AmountCents) / 100.0;
 
         return new AdminDashboardSummary
         {

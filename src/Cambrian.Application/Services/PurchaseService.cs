@@ -1,6 +1,7 @@
 using Cambrian.Application.DTOs.Purchases;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
 
@@ -10,23 +11,42 @@ public class PurchaseService : IPurchaseService
     private readonly ITrackRepository _tracks;
     private readonly ILibraryRepository _library;
     private readonly IInvoiceRepository _invoiceRepo;
+    private readonly IPaymentGateway _gateway;
+    private readonly ILogger<PurchaseService> _logger;
 
     public PurchaseService(
         IPurchaseRepository purchases,
         ITrackRepository tracks,
         ILibraryRepository library,
-        IInvoiceRepository invoiceRepo)
+        IInvoiceRepository invoiceRepo,
+        IPaymentGateway gateway,
+        ILogger<PurchaseService> logger)
     {
         _purchases = purchases;
         _tracks = tracks;
         _library = library;
         _invoiceRepo = invoiceRepo;
+        _gateway = gateway;
+        _logger = logger;
     }
 
     public async Task<PurchaseResponse> CreateAsync(PurchaseCreateRequest request, string userId)
     {
         if (!Guid.TryParse(request.TrackId, out var trackId))
             throw new ArgumentException("Invalid trackId.");
+
+        // ── Verify Stripe payment before creating a purchase ──
+        if (string.IsNullOrWhiteSpace(request.StripeSessionId))
+            throw new InvalidOperationException("A Stripe checkout session ID is required to complete a purchase.");
+
+        var session = await _gateway.GetCheckoutSessionAsync(request.StripeSessionId);
+        if (session is null || session.Status != "paid")
+        {
+            _logger.LogWarning(
+                "Purchase rejected: Stripe session {SessionId} status={Status} for user {UserId}",
+                request.StripeSessionId, session?.Status ?? "not_found", userId);
+            throw new InvalidOperationException("Payment has not been completed. Please complete checkout first.");
+        }
 
         var track = await _tracks.GetByIdAsync(trackId)
             ?? throw new KeyNotFoundException("Track not found.");
