@@ -8,16 +8,40 @@ public class PayoutService : IPayoutService
 {
     private readonly IPayoutRepository _payouts;
     private readonly IPurchaseRepository _purchases;
+    private readonly ITrackRepository _tracks;
 
-    public PayoutService(IPayoutRepository payouts, IPurchaseRepository purchases)
+    public PayoutService(IPayoutRepository payouts, IPurchaseRepository purchases, ITrackRepository tracks)
     {
         _payouts = payouts;
         _purchases = purchases;
+        _tracks = tracks;
     }
 
-    public async Task<object> GetEarningsAsync()
+    public async Task<object> GetEarningsAsync(string userId)
     {
-        return await Task.FromResult(new { balance = 0m, pending = 0m, available = 0m, currency = "USD" });
+        // Compute real earnings from completed purchases on the creator's tracks
+        var tracks = await _tracks.GetByCreatorIdAsync(userId);
+        var allPurchases = new List<Purchase>();
+        foreach (var track in tracks)
+        {
+            var tp = await _purchases.GetByTrackIdAsync(track.Id);
+            allPurchases.AddRange(tp.Where(p => p.Status == "completed"));
+        }
+
+        var totalEarned = allPurchases.Sum(p => p.AmountCents) / 100m;
+
+        var payouts = await _payouts.GetByCreatorIdAsync(userId);
+        var paidOut = (decimal)payouts.Where(p => p.Status == "completed").Sum(p => p.Amount);
+        var pendingPayouts = (decimal)payouts.Where(p => p.Status == "pending").Sum(p => p.Amount);
+        var available = totalEarned - paidOut - pendingPayouts;
+
+        return new
+        {
+            available = Math.Max(0, available),
+            pending = pendingPayouts,
+            totalEarned,
+            totalWithdrawn = paidOut
+        };
     }
 
     public async Task<PayoutResponse> RequestAsync(PayoutRequest request, string creatorId)
