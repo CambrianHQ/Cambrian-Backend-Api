@@ -119,4 +119,32 @@ public class StripeFacade : IPaymentGateway
         var service = new SessionService();
         return await service.GetAsync(sessionId);
     }
+
+    public async Task<CheckoutSessionInfo?> GetCheckoutSessionAsync(string sessionId)
+    {
+        try
+        {
+            var service = new SessionService();
+            var session = await service.GetAsync(sessionId);
+
+            var status = session.PaymentStatus switch
+            {
+                "paid" => "paid",
+                "unpaid" => "pending",
+                _ => "pending"
+            };
+
+            return new CheckoutSessionInfo
+            {
+                SessionId = session.Id,
+                Status = status,
+                ClientReferenceId = session.ClientReferenceId,
+                AmountTotal = session.AmountTotal
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

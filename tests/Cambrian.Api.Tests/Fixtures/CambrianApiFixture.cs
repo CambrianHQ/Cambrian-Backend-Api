@@ -186,6 +186,18 @@ internal sealed class FakePaymentGateway : IPaymentGateway
     {
         return Task.FromResult($"https://checkout.stripe.com/fake-sub?plan={planName}&ref={clientReferenceId}");
     }
+
+    public Task<CheckoutSessionInfo?> GetCheckoutSessionAsync(string sessionId)
+    {
+        // Return a fake paid session for testing
+        return Task.FromResult<CheckoutSessionInfo?>(new CheckoutSessionInfo
+        {
+            SessionId = sessionId,
+            Status = "paid",
+            ClientReferenceId = null,
+            AmountTotal = 0
+        });
+    }
 }
 
 internal sealed class FakeObjectStorage : IObjectStorage
