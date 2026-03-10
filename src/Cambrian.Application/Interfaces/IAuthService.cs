@@ -21,6 +21,12 @@ public interface IAuthService
 
     Task RecoverUsernameAsync(RecoverUsernameRequest request);
 
+    /// <summary>Change password for the authenticated user (requires current password).</summary>
+    Task ChangePasswordAsync(ClaimsPrincipal principal, ChangePasswordRequest request);
+
+    /// <summary>Change email for the authenticated user (requires current password).</summary>
+    Task ChangeEmailAsync(ClaimsPrincipal principal, ChangeEmailRequest request);
+
     /// <summary>Generate a fresh JWT for the given userId (includes updated tier/role claims).</summary>
     Task<string?> GenerateFreshTokenAsync(string userId);
 }

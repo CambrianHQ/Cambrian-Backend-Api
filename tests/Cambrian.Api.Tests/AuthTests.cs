@@ -22,6 +22,7 @@ public sealed class AuthTests
     private readonly UserManager<ApplicationUser> _users;
     private readonly IConfiguration _config;
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly IEmailService _email;
     private readonly AuthService _sut;
 
     public AuthTests()
@@ -40,7 +41,8 @@ public sealed class AuthTests
             .Build();
 
         _subscriptions = Substitute.For<ISubscriptionRepository>();
-        _sut = new AuthService(_users, _config, _subscriptions);
+        _email = Substitute.For<IEmailService>();
+        _sut = new AuthService(_users, _config, _subscriptions, _email);
     }
 
     [Fact]

@@ -174,9 +174,13 @@ builder.Services.AddCors(options =>
                 if (originSet.Contains(origin))
                     return true;
 
-                // Allow any Vercel preview deployment for the project
-                if (Uri.TryCreate(origin, UriKind.Absolute, out var uri)
-                    && uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
+                // Allow Vercel preview deployments only for the specific project slug
+                // Configure via App:VercelProjectSlug (e.g. "cambrian-frontend")
+                var vercelSlug = builder.Configuration["App:VercelProjectSlug"] ?? "";
+                if (!string.IsNullOrEmpty(vercelSlug)
+                    && Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+                    && uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase)
+                    && uri.Host.Contains(vercelSlug, StringComparison.OrdinalIgnoreCase))
                     return true;
 
                 return false;
@@ -257,6 +261,19 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Stagi
 }
 
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+// Security headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
+    await next();
+});
+
 // app.UseHttpsRedirection(); // disabled for local dev
 app.UseStaticFiles(); // serve uploaded files from wwwroot
 app.UseCors();

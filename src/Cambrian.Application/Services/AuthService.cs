@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
@@ -15,12 +16,21 @@ public class AuthService : IAuthService
     private readonly UserManager<ApplicationUser> _users;
     private readonly IConfiguration _config;
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly IEmailService _email;
 
-    public AuthService(UserManager<ApplicationUser> users, IConfiguration config, ISubscriptionRepository subscriptions)
+    /// <summary>How long a password reset code is valid.</summary>
+    private static readonly TimeSpan ResetCodeLifetime = TimeSpan.FromMinutes(15);
+
+    public AuthService(
+        UserManager<ApplicationUser> users,
+        IConfiguration config,
+        ISubscriptionRepository subscriptions,
+        IEmailService email)
     {
         _users = users;
         _config = config;
         _subscriptions = subscriptions;
+        _email = email;
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -113,27 +123,43 @@ public class AuthService : IAuthService
         };
     }
 
-    public Task ForgotPasswordAsync(ForgotPasswordRequest request)
+    public async Task ForgotPasswordAsync(ForgotPasswordRequest request)
     {
-        // TODO: Send password reset code via email/SMS
-        return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return; // silent - do not reveal whether the email exists
+
+        var user = await _users.FindByEmailAsync(request.Email);
+        if (user is null)
+            return; // silent
+
+        // Generate a cryptographically random 6-digit code
+        var code = RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
+
+        user.PasswordResetCode = code;
+        user.PasswordResetCodeExpiry = DateTime.UtcNow.Add(ResetCodeLifetime);
+        await _users.UpdateAsync(user);
+
+        await _email.SendPasswordResetAsync(user.Email!, code);
     }
 
-    public Task VerifyCodeAsync(VerifyCodeRequest request)
+    public async Task VerifyCodeAsync(VerifyCodeRequest request)
     {
-        // TODO: Verify the code against stored reset codes
-        return Task.CompletedTask;
+        var user = await FindUserByContact(request.Email, request.PhoneNumber);
+        if (user is null)
+            throw new InvalidOperationException("Invalid or expired code.");
+
+        ValidateResetCode(user, request.Code);
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request)
     {
-        var user = request.Email is not null
-            ? await _users.FindByEmailAsync(request.Email)
-            : null;
-
+        var user = await FindUserByContact(request.Email, request.PhoneNumber);
         if (user is null)
-            throw new InvalidOperationException("User not found");
+            throw new InvalidOperationException("Invalid or expired code.");
 
+        ValidateResetCode(user, request.Code);
+
+        // Code is valid - perform the actual password reset via Identity
         var token = await _users.GeneratePasswordResetTokenAsync(user);
         var result = await _users.ResetPasswordAsync(user, token, request.NewPassword);
 
@@ -142,12 +168,105 @@ public class AuthService : IAuthService
             var errors = string.Join("; ", result.Errors.Select(e => e.Description));
             throw new InvalidOperationException($"Password reset failed: {errors}");
         }
+
+        // Invalidate the code so it cannot be reused
+        user.PasswordResetCode = null;
+        user.PasswordResetCodeExpiry = null;
+        await _users.UpdateAsync(user);
     }
 
-    public Task RecoverUsernameAsync(RecoverUsernameRequest request)
+    public async Task RecoverUsernameAsync(RecoverUsernameRequest request)
     {
-        // TODO: Send username recovery via email/SMS
-        return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return; // silent - do not reveal whether the email exists
+
+        var user = await _users.FindByEmailAsync(request.Email);
+        if (user is null)
+            return; // silent
+
+        // Send the username (display name or email) via email
+        await _email.SendAsync(
+            user.Email!,
+            "Cambrian - Your Username",
+            $"<p>Your username is: <strong>{user.DisplayName ?? user.Email}</strong></p>");
+    }
+
+    public async Task ChangePasswordAsync(ClaimsPrincipal principal, ChangePasswordRequest request)
+    {
+        var user = await GetRequiredUser(principal);
+        var result = await _users.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+
+        if (!result.Succeeded)
+        {
+            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            throw new InvalidOperationException($"Password change failed: {errors}");
+        }
+    }
+
+    public async Task ChangeEmailAsync(ClaimsPrincipal principal, ChangeEmailRequest request)
+    {
+        var user = await GetRequiredUser(principal);
+
+        // Verify the current password before allowing email change
+        var passwordValid = await _users.CheckPasswordAsync(user, request.Password);
+        if (!passwordValid)
+            throw new UnauthorizedAccessException("Invalid password.");
+
+        // Check that the new email is not already taken
+        var existing = await _users.FindByEmailAsync(request.NewEmail);
+        if (existing is not null && existing.Id != user.Id)
+            throw new InvalidOperationException("Email is already in use.");
+
+        var token = await _users.GenerateChangeEmailTokenAsync(user, request.NewEmail);
+        var result = await _users.ChangeEmailAsync(user, request.NewEmail, token);
+
+        if (!result.Succeeded)
+        {
+            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            throw new InvalidOperationException($"Email change failed: {errors}");
+        }
+
+        // Keep UserName in sync with Email
+        user.UserName = request.NewEmail;
+        await _users.UpdateAsync(user);
+    }
+
+    // -- Helpers --
+
+    private async Task<ApplicationUser> GetRequiredUser(ClaimsPrincipal principal)
+    {
+        var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+        if (userId is null)
+            throw new UnauthorizedAccessException("No user identity found");
+
+        return await _users.FindByIdAsync(userId)
+               ?? throw new UnauthorizedAccessException("User not found");
+    }
+
+    private async Task<ApplicationUser?> FindUserByContact(string? email, string? phone)
+    {
+        if (!string.IsNullOrWhiteSpace(email))
+            return await _users.FindByEmailAsync(email);
+
+        // Phone-based lookup not yet implemented
+        return null;
+    }
+
+    private static void ValidateResetCode(ApplicationUser user, string code)
+    {
+        if (string.IsNullOrEmpty(user.PasswordResetCode)
+            || user.PasswordResetCodeExpiry is null
+            || user.PasswordResetCodeExpiry < DateTime.UtcNow)
+        {
+            throw new InvalidOperationException("Invalid or expired code.");
+        }
+
+        if (!string.Equals(user.PasswordResetCode, code, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Invalid or expired code.");
+        }
     }
 
     private string GenerateJwt(ApplicationUser user)
