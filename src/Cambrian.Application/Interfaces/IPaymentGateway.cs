@@ -25,4 +25,20 @@ public interface IPaymentGateway
         string clientReferenceId,
         string successUrl,
         string cancelUrl);
+
+    /// <summary>
+    /// Retrieve a checkout session by its ID and return its status + metadata.
+    /// </summary>
+    Task<CheckoutSessionInfo?> GetCheckoutSessionAsync(string sessionId);
+}
+
+/// <summary>
+/// Payment-provider-agnostic checkout session details.
+/// </summary>
+public sealed class CheckoutSessionInfo
+{
+    public string SessionId { get; init; } = "";
+    public string Status { get; init; } = "";
+    public string? ClientReferenceId { get; init; }
+    public long? AmountTotal { get; init; }
 }

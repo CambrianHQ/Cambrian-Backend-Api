@@ -3,6 +3,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -60,7 +61,9 @@ public sealed class BillingTierTests
             })
             .Build();
 
-        var sut = new BillingService(subscriptions, gateway, config);
+        var subService = Substitute.For<ISubscriptionService>();
+        var logger = Substitute.For<ILogger<BillingService>>();
+        var sut = new BillingService(subscriptions, subService, gateway, config, logger);
 
         var result = await sut.GetStatusAsync("user-1");
 
@@ -80,7 +83,9 @@ public sealed class BillingTierTests
             })
             .Build();
 
-        var sut = new BillingService(subscriptions, gateway, config);
+        var subService = Substitute.For<ISubscriptionService>();
+        var logger = Substitute.For<ILogger<BillingService>>();
+        var sut = new BillingService(subscriptions, subService, gateway, config, logger);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = "enterprise" }, "user-1"));
