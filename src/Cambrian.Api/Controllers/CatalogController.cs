@@ -24,7 +24,9 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
-        return OkResponse(await _catalog.GetDiscoverAsync(page, pageSize, genre, search));
+        var items = await _catalog.GetDiscoverAsync(page, pageSize, genre, search);
+        ResolveTrackUrls(items);
+        return OkResponse(items);
     }
 
     [HttpGet("catalog")]
@@ -37,7 +39,9 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 50;
-        return OkResponse(await _catalog.GetCatalogAsync(page, pageSize, genre, search, sort));
+        var items = await _catalog.GetCatalogAsync(page, pageSize, genre, search, sort);
+        ResolveTrackUrls(items);
+        return OkResponse(items);
     }
 
     [HttpGet("tracks/{trackId}")]
@@ -47,9 +51,10 @@ public class CatalogController : BaseController
             return ErrorResponse("trackId must be a valid GUID.");
 
         var result = await _catalog.GetTrackAsync(trackId);
-        return result is null
-            ? NotFoundResponse($"Track '{trackId}' not found.")
-            : OkResponse(result);
+        if (result is null)
+            return NotFoundResponse($"Track '{trackId}' not found.");
+        result.AudioUrl = ResolveAbsoluteUrl(result.AudioUrl);
+        return OkResponse(result);
     }
 
     [HttpGet("trending")]
@@ -60,13 +65,23 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
-        return OkResponse(await _catalog.GetDiscoverAsync(page, pageSize, genre));
+        var items = await _catalog.GetDiscoverAsync(page, pageSize, genre);
+        ResolveTrackUrls(items);
+        return OkResponse(items);
     }
 
     [HttpGet("tracks")]
     public async Task<IActionResult> ListTracks()
     {
-        return OkResponse(await _catalog.GetCatalogAsync());
+        var items = await _catalog.GetCatalogAsync();
+        ResolveTrackUrls(items);
+        return OkResponse(items);
+    }
+
+    private void ResolveTrackUrls(IEnumerable<Cambrian.Application.DTOs.Catalog.TrackResponse> tracks)
+    {
+        foreach (var t in tracks)
+            t.AudioUrl = ResolveAbsoluteUrl(t.AudioUrl);
     }
 
     [Authorize(Roles = "Creator")]

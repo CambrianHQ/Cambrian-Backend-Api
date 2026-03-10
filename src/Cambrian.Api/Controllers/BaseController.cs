@@ -36,4 +36,18 @@ public class BaseController : ControllerBase
     /// <summary>409 Conflict with error envelope.</summary>
     protected IActionResult ConflictResponse(string error = "Resource already exists.") =>
         StatusCode(409, ApiResponse.Fail(error));
+
+    /// <summary>
+    /// Convert a relative URL (e.g. /uploads/key) to an absolute URL so the
+    /// frontend on a different origin can fetch the file correctly.
+    /// Already-absolute URLs (S3/R2 pre-signed) are returned unchanged.
+    /// </summary>
+    protected string ResolveAbsoluteUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url))
+            return url ?? "";
+        if (Uri.TryCreate(url, UriKind.Absolute, out _))
+            return url;
+        return $"{Request.Scheme}://{Request.Host}{url}";
+    }
 }
