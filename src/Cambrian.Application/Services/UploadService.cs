@@ -69,6 +69,13 @@ public class UploadService : IUploadService
             key,
             string.IsNullOrWhiteSpace(request.Audio.ContentType) ? "audio/mpeg" : request.Audio.ContentType);
 
+        // Derive cents from the dedicated price fields when provided,
+        // otherwise fall back to the generic Price so tracks uploaded via the
+        // single-price form still display correctly on the marketplace.
+        var priceCents = request.Price.HasValue
+            ? (int)Math.Round(request.Price.Value * 100, MidpointRounding.AwayFromZero)
+            : 0;
+
         var track = new Track
         {
             Id = Guid.NewGuid(),
@@ -80,10 +87,10 @@ public class UploadService : IUploadService
             AudioUrl = audioUrl,
             NonExclusivePriceCents = request.NonExclusivePrice.HasValue
                 ? (int)Math.Round(request.NonExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
-                : 0,
+                : priceCents,
             ExclusivePriceCents = request.ExclusivePrice.HasValue
                 ? (int)Math.Round(request.ExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
-                : 0,
+                : priceCents,
             CreatorId = request.CreatorId,
             Tags = string.IsNullOrWhiteSpace(request.Tags)
                 ? new List<string>()
