@@ -125,36 +125,47 @@ public class AuthController : BaseController
 
     [Authorize]
     [HttpGet("/settings/profile")]
-    public IActionResult GetProfile()
+    public async Task<IActionResult> GetProfile()
     {
-        return OkResponse(new { displayName = (string?)null, email = (string?)null });
+        var profile = await _auth.GetCurrentUserAsync(User);
+        return OkResponse(new
+        {
+            displayName = profile.DisplayName,
+            email = profile.Email,
+            tier = profile.Tier,
+            role = profile.Role
+        });
     }
 
     [Authorize]
     [HttpPost("/settings/password")]
-    public IActionResult ChangePassword()
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
+        await _auth.ChangePasswordAsync(User, request);
         return MessageResponse("Password updated.");
     }
 
     [Authorize]
     [HttpPut("/settings/password")]
-    public IActionResult UpdatePassword()
+    public async Task<IActionResult> UpdatePassword([FromBody] ChangePasswordRequest request)
     {
+        await _auth.ChangePasswordAsync(User, request);
         return MessageResponse("Password updated.");
     }
 
     [Authorize]
     [HttpPost("/settings/email")]
-    public IActionResult ChangeEmail()
+    public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailRequest request)
     {
+        await _auth.ChangeEmailAsync(User, request);
         return MessageResponse("Email updated.");
     }
 
     [Authorize]
     [HttpPut("/settings/email")]
-    public IActionResult UpdateEmail()
+    public async Task<IActionResult> UpdateEmail([FromBody] ChangeEmailRequest request)
     {
+        await _auth.ChangeEmailAsync(User, request);
         return MessageResponse("Email updated.");
     }
 }

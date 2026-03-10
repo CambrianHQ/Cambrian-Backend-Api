@@ -18,6 +18,12 @@ public class ApplicationUser : IdentityUser
 
     public long WalletBalanceCents { get; set; }
 
+    /// <summary>Hashed 6-digit code for password reset (null = no pending reset).</summary>
+    public string? PasswordResetCode { get; set; }
+
+    /// <summary>UTC expiry of the current password reset code.</summary>
+    public DateTime? PasswordResetCodeExpiry { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();
