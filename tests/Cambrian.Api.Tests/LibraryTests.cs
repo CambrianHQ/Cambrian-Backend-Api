@@ -25,6 +25,9 @@ public sealed class LibraryTests
     public LibraryTests()
     {
         _sut = new LibraryService(_library, _purchases, _tracks);
+
+        // Default: no purchases for any user (tests that need purchases override this)
+        _purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>

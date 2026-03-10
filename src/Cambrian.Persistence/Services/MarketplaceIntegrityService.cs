@@ -144,7 +144,7 @@ public class MarketplaceIntegrityService : IMarketplaceIntegrityService
 
             var totalRevenue = await _db.Purchases
                 .Where(p => creatorTrackIds.Contains(p.TrackId) && p.Status == "completed")
-                .SumAsync(p => p.Amount);
+                .SumAsync(p => p.AmountCents) / 100.0;
 
             if (payout.TotalPaid > totalRevenue)
             {

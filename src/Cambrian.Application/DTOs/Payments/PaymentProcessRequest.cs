@@ -7,17 +7,9 @@ public class PaymentProcessRequest
     [Required]
     public string PurchaseId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Stripe PaymentMethod ID (e.g. pm_xxx). Card details are collected
+    /// client-side via Stripe.js — never sent to our server.
+    /// </summary>
     public string? PaymentMethodId { get; set; }
-
-    [Obsolete("Use PaymentMethodId instead")]
-    public string? CardNumber { get; set; }
-
-    [Obsolete("Use PaymentMethodId instead")]
-    public string? CardExpiry { get; set; }
-
-    [Obsolete("Use PaymentMethodId instead")]
-    public string? CardCvc { get; set; }
-
-    [Obsolete("Use PaymentMethodId instead")]
-    public string? CardName { get; set; }
 }
