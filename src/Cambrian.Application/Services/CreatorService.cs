@@ -48,8 +48,8 @@ public class CreatorService : ICreatorService
         var totalEarned = allPurchases.Sum(p => p.AmountCents) / 100m;
 
         var payouts = await _payouts.GetByCreatorIdAsync(userId);
-        var pendingPayouts = (decimal)payouts.Where(p => p.Status == "pending").Sum(p => p.Amount);
-        var paidOut = (decimal)payouts.Where(p => p.Status == "completed").Sum(p => p.Amount);
+        var pendingPayouts = payouts.Where(p => p.Status == "pending").Sum(p => p.AmountCents) / 100m;
+        var paidOut = payouts.Where(p => p.Status == "completed").Sum(p => p.AmountCents) / 100m;
 
         return new
         {
