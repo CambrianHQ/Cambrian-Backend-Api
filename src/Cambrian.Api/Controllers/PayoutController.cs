@@ -11,40 +11,52 @@ namespace Cambrian.Api.Controllers;
 public class PayoutController : BaseController
 {
     private readonly IPayoutService _payouts;
+    private readonly ICreatorConnectService _connect;
 
-    public PayoutController(IPayoutService payouts)
+    public PayoutController(IPayoutService payouts, ICreatorConnectService connect)
     {
         _payouts = payouts;
+        _connect = connect;
     }
 
     [HttpPost("connect-stripe")]
-    public IActionResult ConnectStripe()
+    public async Task<IActionResult> ConnectStripe()
     {
-        return OkResponse(new { connectUrl = (string?)null });
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await _connect.StartOnboardingAsync(userId);
+        return OkResponse(result);
     }
 
     [HttpGet("connect-status")]
-    public IActionResult ConnectStatus()
+    public async Task<IActionResult> ConnectStatus()
     {
-        return OkResponse(new { connected = false });
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var status = await _connect.GetStatusAsync(userId);
+        return OkResponse(status);
     }
 
     [HttpGet("stripe-dashboard")]
-    public IActionResult StripeDashboard()
+    public async Task<IActionResult> StripeDashboard()
     {
-        return OkResponse(new { url = (string?)null });
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var url = await _connect.GetDashboardLinkAsync(userId);
+        return OkResponse(new { url });
     }
 
     [HttpGet("account")]
-    public IActionResult Account()
+    public async Task<IActionResult> Account()
     {
-        return OkResponse(new { accountId = (string?)null, status = "not_connected" });
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var status = await _connect.GetStatusAsync(userId);
+        return OkResponse(new { accountId = status.AccountId, status = status.Status });
     }
 
     [HttpPost("connect")]
-    public IActionResult Connect([FromBody] PayoutConnectRequest? request = null)
+    public async Task<IActionResult> Connect([FromBody] PayoutConnectRequest? request = null)
     {
-        return OkResponse(new { connectUrl = (string?)null, status = "pending" });
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var result = await _connect.StartOnboardingAsync(userId);
+        return OkResponse(result);
     }
 
     public class PayoutConnectRequest
@@ -56,14 +68,18 @@ public class PayoutController : BaseController
     }
 
     [HttpDelete("disconnect")]
-    public IActionResult DisconnectDelete()
+    public async Task<IActionResult> DisconnectDelete()
     {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await _connect.DisconnectAsync(userId);
         return MessageResponse("Stripe account disconnected.");
     }
 
     [HttpPost("disconnect")]
-    public IActionResult DisconnectPost()
+    public async Task<IActionResult> DisconnectPost()
     {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await _connect.DisconnectAsync(userId);
         return MessageResponse("Stripe account disconnected.");
     }
 

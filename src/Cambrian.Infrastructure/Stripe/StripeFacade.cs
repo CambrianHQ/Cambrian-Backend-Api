@@ -147,4 +147,76 @@ public class StripeFacade : IPaymentGateway
             return null;
         }
     }
+
+    // ── Stripe Connect ──
+
+    public async Task<string> CreateConnectAccountAsync(string email)
+    {
+        var service = new AccountService();
+        var account = await service.CreateAsync(new AccountCreateOptions
+        {
+            Type = "express",
+            Email = email,
+            Capabilities = new AccountCapabilitiesOptions
+            {
+                Transfers = new AccountCapabilitiesTransfersOptions { Requested = true }
+            }
+        });
+        return account.Id;
+    }
+
+    public async Task<string> CreateAccountOnboardingLinkAsync(
+        string accountId, string returnUrl, string refreshUrl)
+    {
+        var service = new AccountLinkService();
+        var link = await service.CreateAsync(new AccountLinkCreateOptions
+        {
+            Account = accountId,
+            Type = "account_onboarding",
+            ReturnUrl = returnUrl,
+            RefreshUrl = refreshUrl
+        });
+        return link.Url;
+    }
+
+    public async Task<ConnectAccountStatus> GetConnectAccountStatusAsync(string accountId)
+    {
+        var service = new AccountService();
+        var account = await service.GetAsync(accountId);
+        var status = (account.ChargesEnabled && account.PayoutsEnabled) ? "active" : "pending";
+        return new ConnectAccountStatus
+        {
+            AccountId = account.Id,
+            Status = status,
+            ChargesEnabled = account.ChargesEnabled,
+            PayoutsEnabled = account.PayoutsEnabled
+        };
+    }
+
+    public async Task<string> CreateExpressDashboardLinkAsync(string accountId)
+    {
+        var service = new AccountLoginLinkService();
+        var link = await service.CreateAsync(accountId);
+        return link.Url;
+    }
+
+    public async Task<string> CreateTransferAsync(
+        string destinationAccountId, long amountCents, string description)
+    {
+        var service = new TransferService();
+        var transfer = await service.CreateAsync(new TransferCreateOptions
+        {
+            Amount = amountCents,
+            Currency = "usd",
+            Destination = destinationAccountId,
+            Description = description
+        });
+        return transfer.Id;
+    }
+
+    public async Task DeleteConnectedAccountAsync(string accountId)
+    {
+        var service = new AccountService();
+        await service.DeleteAsync(accountId);
+    }
 }

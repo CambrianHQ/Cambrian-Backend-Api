@@ -16,6 +16,9 @@ public class ApplicationUser : IdentityUser
 
     public string? Plan { get; set; }
 
+    /// <summary>Stripe Connect Express account ID (e.g. acct_xxx). Null if not connected.</summary>
+    public string? StripeAccountId { get; set; }
+
     public long WalletBalanceCents { get; set; }
 
     /// <summary>Hashed 6-digit code for password reset (null = no pending reset).</summary>
