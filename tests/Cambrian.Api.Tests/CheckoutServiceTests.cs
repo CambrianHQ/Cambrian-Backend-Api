@@ -4,6 +4,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -18,7 +19,11 @@ public sealed class CheckoutServiceTests
     {
         var config = Substitute.For<IConfiguration>();
         config["App:FrontendUrl"].Returns("http://localhost:5173");
-        _sut = new CheckoutService(_gateway, _tracks, config);
+        var purchases = Substitute.For<IPurchaseRepository>();
+        var library = Substitute.For<ILibraryRepository>();
+        var wallet = Substitute.For<IWalletRepository>();
+        var logger = Substitute.For<ILogger<CheckoutService>>();
+        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, config, logger);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>

@@ -132,3 +132,4 @@ uploads/
 *.Publish.xml
 *.pubxml
 *.pubxml.user
+publish-out/
