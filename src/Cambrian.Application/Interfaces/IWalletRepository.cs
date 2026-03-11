@@ -9,4 +9,11 @@ public interface IWalletRepository
     Task<List<WalletTransaction>> GetHistoryAsync(string userId, int take = 50);
 
     Task AddTransactionAsync(WalletTransaction transaction);
+
+    /// <summary>
+    /// Atomically check balance and create a withdrawal transaction in a single
+    /// serializable transaction to prevent double-withdrawal race conditions.
+    /// Returns true if the withdrawal succeeded, false if balance was insufficient.
+    /// </summary>
+    Task<bool> AtomicWithdrawAsync(string userId, long amountCents, string description);
 }

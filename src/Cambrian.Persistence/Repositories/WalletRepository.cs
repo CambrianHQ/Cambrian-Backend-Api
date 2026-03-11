@@ -34,4 +34,42 @@ public class WalletRepository : IWalletRepository
         _db.WalletTransactions.Add(transaction);
         await _db.SaveChangesAsync();
     }
+
+    public async Task<bool> AtomicWithdrawAsync(string userId, long amountCents, string description)
+    {
+        // Use a serializable transaction to prevent double-withdrawal race conditions.
+        // The balance check and insertion happen atomically.
+        await using var transaction = await _db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable);
+        try
+        {
+            var balance = await _db.WalletTransactions
+                .Where(w => w.UserId == userId)
+                .SumAsync(w => w.AmountCents);
+
+            if (amountCents > balance)
+            {
+                await transaction.RollbackAsync();
+                return false;
+            }
+
+            _db.WalletTransactions.Add(new WalletTransaction
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                AmountCents = -amountCents,
+                Type = "withdrawal",
+                Description = description
+            });
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return true;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
 }
