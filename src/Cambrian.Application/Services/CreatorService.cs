@@ -28,7 +28,9 @@ public class CreatorService : ICreatorService
                 Id = t.Id.ToString(),
                 Title = t.Title,
                 Genre = t.Genre ?? "",
-                Price = (decimal)t.Price
+                Price = (decimal)t.Price,
+                AudioUrl = t.AudioUrl ?? "",
+                CoverArtUrl = t.CoverArtUrl
             })
             .ToList();
     }
