@@ -37,15 +37,21 @@ public sealed class LocalObjectStorage : IObjectStorage
         // Strip leading /uploads/ if the caller passed the full relative URL
         if (key.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
             return key;
-        return $"/uploads/{key}";
+        // Strip leading slash to build a consistent /uploads/ URL
+        var clean = key.StartsWith("/", StringComparison.Ordinal) ? key[1..] : key;
+        return $"/uploads/{clean}";
     }
 
     public Task<StorageFile?> OpenReadAsync(string key)
     {
-        // Strip leading /uploads/ if the caller passed the full relative URL
+        // Normalise the key to a relative path under _basePath.
+        // Callers may pass paths like "/uploads/audio/demo1.mp3", "/audio/demo1.mp3",
+        // "audio/demo1.mp3", or "uploads/audio/demo1.mp3".
         var normalised = key;
         if (normalised.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
             normalised = normalised["/uploads/".Length..];
+        else if (normalised.StartsWith("/", StringComparison.Ordinal))
+            normalised = normalised[1..]; // strip leading slash
 
         var filePath = Path.Combine(_basePath, normalised.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(filePath))
