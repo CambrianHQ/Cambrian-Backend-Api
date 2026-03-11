@@ -95,6 +95,7 @@ public class AuthController : BaseController
         return OkResponse(new { token = Guid.NewGuid() });
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request)
     {
@@ -102,6 +103,7 @@ public class AuthController : BaseController
         return MessageResponse("If a matching account was found, a reset code has been sent.");
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("verify-code")]
     public async Task<IActionResult> VerifyCode(VerifyCodeRequest request)
     {
@@ -109,6 +111,7 @@ public class AuthController : BaseController
         return MessageResponse("Code verified successfully.");
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(ResetPasswordRequest request)
     {

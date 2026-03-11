@@ -1,5 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
@@ -60,14 +62,15 @@ public sealed class Phase1SecurityTests
 
         await _sut.ForgotPasswordAsync(new ForgotPasswordRequest { Email = "test@example.com" });
 
-        // Code should be stored on the user
+        // Code should be stored on the user (as SHA-256 hash → 64 hex chars)
         Assert.NotNull(user.PasswordResetCode);
-        Assert.Equal(6, user.PasswordResetCode!.Length);
+        Assert.Equal(64, user.PasswordResetCode!.Length);
         Assert.NotNull(user.PasswordResetCodeExpiry);
         Assert.True(user.PasswordResetCodeExpiry > DateTime.UtcNow);
 
-        // Email should have been sent
-        await _email.Received(1).SendPasswordResetAsync("test@example.com", user.PasswordResetCode);
+        // Email should have been sent with the plaintext code (not the hash)
+        await _email.Received(1).SendPasswordResetAsync("test@example.com",
+            Arg.Is<string>(c => c.Length == 6));
     }
 
     [Fact]
@@ -90,7 +93,7 @@ public sealed class Phase1SecurityTests
         {
             Id = "u1",
             Email = "test@example.com",
-            PasswordResetCode = "123456",
+            PasswordResetCode = HashCode("123456"),
             PasswordResetCodeExpiry = DateTime.UtcNow.AddMinutes(10)
         };
         _users.FindByEmailAsync("test@example.com").Returns(user);
@@ -106,7 +109,7 @@ public sealed class Phase1SecurityTests
         {
             Id = "u1",
             Email = "test@example.com",
-            PasswordResetCode = "123456",
+            PasswordResetCode = HashCode("123456"),
             PasswordResetCodeExpiry = DateTime.UtcNow.AddMinutes(10)
         };
         _users.FindByEmailAsync("test@example.com").Returns(user);
@@ -124,7 +127,7 @@ public sealed class Phase1SecurityTests
         {
             Id = "u1",
             Email = "test@example.com",
-            PasswordResetCode = "123456",
+            PasswordResetCode = HashCode("123456"),
             PasswordResetCodeExpiry = DateTime.UtcNow.AddMinutes(-1) // expired
         };
         _users.FindByEmailAsync("test@example.com").Returns(user);
@@ -163,7 +166,7 @@ public sealed class Phase1SecurityTests
         {
             Id = "u1",
             Email = "test@example.com",
-            PasswordResetCode = "654321",
+            PasswordResetCode = HashCode("654321"),
             PasswordResetCodeExpiry = DateTime.UtcNow.AddMinutes(10)
         };
         _users.FindByEmailAsync("test@example.com").Returns(user);
@@ -261,5 +264,11 @@ public sealed class Phase1SecurityTests
             _sut.ChangeEmailAsync(
                 MakeUser("u1"),
                 new ChangeEmailRequest { Password = "correct", NewEmail = "taken@example.com" }));
+    }
+
+    private static string HashCode(string code)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(code));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

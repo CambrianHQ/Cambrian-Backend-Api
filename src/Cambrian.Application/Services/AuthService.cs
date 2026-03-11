@@ -135,7 +135,7 @@ public class AuthService : IAuthService
         // Generate a cryptographically random 6-digit code
         var code = RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
 
-        user.PasswordResetCode = code;
+        user.PasswordResetCode = HashResetCode(code);
         user.PasswordResetCodeExpiry = DateTime.UtcNow.Add(ResetCodeLifetime);
         await _users.UpdateAsync(user);
 
@@ -263,15 +263,22 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Invalid or expired code.");
         }
 
-        if (!string.Equals(user.PasswordResetCode, code, StringComparison.Ordinal))
+        if (!string.Equals(user.PasswordResetCode, HashResetCode(code), StringComparison.Ordinal))
         {
             throw new InvalidOperationException("Invalid or expired code.");
         }
     }
 
+    private static string HashResetCode(string code)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(code));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
     private string GenerateJwt(ApplicationUser user)
     {
-        var key = _config["Jwt:Key"] ?? "***REDACTED_DEV_JWT_KEY***";
+        var key = _config["Jwt:Key"]
+            ?? throw new InvalidOperationException("Jwt:Key is not configured. Ensure it is set in environment variables or appsettings.");
         var issuer = _config["Jwt:Issuer"] ?? "cambrian-api";
         var audience = _config["Jwt:Audience"] ?? "cambrian-client";
 

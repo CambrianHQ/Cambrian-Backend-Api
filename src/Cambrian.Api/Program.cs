@@ -32,7 +32,14 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 if (string.IsNullOrWhiteSpace(connectionString))
     connectionString = Environment.GetEnvironmentVariable("DATABASE_URL");
 if (string.IsNullOrWhiteSpace(connectionString))
-    connectionString = "***REDACTED_DEV_DB_CONNECTION***";
+{
+    if (builder.Environment.IsDevelopment()
+        || builder.Environment.EnvironmentName == "Testing")
+        connectionString = "***REDACTED_DEV_DB_CONNECTION***";
+    else
+        throw new InvalidOperationException(
+            "Database connection string must be set via ConnectionStrings:DefaultConnection or DATABASE_URL.");
+}
 Console.WriteLine($"[Startup] DB connection source: {(connectionString.StartsWith("postgres") ? "URI" : "ADO.NET")}");
 
 // Render provides postgres:// URI — convert to Npgsql ADO.NET format
@@ -79,6 +86,10 @@ if (string.IsNullOrWhiteSpace(jwtKey))
 }
 if (jwtKey.Length < 32)
     throw new InvalidOperationException("Jwt:Key must be at least 32 characters.");
+
+// Store the resolved key so downstream services (AuthService) can read it from config
+// without their own hardcoded fallback.
+builder.Configuration["Jwt:Key"] = jwtKey;
 
 var stripeKey = builder.Configuration["Stripe:SecretKey"] ?? "";
 if (!string.IsNullOrWhiteSpace(stripeKey))
@@ -273,13 +284,32 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
-    context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
+    context.Response.Headers["X-XSS-Protection"] = "0"; // deprecated — rely on CSP instead
+    if (!app.Environment.IsDevelopment())
+        context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
     await next();
 });
 
-// app.UseHttpsRedirection(); // disabled for local dev
+if (!app.Environment.IsDevelopment())
+    app.UseHttpsRedirection();
 app.UseCors();
-app.UseStaticFiles(); // serve uploaded files from wwwroot (after CORS so headers apply)
+
+// Serve static files EXCEPT /uploads/ — uploaded audio must be accessed
+// through authenticated controller endpoints (DownloadController, StreamController).
+// This prevents unauthenticated direct access to user-uploaded files.
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        if (ctx.File.PhysicalPath?.Contains("uploads") == true)
+        {
+            ctx.Context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            ctx.Context.Response.ContentLength = 0;
+            ctx.Context.Response.Body = Stream.Null;
+        }
+    }
+});
+
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

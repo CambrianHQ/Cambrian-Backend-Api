@@ -62,10 +62,13 @@ public class PaymentService : IPaymentService
         };
     }
 
-    public async Task ProcessAsync(PaymentProcessRequest request)
+    public async Task ProcessAsync(PaymentProcessRequest request, string userId)
     {
         var purchase = await _purchases.GetByIdAsync(Guid.Parse(request.PurchaseId))
                        ?? throw new KeyNotFoundException($"Purchase {request.PurchaseId} not found.");
+
+        if (purchase.BuyerId != userId)
+            throw new UnauthorizedAccessException("You do not own this purchase.");
 
         purchase.Status = "completed";
         purchase.PaymentMethod = request.PaymentMethodId ?? "stripe";
