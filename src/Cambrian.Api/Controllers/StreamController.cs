@@ -31,7 +31,7 @@ public class StreamController : BaseController
             artist = t.Creator?.DisplayName ?? t.Creator?.Email ?? "Unknown",
             genre = t.Genre,
             duration = t.Duration,
-            audioUrl = ResolveAbsoluteUrl(t.AudioUrl)
+            audioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio")
         }).ToList();
 
         return OkResponse(result);
@@ -55,6 +55,33 @@ public class StreamController : BaseController
 
         var streamUrl = _storage.GenerateSignedUrl(track.AudioUrl);
         return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl) });
+    }
+
+    /// <summary>
+    /// Proxy-streams the actual audio bytes for a track.
+    /// This endpoint is what the &lt;audio&gt; element should point at.
+    /// Supports HTTP Range requests for seeking / Safari compatibility.
+    /// </summary>
+    [Authorize]
+    [HttpGet("{trackId}/audio")]
+    public async Task<IActionResult> StreamAudio(string trackId)
+    {
+        if (!Guid.TryParse(trackId, out var id))
+            return ErrorResponse("trackId must be a valid GUID.");
+
+        var track = await _tracks.GetByIdAsync(id);
+        if (track?.AudioUrl is null)
+            return NotFoundResponse("Track not found.");
+
+        var file = await _storage.OpenReadAsync(track.AudioUrl);
+        if (file is null)
+            return NotFoundResponse("Audio file not found.");
+
+        // Let ASP.NET Core handle Range requests (required by Safari / iOS)
+        Response.Headers["Accept-Ranges"] = "bytes";
+        Response.Headers["Cache-Control"] = "private, max-age=3600";
+
+        return File(file.Stream, file.ContentType, enableRangeProcessing: true);
     }
 
     [Authorize]

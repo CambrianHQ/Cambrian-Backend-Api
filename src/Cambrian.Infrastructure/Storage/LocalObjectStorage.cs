@@ -40,6 +40,41 @@ public sealed class LocalObjectStorage : IObjectStorage
         return $"/uploads/{key}";
     }
 
+    public Task<StorageFile?> OpenReadAsync(string key)
+    {
+        // Strip leading /uploads/ if the caller passed the full relative URL
+        var normalised = key;
+        if (normalised.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+            normalised = normalised["/uploads/".Length..];
+
+        var filePath = Path.Combine(_basePath, normalised.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(filePath))
+            return Task.FromResult<StorageFile?>(null);
+
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        var contentType = ext switch
+        {
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".flac" => "audio/flac",
+            ".aac" => "audio/aac",
+            ".ogg" => "audio/ogg",
+            ".m4a" => "audio/mp4",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream",
+        };
+
+        var fs = File.OpenRead(filePath);
+        return Task.FromResult<StorageFile?>(new StorageFile
+        {
+            Stream = fs,
+            ContentType = contentType,
+            Length = fs.Length,
+        });
+    }
+
     public Task DeleteAsync(string key)
     {
         var filePath = Path.Combine(_basePath, key.Replace('/', Path.DirectorySeparatorChar));
