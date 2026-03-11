@@ -109,6 +109,10 @@ coverage/
 ################################################
 
 uploads/
+# Allow demo audio files to be committed for staging/Docker
+!src/Cambrian.Api/wwwroot/uploads/
+!src/Cambrian.Api/wwwroot/uploads/audio/
+!src/Cambrian.Api/wwwroot/uploads/audio/demo*.mp3
 /storage/
 
 ################################################
