@@ -35,22 +35,35 @@ public class CatalogService : ICatalogService
         return track is null ? null : MapToResponse(track);
     }
 
-    private static TrackResponse MapToResponse(Track t) => new()
+    private const decimal PlatformFeeRate = 0.15m;
+
+    private static TrackResponse MapToResponse(Track t)
     {
-        Id = t.Id.ToString(),
-        Title = t.Title,
-        Description = t.Description,
-        Genre = t.Genre ?? "",
-        Price = (decimal)t.Price,
-        NonExclusivePrice = t.NonExclusivePriceCents / 100m,
-        ExclusivePrice = t.ExclusivePriceCents / 100m,
-        ExclusiveSold = t.ExclusiveSold,
-        LicenseType = t.LicenseType,
-        Duration = t.Duration,
-        AudioUrl = t.AudioUrl,
-        CoverArtUrl = t.CoverArtUrl,
-        CreatorId = t.CreatorId,
-        Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
-        CreatedAt = t.CreatedAt,
-    };
+        var nonExPrice = t.NonExclusivePriceCents / 100m;
+        var exPrice = t.ExclusivePriceCents / 100m;
+
+        return new TrackResponse
+        {
+            Id = t.Id.ToString(),
+            Title = t.Title,
+            Description = t.Description,
+            Genre = t.Genre ?? "",
+            Price = (decimal)t.Price,
+            NonExclusivePrice = nonExPrice,
+            ExclusivePrice = exPrice,
+            PlatformFeePercent = PlatformFeeRate,
+            NonExclusivePlatformFee = Math.Round(nonExPrice * PlatformFeeRate, 2),
+            NonExclusiveCreatorEarnings = Math.Round(nonExPrice * (1 - PlatformFeeRate), 2),
+            ExclusivePlatformFee = Math.Round(exPrice * PlatformFeeRate, 2),
+            ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - PlatformFeeRate), 2),
+            ExclusiveSold = t.ExclusiveSold,
+            LicenseType = t.LicenseType,
+            Duration = t.Duration,
+            AudioUrl = t.AudioUrl,
+            CoverArtUrl = t.CoverArtUrl,
+            CreatorId = t.CreatorId,
+            Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
+            CreatedAt = t.CreatedAt,
+        };
+    }
 }
