@@ -16,6 +16,7 @@ public class TrackRepository : ITrackRepository
     public async Task<List<Track>> BrowseAsync()
     {
         return await _db.Tracks
+            .Include(t => t.Creator)
             .Where(t => !t.ExclusiveSold && t.Visibility == "public")
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
@@ -24,6 +25,7 @@ public class TrackRepository : ITrackRepository
     public async Task<List<Track>> BrowseAsync(int page, int pageSize, string? genre, string? search, string? sort = null)
     {
         var query = _db.Tracks
+            .Include(t => t.Creator)
             .Where(t => !t.ExclusiveSold && t.Visibility == "public");
 
         if (!string.IsNullOrWhiteSpace(genre))
