@@ -8,23 +8,27 @@ public interface IPaymentGateway
 {
     /// <summary>
     /// Create a hosted checkout session for a one-time payment and return the redirect URL.
+    /// Stripe Accounts V2 requires an existing Customer — pass customerEmail to find-or-create one.
     /// </summary>
     Task<string> CreateCheckoutSessionAsync(
         int amountInCents,
         string productName,
         string? clientReferenceId = null,
         string? successUrl = null,
-        string? cancelUrl = null);
+        string? cancelUrl = null,
+        string? customerEmail = null);
 
     /// <summary>
     /// Create a hosted checkout session for a recurring subscription and return the redirect URL.
+    /// Stripe Accounts V2 requires an existing Customer — pass customerEmail to find-or-create one.
     /// </summary>
     Task<string> CreateSubscriptionCheckoutAsync(
         int amountInCents,
         string planName,
         string clientReferenceId,
         string successUrl,
-        string cancelUrl);
+        string cancelUrl,
+        string? customerEmail = null);
 
     /// <summary>
     /// Retrieve a checkout session by its ID and return its status + metadata.

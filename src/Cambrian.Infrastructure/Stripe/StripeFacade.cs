@@ -19,11 +19,13 @@ public class StripeFacade : IPaymentGateway
         string productName,
         string? clientReferenceId = null,
         string? successUrl = null,
-        string? cancelUrl = null)
+        string? cancelUrl = null,
+        string? customerEmail = null)
     {
         var options = new SessionCreateOptions
         {
             Mode = "payment",
+            Customer = customerEmail != null ? await FindOrCreateCustomerAsync(customerEmail) : null,
             SuccessUrl = successUrl ?? $"{_frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
             CancelUrl = cancelUrl ?? $"{_frontendUrl}/checkout/cancel",
             ClientReferenceId = clientReferenceId,
@@ -56,11 +58,13 @@ public class StripeFacade : IPaymentGateway
         string planName,
         string clientReferenceId,
         string successUrl,
-        string cancelUrl)
+        string cancelUrl,
+        string? customerEmail = null)
     {
         var options = new SessionCreateOptions
         {
             Mode = "subscription",
+            Customer = customerEmail != null ? await FindOrCreateCustomerAsync(customerEmail) : null,
             SuccessUrl = successUrl,
             CancelUrl = cancelUrl,
             ClientReferenceId = clientReferenceId,
@@ -124,6 +128,31 @@ public class StripeFacade : IPaymentGateway
         {
             return null;
         }
+    }
+
+    // ── Helpers ──
+
+    /// <summary>
+    /// Find an existing Stripe Customer by email, or create one if none exists.
+    /// Required by Stripe Accounts V2 which does not support checkout without a customer.
+    /// </summary>
+    private static async Task<string> FindOrCreateCustomerAsync(string email)
+    {
+        var customerService = new CustomerService();
+        var existing = await customerService.ListAsync(new CustomerListOptions
+        {
+            Email = email,
+            Limit = 1
+        });
+
+        if (existing.Data.Count > 0)
+            return existing.Data[0].Id;
+
+        var customer = await customerService.CreateAsync(new CustomerCreateOptions
+        {
+            Email = email
+        });
+        return customer.Id;
     }
 
     // ── Stripe Connect ──

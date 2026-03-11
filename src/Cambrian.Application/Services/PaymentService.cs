@@ -17,7 +17,7 @@ public class PaymentService : IPaymentService
         _purchases = purchases;
     }
 
-    public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request)
+    public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request, string? customerEmail = null)
     {
         if (string.IsNullOrWhiteSpace(request.TrackId))
             throw new ArgumentException("TrackId is required.");
@@ -30,7 +30,8 @@ public class PaymentService : IPaymentService
         var url = await _gateway.CreateCheckoutSessionAsync(
             amountCents,
             track.Title,
-            clientReferenceId: request.ClientReferenceId ?? request.TrackId);
+            clientReferenceId: request.ClientReferenceId ?? request.TrackId,
+            customerEmail: customerEmail);
 
         return new PaymentCheckoutResponse { CheckoutUrl = url };
     }
