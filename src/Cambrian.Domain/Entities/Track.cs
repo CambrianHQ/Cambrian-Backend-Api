@@ -18,6 +18,8 @@ public class Track
 
     public string? AudioUrl { get; set; }
 
+    public string? CoverArtUrl { get; set; }
+
     public int NonExclusivePriceCents { get; set; }
 
     public int ExclusivePriceCents { get; set; }

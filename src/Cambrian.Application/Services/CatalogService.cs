@@ -48,6 +48,7 @@ public class CatalogService : ICatalogService
         LicenseType = t.LicenseType,
         Duration = t.Duration,
         AudioUrl = t.AudioUrl,
+        CoverArtUrl = t.CoverArtUrl,
         CreatorId = t.CreatorId,
         Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
         CreatedAt = t.CreatedAt,
