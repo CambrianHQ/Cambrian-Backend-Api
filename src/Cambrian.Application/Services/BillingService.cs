@@ -28,7 +28,7 @@ public sealed class BillingService : IBillingService
         _frontendUrl = ResolveFrontendUrl(configuration);
     }
 
-    public async Task<CheckoutResponse> CreateCheckoutAsync(BillingCheckoutRequest request, string userId)
+    public async Task<CheckoutResponse> CreateCheckoutAsync(BillingCheckoutRequest request, string userId, string? userEmail = null)
     {
         var tier = request.Tier?.ToLowerInvariant() ?? "";
         var (amountCents, planName) = tier switch
@@ -49,7 +49,8 @@ public sealed class BillingService : IBillingService
             planName,
             clientReferenceId: $"{userId}:subscription:{tier}",
             successUrl,
-            cancelUrl);
+            cancelUrl,
+            customerEmail: userEmail);
 
         return new CheckoutResponse { CheckoutUrl = url };
     }

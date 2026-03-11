@@ -4,7 +4,7 @@ namespace Cambrian.Application.Interfaces;
 
 public interface IBillingService
 {
-    Task<CheckoutResponse> CreateCheckoutAsync(BillingCheckoutRequest request, string userId);
+    Task<CheckoutResponse> CreateCheckoutAsync(BillingCheckoutRequest request, string userId, string? userEmail = null);
 
     Task<BillingStatusResponse> GetStatusAsync(string userId);
 

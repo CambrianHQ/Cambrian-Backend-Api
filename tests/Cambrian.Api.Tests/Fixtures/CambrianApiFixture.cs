@@ -171,7 +171,8 @@ internal sealed class FakePaymentGateway : IPaymentGateway
         string productName,
         string? clientReferenceId = null,
         string? successUrl = null,
-        string? cancelUrl = null)
+        string? cancelUrl = null,
+        string? customerEmail = null)
     {
         // Return a deterministic fake URL so checkout tests can verify redirects
         return Task.FromResult($"https://checkout.stripe.com/fake?ref={clientReferenceId}");
@@ -182,7 +183,8 @@ internal sealed class FakePaymentGateway : IPaymentGateway
         string planName,
         string clientReferenceId,
         string successUrl,
-        string cancelUrl)
+        string cancelUrl,
+        string? customerEmail = null)
     {
         return Task.FromResult($"https://checkout.stripe.com/fake-sub?plan={planName}&ref={clientReferenceId}");
     }
