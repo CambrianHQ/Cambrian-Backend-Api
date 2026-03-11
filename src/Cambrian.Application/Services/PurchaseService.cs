@@ -59,6 +59,14 @@ public class PurchaseService : IPurchaseService
         if (existing.Any(p => p.TrackId == trackId))
             throw new InvalidOperationException("You already own this track.");
 
+        // Atomically mark exclusive BEFORE creating records to prevent race conditions.
+        // If two concurrent exclusive requests arrive, only one will succeed here.
+        if (request.LicenseType == "exclusive")
+        {
+            if (!await _tracks.TryMarkExclusiveSoldAsync(trackId))
+                throw new InvalidOperationException("This track has already been sold under an exclusive license.");
+        }
+
         // Resolve price in cents based on license type
         var amountCents = (request.LicenseType ?? "non-exclusive") switch
         {
@@ -92,13 +100,6 @@ public class PurchaseService : IPurchaseService
             AudioUrl = track.AudioUrl,
             SavedAt = DateTime.UtcNow
         });
-
-        // Mark exclusive if applicable
-        if (request.LicenseType == "exclusive")
-        {
-            track.ExclusiveSold = true;
-            await _tracks.UpdateAsync(track);
-        }
 
         // Auto-create invoice
         var invoice = new Invoice

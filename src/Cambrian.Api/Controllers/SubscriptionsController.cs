@@ -37,6 +37,17 @@ public class SubscriptionsController : BaseController
     public async Task<IActionResult> Update(UpdateSubscriptionRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        // Paid plan upgrades must go through /billing/checkout → /billing/confirm
+        // to ensure Stripe payment is verified before activation.
+        if (request.Plan is "paid" or "creator")
+        {
+            // Allow re-sync when user is already on this plan (e.g., tier mismatch fix)
+            var current = await _subscriptions.GetCurrentAsync(userId);
+            if (current.Plan != request.Plan)
+                return StatusCode(402, Common.ApiResponse.Fail("Paid plan upgrades require checkout. Use POST /billing/checkout."));
+        }
+
         var result = await _subscriptions.UpdateAsync(request, userId);
         return OkResponse(result, "Subscription updated.");
     }

@@ -133,6 +133,7 @@ public sealed class PurchaseServiceTests
         var trackId = Guid.NewGuid();
         var track = MakeTrack(trackId);
         _tracks.GetByIdAsync(trackId).Returns(track);
+        _tracks.TryMarkExclusiveSoldAsync(trackId).Returns(true);
         _purchases.GetByBuyerIdAsync("user-1").Returns(new List<Purchase>());
 
         var request = new PurchaseCreateRequest
@@ -144,8 +145,7 @@ public sealed class PurchaseServiceTests
 
         await _sut.CreateAsync(request, "user-1");
 
-        Assert.True(track.ExclusiveSold);
-        await _tracks.Received(1).UpdateAsync(track);
+        await _tracks.Received(1).TryMarkExclusiveSoldAsync(trackId);
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public sealed class PurchaseServiceTests
         await _sut.CreateAsync(request, "user-1");
 
         Assert.False(track.ExclusiveSold);
-        await _tracks.DidNotReceive().UpdateAsync(Arg.Any<Track>());
+        await _tracks.DidNotReceive().TryMarkExclusiveSoldAsync(Arg.Any<Guid>());
     }
 
     [Fact]

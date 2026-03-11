@@ -37,6 +37,11 @@ public class StreamController : BaseController
         return OkResponse(result);
     }
 
+    /// <summary>
+    /// Returns a streamable URL for the given track. Open to all authenticated users
+    /// (no purchase check) by design — this is the marketplace discovery/preview model.
+    /// Full-quality downloads require a verified purchase (see DownloadController).
+    /// </summary>
     [Authorize]
     [HttpGet("{trackId}")]
     public async Task<IActionResult> Stream(string trackId)
