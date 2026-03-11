@@ -46,7 +46,8 @@ public class PaymentsController : BaseController
     [HttpPost("process")]
     public async Task<IActionResult> Process(PaymentProcessRequest request)
     {
-        await _payments.ProcessAsync(request);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await _payments.ProcessAsync(request, userId);
         return MessageResponse("Payment processed.");
     }
 
@@ -60,6 +61,7 @@ public class PaymentsController : BaseController
         return CreatedResponse(result, "Purchase completed.");
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost("/purchases/credit-creator")]
     public async Task<IActionResult> CreditCreator(CreditCreatorRequest request)
     {

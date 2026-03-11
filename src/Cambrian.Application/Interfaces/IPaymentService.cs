@@ -10,5 +10,5 @@ public interface IPaymentService
 
     Task<PaymentResultResponse> GetResultAsync(string? status, string? trackId);
 
-    Task ProcessAsync(PaymentProcessRequest request);
+    Task ProcessAsync(PaymentProcessRequest request, string userId);
 }
