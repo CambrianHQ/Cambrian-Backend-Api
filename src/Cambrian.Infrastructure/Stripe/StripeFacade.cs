@@ -21,20 +21,9 @@ public class StripeFacade : IPaymentGateway
         string? successUrl = null,
         string? cancelUrl = null)
     {
-        // Stripe Accounts V2 requires a Customer for test-mode Checkout sessions
-        var customerService = new CustomerService();
-        var customer = await customerService.CreateAsync(new CustomerCreateOptions
-        {
-            Metadata = new Dictionary<string, string>
-            {
-                { "cambrian_ref", clientReferenceId ?? "" }
-            }
-        });
-
         var options = new SessionCreateOptions
         {
             Mode = "payment",
-            Customer = customer.Id,
             SuccessUrl = successUrl ?? $"{_frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
             CancelUrl = cancelUrl ?? $"{_frontendUrl}/checkout/cancel",
             ClientReferenceId = clientReferenceId,
@@ -69,20 +58,9 @@ public class StripeFacade : IPaymentGateway
         string successUrl,
         string cancelUrl)
     {
-        // Stripe Accounts V2 requires a Customer object for Checkout sessions in test mode
-        var customerService = new CustomerService();
-        var customer = await customerService.CreateAsync(new CustomerCreateOptions
-        {
-            Metadata = new Dictionary<string, string>
-            {
-                { "cambrian_user_id", clientReferenceId }
-            }
-        });
-
         var options = new SessionCreateOptions
         {
             Mode = "subscription",
-            Customer = customer.Id,
             SuccessUrl = successUrl,
             CancelUrl = cancelUrl,
             ClientReferenceId = clientReferenceId,
