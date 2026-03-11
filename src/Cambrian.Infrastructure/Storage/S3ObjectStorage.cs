@@ -59,6 +59,24 @@ public sealed class S3ObjectStorage : IObjectStorage
         return _client.GetPreSignedURL(request);
     }
 
+    public async Task<StorageFile?> OpenReadAsync(string key)
+    {
+        try
+        {
+            var response = await _client.GetObjectAsync(_options.Bucket, key);
+            return new StorageFile
+            {
+                Stream = response.ResponseStream,
+                ContentType = response.Headers.ContentType ?? "application/octet-stream",
+                Length = response.ContentLength,
+            };
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
     public async Task DeleteAsync(string key)
     {
         await _client.DeleteObjectAsync(_options.Bucket, key);

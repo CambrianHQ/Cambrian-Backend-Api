@@ -53,7 +53,9 @@ public class CatalogController : BaseController
         var result = await _catalog.GetTrackAsync(trackId);
         if (result is null)
             return NotFoundResponse($"Track '{trackId}' not found.");
-        result.AudioUrl = ResolveAbsoluteUrl(result.AudioUrl);
+        result.AudioUrl = ResolveAbsoluteUrl($"/stream/{result.Id}/audio");
+        if (!string.IsNullOrEmpty(result.CoverArtUrl))
+            result.CoverArtUrl = ResolveAbsoluteUrl(result.CoverArtUrl);
         return OkResponse(result);
     }
 
@@ -81,7 +83,13 @@ public class CatalogController : BaseController
     private void ResolveTrackUrls(IEnumerable<Cambrian.Application.DTOs.Catalog.TrackResponse> tracks)
     {
         foreach (var t in tracks)
-            t.AudioUrl = ResolveAbsoluteUrl(t.AudioUrl);
+        {
+            // Point audioUrl at the authenticated streaming proxy so browsers
+            // get the correct Content-Type, Range support, and CORS headers.
+            t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
+            if (!string.IsNullOrEmpty(t.CoverArtUrl))
+                t.CoverArtUrl = ResolveAbsoluteUrl(t.CoverArtUrl);
+        }
     }
 
     [Authorize(Roles = "Creator")]

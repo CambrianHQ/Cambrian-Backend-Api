@@ -56,6 +56,8 @@ public sealed class PayoutServiceTests
     {
         var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
         _users.FindByIdAsync("c1").Returns(user);
+        _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
+            { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
         _wallet.GetBalanceAsync("c1").Returns(100L); // 100 cents = $1.00
         _gateway.CreateTransferAsync("acct_1", 1L, Arg.Any<string>())
             .Returns("tr_1");
@@ -88,6 +90,8 @@ public sealed class PayoutServiceTests
     {
         var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
         _users.FindByIdAsync("c1").Returns(user);
+        _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
+            { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
         _wallet.GetBalanceAsync("c1").Returns(1000L); // $10.00
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -103,6 +107,8 @@ public sealed class PayoutServiceTests
     {
         var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
         _users.FindByIdAsync("c1").Returns(user);
+        _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
+            { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
         _wallet.GetBalanceAsync("c1").Returns(10000L); // $100
         _gateway.CreateTransferAsync("acct_1", 5000L, Arg.Any<string>())
             .Returns("tr_123");
@@ -127,6 +133,8 @@ public sealed class PayoutServiceTests
     {
         var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
         _users.FindByIdAsync("c1").Returns(user);
+        _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
+            { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
         _wallet.GetBalanceAsync("c1").Returns(10000L);
         _gateway.CreateTransferAsync("acct_1", Arg.Any<long>(), Arg.Any<string>())
             .Throws(new Exception("Stripe transfer failed"));
