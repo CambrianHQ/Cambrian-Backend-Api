@@ -73,12 +73,12 @@ services:
         value: "100"
       # Frontend CORS
       - key: App__FrontendUrl
-        value: https://cambrian-test.vercel.app
+        value: https://cambrian-amber.vercel.app
       - key: App__CorsOrigins
-        value: "https://cambrian-test.vercel.app,https://cambrian-staging.vercel.app"
+        value: "https://cambrian-amber.vercel.app,https://cambrian-test.vercel.app,https://cambrian-staging.vercel.app"
       # Vercel preview deployment CORS wildcard
       - key: App__VercelProjectSlug
-        value: cambrian-test
+        value: cambrian-amber
     buildFilter:
       paths:
         - src/**
