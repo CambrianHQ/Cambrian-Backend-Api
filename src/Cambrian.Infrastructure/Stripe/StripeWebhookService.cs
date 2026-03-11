@@ -36,6 +36,8 @@ public class StripeWebhookService : IWebhookService
         string? eventId;
         string? clientReferenceId;
         long? amountTotal;
+        string? stripeSubscriptionId = null;
+        string? stripeCustomerId = null;
 
         // ── Verified path: both secret and signature present ──
         if (!string.IsNullOrEmpty(_webhookSecret) && !string.IsNullOrEmpty(signature))
@@ -52,8 +54,20 @@ public class StripeWebhookService : IWebhookService
                 clientReferenceId = session?.ClientReferenceId;
                 amountTotal = session?.AmountTotal;
             }
+            else if (eventType == "customer.subscription.deleted")
+            {
+                var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
+                stripeSubscriptionId = sub?.Id;
+                stripeCustomerId = sub?.CustomerId;
+            }
+            else if (eventType == "invoice.payment_failed")
+            {
+                var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
+                stripeSubscriptionId = invoice?.SubscriptionId;
+                stripeCustomerId = invoice?.CustomerId;
+            }
 
-            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal);
+            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId);
             _logger.LogInformation("Stripe webhook received (verified): {EventType}", eventType);
             return;
         }
@@ -88,15 +102,21 @@ public class StripeWebhookService : IWebhookService
             clientReferenceId = dataObj.TryGetProperty("client_reference_id", out var cri) ? cri.GetString() : null;
             amountTotal = dataObj.TryGetProperty("amount_total", out var at) ? at.GetInt64() : null;
         }
+        else if (eventType is "customer.subscription.deleted" or "invoice.payment_failed")
+        {
+            var dataObj = root.GetProperty("data").GetProperty("object");
+            stripeCustomerId = dataObj.TryGetProperty("customer", out var cust) ? cust.GetString() : null;
+        }
 
-        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal);
+        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId);
     }
 
     private async Task ProcessEventAsync(
         string? eventId,
         string eventType,
         string? clientReferenceId,
-        long? amountTotal)
+        long? amountTotal,
+        string? stripeCustomerId)
     {
         if (string.IsNullOrWhiteSpace(eventId))
         {
@@ -107,6 +127,14 @@ public class StripeWebhookService : IWebhookService
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
                 await HandleCheckoutCompleted(clientReferenceId, amountTotal);
+            }
+            else if (eventType == "customer.subscription.deleted")
+            {
+                await HandleSubscriptionDeleted(stripeCustomerId);
+            }
+            else if (eventType == "invoice.payment_failed")
+            {
+                await HandleInvoicePaymentFailed(stripeCustomerId);
             }
 
             return;
@@ -139,6 +167,14 @@ public class StripeWebhookService : IWebhookService
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
                 await HandleCheckoutCompleted(clientReferenceId, amountTotal);
+            }
+            else if (eventType == "customer.subscription.deleted")
+            {
+                await HandleSubscriptionDeleted(stripeCustomerId);
+            }
+            else if (eventType == "invoice.payment_failed")
+            {
+                await HandleInvoicePaymentFailed(stripeCustomerId);
             }
 
             await _db.SaveChangesAsync();
@@ -349,5 +385,43 @@ public class StripeWebhookService : IWebhookService
         _logger.LogInformation(
             "Subscription activated: User={UserId} Plan={Plan}",
             userId, tier);
+    }
+
+    /// <summary>
+    /// Handle customer.subscription.deleted — downgrade user to free tier.
+    /// Stripe sends this when a subscription is cancelled (end of billing period or immediate).
+    /// NOTE: We cannot reliably match Stripe customer ID to our user yet.
+    /// A future improvement is to store StripeCustomerId on ApplicationUser during checkout.
+    /// For now, this logs the event so it can be handled manually if needed.
+    /// </summary>
+    private async Task HandleSubscriptionDeleted(string? stripeCustomerId)
+    {
+        if (string.IsNullOrEmpty(stripeCustomerId))
+        {
+            _logger.LogWarning("customer.subscription.deleted received without customer ID");
+            return;
+        }
+
+        _logger.LogWarning(
+            "Stripe subscription deleted for customer {CustomerId}. " +
+            "Manual review may be needed to downgrade the user's tier.",
+            stripeCustomerId);
+
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Handle invoice.payment_failed — log the failure.
+    /// Stripe will retry payment automatically according to its retry schedule.
+    /// If all retries fail, Stripe sends customer.subscription.deleted.
+    /// </summary>
+    private async Task HandleInvoicePaymentFailed(string? stripeCustomerId)
+    {
+        _logger.LogWarning(
+            "Invoice payment failed for Stripe customer {CustomerId}. " +
+            "Stripe will retry or cancel the subscription automatically.",
+            stripeCustomerId ?? "unknown");
+
+        await Task.CompletedTask;
     }
 }

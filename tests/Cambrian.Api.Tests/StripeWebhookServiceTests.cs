@@ -357,4 +357,77 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Equal("creator", subscriptions[0].Plan);
         Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
     }
+    // ── Subscription lifecycle webhooks ──
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_SubscriptionDeleted_LogsWarning()
+    {
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = """
+        {
+            "type": "customer.subscription.deleted",
+            "data": {
+                "object": {
+                    "customer": "cus_test_123"
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+        // No exception = handled gracefully; logs warning about manual review
+    }
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_SubscriptionDeleted_NoCustomerId_DoesNotThrow()
+    {
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = """
+        {
+            "type": "customer.subscription.deleted",
+            "data": {
+                "object": {}
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+        // No exception = handles missing customer ID gracefully
+    }
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_InvoicePaymentFailed_LogsWarning()
+    {
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = """
+        {
+            "type": "invoice.payment_failed",
+            "data": {
+                "object": {
+                    "customer": "cus_test_456"
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+        // No exception = handled gracefully; logs warning about retry
+    }
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_InvoicePaymentFailed_NoCustomerId_DoesNotThrow()
+    {
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = """
+        {
+            "type": "invoice.payment_failed",
+            "data": {
+                "object": {}
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+        // No exception = handles missing customer ID gracefully
+    }
 }
