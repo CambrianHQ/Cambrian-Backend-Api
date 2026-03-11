@@ -61,8 +61,10 @@ public class StreamController : BaseController
     /// Proxy-streams the actual audio bytes for a track.
     /// This endpoint is what the &lt;audio&gt; element should point at.
     /// Supports HTTP Range requests for seeking / Safari compatibility.
+    /// Open to anonymous users — this is the marketplace discovery/preview model.
+    /// Full-quality downloads require a verified purchase (see DownloadController).
     /// </summary>
-    [Authorize]
+    [AllowAnonymous]
     [HttpGet("{trackId}/audio")]
     public async Task<IActionResult> StreamAudio(string trackId)
     {
