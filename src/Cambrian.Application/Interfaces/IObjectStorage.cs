@@ -10,5 +10,24 @@ public interface IObjectStorage
 
     string GenerateSignedUrl(string key);
 
+    /// <summary>
+    /// Open a readable stream for the stored object.
+    /// Returns null when the object does not exist (local) or cannot be opened.
+    /// </summary>
+    Task<StorageFile?> OpenReadAsync(string key);
+
     Task DeleteAsync(string key);
+}
+
+/// <summary>
+/// Wrapper for a file retrieved from object storage.
+/// Callers must dispose the <see cref="Stream"/> when finished.
+/// </summary>
+public sealed class StorageFile : IDisposable
+{
+    public Stream Stream { get; init; } = null!;
+    public string ContentType { get; init; } = "application/octet-stream";
+    public long? Length { get; init; }
+
+    public void Dispose() => Stream.Dispose();
 }

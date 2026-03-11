@@ -48,6 +48,9 @@ public class BaseController : ControllerBase
             return url ?? "";
         if (Uri.TryCreate(url, UriKind.Absolute, out _))
             return url;
+        // Request may be null in unit tests — return relative path as-is
+        if (Request is null)
+            return url;
         return $"{Request.Scheme}://{Request.Host}{url}";
     }
 }
