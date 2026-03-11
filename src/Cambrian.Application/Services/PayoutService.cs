@@ -86,6 +86,13 @@ public class PayoutService : IPayoutService
         if (string.IsNullOrEmpty(user.StripeAccountId))
             throw new InvalidOperationException("You must connect a Stripe account before requesting a payout.");
 
+        // Verify the Connect account has completed onboarding
+        var connectStatus = await _gateway.GetConnectAccountStatusAsync(user.StripeAccountId);
+        if (!connectStatus.ChargesEnabled || !connectStatus.PayoutsEnabled)
+            throw new InvalidOperationException(
+                "Your Stripe account onboarding is incomplete. " +
+                "Please finish setting up your account before requesting a payout.");
+
         // Verify available wallet balance covers the request
         var balanceCents = await _wallet.GetBalanceAsync(creatorId);
         var requestCents = (long)Math.Round(request.Amount * 100, MidpointRounding.AwayFromZero);
