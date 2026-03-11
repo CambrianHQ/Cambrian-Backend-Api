@@ -3,18 +3,30 @@
 #
 # Deploy:
 #   1. Push to default branch
-#   2. Render Dashboard → Blueprints → New Blueprint Instance
-#   3. Select this repo → confirm
+#   2. Render Dashboard -> Blueprints -> New Blueprint Instance
+#   3. Select this repo -> confirm
 
 databases:
-  - name: cambrian-db
+  # -- Staging database -----------------------------------------------
+  - name: cambrian-db-staging
     plan: free
     region: oregon
-    databaseName: cambrian
+    databaseName: cambrian_staging
     user: cambrian
     postgresMajorVersion: "16"
 
+  # -- Production database (uncomment when ready) ---------------------
+  # - name: cambrian-db-prod
+  #   plan: starter          # paid plan for persistent storage
+  #   region: oregon
+  #   databaseName: cambrian_prod
+  #   user: cambrian
+  #   postgresMajorVersion: "16"
+
 services:
+  # ====================================================================
+  #  STAGING API
+  # ====================================================================
   - type: web
     name: cambrian-api-staging
     runtime: docker
@@ -25,46 +37,117 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
-      # Render injects PORT — Dockerfile entrypoint uses it
+      # Render injects PORT -- Dockerfile entrypoint uses it
       - key: PORT
         value: "10000"
       # .NET environment
       - key: ASPNETCORE_ENVIRONMENT
         value: Staging
-      # Database — paste the External Database URL from Render PostgreSQL dashboard
-      # Free tier has no private networking, so we use the external URL manually
-      - key: ConnectionStrings__DefaultConnection
-        sync: false
-      # JWT — generate a strong secret and paste it into the Render dashboard
+      # Database -- Render auto-populates from the linked database
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cambrian-db-staging
+          property: connectionString
+      # JWT -- generate a strong >=32-char secret in the Render dashboard
       - key: Jwt__Key
-        sync: false   # must be set manually in dashboard
+        sync: false
       - key: Jwt__Issuer
         value: cambrian-api
       - key: Jwt__Audience
         value: cambrian-client
-      # Stripe (optional for staging — leave blank to skip payments)
+      # Stripe -- test keys for staging
       - key: Stripe__SecretKey
         sync: false
       - key: Stripe__WebhookSecret
         sync: false
-      # Object storage — default to local for staging
+      # Object storage -- local for now; switch to S3/R2 when ready
       - key: Storage__Provider
         value: local
-      # Email — console logger for staging
+      # Email -- console logger for staging
       - key: Email__Provider
         value: console
-      # Rate limiting — relaxed for staging
+      # Rate limiting -- relaxed for staging
       - key: RateLimiting__GlobalPermitLimit
         value: "500"
       - key: RateLimiting__AuthPermitLimit
         value: "100"
-      # CORS — allow the Vercel staging frontend
+      # Frontend CORS
       - key: App__FrontendUrl
         value: https://cambrian-test.vercel.app
       - key: App__CorsOrigins
-        value: "https://cambrian-test.vercel.app,https://cambrian-staging.vercel.app,https://cambrianmusic.com,https://www.cambrianmusic.com"
+        value: "https://cambrian-test.vercel.app,https://cambrian-staging.vercel.app"
+      # Vercel preview deployment CORS wildcard
+      - key: App__VercelProjectSlug
+        value: cambrian-test
     buildFilter:
       paths:
         - src/**
         - Dockerfile
         - Cambrian.sln
+
+  # ====================================================================
+  #  PRODUCTION API  (uncomment when ready to go live)
+  # ====================================================================
+  # - type: web
+  #   name: cambrian-api
+  #   runtime: docker
+  #   repo: https://github.com/loganbryanx/Cambrian-Backend-Api
+  #   branch: main
+  #   plan: starter
+  #   region: oregon
+  #   dockerfilePath: ./Dockerfile
+  #   healthCheckPath: /health
+  #   envVars:
+  #     - key: PORT
+  #       value: "10000"
+  #     - key: ASPNETCORE_ENVIRONMENT
+  #       value: Production
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: cambrian-db-prod
+  #         property: connectionString
+  #     - key: Jwt__Key
+  #       sync: false
+  #     - key: Jwt__Issuer
+  #       value: cambrian-api
+  #     - key: Jwt__Audience
+  #       value: cambrian-client
+  #     - key: Stripe__SecretKey
+  #       sync: false
+  #     - key: Stripe__WebhookSecret
+  #       sync: false
+  #     - key: Storage__Provider
+  #       sync: false           # set to s3 or r2 and fill keys below
+  #     - key: Storage__Endpoint
+  #       sync: false
+  #     - key: Storage__Bucket
+  #       sync: false
+  #     - key: Storage__AccessKey
+  #       sync: false
+  #     - key: Storage__SecretKey
+  #       sync: false
+  #     - key: Email__Provider
+  #       value: smtp
+  #     - key: Email__SmtpHost
+  #       sync: false
+  #     - key: Email__SmtpPort
+  #       value: "587"
+  #     - key: Email__SmtpUser
+  #       sync: false
+  #     - key: Email__SmtpPass
+  #       sync: false
+  #     - key: RateLimiting__GlobalPermitLimit
+  #       value: "100"
+  #     - key: RateLimiting__AuthPermitLimit
+  #       value: "10"
+  #     - key: App__FrontendUrl
+  #       value: https://cambrianmusic.com
+  #     - key: App__CorsOrigins
+  #       value: "https://cambrianmusic.com,https://www.cambrianmusic.com"
+  #     - key: App__VercelProjectSlug
+  #       value: ""
+  #   buildFilter:
+  #     paths:
+  #       - src/**
+  #       - Dockerfile
+  #       - Cambrian.sln
