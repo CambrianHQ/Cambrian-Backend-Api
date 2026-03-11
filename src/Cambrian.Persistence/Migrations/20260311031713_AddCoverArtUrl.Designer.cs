@@ -3,6 +3,7 @@ using System;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cambrian.Persistence.Migrations
 {
     [DbContext(typeof(CambrianDbContext))]
-    partial class CambrianDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260311031713_AddCoverArtUrl")]
+    partial class AddCoverArtUrl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

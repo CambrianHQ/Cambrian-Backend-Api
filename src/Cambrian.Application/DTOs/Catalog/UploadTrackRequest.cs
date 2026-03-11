@@ -8,6 +8,9 @@ public class UploadTrackRequest
     [Required]
     public IFormFile Audio { get; set; } = null!;
 
+    /// <summary>Optional cover art image (JPEG, PNG, WebP; max 10 MB).</summary>
+    public IFormFile? CoverArt { get; set; }
+
     [Required]
     [MaxLength(200)]
     public string Title { get; set; } = string.Empty;

@@ -24,6 +24,8 @@ public class TrackResponse
 
     public string? AudioUrl { get; set; }
 
+    public string? CoverArtUrl { get; set; }
+
     public string CreatorId { get; set; } = string.Empty;
 
     public string? Artist { get; set; }
