@@ -168,13 +168,17 @@ var corsOrigins = builder.Configuration.GetSection("App:CorsOrigins").Value?
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     ?? Array.Empty<string>();
 var frontendUrl = builder.Configuration["App:FrontendUrl"] ?? "";
-var defaultOrigins = new[] { "http://localhost:5173", "http://localhost:5174", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173", "http://127.0.0.1:5174" };
+// Only include localhost origins during development
+var defaultOrigins = builder.Environment.IsDevelopment()
+    ? new[] { "http://localhost:5173", "http://localhost:5174", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173", "http://127.0.0.1:5174" }
+    : Array.Empty<string>();
 var allOrigins = defaultOrigins
     .Concat(corsOrigins)
     .Concat(string.IsNullOrWhiteSpace(frontendUrl) ? Array.Empty<string>() : new[] { frontendUrl })
     .Where(o => !string.IsNullOrWhiteSpace(o))
     .Distinct()
     .ToArray();
+Console.WriteLine($"[Startup] CORS origins: {string.Join(", ", allOrigins)}");
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -290,8 +294,8 @@ app.Use(async (context, next) =>
     await next();
 });
 
-if (!app.Environment.IsDevelopment())
-    app.UseHttpsRedirection();
+// HTTPS handled by Render/Vercel load balancers - no redirect needed from app
+// app.UseHttpsRedirection();
 app.UseCors();
 
 // Serve static files — block direct access to uploaded audio (tracks/)
