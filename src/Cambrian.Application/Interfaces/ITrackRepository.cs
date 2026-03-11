@@ -17,4 +17,11 @@ public interface ITrackRepository
     Task UpdateAsync(Track track);
 
     Task DeleteAsync(Guid id);
+
+    /// <summary>
+    /// Atomically set ExclusiveSold = true only if it is currently false.
+    /// Returns true if the flag was set, false if the track was already sold exclusively.
+    /// Prevents race conditions on concurrent exclusive purchase attempts.
+    /// </summary>
+    Task<bool> TryMarkExclusiveSoldAsync(Guid trackId);
 }

@@ -83,4 +83,13 @@ public class TrackRepository : ITrackRepository
             await _db.SaveChangesAsync();
         }
     }
+
+    public async Task<bool> TryMarkExclusiveSoldAsync(Guid trackId)
+    {
+        // Atomic UPDATE with WHERE clause — only succeeds if ExclusiveSold is currently false.
+        // Prevents race conditions on concurrent exclusive purchase attempts.
+        var affected = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"Tracks\" SET \"ExclusiveSold\" = true WHERE \"Id\" = {trackId} AND \"ExclusiveSold\" = false");
+        return affected > 0;
+    }
 }

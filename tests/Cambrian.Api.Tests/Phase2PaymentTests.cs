@@ -118,13 +118,13 @@ public sealed class Phase2PaymentTests
     public async Task WalletService_WithdrawAsync_CreatesNegativeTransaction()
     {
         var repo = Substitute.For<IWalletRepository>();
-        repo.GetBalanceAsync("user-1").Returns(10000L); // $100.00
+        repo.AtomicWithdrawAsync("user-1", 2500, Arg.Any<string>()).Returns(true);
         var sut = new WalletService(repo);
 
         await sut.WithdrawAsync(25.00, "user-1");
 
-        await repo.Received(1).AddTransactionAsync(
-            Arg.Is<WalletTransaction>(t => t.AmountCents == -2500 && t.Type == "withdrawal"));
+        await repo.Received(1).AtomicWithdrawAsync("user-1", 2500,
+            Arg.Is<string>(d => d.Contains("25.00")));
     }
 
     // ── Purchase.AmountCents Tests ──
@@ -183,6 +183,7 @@ public sealed class Phase2PaymentTests
             CreatorId = "creator-1"
         });
         purchases.GetByBuyerIdAsync("buyer-1").Returns(new List<Purchase>());
+        tracks.TryMarkExclusiveSoldAsync(trackId).Returns(true);
 
         var sut = new PurchaseService(purchases, tracks, library, invoices,
             gateway, Substitute.For<Microsoft.Extensions.Logging.ILogger<PurchaseService>>());

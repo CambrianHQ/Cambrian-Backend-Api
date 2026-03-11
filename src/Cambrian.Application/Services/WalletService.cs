@@ -42,24 +42,15 @@ public class WalletService : IWalletService
         if (amount <= 0)
             throw new ArgumentException("Withdrawal amount must be greater than zero.");
 
-        var balanceCents = await _wallet.GetBalanceAsync(userId);
         var amountCents = (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero);
 
         if (amountCents <= 0)
             throw new ArgumentException("Withdrawal amount must be greater than zero.");
 
-        if (amountCents > balanceCents)
+        // Use atomic withdraw to prevent race condition (double-withdrawal)
+        var success = await _wallet.AtomicWithdrawAsync(userId, amountCents, $"Withdrawal of ${amount:F2}");
+
+        if (!success)
             throw new InvalidOperationException("Insufficient balance.");
-
-        var txn = new WalletTransaction
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            AmountCents = -amountCents,
-            Type = "withdrawal",
-            Description = $"Withdrawal of ${amount:F2}"
-        };
-
-        await _wallet.AddTransactionAsync(txn);
     }
 }
