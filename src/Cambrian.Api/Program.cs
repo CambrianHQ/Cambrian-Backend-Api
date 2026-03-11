@@ -168,7 +168,7 @@ var corsOrigins = builder.Configuration.GetSection("App:CorsOrigins").Value?
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     ?? Array.Empty<string>();
 var frontendUrl = builder.Configuration["App:FrontendUrl"] ?? "";
-var defaultOrigins = new[] { "http://localhost:5173", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173" };
+var defaultOrigins = new[] { "http://localhost:5173", "http://localhost:5174", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173", "http://127.0.0.1:5174" };
 var allOrigins = defaultOrigins
     .Concat(corsOrigins)
     .Concat(string.IsNullOrWhiteSpace(frontendUrl) ? Array.Empty<string>() : new[] { frontendUrl })
@@ -294,14 +294,16 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 app.UseCors();
 
-// Serve static files EXCEPT /uploads/ — uploaded audio must be accessed
-// through authenticated controller endpoints (DownloadController, StreamController).
-// This prevents unauthenticated direct access to user-uploaded files.
+// Serve static files — block direct access to uploaded audio (tracks/)
+// but allow public access to cover art images (covers/).
+// Audio must go through authenticated StreamController / DownloadController.
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
-        if (ctx.File.PhysicalPath?.Contains("uploads") == true)
+        var path = ctx.File.PhysicalPath ?? "";
+        // Block uploaded audio tracks — covers are public
+        if (path.Contains("uploads") && !path.Contains("covers"))
         {
             ctx.Context.Response.StatusCode = StatusCodes.Status403Forbidden;
             ctx.Context.Response.ContentLength = 0;
