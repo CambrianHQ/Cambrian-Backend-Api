@@ -34,6 +34,8 @@ public class PayoutService : IPayoutService
         _logger = logger;
     }
 
+    private const decimal PlatformFeeRate = 0.15m;
+
     public async Task<object> GetEarningsAsync(string userId)
     {
         // Compute real earnings from completed purchases on the creator's tracks
@@ -45,7 +47,10 @@ public class PayoutService : IPayoutService
             allPurchases.AddRange(tp.Where(p => p.Status == "completed"));
         }
 
-        var totalEarned = allPurchases.Sum(p => p.AmountCents) / 100m;
+        var grossCents = allPurchases.Sum(p => p.AmountCents);
+        var totalGross = grossCents / 100m;
+        var totalPlatformFee = Math.Round(totalGross * PlatformFeeRate, 2);
+        var totalEarned = Math.Round(totalGross * (1 - PlatformFeeRate), 2);
 
         var payouts = await _payouts.GetByCreatorIdAsync(userId);
         var paidOut = payouts.Where(p => p.Status == "completed").Sum(p => p.AmountCents) / 100m;
@@ -57,6 +62,9 @@ public class PayoutService : IPayoutService
             available = Math.Max(0, available),
             pending = pendingPayouts,
             totalEarned,
+            totalGross,
+            totalPlatformFee,
+            platformFeePercent = PlatformFeeRate,
             totalWithdrawn = paidOut
         };
     }

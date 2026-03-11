@@ -16,6 +16,21 @@ public class TrackResponse
 
     public decimal ExclusivePrice { get; set; }
 
+    /// <summary>Platform fee rate applied to each sale (0.15 = 15%).</summary>
+    public decimal PlatformFeePercent { get; set; } = 0.15m;
+
+    /// <summary>Platform fee in dollars for the non-exclusive price.</summary>
+    public decimal NonExclusivePlatformFee { get; set; }
+
+    /// <summary>Creator earnings in dollars for a non-exclusive sale.</summary>
+    public decimal NonExclusiveCreatorEarnings { get; set; }
+
+    /// <summary>Platform fee in dollars for the exclusive price.</summary>
+    public decimal ExclusivePlatformFee { get; set; }
+
+    /// <summary>Creator earnings in dollars for an exclusive sale.</summary>
+    public decimal ExclusiveCreatorEarnings { get; set; }
+
     public bool ExclusiveSold { get; set; }
 
     public string? LicenseType { get; set; }
