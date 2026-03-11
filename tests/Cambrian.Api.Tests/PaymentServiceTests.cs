@@ -163,7 +163,23 @@ public sealed class PaymentServiceTests
         _purchases.GetByIdAsync(purchaseId).Returns((Purchase?)null);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(() =>
-            _sut.ProcessAsync(new PaymentProcessRequest { PurchaseId = purchaseId.ToString() }));
+            _sut.ProcessAsync(new PaymentProcessRequest { PurchaseId = purchaseId.ToString() }, "user-1"));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ThrowsUnauthorized_WhenUserDoesNotOwnPurchase()
+    {
+        var purchase = new Purchase
+        {
+            Id = Guid.NewGuid(),
+            TrackId = Guid.NewGuid(),
+            BuyerId = "user-1",
+            Status = "pending"
+        };
+        _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            _sut.ProcessAsync(new PaymentProcessRequest { PurchaseId = purchase.Id.ToString() }, "user-999"));
     }
 
     [Fact]
@@ -182,7 +198,7 @@ public sealed class PaymentServiceTests
         {
             PurchaseId = purchase.Id.ToString(),
             PaymentMethodId = "pm_test"
-        });
+        }, "user-1");
 
         Assert.Equal("completed", purchase.Status);
         Assert.Equal("pm_test", purchase.PaymentMethod);
@@ -205,7 +221,7 @@ public sealed class PaymentServiceTests
         {
             PurchaseId = purchase.Id.ToString(),
             PaymentMethodId = null
-        });
+        }, "user-1");
 
         Assert.Equal("stripe", purchase.PaymentMethod);
     }

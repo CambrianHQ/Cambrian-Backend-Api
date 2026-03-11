@@ -98,7 +98,7 @@ public sealed class PaymentsControllerTests
     public async Task Process_ReturnsOk_WhenPaymentProcessed()
     {
         SetupUser();
-        _payments.ProcessAsync(Arg.Any<PaymentProcessRequest>()).Returns(Task.CompletedTask);
+        _payments.ProcessAsync(Arg.Any<PaymentProcessRequest>(), Arg.Any<string>()).Returns(Task.CompletedTask);
 
         var result = await _controller.Process(new PaymentProcessRequest
         {
@@ -115,7 +115,7 @@ public sealed class PaymentsControllerTests
     public async Task Process_PropagatesKeyNotFoundException()
     {
         SetupUser();
-        _payments.ProcessAsync(Arg.Any<PaymentProcessRequest>())
+        _payments.ProcessAsync(Arg.Any<PaymentProcessRequest>(), Arg.Any<string>())
             .ThrowsAsync(new KeyNotFoundException("Purchase not found."));
 
         await Assert.ThrowsAsync<KeyNotFoundException>(() =>

@@ -20,11 +20,26 @@ public class UploadService : IUploadService
     {
         "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave",
         "audio/flac", "audio/x-flac", "audio/aac", "audio/mp4", "audio/m4a",
-        "audio/ogg", "audio/x-m4a", "application/octet-stream"
+        "audio/ogg", "audio/x-m4a"
+    };
+
+    /// <summary>Allowed image extensions for cover art.</summary>
+    private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".webp"
+    };
+
+    /// <summary>Allowed MIME types for cover art.</summary>
+    private static readonly HashSet<string> AllowedImageMimeTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg", "image/png", "image/webp"
     };
 
     /// <summary>Maximum upload size in bytes (default 100 MB).</summary>
     private const long MaxFileSizeBytes = 100 * 1024 * 1024;
+
+    /// <summary>Maximum cover art size in bytes (10 MB).</summary>
+    private const long MaxCoverArtSizeBytes = 10 * 1024 * 1024;
 
     public UploadService(IObjectStorage storage, ITrackRepository tracks)
     {
@@ -69,6 +84,32 @@ public class UploadService : IUploadService
             key,
             string.IsNullOrWhiteSpace(request.Audio.ContentType) ? "audio/mpeg" : request.Audio.ContentType);
 
+        // ── Optional cover art upload ──
+        string? coverArtUrl = null;
+        if (request.CoverArt is not null && request.CoverArt.Length > 0)
+        {
+            if (request.CoverArt.Length > MaxCoverArtSizeBytes)
+                throw new ArgumentException(
+                    $"Cover art size ({request.CoverArt.Length / (1024 * 1024)} MB) exceeds the {MaxCoverArtSizeBytes / (1024 * 1024)} MB limit.");
+
+            var imgExt = Path.GetExtension(request.CoverArt.FileName)?.ToLowerInvariant() ?? "";
+            if (!AllowedImageExtensions.Contains(imgExt))
+                throw new ArgumentException(
+                    $"Cover art type '{imgExt}' is not allowed. Accepted: {string.Join(", ", AllowedImageExtensions)}");
+
+            var imgMime = request.CoverArt.ContentType?.ToLowerInvariant() ?? "";
+            if (!string.IsNullOrEmpty(imgMime) && !AllowedImageMimeTypes.Contains(imgMime))
+                throw new ArgumentException(
+                    $"Cover art MIME type '{imgMime}' is not allowed.");
+
+            var coverKey = $"covers/{request.CreatorId}/{Guid.NewGuid()}{imgExt}";
+            await using var coverStream = request.CoverArt.OpenReadStream();
+            coverArtUrl = await _storage.UploadAsync(
+                coverStream,
+                coverKey,
+                string.IsNullOrWhiteSpace(imgMime) ? "image/jpeg" : imgMime);
+        }
+
         // Derive cents from the dedicated price fields when provided,
         // otherwise fall back to the generic Price so tracks uploaded via the
         // single-price form still display correctly on the marketplace.
@@ -85,6 +126,7 @@ public class UploadService : IUploadService
             Price = request.Price ?? 0,
             LicenseType = request.LicenseType ?? "streaming",
             AudioUrl = audioUrl,
+            CoverArtUrl = coverArtUrl,
             NonExclusivePriceCents = request.NonExclusivePrice.HasValue
                 ? (int)Math.Round(request.NonExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
                 : priceCents,
