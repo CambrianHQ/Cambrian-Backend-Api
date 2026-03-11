@@ -21,10 +21,12 @@ public class BillingController : BaseController
     public async Task<IActionResult> Checkout(BillingCheckoutRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userEmail = User.FindFirstValue(ClaimTypes.Email)
+                     ?? User.FindFirstValue("email");
 
         try
         {
-            var result = await _billing.CreateCheckoutAsync(request, userId);
+            var result = await _billing.CreateCheckoutAsync(request, userId, userEmail);
             return OkResponse(new { url = result.CheckoutUrl });
         }
         catch (ArgumentException ex)

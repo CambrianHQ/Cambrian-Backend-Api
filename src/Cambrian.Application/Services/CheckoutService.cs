@@ -54,6 +54,8 @@ public class CheckoutService : ICheckoutService
         };
 
         var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userEmail = user.FindFirstValue(ClaimTypes.Email)
+                     ?? user.FindFirstValue("email");
 
         // Build redirect URLs that match the frontend routes
         var encodedTrackId = Uri.EscapeDataString(request.TrackId);
@@ -65,7 +67,8 @@ public class CheckoutService : ICheckoutService
             track.Title,
             clientReferenceId: $"{userId}:{request.TrackId}:{request.LicenseType}",
             successUrl,
-            cancelUrl);
+            cancelUrl,
+            customerEmail: userEmail);
 
         return new CheckoutResponse
         {
