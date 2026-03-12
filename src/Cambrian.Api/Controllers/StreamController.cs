@@ -75,9 +75,24 @@ public class StreamController : BaseController
         if (track?.AudioUrl is null)
             return NotFoundResponse("Track not found.");
 
-        var file = await _storage.OpenReadAsync(track.AudioUrl);
+        Console.WriteLine($"[StreamAudio] trackId={trackId}, dbAudioUrl={track.AudioUrl}");
+
+        StorageFile? file;
+        try
+        {
+            file = await _storage.OpenReadAsync(track.AudioUrl);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[StreamAudio] Storage error for key={track.AudioUrl}: {ex.GetType().Name}: {ex.Message}");
+            return NotFoundResponse($"Audio file not accessible.");
+        }
+
         if (file is null)
+        {
+            Console.WriteLine($"[StreamAudio] File not found in storage. key={track.AudioUrl}");
             return NotFoundResponse("Audio file not found.");
+        }
 
         // Let ASP.NET Core handle Range requests (required by Safari / iOS)
         Response.Headers["Accept-Ranges"] = "bytes";
