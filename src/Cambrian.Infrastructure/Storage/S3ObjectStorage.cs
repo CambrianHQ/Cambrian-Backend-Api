@@ -88,7 +88,13 @@ public sealed class S3ObjectStorage : IObjectStorage
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
+            Console.WriteLine($"[S3] Not found: bucket={_options.Bucket}, key={NormaliseKey(key)}");
             return null;
+        }
+        catch (AmazonS3Exception ex)
+        {
+            Console.WriteLine($"[S3] ERROR: {ex.StatusCode} {ex.ErrorCode} — bucket={_options.Bucket}, key={NormaliseKey(key)}, message={ex.Message}");
+            throw;
         }
     }
 
