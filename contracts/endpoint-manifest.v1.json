@@ -286,6 +286,12 @@
     },
     {
       "method": "GET",
+      "path": "/checkout/session/{sessionId}",
+      "requiresAuth": true,
+      "tag": "Checkout"
+    },
+    {
+      "method": "GET",
       "path": "/earnings",
       "requiresAuth": true,
       "tag": "Payouts"
