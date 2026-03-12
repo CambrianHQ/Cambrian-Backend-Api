@@ -20,6 +20,7 @@ public class UploadController : BaseController
     [Authorize]
     [RequireCreatorTier]
     [HttpPost("upload")]
+    [DisableRequestSizeLimit] // Allow large audio files — validated in UploadService
     public async Task<IActionResult> Upload([FromForm] UploadTrackRequest request)
     {
         request.CreatorId = User.FindFirstValue(ClaimTypes.NameIdentifier);

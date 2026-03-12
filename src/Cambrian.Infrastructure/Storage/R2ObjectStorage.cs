@@ -20,6 +20,11 @@ public class R2ObjectStorage : IObjectStorage
         return $"https://storage.cambrian.app/{key}?signed=dev";
     }
 
+    public string GetPublicUrl(string key)
+    {
+        return $"https://storage.cambrian.app/{key}";
+    }
+
     public Task<StorageFile?> OpenReadAsync(string key)
     {
         // TODO: Implement R2 download

@@ -3,6 +3,7 @@ using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -15,11 +16,13 @@ namespace Cambrian.Api.Tests;
 public sealed class CatalogControllerTests
 {
     private readonly ICatalogService _catalog = Substitute.For<ICatalogService>();
+    private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly CatalogController _controller;
 
     public CatalogControllerTests()
     {
-        _controller = new CatalogController(_catalog);
+        _controller = new CatalogController(_catalog, _storage, _cache);
     }
 
     // ── Discover ──
