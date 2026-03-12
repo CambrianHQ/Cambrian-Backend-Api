@@ -67,6 +67,14 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         {
             e.HasKey(p => p.Id);
             e.Property(p => p.UsageType).HasMaxLength(30).HasDefaultValue("personal");
+            e.Property(p => p.StripeSessionId).HasMaxLength(255);
+            e.HasIndex(p => p.StripeSessionId)
+                .IsUnique()
+                .HasFilter("\"StripeSessionId\" IS NOT NULL");
+            e.HasOne(p => p.License)
+                .WithOne()
+                .HasForeignKey<Purchase>(p => p.LicenseId)
+                .OnDelete(DeleteBehavior.SetNull);
             e.HasOne(p => p.Buyer)
                 .WithMany(u => u.Purchases)
                 .HasForeignKey(p => p.BuyerId)
@@ -89,6 +97,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(t => t.LibraryItems)
                 .HasForeignKey(l => l.TrackId)
                 .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(l => l.Purchase)
+                .WithMany()
+                .HasForeignKey(l => l.PurchaseId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<Payout>(e =>

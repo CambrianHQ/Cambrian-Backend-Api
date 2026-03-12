@@ -10,6 +10,9 @@ public interface IPurchaseRepository
 
     Task<List<Purchase>> GetByTrackIdAsync(Guid trackId);
 
+    /// <summary>Look up a purchase by its Stripe Checkout Session ID.</summary>
+    Task<Purchase?> GetByStripeSessionIdAsync(string stripeSessionId);
+
     Task AddAsync(Purchase purchase);
 
     Task UpdateAsync(Purchase purchase);

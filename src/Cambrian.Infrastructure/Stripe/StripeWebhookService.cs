@@ -14,17 +14,20 @@ namespace Cambrian.Infrastructure.Stripe;
 public class StripeWebhookService : IWebhookService
 {
     private readonly CambrianDbContext _db;
+    private readonly ILicenseService _licenseService;
     private readonly string _webhookSecret;
     private readonly ILogger<StripeWebhookService> _logger;
     private readonly bool _isDevelopment;
 
     public StripeWebhookService(
         CambrianDbContext db,
+        ILicenseService licenseService,
         IConfiguration configuration,
         ILogger<StripeWebhookService> logger,
         IHostEnvironment env)
     {
         _db = db;
+        _licenseService = licenseService;
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "";
         _logger = logger;
         _isDevelopment = env.IsDevelopment();
@@ -36,6 +39,7 @@ public class StripeWebhookService : IWebhookService
         string? eventId;
         string? clientReferenceId;
         long? amountTotal;
+        string? stripeSessionId = null;
         string? stripeSubscriptionId = null;
         string? stripeCustomerId = null;
 
@@ -53,6 +57,7 @@ public class StripeWebhookService : IWebhookService
                 var session = stripeEvent.Data.Object as Session;
                 clientReferenceId = session?.ClientReferenceId;
                 amountTotal = session?.AmountTotal;
+                stripeSessionId = session?.Id;
             }
             else if (eventType == "customer.subscription.deleted")
             {
@@ -67,7 +72,7 @@ public class StripeWebhookService : IWebhookService
                 stripeCustomerId = invoice?.CustomerId;
             }
 
-            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId);
+            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId);
             _logger.LogInformation("Stripe webhook received (verified): {EventType}", eventType);
             return;
         }
@@ -101,6 +106,7 @@ public class StripeWebhookService : IWebhookService
             var dataObj = root.GetProperty("data").GetProperty("object");
             clientReferenceId = dataObj.TryGetProperty("client_reference_id", out var cri) ? cri.GetString() : null;
             amountTotal = dataObj.TryGetProperty("amount_total", out var at) ? at.GetInt64() : null;
+            stripeSessionId = dataObj.TryGetProperty("id", out var sid) ? sid.GetString() : null;
         }
         else if (eventType is "customer.subscription.deleted" or "invoice.payment_failed")
         {
@@ -108,7 +114,7 @@ public class StripeWebhookService : IWebhookService
             stripeCustomerId = dataObj.TryGetProperty("customer", out var cust) ? cust.GetString() : null;
         }
 
-        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId);
+        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId);
     }
 
     private async Task ProcessEventAsync(
@@ -116,7 +122,8 @@ public class StripeWebhookService : IWebhookService
         string eventType,
         string? clientReferenceId,
         long? amountTotal,
-        string? stripeCustomerId)
+        string? stripeCustomerId,
+        string? stripeSessionId)
     {
         if (string.IsNullOrWhiteSpace(eventId))
         {
@@ -126,7 +133,7 @@ public class StripeWebhookService : IWebhookService
 
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
-                await HandleCheckoutCompleted(clientReferenceId, amountTotal);
+                await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
             }
             else if (eventType == "customer.subscription.deleted")
             {
@@ -166,7 +173,7 @@ public class StripeWebhookService : IWebhookService
 
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
-                await HandleCheckoutCompleted(clientReferenceId, amountTotal);
+                await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
             }
             else if (eventType == "customer.subscription.deleted")
             {
@@ -202,7 +209,7 @@ public class StripeWebhookService : IWebhookService
         }
     }
 
-    private async Task HandleCheckoutCompleted(string? clientReferenceId, long? amountTotal)
+    private async Task HandleCheckoutCompleted(string? clientReferenceId, long? amountTotal, string? stripeSessionId)
     {
         if (clientReferenceId is null)
         {
@@ -211,17 +218,18 @@ public class StripeWebhookService : IWebhookService
         }
 
         // BillingController sets clientReferenceId = "userId:subscription:tier"
-        // CheckoutService sets clientReferenceId = "userId:trackId:licenseType"
+        // CheckoutService sets clientReferenceId = "userId:trackId:licenseType[:usageType]"
         var parts = clientReferenceId.Split(':');
-        if (parts.Length == 3 && parts[1] == "subscription")
+        if (parts.Length >= 3 && parts[1] == "subscription")
         {
             await HandleSubscriptionCheckout(parts[0], parts[2]);
             return;
         }
 
-        if (parts.Length == 3)
+        if (parts.Length >= 3)
         {
-            await HandleTrackPurchase(parts[0], parts[1], parts[2], amountTotal);
+            var usageType = parts.Length >= 4 ? parts[3] : "personal";
+            await HandleTrackPurchase(parts[0], parts[1], parts[2], usageType, amountTotal, stripeSessionId);
             return;
         }
 
@@ -239,9 +247,11 @@ public class StripeWebhookService : IWebhookService
     }
 
     /// <summary>
-    /// Handle a track purchase: create Purchase record + add to Library.
+    /// Handle a track purchase: create Purchase record, issue license, add to Library.
     /// </summary>
-    private async Task HandleTrackPurchase(string userId, string trackIdStr, string licenseType, long? amountTotal)
+    private async Task HandleTrackPurchase(
+        string userId, string trackIdStr, string licenseType,
+        string usageType, long? amountTotal, string? stripeSessionId)
     {
         if (!Guid.TryParse(trackIdStr, out var trackId))
         {
@@ -256,10 +266,22 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        if (track.ExclusiveSold)
+        // ── Exclusive: atomic check-and-set to prevent race conditions ──
+        if (licenseType == "exclusive")
         {
-            _logger.LogWarning("Track {TrackId} already sold exclusively — skipping purchase for user {UserId}", trackId, userId);
-            return;
+            if (track.ExclusiveSold)
+            {
+                _logger.LogWarning("Track {TrackId} already sold exclusively — skipping purchase for user {UserId}", trackId, userId);
+                return;
+            }
+
+            var marked = await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE \"Tracks\" SET \"ExclusiveSold\" = true WHERE \"Id\" = {trackId} AND \"ExclusiveSold\" = false");
+            if (marked == 0)
+            {
+                _logger.LogWarning("Exclusive race: Track {TrackId} was sold by another request — skipping for user {UserId}", trackId, userId);
+                return;
+            }
         }
 
         // Prevent duplicate purchases for the same track/user/license
@@ -269,12 +291,17 @@ public class StripeWebhookService : IWebhookService
         if (existingPurchase is not null)
         {
             _logger.LogInformation("Duplicate purchase skipped for user {UserId} track {TrackId}", userId, trackId);
-            existingPurchase.Status = "completed";
+            if (existingPurchase.Status != "completed")
+            {
+                existingPurchase.Status = "completed";
+                existingPurchase.CompletedAt = DateTime.UtcNow;
+                existingPurchase.StripeSessionId ??= stripeSessionId;
+            }
             await _db.SaveChangesAsync();
             return;
         }
 
-        // Create completed Purchase
+        // ── Create completed Purchase ──
         var purchase = new Purchase
         {
             Id = Guid.NewGuid(),
@@ -283,18 +310,15 @@ public class StripeWebhookService : IWebhookService
             AmountCents = (int)(amountTotal ?? 0),
             PaymentMethod = "stripe",
             LicenseType = licenseType,
+            UsageType = usageType,
             Status = "completed",
+            StripeSessionId = stripeSessionId,
+            CompletedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
         _db.Purchases.Add(purchase);
 
-        // Mark track as exclusively sold when an exclusive license is purchased
-        if (licenseType == "exclusive")
-        {
-            track.ExclusiveSold = true;
-        }
-
-        // Add to library (if not already there)
+        // ── Add to library (if not already there), with PurchaseId FK ──
         var existingLib = await _db.Library
             .FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == trackId);
 
@@ -305,12 +329,17 @@ public class StripeWebhookService : IWebhookService
                 Id = Guid.NewGuid(),
                 UserId = userId,
                 TrackId = trackId,
+                PurchaseId = purchase.Id,
                 Title = track.Title,
                 Artist = "",
                 AudioUrl = track.AudioUrl,
                 SavedAt = DateTime.UtcNow
             };
             _db.Library.Add(libraryItem);
+        }
+        else if (existingLib.PurchaseId is null)
+        {
+            existingLib.PurchaseId = purchase.Id;
         }
 
         // ── Credit creator wallet (platform takes 15% fee) ──
@@ -336,6 +365,26 @@ public class StripeWebhookService : IWebhookService
                     "Credited creator {CreatorId} with {AmountCents} cents for track {TrackId}",
                     track.CreatorId, creatorCents, trackId);
             }
+        }
+
+        // ── Issue license certificate ──
+        try
+        {
+            var cert = await _licenseService.IssueCertificateAsync(
+                purchase.Id,
+                track.CambrianTrackId ?? trackIdStr,
+                userId,
+                track.CreatorId,
+                licenseType,
+                usageType);
+            purchase.LicenseId = Guid.TryParse(cert.LicenseId, out var licId) ? licId : null;
+            _logger.LogInformation(
+                "License certificate issued: PurchaseId={PurchaseId} LicenseId={LicenseId}",
+                purchase.Id, cert.LicenseId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to issue license certificate for webhook purchase {PurchaseId}", purchase.Id);
         }
 
         await _db.SaveChangesAsync();

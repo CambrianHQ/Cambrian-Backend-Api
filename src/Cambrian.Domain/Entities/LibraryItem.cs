@@ -12,6 +12,11 @@ public class LibraryItem
 
     public Track Track { get; set; } = null!;
 
+    /// <summary>FK to the purchase that granted access (null for legacy / free items).</summary>
+    public Guid? PurchaseId { get; set; }
+
+    public Purchase? Purchase { get; set; }
+
     public string? Title { get; set; }
 
     public string? Artist { get; set; }
