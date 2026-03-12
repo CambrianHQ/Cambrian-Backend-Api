@@ -4,6 +4,9 @@ public class TrackResponse
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
+    /// <summary>Cambrian track identifier (CAMB-TRK-XXXX).</summary>
+    public string CambrianTrackId { get; set; } = string.Empty;
+
     public string Title { get; set; } = string.Empty;
 
     public string? Description { get; set; }

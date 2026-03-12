@@ -13,4 +13,12 @@ public class CheckoutRequest
     public string LicenseType { get; set; } = "standard";
 
     public string? ClientReferenceId { get; set; }
+
+    /// <summary>
+    /// Optional intended usage for the purchased license.
+    /// Valid values: youtube, ads, podcast, game, film, social.
+    /// </summary>
+    [RegularExpression("^(personal|youtube|ads|podcast|game|film|social)$",
+        ErrorMessage = "UsageType must be personal, youtube, ads, podcast, game, film, or social.")]
+    public string? UsageType { get; set; }
 }

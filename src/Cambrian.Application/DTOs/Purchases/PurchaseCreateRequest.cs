@@ -13,4 +13,10 @@ public class PurchaseCreateRequest
     /// before creating the purchase record.
     /// </summary>
     public string? StripeSessionId { get; set; }
+
+    /// <summary>
+    /// Optional intended usage for the purchased license.
+    /// Valid values: youtube, ads, podcast, game, film, social.
+    /// </summary>
+    public string? UsageType { get; set; }
 }

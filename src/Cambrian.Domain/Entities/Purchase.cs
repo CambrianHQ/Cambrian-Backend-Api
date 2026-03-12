@@ -21,5 +21,8 @@ public class Purchase
 
     public string Status { get; set; } = "pending"; // pending, completed, refunded
 
+    /// <summary>Intended usage context for the license (e.g. youtube, ads, podcast).</summary>
+    public string UsageType { get; set; } = "personal";
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
