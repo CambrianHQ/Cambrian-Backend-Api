@@ -34,17 +34,20 @@ public sealed class S3ObjectStorage : IObjectStorage
 
     public async Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
     {
+        var normalised = NormaliseKey(key);
+        Console.WriteLine($"[S3] Uploading: bucket={_options.Bucket}, key={normalised}, contentType={contentType}, size={file.Length}");
         var request = new PutObjectRequest
         {
             BucketName = _options.Bucket,
-            Key = key,
+            Key = normalised,
             InputStream = file,
             ContentType = contentType,
         };
         await _client.PutObjectAsync(request);
+        Console.WriteLine($"[S3] Upload complete: {normalised}");
 
         // Return just the key — callers use GetPublicUrl / GenerateSignedUrl to build URLs.
-        return key;
+        return normalised;
     }
 
     public string GenerateSignedUrl(string key)
@@ -74,6 +77,7 @@ public sealed class S3ObjectStorage : IObjectStorage
         try
         {
             var normalised = NormaliseKey(key);
+            Console.WriteLine($"[S3] OpenRead: bucket={_options.Bucket}, key={normalised} (raw={key})");
             var response = await _client.GetObjectAsync(_options.Bucket, normalised);
             return new StorageFile
             {
