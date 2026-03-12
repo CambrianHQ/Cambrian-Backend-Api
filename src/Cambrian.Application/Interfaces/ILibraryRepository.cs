@@ -10,5 +10,7 @@ public interface ILibraryRepository
 
     Task AddAsync(LibraryItem item);
 
+    Task UpdateAsync(LibraryItem item);
+
     Task RemoveAsync(Guid id);
 }

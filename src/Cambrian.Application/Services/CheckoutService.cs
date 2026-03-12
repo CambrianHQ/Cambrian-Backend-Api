@@ -48,6 +48,16 @@ public class CheckoutService : ICheckoutService
         if (request.LicenseType == "exclusive" && track.ExclusiveSold)
             throw new InvalidOperationException("This track has already been sold under an exclusive license.");
 
+        // ── Reject if user already has a completed purchase for this track+license ──
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        var existingPurchases = await _purchases.GetByBuyerIdAsync(userId!);
+        var duplicate = existingPurchases
+            .FirstOrDefault(p => p.TrackId == Guid.Parse(request.TrackId)
+                              && p.LicenseType == request.LicenseType
+                              && p.Status == "completed");
+        if (duplicate is not null)
+            throw new InvalidOperationException("You already own this license for this track.");
+
         // Determine price based on license type
         var amountCents = request.LicenseType switch
         {
@@ -56,7 +66,6 @@ public class CheckoutService : ICheckoutService
             _ => (int)(track.Price * 100)
         };
 
-        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
         var userEmail = user.FindFirstValue(ClaimTypes.Email)
                      ?? user.FindFirstValue("email");
 
@@ -163,6 +172,8 @@ public class CheckoutService : ICheckoutService
             LicenseType = licenseType,
             UsageType = usageType,
             Status = "completed",
+            StripeSessionId = sessionId,
+            CompletedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
         await _purchases.AddAsync(purchase);
@@ -183,12 +194,18 @@ public class CheckoutService : ICheckoutService
                 Id = Guid.NewGuid(),
                 UserId = userId,
                 TrackId = trackId,
+                PurchaseId = purchase.Id,
                 Title = track.Title,
                 Artist = track.Creator?.DisplayName ?? "",
                 AudioUrl = track.AudioUrl,
                 SavedAt = DateTime.UtcNow
             };
             await _library.AddAsync(libraryItem);
+        }
+        else if (existingLib.PurchaseId is null)
+        {
+            existingLib.PurchaseId = purchase.Id;
+            await _library.UpdateAsync(existingLib);
         }
 
         // ── Credit creator wallet (platform takes 15% fee) ──
@@ -229,6 +246,13 @@ public class CheckoutService : ICheckoutService
                 licenseType,
                 usageType);
             licenseId = cert.LicenseId;
+
+            // Link license back to purchase
+            if (Guid.TryParse(licenseId, out var licGuid))
+            {
+                purchase.LicenseId = licGuid;
+                await _purchases.UpdateAsync(purchase);
+            }
         }
         catch (Exception ex)
         {

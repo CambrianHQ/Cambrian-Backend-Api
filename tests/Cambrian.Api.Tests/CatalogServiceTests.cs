@@ -97,7 +97,7 @@ public sealed class CatalogServiceTests
             new() { Id = Guid.NewGuid(), Title = "A", Price = 5, CreatorId = "c1", Creator = new ApplicationUser { DisplayName = "Art" } },
             new() { Id = Guid.NewGuid(), Title = "B", Price = 10, CreatorId = "c2", Creator = new ApplicationUser { DisplayName = "Bee" } }
         };
-        _tracks.BrowseAsync(1, 50, null, null, null).Returns(tracks);
+        _tracks.BrowseAsync(1, 50, null, null, null, null, null, null, null).Returns(tracks);
 
         var result = await _sut.GetCatalogAsync();
 

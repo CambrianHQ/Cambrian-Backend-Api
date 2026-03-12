@@ -1,3 +1,4 @@
+using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Stripe;
 using Cambrian.Persistence;
@@ -13,6 +14,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
 {
     private readonly CambrianDbContext _db;
     private readonly ILogger<StripeWebhookService> _logger = Substitute.For<ILogger<StripeWebhookService>>();
+    private readonly ILicenseService _licenseService = Substitute.For<ILicenseService>();
 
     public StripeWebhookServiceTests()
     {
@@ -34,7 +36,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns(isDevelopment ? "Development" : "Production");
 
-        return new StripeWebhookService(_db, config, _logger, env);
+        return new StripeWebhookService(_db, _licenseService, config, _logger, env);
     }
 
     // ── Security gate: non-Development rejection ──
