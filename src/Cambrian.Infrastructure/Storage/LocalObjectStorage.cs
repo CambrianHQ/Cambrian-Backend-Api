@@ -13,8 +13,16 @@ public sealed class LocalObjectStorage : IObjectStorage
 
     public LocalObjectStorage(IOptions<StorageOptions> options)
     {
-        _basePath = options.Value.LocalPath ?? "wwwroot/uploads";
+        var configured = options.Value.LocalPath ?? "wwwroot/uploads";
+
+        // Resolve to an absolute path — on Render the CWD may differ from
+        // where the published app files live (e.g. /opt/render/project/src/...).
+        _basePath = Path.IsPathRooted(configured)
+            ? configured
+            : Path.Combine(AppContext.BaseDirectory, configured);
+
         Directory.CreateDirectory(_basePath);
+        Console.WriteLine($"[LocalObjectStorage] basePath = {_basePath}  (exists={Directory.Exists(_basePath)})");
     }
 
     public async Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
@@ -55,12 +63,39 @@ public sealed class LocalObjectStorage : IObjectStorage
         var normalised = key;
         if (normalised.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
             normalised = normalised["/uploads/".Length..];
+        else if (normalised.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase))
+            normalised = normalised["uploads/".Length..];
         else if (normalised.StartsWith("/", StringComparison.Ordinal))
             normalised = normalised[1..]; // strip leading slash
 
         var filePath = Path.Combine(_basePath, normalised.Replace('/', Path.DirectorySeparatorChar));
+
+        // Fallback: try CWD-relative path if the absolute path doesn't exist
+        // (handles cases where files were deployed alongside the app)
         if (!File.Exists(filePath))
-            return Task.FromResult<StorageFile?>(null);
+        {
+            var cwdFallback = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", normalised.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(cwdFallback))
+                filePath = cwdFallback;
+            else
+            {
+                // Also try wwwroot directly (e.g. for /audio/demo1.mp3 served as wwwroot/audio/...)
+                var wwwrootDirect = Path.Combine(AppContext.BaseDirectory, "wwwroot", normalised.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(wwwrootDirect))
+                    filePath = wwwrootDirect;
+                else
+                {
+                    var cwdWwwroot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", normalised.Replace('/', Path.DirectorySeparatorChar));
+                    if (File.Exists(cwdWwwroot))
+                        filePath = cwdWwwroot;
+                    else
+                    {
+                        Console.WriteLine($"[LocalObjectStorage] File not found: key={key}, tried: {filePath}, {cwdFallback}, {wwwrootDirect}, {cwdWwwroot}");
+                        return Task.FromResult<StorageFile?>(null);
+                    }
+                }
+            }
+        }
 
         var ext = Path.GetExtension(filePath).ToLowerInvariant();
         var contentType = ext switch
