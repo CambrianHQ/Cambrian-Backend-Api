@@ -15,14 +15,25 @@ public class CatalogService : ICatalogService
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync(int page = 1, int pageSize = 50, string? genre = null, string? search = null, string? sort = null)
     {
-        var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort);
+        return await GetCatalogAsync(page, pageSize, genre, search, sort, null, null, null, null);
+    }
 
+    public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync(int page, int pageSize, string? genre, string? search, string? sort,
+        string? mood, string? tempo, bool? instrumental, string? duration)
+    {
+        var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
         return tracks.Select(t => MapToResponse(t)).ToList();
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync(int page = 1, int pageSize = 20, string? genre = null, string? search = null)
     {
         return await GetCatalogAsync(page, pageSize, genre, search);
+    }
+
+    public async Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync(int page, int pageSize, string? genre, string? search,
+        string? mood, string? tempo, bool? instrumental, string? duration)
+    {
+        return await GetCatalogAsync(page, pageSize, genre, search, null, mood, tempo, instrumental, duration);
     }
 
     public async Task<TrackResponse?> GetTrackAsync(string trackId)
@@ -45,6 +56,7 @@ public class CatalogService : ICatalogService
         return new TrackResponse
         {
             Id = t.Id.ToString(),
+            CambrianTrackId = t.CambrianTrackId,
             Title = t.Title,
             Description = t.Description,
             Genre = t.Genre ?? "",

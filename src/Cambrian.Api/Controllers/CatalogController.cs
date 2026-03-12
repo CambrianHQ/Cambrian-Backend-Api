@@ -26,15 +26,19 @@ public class CatalogController : BaseController
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? genre = null,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] string? mood = null,
+        [FromQuery] string? tempo = null,
+        [FromQuery] bool? instrumental = null,
+        [FromQuery] string? duration = null)
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
-        var cacheKey = $"discover:{page}:{pageSize}:{genre}:{search}";
+        var cacheKey = $"discover:{page}:{pageSize}:{genre}:{search}:{mood}:{tempo}:{instrumental}:{duration}";
         var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _catalog.GetDiscoverAsync(page, pageSize, genre, search);
+            return await _catalog.GetDiscoverAsync(page, pageSize, genre, search, mood, tempo, instrumental, duration);
         });
         ResolveTrackUrls(items!);
         return OkResponse(items);
@@ -46,15 +50,19 @@ public class CatalogController : BaseController
         [FromQuery] int pageSize = 50,
         [FromQuery] string? genre = null,
         [FromQuery] string? search = null,
-        [FromQuery] string? sort = null)
+        [FromQuery] string? sort = null,
+        [FromQuery] string? mood = null,
+        [FromQuery] string? tempo = null,
+        [FromQuery] bool? instrumental = null,
+        [FromQuery] string? duration = null)
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 50;
-        var cacheKey = $"catalog:{page}:{pageSize}:{genre}:{search}:{sort}";
+        var cacheKey = $"catalog:{page}:{pageSize}:{genre}:{search}:{sort}:{mood}:{tempo}:{instrumental}:{duration}";
         var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _catalog.GetCatalogAsync(page, pageSize, genre, search, sort);
+            return await _catalog.GetCatalogAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
         });
         ResolveTrackUrls(items!);
         return OkResponse(items);
@@ -79,11 +87,15 @@ public class CatalogController : BaseController
     public async Task<IActionResult> Trending(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
-        [FromQuery] string? genre = null)
+        [FromQuery] string? genre = null,
+        [FromQuery] string? mood = null,
+        [FromQuery] string? tempo = null,
+        [FromQuery] bool? instrumental = null,
+        [FromQuery] string? duration = null)
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
-        var items = await _catalog.GetDiscoverAsync(page, pageSize, genre);
+        var items = await _catalog.GetDiscoverAsync(page, pageSize, genre, null, mood, tempo, instrumental, duration);
         ResolveTrackUrls(items);
         return OkResponse(items);
     }

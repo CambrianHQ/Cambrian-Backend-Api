@@ -152,7 +152,7 @@ public sealed class Phase2PaymentTests
         purchases.GetByBuyerIdAsync("buyer-1").Returns(new List<Purchase>());
 
         var sut = new PurchaseService(purchases, tracks, library, invoices,
-            gateway, Substitute.For<Microsoft.Extensions.Logging.ILogger<PurchaseService>>());
+            Substitute.For<ILicenseService>(), gateway, Substitute.For<Microsoft.Extensions.Logging.ILogger<PurchaseService>>());
         var result = await sut.CreateAsync(
             new Application.DTOs.Purchases.PurchaseCreateRequest { TrackId = trackId.ToString(), LicenseType = "non-exclusive", StripeSessionId = "sess_test" },
             "buyer-1");
@@ -186,7 +186,7 @@ public sealed class Phase2PaymentTests
         tracks.TryMarkExclusiveSoldAsync(trackId).Returns(true);
 
         var sut = new PurchaseService(purchases, tracks, library, invoices,
-            gateway, Substitute.For<Microsoft.Extensions.Logging.ILogger<PurchaseService>>());
+            Substitute.For<ILicenseService>(), gateway, Substitute.For<Microsoft.Extensions.Logging.ILogger<PurchaseService>>());
         var result = await sut.CreateAsync(
             new Application.DTOs.Purchases.PurchaseCreateRequest { TrackId = trackId.ToString(), LicenseType = "exclusive", StripeSessionId = "sess_test" },
             "buyer-1");

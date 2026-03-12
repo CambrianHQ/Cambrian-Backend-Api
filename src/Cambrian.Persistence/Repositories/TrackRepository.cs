@@ -24,6 +24,12 @@ public class TrackRepository : ITrackRepository
 
     public async Task<List<Track>> BrowseAsync(int page, int pageSize, string? genre, string? search, string? sort = null)
     {
+        return await BrowseAsync(page, pageSize, genre, search, sort, null, null, null, null);
+    }
+
+    public async Task<List<Track>> BrowseAsync(int page, int pageSize, string? genre, string? search, string? sort,
+        string? mood, string? tempo, bool? instrumental, string? duration)
+    {
         var query = _db.Tracks
             .Include(t => t.Creator)
             .Where(t => !t.ExclusiveSold && t.Visibility == "public");
@@ -33,6 +39,19 @@ public class TrackRepository : ITrackRepository
 
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(t => t.Title.ToLower().Contains(search.ToLower()));
+
+        // ── New optional filters ──
+        if (!string.IsNullOrWhiteSpace(mood))
+            query = query.Where(t => t.Mood != null && t.Mood.ToLower() == mood.ToLower());
+
+        if (!string.IsNullOrWhiteSpace(tempo))
+            query = query.Where(t => t.Tempo != null && t.Tempo.ToLower() == tempo.ToLower());
+
+        if (instrumental.HasValue)
+            query = query.Where(t => t.Instrumental == instrumental.Value);
+
+        if (!string.IsNullOrWhiteSpace(duration))
+            query = query.Where(t => t.Duration != null && t.Duration.ToLower() == duration.ToLower());
 
         query = sort?.ToLower() switch
         {
@@ -53,6 +72,13 @@ public class TrackRepository : ITrackRepository
         return await _db.Tracks
             .Include(t => t.Creator)
             .FirstOrDefaultAsync(t => t.Id == id);
+    }
+
+    public async Task<Track?> GetByCambrianTrackIdAsync(string cambrianTrackId)
+    {
+        return await _db.Tracks
+            .Include(t => t.Creator)
+            .FirstOrDefaultAsync(t => t.CambrianTrackId == cambrianTrackId);
     }
 
     public async Task<List<Track>> GetByCreatorIdAsync(string creatorId)

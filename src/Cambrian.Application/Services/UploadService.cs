@@ -120,6 +120,7 @@ public class UploadService : IUploadService
         var track = new Track
         {
             Id = Guid.NewGuid(),
+            CambrianTrackId = TrackIdDto.Generate(),
             Title = request.Title,
             Description = request.Description,
             Genre = request.Genre,

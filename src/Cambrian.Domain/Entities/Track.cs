@@ -4,11 +4,23 @@ public class Track
 {
     public Guid Id { get; set; }
 
+    /// <summary>Human-readable Cambrian track ID (e.g. CAMB-TRK-A1B2C3D4).</summary>
+    public string CambrianTrackId { get; set; } = "";
+
     public string Title { get; set; } = "";
 
     public string? Description { get; set; }
 
     public string? Genre { get; set; }
+
+    /// <summary>Mood tag for search filtering (e.g. happy, dark, chill, energetic).</summary>
+    public string? Mood { get; set; }
+
+    /// <summary>Tempo description or BPM value for search filtering.</summary>
+    public string? Tempo { get; set; }
+
+    /// <summary>Whether the track is instrumental (no vocals).</summary>
+    public bool Instrumental { get; set; }
 
     public double Price { get; set; }
 
