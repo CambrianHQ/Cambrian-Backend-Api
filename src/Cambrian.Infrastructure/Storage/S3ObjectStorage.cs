@@ -42,6 +42,10 @@ public sealed class S3ObjectStorage : IObjectStorage
             Key = normalised,
             InputStream = file,
             ContentType = contentType,
+            // Cloudflare R2 does not support STREAMING-AWS4-HMAC-SHA256-PAYLOAD
+            // (chunked transfer encoding with signed payloads).  Disabling payload
+            // signing makes the SDK send an unsigned payload hash instead, which R2 accepts.
+            DisablePayloadSigning = true,
         };
         await _client.PutObjectAsync(request);
         Console.WriteLine($"[S3] Upload complete: {normalised}");
