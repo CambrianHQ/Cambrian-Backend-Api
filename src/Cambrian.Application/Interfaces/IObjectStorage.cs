@@ -11,6 +11,11 @@ public interface IObjectStorage
     string GenerateSignedUrl(string key);
 
     /// <summary>
+    /// Get a public (unsigned) URL for browsable assets like cover art.
+    /// </summary>
+    string GetPublicUrl(string key);
+
+    /// <summary>
     /// Open a readable stream for the stored object.
     /// Returns null when the object does not exist (local) or cannot be opened.
     /// </summary>

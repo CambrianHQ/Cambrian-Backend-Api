@@ -2,6 +2,7 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Cambrian.Api.Controllers;
 
@@ -9,10 +10,15 @@ namespace Cambrian.Api.Controllers;
 public class CatalogController : BaseController
 {
     private readonly ICatalogService _catalog;
+    private readonly IObjectStorage _storage;
+    private readonly IMemoryCache _cache;
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
-    public CatalogController(ICatalogService catalog)
+    public CatalogController(ICatalogService catalog, IObjectStorage storage, IMemoryCache cache)
     {
         _catalog = catalog;
+        _storage = storage;
+        _cache = cache;
     }
 
     [HttpGet("discover")]
@@ -24,8 +30,13 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
-        var items = await _catalog.GetDiscoverAsync(page, pageSize, genre, search);
-        ResolveTrackUrls(items);
+        var cacheKey = $"discover:{page}:{pageSize}:{genre}:{search}";
+        var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
+            return await _catalog.GetDiscoverAsync(page, pageSize, genre, search);
+        });
+        ResolveTrackUrls(items!);
         return OkResponse(items);
     }
 
@@ -39,8 +50,13 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 50;
-        var items = await _catalog.GetCatalogAsync(page, pageSize, genre, search, sort);
-        ResolveTrackUrls(items);
+        var cacheKey = $"catalog:{page}:{pageSize}:{genre}:{search}:{sort}";
+        var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
+            return await _catalog.GetCatalogAsync(page, pageSize, genre, search, sort);
+        });
+        ResolveTrackUrls(items!);
         return OkResponse(items);
     }
 
@@ -55,7 +71,7 @@ public class CatalogController : BaseController
             return NotFoundResponse($"Track '{trackId}' not found.");
         result.AudioUrl = ResolveAbsoluteUrl($"/stream/{result.Id}/audio");
         if (!string.IsNullOrEmpty(result.CoverArtUrl))
-            result.CoverArtUrl = ResolveAbsoluteUrl(result.CoverArtUrl);
+            result.CoverArtUrl = ResolveCoverArtUrl(result.CoverArtUrl);
         return OkResponse(result);
     }
 
@@ -88,8 +104,25 @@ public class CatalogController : BaseController
             // get the correct Content-Type, Range support, and CORS headers.
             t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
             if (!string.IsNullOrEmpty(t.CoverArtUrl))
-                t.CoverArtUrl = ResolveAbsoluteUrl(t.CoverArtUrl);
+                t.CoverArtUrl = ResolveCoverArtUrl(t.CoverArtUrl);
         }
+    }
+
+    /// <summary>
+    /// Produce a public URL for cover art that works for both local storage
+    /// (relative /uploads/ path) and S3/R2 (public bucket URL or signed URL).
+    /// </summary>
+    private string ResolveCoverArtUrl(string rawUrl)
+    {
+        // If it's already an absolute URL (e.g. from S3), leave it alone
+        if (rawUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            rawUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return rawUrl;
+        // For local storage paths (/uploads/covers/...) — keep using the existing absolute URL resolution
+        if (rawUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+            return ResolveAbsoluteUrl(rawUrl);
+        // Otherwise it's an object key (e.g. covers/{creatorId}/{guid}.jpg) — use storage provider
+        return _storage.GetPublicUrl(rawUrl);
     }
 
     [Authorize(Roles = "Creator")]
