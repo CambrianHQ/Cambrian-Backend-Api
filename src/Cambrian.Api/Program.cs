@@ -368,6 +368,50 @@ catch (Exception ex)
     Console.WriteLine($"[Startup] Migration error: {ex.Message}");
 }
 
+// ── Ensure demo audio files exist (repair broken AudioUrl references) ──
+{
+    try
+    {
+        using var repairScope = app.Services.CreateScope();
+        var repairDb = repairScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var repairStorage = repairScope.ServiceProvider.GetRequiredService<IObjectStorage>();
+
+        // Find tracks whose AudioUrl looks like a local demo path (e.g. "/audio/demo1.mp3")
+        // and verify the file actually exists. If not, generate a silent placeholder.
+        var demoTracks = repairDb.Tracks
+            .Where(t => t.AudioUrl != null && t.AudioUrl.Contains("/audio/demo"))
+            .ToList();
+
+        foreach (var track in demoTracks)
+        {
+            var existing = await repairStorage.OpenReadAsync(track.AudioUrl!);
+            if (existing is not null)
+            {
+                existing.Stream.Dispose();
+                continue; // file exists, nothing to repair
+            }
+
+            Console.WriteLine($"[Repair] Audio missing for '{track.Title}' (AudioUrl={track.AudioUrl}). Generating placeholder...");
+            var silentMp3 = Cambrian.Api.Tools.SilentMp3Generator.Generate(durationSeconds: 3);
+            using var silentStream = new MemoryStream(silentMp3);
+            var key = track.AudioUrl!.TrimStart('/');
+            var storedKey = await repairStorage.UploadAsync(silentStream, key, "audio/mpeg");
+            track.AudioUrl = storedKey;
+            Console.WriteLine($"[Repair] Stored placeholder → {storedKey} ({silentMp3.Length} bytes)");
+        }
+
+        if (demoTracks.Any())
+        {
+            repairDb.SaveChanges();
+            Console.WriteLine($"[Repair] Repaired {demoTracks.Count} demo tracks");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Repair] ERROR: {ex.Message}");
+    }
+}
+
 // ── Seed demo tracks if the table is empty ──
 {
     Console.WriteLine("[Seed] Checking for tracks...");
@@ -417,15 +461,21 @@ catch (Exception ex)
                     }
                     if (localFile is null)
                     {
-                        Console.WriteLine($"[Seed] WARNING: Demo file not found. Tried: {string.Join(", ", candidates)}");
-                        return localRelativePath;
+                        Console.WriteLine($"[Seed] Demo file not found locally. Generating silent placeholder for {fileName}");
+                        // Generate a valid silent MP3 so the streaming endpoint returns playable audio.
+                        var silentMp3 = Cambrian.Api.Tools.SilentMp3Generator.Generate(durationSeconds: 3);
+                        using var silentStream = new MemoryStream(silentMp3);
+                        var seedKey = useRemoteStorage ? $"demos/{fileName}" : fileName;
+                        var seedStoredKey = await storage.UploadAsync(silentStream, seedKey, "audio/mpeg");
+                        Console.WriteLine($"[Seed] Generated silent MP3 → {seedStoredKey} ({silentMp3.Length} bytes)");
+                        return seedStoredKey;
                     }
 
-                    var key = $"demos/{fileName}";
+                    var uploadKey = $"demos/{fileName}";
                     await using var fs = File.OpenRead(localFile);
-                    var storedKey = await storage.UploadAsync(fs, key, "audio/mpeg");
-                    Console.WriteLine($"[Seed] Uploaded {localFile} → {storedKey}");
-                    return storedKey;
+                    var uploadedKey = await storage.UploadAsync(fs, uploadKey, "audio/mpeg");
+                    Console.WriteLine($"[Seed] Uploaded {localFile} → {uploadedKey}");
+                    return uploadedKey;
                 }
 
                 var demoData = new[]
