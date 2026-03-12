@@ -39,6 +39,14 @@ public class PurchaseRepository : IPurchaseRepository
             .ToListAsync();
     }
 
+    public async Task<Purchase?> GetByStripeSessionIdAsync(string stripeSessionId)
+    {
+        return await _db.Purchases
+            .Include(p => p.Track)
+            .Include(p => p.Buyer)
+            .FirstOrDefaultAsync(p => p.StripeSessionId == stripeSessionId);
+    }
+
     public async Task AddAsync(Purchase purchase)
     {
         _db.Purchases.Add(purchase);

@@ -23,6 +23,7 @@ public sealed class CheckoutTests
         var config = Substitute.For<IConfiguration>();
         config["App:FrontendUrl"].Returns("http://localhost:5173");
         var purchases = Substitute.For<IPurchaseRepository>();
+        purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
         var library = Substitute.For<ILibraryRepository>();
         var wallet = Substitute.For<IWalletRepository>();
         var licenseService = Substitute.For<ILicenseService>();

@@ -35,6 +35,12 @@ public class LibraryRepository : ILibraryRepository
         await _db.SaveChangesAsync();
     }
 
+    public async Task UpdateAsync(LibraryItem item)
+    {
+        _db.Library.Update(item);
+        await _db.SaveChangesAsync();
+    }
+
     public async Task RemoveAsync(Guid id)
     {
         var item = await _db.Library.FindAsync(id);

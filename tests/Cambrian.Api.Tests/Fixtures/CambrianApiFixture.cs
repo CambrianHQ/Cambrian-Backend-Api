@@ -110,9 +110,11 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
+        var trackId = Guid.NewGuid();
         var track = new Track
         {
-            Id = Guid.NewGuid(),
+            Id = trackId,
+            CambrianTrackId = $"CAMB-TRK-{trackId.ToString()[..8].ToUpper()}",
             Title = title,
             Price = 29.99,
             LicenseType = "standard",
