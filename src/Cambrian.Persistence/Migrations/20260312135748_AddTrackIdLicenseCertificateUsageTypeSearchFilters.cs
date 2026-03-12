@@ -11,7 +11,24 @@ namespace Cambrian.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Step 1: Add CambrianTrackId as NULLABLE so existing rows aren't blocked.
             migrationBuilder.AddColumn<string>(
+                name: "CambrianTrackId",
+                table: "Tracks",
+                type: "character varying(25)",
+                maxLength: 25,
+                nullable: true);
+
+            // Step 2: Backfill existing rows with unique CAMB-TRK-XXXXXXXX identifiers.
+            migrationBuilder.Sql(
+                """
+                UPDATE "Tracks"
+                SET "CambrianTrackId" = 'CAMB-TRK-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 8))
+                WHERE "CambrianTrackId" IS NULL OR "CambrianTrackId" = '';
+                """);
+
+            // Step 3: Now make the column NOT NULL.
+            migrationBuilder.AlterColumn<string>(
                 name: "CambrianTrackId",
                 table: "Tracks",
                 type: "character varying(25)",
