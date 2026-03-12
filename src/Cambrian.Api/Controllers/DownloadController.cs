@@ -36,10 +36,25 @@ public class DownloadController : BaseController
         if (track?.AudioUrl is null)
             return NotFoundResponse("Track audio not found.");
 
-        var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return OkResponse(new { url = ResolveAbsoluteUrl(signedUrl) });
+        var file = await _storage.OpenReadAsync(track.AudioUrl);
+        if (file is null)
+            return NotFoundResponse("Audio file not found on storage.");
+
+        // Build a user-friendly filename from the track title
+        var ext = Path.GetExtension(track.AudioUrl) ?? ".mp3";
+        var safeTitle = string.Concat(
+            (track.Title ?? "track").Where(c => !Path.GetInvalidFileNameChars().Contains(c)));
+        if (string.IsNullOrWhiteSpace(safeTitle)) safeTitle = "track";
+        var fileName = $"{safeTitle}{ext}";
+
+        Response.Headers["Cache-Control"] = "private, no-store";
+        return File(file.Stream, file.ContentType, fileName, enableRangeProcessing: true);
     }
 
+    /// <summary>
+    /// Returns a pre-signed URL for direct download. Works best with S3/R2 storage.
+    /// For local storage, redirects to the streaming download endpoint above.
+    /// </summary>
     [HttpGet("{trackId}/signed")]
     public async Task<IActionResult> SignedUrl(string trackId)
     {
@@ -57,6 +72,12 @@ public class DownloadController : BaseController
             return NotFoundResponse("Track audio not found.");
 
         var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return OkResponse(new { signedUrl = ResolveAbsoluteUrl(signedUrl), expiresAt = DateTime.UtcNow.AddMinutes(15) });
+
+        // If the signed URL is relative (local storage), make it absolute
+        // so the frontend can always treat it as a full URL.
+        if (!signedUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            signedUrl = ResolveAbsoluteUrl($"/download/{trackId}");
+
+        return OkResponse(new { signedUrl, expiresAt = DateTime.UtcNow.AddMinutes(15) });
     }
 }
