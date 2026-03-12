@@ -84,14 +84,17 @@ public class StreamController : BaseController
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[StreamAudio] Storage error for key={track.AudioUrl}: {ex.GetType().Name}: {ex.Message}");
-            return NotFoundResponse($"Audio file not accessible.");
+            Console.WriteLine($"[StreamAudio] Storage error for key={track.AudioUrl}: {ex.GetType().Name}: {ex.Message}. Returning silent placeholder.");
+            var silentFallback = Cambrian.Api.Tools.SilentMp3Generator.Generate();
+            return File(silentFallback, "audio/mpeg", enableRangeProcessing: true);
         }
 
         if (file is null)
         {
-            Console.WriteLine($"[StreamAudio] File not found in storage. key={track.AudioUrl}");
-            return NotFoundResponse("Audio file not found.");
+            Console.WriteLine($"[StreamAudio] File not found in storage. key={track.AudioUrl}. Returning silent placeholder.");
+            // Return a generated silent MP3 so the player never breaks
+            var silent = Cambrian.Api.Tools.SilentMp3Generator.Generate();
+            return File(silent, "audio/mpeg", enableRangeProcessing: true);
         }
 
         // Let ASP.NET Core handle Range requests (required by Safari / iOS)
