@@ -36,9 +36,10 @@ public class DownloadController : BaseController
         if (track?.AudioUrl is null)
             return NotFoundResponse("Track audio not found.");
 
+        Console.WriteLine($"[Download] trackId={trackId}, audioUrl={track.AudioUrl}");
         var file = await _storage.OpenReadAsync(track.AudioUrl);
         if (file is null)
-            return NotFoundResponse("Audio file not found on storage.");
+            return NotFoundResponse($"Audio file not found on storage. audioUrl={track.AudioUrl}");
 
         // Build a user-friendly filename from the track title
         var ext = Path.GetExtension(track.AudioUrl) ?? ".mp3";
