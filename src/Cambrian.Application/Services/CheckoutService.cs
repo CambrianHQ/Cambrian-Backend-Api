@@ -14,6 +14,7 @@ public class CheckoutService : ICheckoutService
     private readonly IPurchaseRepository _purchases;
     private readonly ILibraryRepository _library;
     private readonly IWalletRepository _wallet;
+    private readonly ILicenseService _licenseService;
     private readonly ILogger<CheckoutService> _logger;
     private readonly string _frontendUrl;
 
@@ -23,6 +24,7 @@ public class CheckoutService : ICheckoutService
         IPurchaseRepository purchases,
         ILibraryRepository library,
         IWalletRepository wallet,
+        ILicenseService licenseService,
         IConfiguration configuration,
         ILogger<CheckoutService> logger)
     {
@@ -31,6 +33,7 @@ public class CheckoutService : ICheckoutService
         _purchases = purchases;
         _library = library;
         _wallet = wallet;
+        _licenseService = licenseService;
         _logger = logger;
         _frontendUrl = configuration["App:FrontendUrl"] ?? "http://localhost:5173";
     }
@@ -65,7 +68,7 @@ public class CheckoutService : ICheckoutService
         var url = await _gateway.CreateCheckoutSessionAsync(
             amountCents,
             track.Title,
-            clientReferenceId: $"{userId}:{request.TrackId}:{request.LicenseType}",
+            clientReferenceId: $"{userId}:{request.TrackId}:{request.LicenseType}:{request.UsageType ?? "personal"}",
             successUrl,
             cancelUrl,
             customerEmail: userEmail);
@@ -91,7 +94,7 @@ public class CheckoutService : ICheckoutService
             return new CheckoutConfirmResponse { Status = session.Status, SessionId = sessionId };
         }
 
-        // Parse clientReferenceId: "userId:trackId:licenseType"
+        // Parse clientReferenceId: "userId:trackId:licenseType:usageType"
         var parts = session.ClientReferenceId?.Split(':');
         if (parts is null || parts.Length < 3)
         {
@@ -102,6 +105,7 @@ public class CheckoutService : ICheckoutService
         var sessionUserId = parts[0];
         var trackIdStr = parts[1];
         var licenseType = parts[2];
+        var usageType = parts.Length >= 4 ? parts[3] : "personal";
 
         // Verify the caller matches the session owner
         if (!string.Equals(sessionUserId, userId, StringComparison.OrdinalIgnoreCase))
@@ -157,6 +161,7 @@ public class CheckoutService : ICheckoutService
             AmountCents = (int)(session.AmountTotal ?? 0),
             PaymentMethod = "stripe",
             LicenseType = licenseType,
+            UsageType = usageType,
             Status = "completed",
             CreatedAt = DateTime.UtcNow
         };
@@ -212,9 +217,27 @@ public class CheckoutService : ICheckoutService
             }
         }
 
+        // ── Issue license certificate ──
+        string? licenseId = null;
+        try
+        {
+            var cert = await _licenseService.IssueCertificateAsync(
+                purchase.Id,
+                track.CambrianTrackId ?? trackIdStr,
+                userId,
+                track.CreatorId,
+                licenseType,
+                usageType);
+            licenseId = cert.LicenseId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to issue license certificate for purchase {PurchaseId}", purchase.Id);
+        }
+
         _logger.LogInformation(
-            "Purchase confirmed: User={UserId} Track={TrackId} License={License}",
-            userId, trackId, licenseType);
+            "Purchase confirmed: User={UserId} Track={TrackId} License={License} LicenseId={LicenseId}",
+            userId, trackId, licenseType, licenseId);
 
         return new CheckoutConfirmResponse
         {
@@ -222,7 +245,8 @@ public class CheckoutService : ICheckoutService
             TrackId = trackIdStr,
             LicenseType = licenseType,
             AddedToLibrary = true,
-            SessionId = sessionId
+            SessionId = sessionId,
+            LicenseId = licenseId
         };
     }
 }

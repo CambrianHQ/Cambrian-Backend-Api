@@ -25,8 +25,9 @@ public sealed class CheckoutTests
         var purchases = Substitute.For<IPurchaseRepository>();
         var library = Substitute.For<ILibraryRepository>();
         var wallet = Substitute.For<IWalletRepository>();
+        var licenseService = Substitute.For<ILicenseService>();
         var logger = Substitute.For<ILogger<CheckoutService>>();
-        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, config, logger);
+        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, config, logger);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
@@ -79,7 +80,7 @@ public sealed class CheckoutTests
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
             Arg.Any<int>(), Arg.Any<string>(),
-            Arg.Is<string>(s => s == $"buyer-99:{trackId}:exclusive"),
+            Arg.Is<string>(s => s == $"buyer-99:{trackId}:exclusive:personal"),
             Arg.Any<string?>(), Arg.Any<string?>());
     }
 }

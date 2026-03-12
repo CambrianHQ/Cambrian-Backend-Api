@@ -22,8 +22,9 @@ public sealed class CheckoutServiceTests
         var purchases = Substitute.For<IPurchaseRepository>();
         var library = Substitute.For<ILibraryRepository>();
         var wallet = Substitute.For<IWalletRepository>();
+        var licenseService = Substitute.For<ILicenseService>();
         var logger = Substitute.For<ILogger<CheckoutService>>();
-        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, config, logger);
+        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, config, logger);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
