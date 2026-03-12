@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generatedAt": "2026-03-07T15:17:18Z",
+  "generatedAt": "2026-03-12T13:43:39.656Z",
   "endpoints": [
     {
       "method": "GET",
@@ -625,6 +625,12 @@
       "path": "/webhook/stripe",
       "requiresAuth": false,
       "tag": "Webhook"
+    },
+    {
+      "method": "GET",
+      "path": "/licenses/{trackId}",
+      "requiresAuth": true,
+      "tag": "Licenses"
     }
   ],
   "source": "contracts/openapi.v1.json"

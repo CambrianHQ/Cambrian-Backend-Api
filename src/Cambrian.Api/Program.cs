@@ -242,6 +242,7 @@ builder.Services.AddScoped<IStreamService, StreamService>();
 builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
+builder.Services.AddScoped<ILicenseService, LicenseService>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
 
 // Repositories
@@ -254,6 +255,7 @@ builder.Services.AddScoped<IStreamRepository, StreamRepository>();
 builder.Services.AddScoped<IWalletRepository, WalletRepository>();
 builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+builder.Services.AddScoped<ILicenseCertificateRepository, LicenseCertificateRepository>();
 
 // Infrastructure
 builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();

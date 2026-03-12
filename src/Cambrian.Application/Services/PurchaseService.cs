@@ -11,6 +11,7 @@ public class PurchaseService : IPurchaseService
     private readonly ITrackRepository _tracks;
     private readonly ILibraryRepository _library;
     private readonly IInvoiceRepository _invoiceRepo;
+    private readonly ILicenseService _licenseService;
     private readonly IPaymentGateway _gateway;
     private readonly ILogger<PurchaseService> _logger;
 
@@ -19,6 +20,7 @@ public class PurchaseService : IPurchaseService
         ITrackRepository tracks,
         ILibraryRepository library,
         IInvoiceRepository invoiceRepo,
+        ILicenseService licenseService,
         IPaymentGateway gateway,
         ILogger<PurchaseService> logger)
     {
@@ -26,6 +28,7 @@ public class PurchaseService : IPurchaseService
         _tracks = tracks;
         _library = library;
         _invoiceRepo = invoiceRepo;
+        _licenseService = licenseService;
         _gateway = gateway;
         _logger = logger;
     }
@@ -84,6 +87,7 @@ public class PurchaseService : IPurchaseService
             AmountCents = amountCents,
             LicenseType = request.LicenseType ?? "non-exclusive",
             PaymentMethod = request.PaymentMethod,
+            UsageType = request.UsageType ?? "personal",
             Status = "completed",
             CreatedAt = DateTime.UtcNow
         };
@@ -114,6 +118,15 @@ public class PurchaseService : IPurchaseService
             PaidAt = DateTime.UtcNow
         };
         await _invoiceRepo.AddAsync(invoice);
+
+        // Issue license certificate
+        await _licenseService.IssueCertificateAsync(
+            purchase.Id,
+            track.CambrianTrackId,
+            userId,
+            track.CreatorId,
+            purchase.LicenseType ?? "non-exclusive",
+            purchase.UsageType);
 
         return new PurchaseResponse
         {

@@ -34,6 +34,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
 
+    public DbSet<LicenseCertificate> LicenseCertificates => Set<LicenseCertificate>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -42,7 +44,11 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         {
             e.HasKey(t => t.Id);
             e.Property(t => t.Title).HasMaxLength(200).IsRequired();
+            e.Property(t => t.CambrianTrackId).HasMaxLength(25).IsRequired();
+            e.HasIndex(t => t.CambrianTrackId).IsUnique();
             e.Property(t => t.Visibility).HasMaxLength(20).HasDefaultValue("public");
+            e.Property(t => t.Mood).HasMaxLength(50);
+            e.Property(t => t.Tempo).HasMaxLength(30);
             e.HasOne(t => t.Creator)
                 .WithMany(u => u.Tracks)
                 .HasForeignKey(t => t.CreatorId)
@@ -60,6 +66,7 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<Purchase>(e =>
         {
             e.HasKey(p => p.Id);
+            e.Property(p => p.UsageType).HasMaxLength(30).HasDefaultValue("personal");
             e.HasOne(p => p.Buyer)
                 .WithMany(u => u.Purchases)
                 .HasForeignKey(p => p.BuyerId)
@@ -153,6 +160,40 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany()
                 .HasForeignKey(w => w.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<LicenseCertificate>(e =>
+        {
+            e.HasKey(lc => lc.Id);
+            e.Property(lc => lc.TrackId).HasMaxLength(25).IsRequired();
+            e.Property(lc => lc.LicenseType).HasMaxLength(30);
+            e.Property(lc => lc.UsageType).HasMaxLength(30).HasDefaultValue("personal");
+            e.HasOne(lc => lc.Buyer)
+                .WithMany()
+                .HasForeignKey(lc => lc.BuyerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(lc => lc.Creator)
+                .WithMany()
+                .HasForeignKey(lc => lc.CreatorId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(lc => lc.Purchase)
+                .WithMany()
+                .HasForeignKey(lc => lc.PurchaseId)
+                .OnDelete(DeleteBehavior.Restrict);
+            var listComparer = new ValueComparer<List<string>?>(
+                (a, b) => (a == null && b == null) || (a != null && b != null && a.SequenceEqual(b)),
+                v => v == null ? 0 : v.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode())),
+                v => v == null ? null : v.ToList());
+            e.Property(lc => lc.AllowedUses)
+                .HasConversion(
+                    v => v == null ? null : string.Join(',', v),
+                    v => v == null ? null : v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())
+                .Metadata.SetValueComparer(listComparer);
+            e.Property(lc => lc.Restrictions)
+                .HasConversion(
+                    v => v == null ? null : string.Join(',', v),
+                    v => v == null ? null : v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())
+                .Metadata.SetValueComparer(listComparer);
         });
     }
 }
