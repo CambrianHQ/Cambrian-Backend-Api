@@ -236,6 +236,9 @@ internal sealed class FakeObjectStorage : IObjectStorage
     public string GenerateSignedUrl(string key)
         => $"https://fake-cdn.cambrian.test/{key}?signed=true";
 
+    public string GetPublicUrl(string key)
+        => $"https://fake-cdn.cambrian.test/{key}";
+
     public Task<StorageFile?> OpenReadAsync(string key)
         => Task.FromResult<StorageFile?>(null);
 

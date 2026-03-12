@@ -117,7 +117,22 @@ builder.Services.AddAuthentication("Bearer")
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddMemoryCache();
+
 builder.Services.AddControllers();
+
+// Raise the multipart form body limit for audio uploads (default ≈128 MB,
+// but Kestrel's MaxRequestBodySize is only 30 MB — raise it too).
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = 150 * 1024 * 1024; // 150 MB
+    o.ValueLengthLimit        = 150 * 1024 * 1024; // 150 MB (default is only 4 MB!)
+    o.ValueCountLimit         = 20;                 // generous for upload form fields
+});
+builder.WebHost.ConfigureKestrel(k =>
+{
+    k.Limits.MaxRequestBodySize = 150 * 1024 * 1024; // 150 MB
+});
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
@@ -359,22 +374,69 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Stagi
             Console.WriteLine($"[Seed] Creator: {creatorId} ({creator?.Email})");
             if (creatorId != null)
             {
-                var tracks = new List<Track>
-            {
-                new() { Id = Guid.NewGuid(), Title = "Midnight Drive",       Genre = "Lo-Fi",       Price = 29, Duration = "3:42", CreatorId = creatorId, AudioUrl = "/audio/demo1.mp3", NonExclusivePriceCents = 2900, ExclusivePriceCents = 49900, Description = "Chill late-night vibes" },
-                new() { Id = Guid.NewGuid(), Title = "Neon Skyline",         Genre = "Electronic",  Price = 39, Duration = "4:15", CreatorId = creatorId, AudioUrl = "/audio/demo2.mp3", NonExclusivePriceCents = 3900, ExclusivePriceCents = 59900, Description = "Synthwave-inspired beat" },
-                new() { Id = Guid.NewGuid(), Title = "Golden Hour",          Genre = "R&B",         Price = 34, Duration = "3:58", CreatorId = creatorId, AudioUrl = "/audio/demo3.mp3", NonExclusivePriceCents = 3400, ExclusivePriceCents = 54900, Description = "Smooth R&B groove" },
-                new() { Id = Guid.NewGuid(), Title = "Concrete Jungle",      Genre = "Hip-Hop",     Price = 49, Duration = "3:20", CreatorId = creatorId, AudioUrl = "/audio/demo4.mp3", NonExclusivePriceCents = 4900, ExclusivePriceCents = 74900, Description = "Hard-hitting trap beat" },
-                new() { Id = Guid.NewGuid(), Title = "Summer Breeze",        Genre = "Pop",         Price = 24, Duration = "3:35", CreatorId = creatorId, AudioUrl = "/audio/demo5.mp3", NonExclusivePriceCents = 2400, ExclusivePriceCents = 39900, Description = "Upbeat pop instrumental" },
-                new() { Id = Guid.NewGuid(), Title = "Rainy Afternoon",      Genre = "Jazz",        Price = 19, Duration = "5:10", CreatorId = creatorId, AudioUrl = "/audio/demo6.mp3", NonExclusivePriceCents = 1900, ExclusivePriceCents = 29900, Description = "Smooth jazz session" },
-                new() { Id = Guid.NewGuid(), Title = "Electric Dreams",      Genre = "Electronic",  Price = 44, Duration = "4:45", CreatorId = creatorId, AudioUrl = "/audio/demo7.mp3", NonExclusivePriceCents = 4400, ExclusivePriceCents = 69900, Description = "Future bass production" },
-                new() { Id = Guid.NewGuid(), Title = "Starlight",            Genre = "Indie",       Price = 29, Duration = "4:02", CreatorId = creatorId, AudioUrl = "/audio/demo8.mp3", NonExclusivePriceCents = 2900, ExclusivePriceCents = 44900, Description = "Dreamy indie beat" },
-                new() { Id = Guid.NewGuid(), Title = "Urban Echoes",         Genre = "Hip-Hop",     Price = 54, Duration = "3:15", CreatorId = creatorId, AudioUrl = "/audio/demo9.mp3", NonExclusivePriceCents = 5400, ExclusivePriceCents = 84900, Description = "Atmospheric boom-bap" },
-                new() { Id = Guid.NewGuid(), Title = "Velvet Sunset",        Genre = "Lo-Fi",       Price = 22, Duration = "3:50", CreatorId = creatorId, AudioUrl = "/audio/demo10.mp3", NonExclusivePriceCents = 2200, ExclusivePriceCents = 34900, Description = "Warm lo-fi textures" },
-            };
-            db.Tracks.AddRange(tracks);
-            db.SaveChanges();
-            Console.WriteLine($"[Seed] Created {tracks.Count} demo tracks for creator {creatorId}");
+                var storage = scope.ServiceProvider.GetRequiredService<IObjectStorage>();
+                var useRemoteStorage = storageProvider is "s3" or "r2";
+
+                // Helper: upload a demo file to object storage if using S3/R2
+                async Task<string> ResolveDemoAudioUrl(string localRelativePath)
+                {
+                    if (!useRemoteStorage)
+                        return localRelativePath; // local storage — serve from wwwroot
+
+                    // e.g. "/audio/demo1.mp3" → "wwwroot/uploads/audio/demo1.mp3"
+                    var fileName = localRelativePath.TrimStart('/');
+                    var localFile = Path.Combine("wwwroot", "uploads", fileName);
+                    if (!File.Exists(localFile))
+                        localFile = Path.Combine("wwwroot", fileName);
+                    if (!File.Exists(localFile))
+                    {
+                        Console.WriteLine($"[Seed] WARNING: Demo file not found: {localFile}");
+                        return localRelativePath;
+                    }
+
+                    var key = $"demos/{fileName}";
+                    await using var fs = File.OpenRead(localFile);
+                    var storedKey = await storage.UploadAsync(fs, key, "audio/mpeg");
+                    Console.WriteLine($"[Seed] Uploaded {localFile} → {storedKey}");
+                    return storedKey;
+                }
+
+                var demoData = new[]
+                {
+                    (Title: "Midnight Drive",   Genre: "Lo-Fi",       Price: 29, Duration: "3:42", File: "/audio/demo1.mp3",  NX: 2900, EX: 49900, Desc: "Chill late-night vibes"),
+                    (Title: "Neon Skyline",     Genre: "Electronic",  Price: 39, Duration: "4:15", File: "/audio/demo2.mp3",  NX: 3900, EX: 59900, Desc: "Synthwave-inspired beat"),
+                    (Title: "Golden Hour",      Genre: "R&B",         Price: 34, Duration: "3:58", File: "/audio/demo3.mp3",  NX: 3400, EX: 54900, Desc: "Smooth R&B groove"),
+                    (Title: "Concrete Jungle",  Genre: "Hip-Hop",     Price: 49, Duration: "3:20", File: "/audio/demo4.mp3",  NX: 4900, EX: 74900, Desc: "Hard-hitting trap beat"),
+                    (Title: "Summer Breeze",    Genre: "Pop",         Price: 24, Duration: "3:35", File: "/audio/demo5.mp3",  NX: 2400, EX: 39900, Desc: "Upbeat pop instrumental"),
+                    (Title: "Rainy Afternoon",  Genre: "Jazz",        Price: 19, Duration: "5:10", File: "/audio/demo6.mp3",  NX: 1900, EX: 29900, Desc: "Smooth jazz session"),
+                    (Title: "Electric Dreams",  Genre: "Electronic",  Price: 44, Duration: "4:45", File: "/audio/demo7.mp3",  NX: 4400, EX: 69900, Desc: "Future bass production"),
+                    (Title: "Starlight",        Genre: "Indie",       Price: 29, Duration: "4:02", File: "/audio/demo8.mp3",  NX: 2900, EX: 44900, Desc: "Dreamy indie beat"),
+                    (Title: "Urban Echoes",     Genre: "Hip-Hop",     Price: 54, Duration: "3:15", File: "/audio/demo9.mp3",  NX: 5400, EX: 84900, Desc: "Atmospheric boom-bap"),
+                    (Title: "Velvet Sunset",    Genre: "Lo-Fi",       Price: 22, Duration: "3:50", File: "/audio/demo10.mp3", NX: 2200, EX: 34900, Desc: "Warm lo-fi textures"),
+                };
+
+                var tracks = new List<Track>();
+                foreach (var d in demoData)
+                {
+                    var audioUrl = await ResolveDemoAudioUrl(d.File);
+                    tracks.Add(new Track
+                    {
+                        Id = Guid.NewGuid(),
+                        Title = d.Title,
+                        Genre = d.Genre,
+                        Price = d.Price,
+                        Duration = d.Duration,
+                        CreatorId = creatorId,
+                        AudioUrl = audioUrl,
+                        NonExclusivePriceCents = d.NX,
+                        ExclusivePriceCents = d.EX,
+                        Description = d.Desc,
+                    });
+                }
+
+                db.Tracks.AddRange(tracks);
+                db.SaveChanges();
+                Console.WriteLine($"[Seed] Created {tracks.Count} demo tracks for creator {creatorId}");
             }
         }
     }

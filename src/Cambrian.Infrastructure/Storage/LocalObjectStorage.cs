@@ -34,6 +34,11 @@ public sealed class LocalObjectStorage : IObjectStorage
     public string GenerateSignedUrl(string key)
     {
         // Local dev — no signing needed
+        return GetPublicUrl(key);
+    }
+
+    public string GetPublicUrl(string key)
+    {
         // Strip leading /uploads/ if the caller passed the full relative URL
         if (key.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
             return key;
