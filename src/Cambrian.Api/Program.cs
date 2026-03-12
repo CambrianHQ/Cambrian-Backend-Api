@@ -368,7 +368,7 @@ catch (Exception ex)
     Console.WriteLine($"[Startup] Migration error: {ex.Message}");
 }
 
-// ── Ensure demo audio files exist (repair broken AudioUrl references) ──
+// ── Ensure audio files exist in storage (repair broken AudioUrl references) ──
 {
     try
     {
@@ -376,39 +376,51 @@ catch (Exception ex)
         var repairDb = repairScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
         var repairStorage = repairScope.ServiceProvider.GetRequiredService<IObjectStorage>();
 
-        // Find tracks whose AudioUrl looks like a local demo path (e.g. "/audio/demo1.mp3")
-        // and verify the file actually exists. If not, generate a silent placeholder.
-        var demoTracks = repairDb.Tracks
-            .Where(t => t.AudioUrl != null && t.AudioUrl.Contains("/audio/demo"))
-            .ToList();
+        // Find ALL tracks and verify storage has the audio file.
+        var allTracks = repairDb.Tracks.Where(t => t.AudioUrl != null).ToList();
+        Console.WriteLine($"[Repair] Checking {allTracks.Count} tracks for missing audio files...");
+        int repaired = 0;
 
-        foreach (var track in demoTracks)
+        foreach (var track in allTracks)
         {
-            var existing = await repairStorage.OpenReadAsync(track.AudioUrl!);
-            if (existing is not null)
+            try
             {
-                existing.Stream.Dispose();
-                continue; // file exists, nothing to repair
-            }
+                var existing = await repairStorage.OpenReadAsync(track.AudioUrl!);
+                if (existing is not null)
+                {
+                    existing.Stream.Dispose();
+                    continue; // file exists
+                }
 
-            Console.WriteLine($"[Repair] Audio missing for '{track.Title}' (AudioUrl={track.AudioUrl}). Generating placeholder...");
-            var silentMp3 = Cambrian.Api.Tools.SilentMp3Generator.Generate(durationSeconds: 3);
-            using var silentStream = new MemoryStream(silentMp3);
-            var key = track.AudioUrl!.TrimStart('/');
-            var storedKey = await repairStorage.UploadAsync(silentStream, key, "audio/mpeg");
-            track.AudioUrl = storedKey;
-            Console.WriteLine($"[Repair] Stored placeholder → {storedKey} ({silentMp3.Length} bytes)");
+                Console.WriteLine($"[Repair] Audio missing for '{track.Title}' (AudioUrl={track.AudioUrl}). Generating placeholder...");
+                var silentMp3 = Cambrian.Api.Tools.SilentMp3Generator.Generate(durationSeconds: 3);
+                using var silentStream = new MemoryStream(silentMp3);
+                var key = track.AudioUrl!.TrimStart('/');
+                var storedKey = await repairStorage.UploadAsync(silentStream, key, "audio/mpeg");
+                track.AudioUrl = storedKey;
+                repaired++;
+                Console.WriteLine($"[Repair] Stored placeholder → {storedKey} ({silentMp3.Length} bytes)");
+            }
+            catch (Exception trackEx)
+            {
+                Console.WriteLine($"[Repair] Failed for track '{track.Title}': {trackEx.GetType().Name}: {trackEx.Message}");
+            }
         }
 
-        if (demoTracks.Any())
+        if (repaired > 0)
         {
             repairDb.SaveChanges();
-            Console.WriteLine($"[Repair] Repaired {demoTracks.Count} demo tracks");
+            Console.WriteLine($"[Repair] Saved {repaired} repaired track AudioUrls");
+        }
+        else
+        {
+            Console.WriteLine("[Repair] All tracks have valid audio files.");
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[Repair] ERROR: {ex.Message}");
+        Console.WriteLine($"[Repair] ERROR: {ex.GetType().Name}: {ex.Message}");
+        Console.WriteLine($"[Repair] Stack: {ex.StackTrace}");
     }
 }
 
