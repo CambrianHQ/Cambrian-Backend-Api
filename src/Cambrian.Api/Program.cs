@@ -261,13 +261,30 @@ builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
 // Storage — choose provider based on config
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
 var storageProvider = builder.Configuration["Storage:Provider"]?.ToLowerInvariant() ?? "local";
+Console.WriteLine($"[Startup] Storage provider: {storageProvider}");
 switch (storageProvider)
 {
     case "s3":
     case "r2":
+        // Validate credentials at startup — fail fast if misconfigured
+        var endpoint = builder.Configuration["Storage:Endpoint"] ?? "";
+        var bucket   = builder.Configuration["Storage:Bucket"] ?? "";
+        var accessKey = builder.Configuration["Storage:AccessKey"] ?? "";
+        var secretKey = builder.Configuration["Storage:SecretKey"] ?? "";
+        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(bucket)
+            || string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
+        {
+            throw new InvalidOperationException(
+                $"Storage provider '{storageProvider}' requires Storage:Endpoint, Storage:Bucket, "
+                + "Storage:AccessKey, and Storage:SecretKey to be configured.");
+        }
+        Console.WriteLine($"[Startup] S3 endpoint={endpoint}, bucket={bucket}");
         builder.Services.AddSingleton<IObjectStorage, S3ObjectStorage>();
         break;
     default:
+        if (!isNonProd)
+            Console.WriteLine("[WARN] Using local storage in non-development environment. "
+                + "Uploaded files will be lost on container restart. Set Storage:Provider=r2 for persistence.");
         builder.Services.AddSingleton<IObjectStorage, LocalObjectStorage>();
         break;
 }
@@ -383,14 +400,25 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Stagi
                     if (!useRemoteStorage)
                         return localRelativePath; // local storage — serve from wwwroot
 
-                    // e.g. "/audio/demo1.mp3" → "wwwroot/uploads/audio/demo1.mp3"
+                    // e.g. "/audio/demo1.mp3" → try several base directories
                     var fileName = localRelativePath.TrimStart('/');
-                    var localFile = Path.Combine("wwwroot", "uploads", fileName);
-                    if (!File.Exists(localFile))
-                        localFile = Path.Combine("wwwroot", fileName);
-                    if (!File.Exists(localFile))
+                    string? localFile = null;
+                    var candidates = new[]
                     {
-                        Console.WriteLine($"[Seed] WARNING: Demo file not found: {localFile}");
+                        Path.Combine(AppContext.BaseDirectory, "wwwroot", "uploads", fileName),
+                        Path.Combine(AppContext.BaseDirectory, "wwwroot", fileName),
+                        Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", fileName),
+                        Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", fileName),
+                        Path.Combine("wwwroot", "uploads", fileName),
+                        Path.Combine("wwwroot", fileName),
+                    };
+                    foreach (var c in candidates)
+                    {
+                        if (File.Exists(c)) { localFile = c; break; }
+                    }
+                    if (localFile is null)
+                    {
+                        Console.WriteLine($"[Seed] WARNING: Demo file not found. Tried: {string.Join(", ", candidates)}");
                         return localRelativePath;
                     }
 
