@@ -40,7 +40,10 @@ public class CheckoutService : ICheckoutService
 
     public async Task<CheckoutResponse> CreateCheckoutAsync(CheckoutRequest request, ClaimsPrincipal user)
     {
-        var track = await _tracks.GetByIdAsync(Guid.Parse(request.TrackId));
+        if (!Guid.TryParse(request.TrackId, out var trackId))
+            throw new ArgumentException("trackId must be a valid GUID.");
+
+        var track = await _tracks.GetByIdAsync(trackId);
 
         if (track is null)
             throw new KeyNotFoundException($"Track {request.TrackId} not found.");
@@ -50,9 +53,12 @@ public class CheckoutService : ICheckoutService
 
         // ── Reject if user already has a completed purchase for this track+license ──
         var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
-        var existingPurchases = await _purchases.GetByBuyerIdAsync(userId!);
+        if (string.IsNullOrEmpty(userId))
+            throw new UnauthorizedAccessException("User is not authenticated.");
+
+        var existingPurchases = await _purchases.GetByBuyerIdAsync(userId);
         var duplicate = existingPurchases
-            .FirstOrDefault(p => p.TrackId == Guid.Parse(request.TrackId)
+            .FirstOrDefault(p => p.TrackId == trackId
                               && p.LicenseType == request.LicenseType
                               && p.Status == "completed");
         if (duplicate is not null)
