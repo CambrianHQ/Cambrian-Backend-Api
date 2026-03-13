@@ -94,7 +94,9 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         res.EnsureSuccessStatusCode();
 
         var json = await res.Content.ReadFromJsonAsync<JsonElement>();
-        return json.GetProperty("token").GetString()!;
+        // Auth endpoints now return ApiResponse envelope: { success, data: { token, ... } }
+        var data = json.GetProperty("data");
+        return data.GetProperty("token").GetString()!;
     }
 
     /// <summary>Register + return an HttpClient with the Bearer token pre-set.</summary>
