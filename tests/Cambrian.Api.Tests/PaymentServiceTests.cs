@@ -2,6 +2,7 @@ using Cambrian.Application.DTOs.Payments;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -11,12 +12,13 @@ public sealed class PaymentServiceTests
     private readonly IPaymentGateway _gateway = Substitute.For<IPaymentGateway>();
     private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
     private readonly IPurchaseRepository _purchases = Substitute.For<IPurchaseRepository>();
+    private readonly ILogger<PaymentService> _logger = Substitute.For<ILogger<PaymentService>>();
     private readonly PaymentService _sut;
     private const string TestUserId = "user-1";
 
     public PaymentServiceTests()
     {
-        _sut = new PaymentService(_gateway, _tracks, _purchases);
+        _sut = new PaymentService(_gateway, _tracks, _purchases, _logger);
     }
 
     [Fact]
