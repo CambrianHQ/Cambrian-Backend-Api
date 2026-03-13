@@ -71,6 +71,28 @@ public sealed class S3ObjectStorage : IObjectStorage
         return _client.GetPreSignedURL(request);
     }
 
+    /// <summary>
+    /// Pre-signed URL that sets Content-Disposition: attachment so the
+    /// browser triggers a "Save As" download instead of playing inline.
+    /// </summary>
+    public string GenerateDownloadUrl(string key, string filename)
+    {
+        var normalised = NormaliseKey(key);
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = _options.Bucket,
+            Key = normalised,
+            Expires = DateTime.UtcNow.AddHours(1),
+            Verb = HttpVerb.GET,
+            ResponseHeaderOverrides =
+            {
+                ContentDisposition = $"attachment; filename=\"{filename}\"",
+                ContentType = "application/octet-stream",
+            },
+        };
+        return _client.GetPreSignedURL(request);
+    }
+
     public string GetPublicUrl(string key)
     {
         var normalised = NormaliseKey(key);
