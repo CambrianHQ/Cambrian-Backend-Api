@@ -51,6 +51,9 @@ public class BaseController : ControllerBase
         // Request may be null in unit tests — return relative path as-is
         if (Request is null)
             return url;
-        return $"{Request.Scheme}://{Request.Host}{url}";
+        // Ensure a "/" separates the host from the path so we never produce
+        // URLs like "onrender.comtracks/..." when the stored key has no leading slash.
+        var separator = url.StartsWith('/') ? "" : "/";
+        return $"{Request.Scheme}://{Request.Host}{separator}{url}";
     }
 }
