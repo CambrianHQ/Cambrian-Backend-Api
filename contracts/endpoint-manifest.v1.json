@@ -1,643 +1,697 @@
 {
-  "version": "v1",
-  "generatedAt": "2026-03-12T13:43:39.656Z",
-  "endpoints": [
-    {
-      "method": "GET",
-      "path": "/admin/audit",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "GET",
-      "path": "/admin/dashboard",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "GET",
-      "path": "/admin/settings",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/settings",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "GET",
-      "path": "/admin/payouts/requests",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/payouts/{id}/approve",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/payouts/{id}/reject",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/users/{id}/role",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "GET",
-      "path": "/admin/users",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/users/{id}/suspend",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/users/{id}/reactivate",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/users/{id}/reset-password",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/users/{id}/verify-creator",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "GET",
-      "path": "/admin/reports",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/reports/{id}/investigate",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/tracks/{id}/remove",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/tracks/{id}/restore",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/tracks/{id}/hide",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/tracks/{id}/flag",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/tracks/{id}/feature",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/tracks/{id}/pin",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/tracks/{id}/visibility",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/collections/curate",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "POST",
-      "path": "/admin/tags/manage",
-      "requiresAuth": true,
-      "tag": "Admin"
-    },
-    {
-      "method": "GET",
-      "path": "/ai/playlist",
-      "requiresAuth": true,
-      "tag": "Ai"
-    },
-    {
-      "method": "POST",
-      "path": "/generate",
-      "requiresAuth": true,
-      "tag": "Ai"
-    },
-    {
-      "method": "GET",
-      "path": "/creator/tracks",
-      "requiresAuth": true,
-      "tag": "Ai"
-    },
-    {
-      "method": "GET",
-      "path": "/creator/revenue",
-      "requiresAuth": true,
-      "tag": "Ai"
-    },
-    {
-      "method": "GET",
-      "path": "/auth/health",
-      "requiresAuth": false,
-      "tag": "Auth"
-    },
-    {
-      "method": "POST",
-      "path": "/auth/register",
-      "requiresAuth": false,
-      "tag": "Auth"
-    },
-    {
-      "method": "POST",
-      "path": "/auth/login",
-      "requiresAuth": false,
-      "tag": "Auth"
-    },
-    {
-      "method": "POST",
-      "path": "/auth/logout",
-      "requiresAuth": true,
-      "tag": "Auth"
-    },
-    {
-      "method": "GET",
-      "path": "/auth/me",
-      "requiresAuth": true,
-      "tag": "Auth"
-    },
-    {
-      "method": "GET",
-      "path": "/auth/csrf-token",
-      "requiresAuth": false,
-      "tag": "Auth"
-    },
-    {
-      "method": "POST",
-      "path": "/auth/forgot-password",
-      "requiresAuth": false,
-      "tag": "Auth"
-    },
-    {
-      "method": "POST",
-      "path": "/auth/verify-code",
-      "requiresAuth": false,
-      "tag": "Auth"
-    },
-    {
-      "method": "POST",
-      "path": "/auth/reset-password",
-      "requiresAuth": false,
-      "tag": "Auth"
-    },
-    {
-      "method": "POST",
-      "path": "/auth/recover-username",
-      "requiresAuth": false,
-      "tag": "Auth"
-    },
-    {
-      "method": "POST",
-      "path": "/billing/checkout",
-      "requiresAuth": true,
-      "tag": "Billing"
-    },
-    {
-      "method": "GET",
-      "path": "/billing/status",
-      "requiresAuth": true,
-      "tag": "Billing"
-    },
-    {
-      "method": "GET",
-      "path": "/billing/checkout-session/{sessionId}",
-      "requiresAuth": true,
-      "tag": "Billing"
-    },
-    {
-      "method": "GET",
-      "path": "/discover",
-      "requiresAuth": true,
-      "tag": "Catalog"
-    },
-    {
-      "method": "GET",
-      "path": "/catalog",
-      "requiresAuth": true,
-      "tag": "Catalog"
-    },
-    {
-      "method": "GET",
-      "path": "/trending",
-      "requiresAuth": true,
-      "tag": "Catalog"
-    },
-    {
-      "method": "GET",
-      "path": "/tracks/{trackId}",
-      "requiresAuth": true,
-      "tag": "Catalog"
-    },
-    {
-      "method": "POST",
-      "path": "/upload",
-      "requiresAuth": true,
-      "tag": "Catalog"
-    },
-    {
-      "method": "POST",
-      "path": "/checkout",
-      "requiresAuth": true,
-      "tag": "Checkout"
-    },
-    {
-      "method": "GET",
-      "path": "/checkout/session/{sessionId}",
-      "requiresAuth": true,
-      "tag": "Checkout"
-    },
-    {
-      "method": "GET",
-      "path": "/earnings",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "GET",
-      "path": "/community",
-      "requiresAuth": true,
-      "tag": "Community"
-    },
-    {
-      "method": "GET",
-      "path": "/data/account",
-      "requiresAuth": true,
-      "tag": "Data"
-    },
-    {
-      "method": "GET",
-      "path": "/data/songs",
-      "requiresAuth": true,
-      "tag": "Data"
-    },
-    {
-      "method": "POST",
-      "path": "/data/songs",
-      "requiresAuth": true,
-      "tag": "Data"
-    },
-    {
-      "method": "GET",
-      "path": "/data/system",
-      "requiresAuth": true,
-      "tag": "Data"
-    },
-    {
-      "method": "POST",
-      "path": "/data/system",
-      "requiresAuth": true,
-      "tag": "Data"
-    },
-    {
-      "method": "GET",
-      "path": "/data/secrets",
-      "requiresAuth": true,
-      "tag": "Data"
-    },
-    {
-      "method": "POST",
-      "path": "/data/secrets",
-      "requiresAuth": true,
-      "tag": "Data"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "requiresAuth": false,
-      "tag": "Health"
-    },
-    {
-      "method": "GET",
-      "path": "/invoices",
-      "requiresAuth": true,
-      "tag": "Invoices"
-    },
-    {
-      "method": "GET",
-      "path": "/invoices/{invoiceId}",
-      "requiresAuth": true,
-      "tag": "Invoices"
-    },
-    {
-      "method": "GET",
-      "path": "/invoices/{invoiceId}/download",
-      "requiresAuth": true,
-      "tag": "Invoices"
-    },
-    {
-      "method": "GET",
-      "path": "/library",
-      "requiresAuth": true,
-      "tag": "Library"
-    },
-    {
-      "method": "POST",
-      "path": "/library",
-      "requiresAuth": true,
-      "tag": "Library"
-    },
-    {
-      "method": "GET",
-      "path": "/library/purchased-track-ids",
-      "requiresAuth": true,
-      "tag": "Library"
-    },
-    {
-      "method": "DELETE",
-      "path": "/library/{trackId}",
-      "requiresAuth": true,
-      "tag": "Library"
-    },
-    {
-      "method": "POST",
-      "path": "/library/{trackId}",
-      "requiresAuth": true,
-      "tag": "Library"
-    },
-    {
-      "method": "GET",
-      "path": "/download/{trackId}",
-      "requiresAuth": true,
-      "tag": "Library"
-    },
-    {
-      "method": "GET",
-      "path": "/download/{trackId}/signed",
-      "requiresAuth": true,
-      "tag": "Library"
-    },
-    {
-      "method": "POST",
-      "path": "/payments/checkout",
-      "requiresAuth": true,
-      "tag": "Payments"
-    },
-    {
-      "method": "GET",
-      "path": "/payments/state",
-      "requiresAuth": true,
-      "tag": "Payments"
-    },
-    {
-      "method": "GET",
-      "path": "/payments/result",
-      "requiresAuth": false,
-      "tag": "Payments"
-    },
-    {
-      "method": "POST",
-      "path": "/payments/process",
-      "requiresAuth": true,
-      "tag": "Payments"
-    },
-    {
-      "method": "POST",
-      "path": "/payouts/connect-stripe",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "GET",
-      "path": "/payouts/connect-status",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "GET",
-      "path": "/payouts/stripe-dashboard",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "GET",
-      "path": "/payouts/account",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "POST",
-      "path": "/payouts/connect",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "DELETE",
-      "path": "/payouts/disconnect",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "POST",
-      "path": "/payouts/disconnect",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "GET",
-      "path": "/payouts/earnings",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "POST",
-      "path": "/payouts/request",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "GET",
-      "path": "/payouts/history",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "POST",
-      "path": "/payouts/settings",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "PUT",
-      "path": "/payouts/settings",
-      "requiresAuth": true,
-      "tag": "Payouts"
-    },
-    {
-      "method": "POST",
-      "path": "/purchases",
-      "requiresAuth": true,
-      "tag": "Purchases"
-    },
-    {
-      "method": "POST",
-      "path": "/purchases/credit-creator",
-      "requiresAuth": true,
-      "tag": "Purchases"
-    },
-    {
-      "method": "GET",
-      "path": "/settings/profile",
-      "requiresAuth": true,
-      "tag": "Settings"
-    },
-    {
-      "method": "POST",
-      "path": "/settings/password",
-      "requiresAuth": true,
-      "tag": "Settings"
-    },
-    {
-      "method": "PUT",
-      "path": "/settings/password",
-      "requiresAuth": true,
-      "tag": "Settings"
-    },
-    {
-      "method": "POST",
-      "path": "/settings/email",
-      "requiresAuth": true,
-      "tag": "Settings"
-    },
-    {
-      "method": "PUT",
-      "path": "/settings/email",
-      "requiresAuth": true,
-      "tag": "Settings"
-    },
-    {
-      "method": "GET",
-      "path": "/stream",
-      "requiresAuth": true,
-      "tag": "Stream"
-    },
-    {
-      "method": "GET",
-      "path": "/stream/{trackId}",
-      "requiresAuth": true,
-      "tag": "Stream"
-    },
-    {
-      "method": "POST",
-      "path": "/stream/start",
-      "requiresAuth": true,
-      "tag": "Stream"
-    },
-    {
-      "method": "POST",
-      "path": "/stream/stop",
-      "requiresAuth": true,
-      "tag": "Stream"
-    },
-    {
-      "method": "GET",
-      "path": "/subscriptions/plans",
-      "requiresAuth": true,
-      "tag": "Subscriptions"
-    },
-    {
-      "method": "GET",
-      "path": "/subscriptions/current",
-      "requiresAuth": true,
-      "tag": "Subscriptions"
-    },
-    {
-      "method": "POST",
-      "path": "/subscriptions/update",
-      "requiresAuth": true,
-      "tag": "Subscriptions"
-    },
-    {
-      "method": "GET",
-      "path": "/tracks",
-      "requiresAuth": true,
-      "tag": "Tracks"
-    },
-    {
-      "method": "GET",
-      "path": "/tracks/{id}",
-      "requiresAuth": true,
-      "tag": "Tracks"
-    },
-    {
-      "method": "POST",
-      "path": "/tracks/upload",
-      "requiresAuth": true,
-      "tag": "Tracks"
-    },
-    {
-      "method": "GET",
-      "path": "/wallet",
-      "requiresAuth": true,
-      "tag": "Wallet"
-    },
-    {
-      "method": "POST",
-      "path": "/wallet/withdraw",
-      "requiresAuth": true,
-      "tag": "Wallet"
-    },
-    {
-      "method": "GET",
-      "path": "/wallet/history",
-      "requiresAuth": true,
-      "tag": "Wallet"
-    },
-    {
-      "method": "POST",
-      "path": "/webhook/stripe",
-      "requiresAuth": false,
-      "tag": "Webhook"
-    },
-    {
-      "method": "GET",
-      "path": "/licenses/{trackId}",
-      "requiresAuth": true,
-      "tag": "Licenses"
-    }
-  ],
-  "source": "contracts/openapi.v1.json"
+    "version":  "v1",
+    "generatedAt":  "2026-03-13T15:00:23.7421695Z",
+    "endpoints":  [
+                      {
+                          "method":  "GET",
+                          "path":  "/admin/audit",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/admin/dashboard",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/admin/settings",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/settings",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/admin/payouts/requests",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/payouts/{id}/approve",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/payouts/{id}/reject",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/users/{id}/role",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/admin/users",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/users/{id}/suspend",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/users/{id}/reactivate",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/users/{id}/reset-password",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/users/{id}/verify-creator",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/admin/reports",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/reports/{id}/investigate",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/tracks/{id}/remove",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/tracks/{id}/restore",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/tracks/{id}/hide",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/tracks/{id}/flag",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/tracks/{id}/feature",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/tracks/{id}/pin",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/tracks/{id}/visibility",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/collections/curate",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/admin/tags/manage",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/ai/playlist",
+                          "requiresAuth":  true,
+                          "tag":  "Ai"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/generate",
+                          "requiresAuth":  true,
+                          "tag":  "Ai"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/creator/tracks",
+                          "requiresAuth":  true,
+                          "tag":  "Ai"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/creator/revenue",
+                          "requiresAuth":  true,
+                          "tag":  "Ai"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/auth/health",
+                          "requiresAuth":  false,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/auth/register",
+                          "requiresAuth":  false,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/auth/login",
+                          "requiresAuth":  false,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/auth/logout",
+                          "requiresAuth":  true,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/auth/me",
+                          "requiresAuth":  true,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/auth/csrf-token",
+                          "requiresAuth":  false,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/auth/forgot-password",
+                          "requiresAuth":  false,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/auth/verify-code",
+                          "requiresAuth":  false,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/auth/reset-password",
+                          "requiresAuth":  false,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/auth/recover-username",
+                          "requiresAuth":  false,
+                          "tag":  "Auth"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/billing/checkout",
+                          "requiresAuth":  true,
+                          "tag":  "Billing"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/billing/status",
+                          "requiresAuth":  true,
+                          "tag":  "Billing"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/billing/checkout-session/{sessionId}",
+                          "requiresAuth":  true,
+                          "tag":  "Billing"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/discover",
+                          "requiresAuth":  true,
+                          "tag":  "Catalog"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/catalog",
+                          "requiresAuth":  true,
+                          "tag":  "Catalog"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/trending",
+                          "requiresAuth":  true,
+                          "tag":  "Catalog"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/tracks/{trackId}",
+                          "requiresAuth":  true,
+                          "tag":  "Catalog"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/upload",
+                          "requiresAuth":  true,
+                          "tag":  "Catalog"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/checkout",
+                          "requiresAuth":  true,
+                          "tag":  "Checkout"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/checkout/session/{sessionId}",
+                          "requiresAuth":  true,
+                          "tag":  "Checkout"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/earnings",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/community",
+                          "requiresAuth":  true,
+                          "tag":  "Community"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/data/account",
+                          "requiresAuth":  true,
+                          "tag":  "Data"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/data/songs",
+                          "requiresAuth":  true,
+                          "tag":  "Data"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/data/songs",
+                          "requiresAuth":  true,
+                          "tag":  "Data"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/data/system",
+                          "requiresAuth":  true,
+                          "tag":  "Data"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/data/system",
+                          "requiresAuth":  true,
+                          "tag":  "Data"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/data/secrets",
+                          "requiresAuth":  true,
+                          "tag":  "Data"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/data/secrets",
+                          "requiresAuth":  true,
+                          "tag":  "Data"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/health",
+                          "requiresAuth":  false,
+                          "tag":  "Health"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/invoices",
+                          "requiresAuth":  true,
+                          "tag":  "Invoices"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/invoices/{invoiceId}",
+                          "requiresAuth":  true,
+                          "tag":  "Invoices"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/invoices/{invoiceId}/download",
+                          "requiresAuth":  true,
+                          "tag":  "Invoices"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/library",
+                          "requiresAuth":  true,
+                          "tag":  "Library"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/library",
+                          "requiresAuth":  true,
+                          "tag":  "Library"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/library/purchased-track-ids",
+                          "requiresAuth":  true,
+                          "tag":  "Library"
+                      },
+                      {
+                          "method":  "DELETE",
+                          "path":  "/library/{trackId}",
+                          "requiresAuth":  true,
+                          "tag":  "Library"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/library/{trackId}",
+                          "requiresAuth":  true,
+                          "tag":  "Library"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/download/{trackId}",
+                          "requiresAuth":  true,
+                          "tag":  "Library"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/download/{trackId}/signed",
+                          "requiresAuth":  true,
+                          "tag":  "Library"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/payments/checkout",
+                          "requiresAuth":  true,
+                          "tag":  "Payments"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/payments/state",
+                          "requiresAuth":  true,
+                          "tag":  "Payments"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/payments/result",
+                          "requiresAuth":  false,
+                          "tag":  "Payments"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/payments/process",
+                          "requiresAuth":  true,
+                          "tag":  "Payments"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/payouts/connect-stripe",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/payouts/connect-status",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/payouts/stripe-dashboard",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/payouts/account",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/payouts/connect",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "DELETE",
+                          "path":  "/payouts/disconnect",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/payouts/disconnect",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/payouts/earnings",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/payouts/request",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/payouts/history",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/payouts/settings",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "PUT",
+                          "path":  "/payouts/settings",
+                          "requiresAuth":  true,
+                          "tag":  "Payouts"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/purchases",
+                          "requiresAuth":  true,
+                          "tag":  "Purchases"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/purchases/credit-creator",
+                          "requiresAuth":  true,
+                          "tag":  "Purchases"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/settings/profile",
+                          "requiresAuth":  true,
+                          "tag":  "Settings"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/settings/password",
+                          "requiresAuth":  true,
+                          "tag":  "Settings"
+                      },
+                      {
+                          "method":  "PUT",
+                          "path":  "/settings/password",
+                          "requiresAuth":  true,
+                          "tag":  "Settings"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/settings/email",
+                          "requiresAuth":  true,
+                          "tag":  "Settings"
+                      },
+                      {
+                          "method":  "PUT",
+                          "path":  "/settings/email",
+                          "requiresAuth":  true,
+                          "tag":  "Settings"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/stream",
+                          "requiresAuth":  true,
+                          "tag":  "Stream"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/stream/{trackId}",
+                          "requiresAuth":  true,
+                          "tag":  "Stream"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/stream/start",
+                          "requiresAuth":  true,
+                          "tag":  "Stream"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/stream/stop",
+                          "requiresAuth":  true,
+                          "tag":  "Stream"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/subscriptions/plans",
+                          "requiresAuth":  true,
+                          "tag":  "Subscriptions"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/subscriptions/current",
+                          "requiresAuth":  true,
+                          "tag":  "Subscriptions"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/subscriptions/update",
+                          "requiresAuth":  true,
+                          "tag":  "Subscriptions"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/tracks",
+                          "requiresAuth":  true,
+                          "tag":  "Tracks"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/tracks/{id}",
+                          "requiresAuth":  true,
+                          "tag":  "Tracks"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/wallet",
+                          "requiresAuth":  true,
+                          "tag":  "Wallet"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/wallet/withdraw",
+                          "requiresAuth":  true,
+                          "tag":  "Wallet"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/wallet/history",
+                          "requiresAuth":  true,
+                          "tag":  "Wallet"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/licenses",
+                          "requiresAuth":  true,
+                          "tag":  "Licenses"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/licenses/{licenseId}",
+                          "requiresAuth":  true,
+                          "tag":  "Licenses"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/billing/checkout-session",
+                          "requiresAuth":  true,
+                          "tag":  "Billing"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/subscriptions/cancel",
+                          "requiresAuth":  true,
+                          "tag":  "Subscriptions"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/subscriptions/history",
+                          "requiresAuth":  true,
+                          "tag":  "Subscriptions"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/admin/integrity",
+                          "requiresAuth":  true,
+                          "tag":  "Admin"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/health/storage",
+                          "requiresAuth":  false,
+                          "tag":  "Health"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/stream/{trackId}/audio",
+                          "requiresAuth":  true,
+                          "tag":  "Stream"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/webhook/stripe",
+                          "requiresAuth":  false,
+                          "tag":  "Webhook"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/health/storage",
+                          "requiresAuth":  false,
+                          "tag":  "Health"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/stream/{trackId}/audio",
+                          "requiresAuth":  true,
+                          "tag":  "Stream"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/webhook/stripe",
+                          "requiresAuth":  false,
+                          "tag":  "Webhook"
+                      }
+                  ],
+    "source":  "contracts/openapi.v1.json"
 }
