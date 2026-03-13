@@ -48,14 +48,24 @@ public class DownloadController : BaseController
 
         _logger.LogInformation("Download requested: trackId={TrackId}, audioUrl={AudioUrl}", trackId, track.AudioUrl);
 
-        var url = _storage.GenerateSignedUrl(track.AudioUrl);
+        // Build a user-friendly filename from the track title
+        var ext = Path.GetExtension(track.AudioUrl);
+        if (string.IsNullOrWhiteSpace(ext)) ext = ".mp3";
+        var safeTitle = string.Concat(
+            (track.Title ?? "track").Where(c => !Path.GetInvalidFileNameChars().Contains(c)));
+        if (string.IsNullOrWhiteSpace(safeTitle)) safeTitle = "track";
+        var filename = $"{safeTitle}{ext}";
+
+        // Generate a URL with Content-Disposition: attachment so the browser
+        // triggers a real "Save As" download instead of playing the audio inline.
+        var url = _storage.GenerateDownloadUrl(track.AudioUrl, filename);
 
         // If the signed URL is relative (local storage returns /uploads/key),
         // fall back to the binary streaming endpoint so the download still works.
         if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             url = ResolveAbsoluteUrl($"/download/{trackId}/file");
 
-        return OkResponse(new { url, expiresAt = DateTime.UtcNow.AddMinutes(15) });
+        return OkResponse(new { url, filename, expiresAt = DateTime.UtcNow.AddMinutes(15) });
     }
 
     /// <summary>

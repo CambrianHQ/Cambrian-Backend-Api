@@ -11,6 +11,12 @@ public interface IObjectStorage
     string GenerateSignedUrl(string key);
 
     /// <summary>
+    /// Generate a pre-signed URL that forces the browser to download (save)
+    /// the file with the specified filename via Content-Disposition: attachment.
+    /// </summary>
+    string GenerateDownloadUrl(string key, string filename) => GenerateSignedUrl(key);
+
+    /// <summary>
     /// Get a public (unsigned) URL for browsable assets like cover art.
     /// </summary>
     string GetPublicUrl(string key);
