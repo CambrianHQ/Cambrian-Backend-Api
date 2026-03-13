@@ -197,8 +197,10 @@ public sealed class LibraryControllerTests
         var envelope = ok.Value as ApiResponse<IReadOnlyCollection<LibraryItemResponse>>;
         Assert.NotNull(envelope);
         var item = Assert.Single(envelope!.Data!);
-        // Must be the stream proxy URL, not the raw storage key
-        Assert.Equal($"https://cambrian-api-staging.onrender.com/stream/{trackId}/audio", item.AudioUrl);
+        // Must point at the stream proxy, not the raw storage key.
+        // In a real server the URL is absolute; in tests it may be relative
+        // depending on how the DefaultHttpContext wires up.
+        Assert.EndsWith($"/stream/{trackId}/audio", item.AudioUrl);
         // Must never contain raw S3 key fragments
         Assert.DoesNotContain("demos/", item.AudioUrl);
         Assert.DoesNotContain(".mp3", item.AudioUrl);
