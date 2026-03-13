@@ -1,3 +1,4 @@
+using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Cambrian.Application.Interfaces;
@@ -17,6 +18,9 @@ public sealed class S3ObjectStorage : IObjectStorage
     public S3ObjectStorage(IOptions<StorageOptions> options)
     {
         _options = options.Value;
+
+        // R2 and modern S3 require Signature Version 4
+        AWSConfigsS3.UseSignatureVersion4 = true;
 
         var config = new AmazonS3Config
         {
@@ -132,3 +136,4 @@ public sealed class S3ObjectStorage : IObjectStorage
         return key;
     }
 }
+
