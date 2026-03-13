@@ -106,6 +106,19 @@ public static class LicensePdfGenerator
                         });
                     }
 
+                    // Exclusive license marketplace status
+                    if (cert.LicenseType == "exclusive")
+                    {
+                        col.Item().PaddingBottom(15).Background(Colors.Blue.Lighten5).Padding(12).Column(inner =>
+                        {
+                            inner.Item().Text("Marketplace Status").Bold().FontSize(12).FontColor(Colors.Blue.Darken2);
+                            inner.Item().PaddingTop(4).Text(
+                                "This track has been permanently removed from the Cambrian marketplace. " +
+                                "As the exclusive license holder, you are the sole owner of commercial rights to this track.")
+                                .FontSize(10).FontColor(Colors.Grey.Darken3);
+                        });
+                    }
+
                     // Legal notice
                     col.Item().PaddingTop(20).BorderTop(1).BorderColor(Colors.Grey.Lighten2).PaddingTop(10).Column(inner =>
                     {
