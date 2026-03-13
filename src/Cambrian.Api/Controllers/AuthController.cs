@@ -24,7 +24,7 @@ public class AuthController : BaseController
     public async Task<IActionResult> Register(RegisterRequest request)
     {
         var result = await _auth.RegisterAsync(request);
-        return StatusCode(201, ToSession(result));
+        return CreatedResponse(ToSession(result));
     }
 
     [EnableRateLimiting("auth")]
@@ -32,7 +32,7 @@ public class AuthController : BaseController
     public async Task<IActionResult> Login(LoginRequest request)
     {
         var result = await _auth.LoginAsync(request);
-        return Ok(ToSession(result));
+        return OkResponse(ToSession(result));
     }
 
     [Authorize]
@@ -50,7 +50,7 @@ public class AuthController : BaseController
         var sub = await _subscriptions.GetActiveAsync(profile.UserId);
         var tier = sub?.Plan ?? profile.Tier ?? "free";
 
-        return Ok(new
+        return OkResponse(new
         {
             token = freshToken ?? Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
             user = new
