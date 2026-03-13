@@ -72,7 +72,7 @@ public class CheckoutService : ICheckoutService
         {
             "exclusive" => track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100),
             "non-exclusive" => track.NonExclusivePriceCents > 0 ? track.NonExclusivePriceCents : (int)(track.Price * 100),
-            "copyright_buyout" => track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100),
+            "copyright_buyout" => track.CopyrightBuyoutPriceCents > 0 ? track.CopyrightBuyoutPriceCents : (track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100)),
             _ => (int)(track.Price * 100)
         };
 
