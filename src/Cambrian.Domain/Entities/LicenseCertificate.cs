@@ -39,4 +39,7 @@ public class LicenseCertificate
 
     /// <summary>Restrictions or limitations (JSON-stored list).</summary>
     public List<string>? Restrictions { get; set; }
+
+    /// <summary>User ID of the copyright owner. Equals buyer for copyright_buyout, creator otherwise.</summary>
+    public string? CopyrightOwner { get; set; }
 }

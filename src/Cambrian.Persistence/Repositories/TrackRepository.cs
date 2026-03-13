@@ -17,7 +17,7 @@ public class TrackRepository : ITrackRepository
     {
         return await _db.Tracks
             .Include(t => t.Creator)
-            .Where(t => !t.ExclusiveSold && t.Visibility == "public")
+            .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public")
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
     }
@@ -32,7 +32,7 @@ public class TrackRepository : ITrackRepository
     {
         var query = _db.Tracks
             .Include(t => t.Creator)
-            .Where(t => !t.ExclusiveSold && t.Visibility == "public");
+            .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public");
 
         if (!string.IsNullOrWhiteSpace(genre))
             query = query.Where(t => t.Genre != null && t.Genre.ToLower() == genre.ToLower());

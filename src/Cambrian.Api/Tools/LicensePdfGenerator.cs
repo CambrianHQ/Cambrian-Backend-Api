@@ -63,6 +63,8 @@ public static class LicensePdfGenerator
                         AddRow(table, "Usage Type", FormatUsageType(cert.UsageType));
                         AddRow(table, "Buyer ID", cert.BuyerId);
                         AddRow(table, "Creator ID", cert.CreatorId);
+                        if (!string.IsNullOrEmpty(cert.CopyrightOwner))
+                            AddRow(table, "Copyright Owner", cert.CopyrightOwner);
                         AddRow(table, "Issued At", cert.IssuedAt.ToString("yyyy-MM-dd HH:mm:ss UTC"));
                     });
 
@@ -119,6 +121,21 @@ public static class LicensePdfGenerator
                         });
                     }
 
+                    // Copyright buyout transfer notice
+                    if (cert.LicenseType == "copyright_buyout")
+                    {
+                        col.Item().PaddingBottom(15).Background(Colors.Green.Lighten5).Padding(12).Column(inner =>
+                        {
+                            inner.Item().Text("Copyright Transfer").Bold().FontSize(12).FontColor(Colors.Green.Darken2);
+                            inner.Item().PaddingTop(4).Text(
+                                "Full copyright ownership of this track has been transferred to the buyer. " +
+                                "The original creator has relinquished all ownership rights. " +
+                                "This track has been permanently removed from the Cambrian marketplace " +
+                                "and no further licensing is permitted by the original creator.")
+                                .FontSize(10).FontColor(Colors.Grey.Darken3);
+                        });
+                    }
+
                     // Legal notice
                     col.Item().PaddingTop(20).BorderTop(1).BorderColor(Colors.Grey.Lighten2).PaddingTop(10).Column(inner =>
                     {
@@ -159,6 +176,7 @@ public static class LicensePdfGenerator
         "standard" => "Standard (Personal Use)",
         "non-exclusive" => "Non-Exclusive (Commercial)",
         "exclusive" => "Exclusive (Full Rights)",
+        "copyright_buyout" => "Copyright Buyout (Full Ownership Transfer)",
         _ => type ?? "Standard"
     };
 

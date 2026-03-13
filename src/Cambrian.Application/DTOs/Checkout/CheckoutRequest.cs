@@ -8,8 +8,8 @@ public class CheckoutRequest
     public string TrackId { get; set; } = string.Empty;
 
     [Required]
-    [RegularExpression("^(standard|non-exclusive|exclusive)$",
-        ErrorMessage = "LicenseType must be standard, non-exclusive, or exclusive.")]
+    [RegularExpression("^(standard|non-exclusive|exclusive|copyright_buyout)$",
+        ErrorMessage = "LicenseType must be standard, non-exclusive, exclusive, or copyright_buyout.")]
     public string LicenseType { get; set; } = "standard";
 
     public string? ClientReferenceId { get; set; }

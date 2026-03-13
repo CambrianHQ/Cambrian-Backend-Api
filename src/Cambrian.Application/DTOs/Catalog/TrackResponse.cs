@@ -36,6 +36,12 @@ public class TrackResponse
 
     public bool ExclusiveSold { get; set; }
 
+    /// <summary>Track availability status: available, exclusive_sold, copyright_transferred.</summary>
+    public string Status { get; set; } = "available";
+
+    /// <summary>Current copyright owner user ID (null means creator owns copyright).</summary>
+    public string? CopyrightOwnerId { get; set; }
+
     public string? LicenseType { get; set; }
 
     public string? Duration { get; set; }

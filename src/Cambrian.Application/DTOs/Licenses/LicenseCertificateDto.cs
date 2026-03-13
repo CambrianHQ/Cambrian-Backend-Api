@@ -35,4 +35,9 @@ public class LicenseCertificateDto
     /// Usage restrictions or limitations.
     /// </summary>
     public List<string>? Restrictions { get; set; }
+
+    /// <summary>
+    /// User ID of the copyright owner. Buyer for copyright_buyout, creator otherwise.
+    /// </summary>
+    public string? CopyrightOwner { get; set; }
 }

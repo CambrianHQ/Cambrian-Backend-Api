@@ -51,6 +51,9 @@ public class CheckoutService : ICheckoutService
         if (request.LicenseType == "exclusive" && track.ExclusiveSold)
             throw new InvalidOperationException("This track has already been sold under an exclusive license.");
 
+        if (request.LicenseType == "copyright_buyout" && (track.ExclusiveSold || track.Status == "copyright_transferred"))
+            throw new InvalidOperationException("This track is no longer available for purchase.");
+
         // ── Reject if user already has a completed purchase for this track+license ──
         var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
@@ -69,6 +72,7 @@ public class CheckoutService : ICheckoutService
         {
             "exclusive" => track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100),
             "non-exclusive" => track.NonExclusivePriceCents > 0 ? track.NonExclusivePriceCents : (int)(track.Price * 100),
+            "copyright_buyout" => track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100),
             _ => (int)(track.Price * 100)
         };
 
@@ -212,6 +216,19 @@ public class CheckoutService : ICheckoutService
         if (licenseType == "exclusive" && !track.ExclusiveSold)
         {
             track.ExclusiveSold = true;
+            track.Status = "exclusive_sold";
+            await _tracks.UpdateAsync(track);
+        }
+
+        // ── Mark copyright_buyout if applicable ──
+        if (licenseType == "copyright_buyout")
+        {
+            track.ExclusiveSold = true;
+            track.Status = "copyright_transferred";
+            track.Visibility = "hidden";
+            track.OriginalCreatorId = track.CreatorId;
+            track.CopyrightOwnerId = userId;
+            track.CopyrightTransferredAt = DateTime.UtcNow;
             await _tracks.UpdateAsync(track);
         }
 

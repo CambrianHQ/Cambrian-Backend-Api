@@ -40,7 +40,8 @@ public class LicenseService : ILicenseService
             UsageType = usageType ?? "personal",
             IssuedAt = DateTime.UtcNow,
             AllowedUses = allowedUses,
-            Restrictions = restrictions
+            Restrictions = restrictions,
+            CopyrightOwner = licenseType == "copyright_buyout" ? buyerId : creatorId
         };
 
         await _repo.AddAsync(cert);
@@ -72,7 +73,8 @@ public class LicenseService : ILicenseService
         UsageType = cert.UsageType,
         IssuedAt = cert.IssuedAt,
         AllowedUses = cert.AllowedUses,
-        Restrictions = cert.Restrictions
+        Restrictions = cert.Restrictions,
+        CopyrightOwner = cert.CopyrightOwner
     };
 
     /// <summary>
@@ -129,6 +131,24 @@ public class LicenseService : ILicenseService
                     "No resale of standalone track",
                     "No sublicensing",
                     "No redistribution of raw audio"
+                }
+            ),
+            "copyright_buyout" => (
+                new List<string>
+                {
+                    "Full copyright ownership transfer",
+                    "Perpetual and irrevocable rights",
+                    "Unlimited commercial use",
+                    "Global distribution",
+                    "Editing, remixing, and modification",
+                    "Monetization and sublicensing rights",
+                    "Right to register with PROs and content ID systems"
+                },
+                new List<string>
+                {
+                    "Original creator relinquishes all ownership rights",
+                    "Track permanently removed from Cambrian marketplace",
+                    "No further licensing by original creator permitted"
                 }
             ),
             _ => (null, null)

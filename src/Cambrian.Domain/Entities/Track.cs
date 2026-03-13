@@ -38,6 +38,18 @@ public class Track
 
     public bool ExclusiveSold { get; set; }
 
+    /// <summary>Track availability status: available, exclusive_sold, copyright_transferred.</summary>
+    public string Status { get; set; } = "available";
+
+    /// <summary>User ID of the current copyright owner (defaults to creator; changes on copyright buyout).</summary>
+    public string? CopyrightOwnerId { get; set; }
+
+    /// <summary>Timestamp when copyright was transferred via buyout.</summary>
+    public DateTime? CopyrightTransferredAt { get; set; }
+
+    /// <summary>Original creator ID preserved after copyright transfer.</summary>
+    public string? OriginalCreatorId { get; set; }
+
     public string Visibility { get; set; } = "public"; // public, limited, hidden
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
