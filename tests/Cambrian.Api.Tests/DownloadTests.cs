@@ -17,7 +17,7 @@ public sealed class DownloadTests : IClassFixture<CambrianApiFixture>
     public DownloadTests(CambrianApiFixture factory) => _factory = factory;
 
     [Fact]
-    public async Task Download_WithPurchase_ReturnsFile()
+    public async Task Download_WithPurchase_ReturnsDownloadUrl()
     {
         // Seed creator + track
         var creatorEmail = "dl-creator@cambrian.com";
@@ -34,7 +34,12 @@ public sealed class DownloadTests : IClassFixture<CambrianApiFixture>
         var res = await client.GetAsync($"/download/{trackId}");
 
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
-        Assert.Equal("audio/mpeg", res.Content.Headers.ContentType?.MediaType);
+        // Endpoint now returns JSON { success, data: { url, expiresAt } }
+        var body = await res.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("success").GetBoolean());
+        var data = body.GetProperty("data");
+        var url = data.GetProperty("url").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(url));
     }
 
     [Fact]
