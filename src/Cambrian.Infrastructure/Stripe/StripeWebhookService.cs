@@ -292,6 +292,23 @@ public class StripeWebhookService : IWebhookService
             }
         }
 
+        // ── Copyright buyout: mark track as transferred ──
+        if (licenseType == "copyright_buyout")
+        {
+            if (track.ExclusiveSold || track.Status == "copyright_transferred")
+            {
+                _logger.LogWarning("Track {TrackId} already sold/transferred — skipping copyright buyout for user {UserId}", trackId, userId);
+                return;
+            }
+
+            track.ExclusiveSold = true;
+            track.Status = "copyright_transferred";
+            track.Visibility = "hidden";
+            track.OriginalCreatorId = track.CreatorId;
+            track.CopyrightOwnerId = userId;
+            track.CopyrightTransferredAt = DateTime.UtcNow;
+        }
+
         // Prevent duplicate purchases for the same track/user/license
         var existingPurchase = await _db.Purchases
             .FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId && p.LicenseType == licenseType);
