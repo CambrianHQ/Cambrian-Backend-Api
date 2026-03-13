@@ -20,9 +20,11 @@ public class LibraryController : BaseController
     public async Task<IActionResult> GetLibrary()
     {
         var items = await _library.GetLibraryAsync(User);
-        // Resolve relative audio URLs to absolute so the frontend can fetch them cross-origin
+        // Point audioUrl at the authenticated streaming proxy so browsers
+        // always get the correct Content-Type, Range support, and CORS headers.
+        // Raw storage keys (e.g. "demos/audio/demo7.mp3") are never useful to the frontend.
         foreach (var item in items)
-            item.AudioUrl = ResolveAbsoluteUrl(item.AudioUrl);
+            item.AudioUrl = ResolveAbsoluteUrl($"/stream/{item.TrackId}/audio");
         return OkResponse(items);
     }
 
