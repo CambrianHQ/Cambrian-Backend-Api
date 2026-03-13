@@ -36,6 +36,8 @@ public class Track
 
     public int ExclusivePriceCents { get; set; }
 
+    public int CopyrightBuyoutPriceCents { get; set; }
+
     public bool ExclusiveSold { get; set; }
 
     /// <summary>Track availability status: available, exclusive_sold, copyright_transferred.</summary>

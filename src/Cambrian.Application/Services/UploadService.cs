@@ -134,6 +134,9 @@ public class UploadService : IUploadService
             ExclusivePriceCents = request.ExclusivePrice.HasValue
                 ? (int)Math.Round(request.ExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
                 : priceCents,
+            CopyrightBuyoutPriceCents = request.CopyrightBuyoutPrice.HasValue
+                ? (int)Math.Round(request.CopyrightBuyoutPrice.Value * 100, MidpointRounding.AwayFromZero)
+                : 0,
             CreatorId = request.CreatorId,
             Tags = string.IsNullOrWhiteSpace(request.Tags)
                 ? new List<string>()

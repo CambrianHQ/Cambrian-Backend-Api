@@ -52,6 +52,7 @@ public class CatalogService : ICatalogService
     {
         var nonExPrice = t.NonExclusivePriceCents / 100m;
         var exPrice = t.ExclusivePriceCents / 100m;
+        var buyoutPrice = t.CopyrightBuyoutPriceCents / 100m;
 
         return new TrackResponse
         {
@@ -63,11 +64,14 @@ public class CatalogService : ICatalogService
             Price = (decimal)t.Price,
             NonExclusivePrice = nonExPrice,
             ExclusivePrice = exPrice,
+            CopyrightBuyoutPrice = buyoutPrice,
             PlatformFeePercent = PlatformFeeRate,
             NonExclusivePlatformFee = Math.Round(nonExPrice * PlatformFeeRate, 2),
             NonExclusiveCreatorEarnings = Math.Round(nonExPrice * (1 - PlatformFeeRate), 2),
             ExclusivePlatformFee = Math.Round(exPrice * PlatformFeeRate, 2),
             ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - PlatformFeeRate), 2),
+            CopyrightBuyoutPlatformFee = Math.Round(buyoutPrice * PlatformFeeRate, 2),
+            CopyrightBuyoutCreatorEarnings = Math.Round(buyoutPrice * (1 - PlatformFeeRate), 2),
             ExclusiveSold = t.ExclusiveSold,
             Status = t.Status ?? "available",
             CopyrightOwnerId = t.CopyrightOwnerId,

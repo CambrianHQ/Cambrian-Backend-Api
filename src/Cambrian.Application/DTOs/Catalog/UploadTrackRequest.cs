@@ -31,5 +31,7 @@ public class UploadTrackRequest
 
     public double? ExclusivePrice { get; set; }
 
+    public double? CopyrightBuyoutPrice { get; set; }
+
     public string? CreatorId { get; set; }
 }

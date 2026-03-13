@@ -19,6 +19,8 @@ public class TrackResponse
 
     public decimal ExclusivePrice { get; set; }
 
+    public decimal CopyrightBuyoutPrice { get; set; }
+
     /// <summary>Platform fee rate applied to each sale (0.15 = 15%).</summary>
     public decimal PlatformFeePercent { get; set; } = 0.15m;
 
@@ -33,6 +35,12 @@ public class TrackResponse
 
     /// <summary>Creator earnings in dollars for an exclusive sale.</summary>
     public decimal ExclusiveCreatorEarnings { get; set; }
+
+    /// <summary>Platform fee in dollars for the copyright buyout price.</summary>
+    public decimal CopyrightBuyoutPlatformFee { get; set; }
+
+    /// <summary>Creator earnings in dollars for a copyright buyout sale.</summary>
+    public decimal CopyrightBuyoutCreatorEarnings { get; set; }
 
     public bool ExclusiveSold { get; set; }
 
