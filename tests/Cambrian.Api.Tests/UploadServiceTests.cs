@@ -161,7 +161,9 @@ public sealed class UploadServiceTests
 
         var result = await _sut.Upload(request);
 
-        Assert.True(Guid.TryParse(result, out _));
+        Assert.True(Guid.TryParse(result.TrackId, out _));
+        Assert.Equal("Beat", result.Title);
+        Assert.NotNull(result.CambrianTrackId);
     }
 
     [Fact]

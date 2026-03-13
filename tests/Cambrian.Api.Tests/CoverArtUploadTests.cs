@@ -105,10 +105,10 @@ public sealed class CoverArtUploadTests
     {
         var request = MakeRequest(MakeAudioFile(), MakeImageFile(fileName, contentType));
 
-        var trackId = await _sut.Upload(request);
+        var result = await _sut.Upload(request);
 
-        Assert.NotNull(trackId);
-        Assert.True(Guid.TryParse(trackId, out _));
+        Assert.NotNull(result);
+        Assert.True(Guid.TryParse(result.TrackId, out _));
     }
 
     // ── Rejected image formats ──
@@ -163,9 +163,9 @@ public sealed class CoverArtUploadTests
 
         var request = MakeRequest(MakeAudioFile(), maxCover);
 
-        var trackId = await _sut.Upload(request);
+        var result = await _sut.Upload(request);
 
-        Assert.NotNull(trackId);
+        Assert.NotNull(result);
     }
 
     // ── Empty cover art is treated as no cover ──

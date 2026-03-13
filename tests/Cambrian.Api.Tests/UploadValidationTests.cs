@@ -49,10 +49,10 @@ public sealed class UploadValidationTests
     public async Task Upload_Accepts_AllowedAudioFormats(string fileName, string contentType)
     {
         var file = MakeFile(fileName, contentType);
-        var trackId = await _sut.Upload(MakeRequest(file));
+        var result = await _sut.Upload(MakeRequest(file));
 
-        Assert.NotNull(trackId);
-        Assert.True(Guid.TryParse(trackId, out _));
+        Assert.NotNull(result);
+        Assert.True(Guid.TryParse(result.TrackId, out _));
     }
 
     [Theory]
@@ -88,9 +88,9 @@ public sealed class UploadValidationTests
     {
         var maxFile = MakeFile("exact.mp3", "audio/mpeg", 100 * 1024 * 1024); // exactly 100MB
 
-        var trackId = await _sut.Upload(MakeRequest(maxFile));
+        var result = await _sut.Upload(MakeRequest(maxFile));
 
-        Assert.NotNull(trackId);
+        Assert.NotNull(result);
     }
 
     [Fact]

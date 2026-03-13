@@ -47,7 +47,7 @@ public class UploadService : IUploadService
         _tracks = tracks;
     }
 
-    public async Task<string> Upload(UploadTrackRequest request)
+    public async Task<UploadTrackResponse> Upload(UploadTrackRequest request)
     {
         if (request.Audio is null || request.Audio.Length == 0)
             throw new ArgumentException("Audio file is required.");
@@ -145,6 +145,11 @@ public class UploadService : IUploadService
 
         await _tracks.AddAsync(track);
 
-        return track.Id.ToString();
+        return new UploadTrackResponse
+        {
+            TrackId = track.Id.ToString(),
+            Title = track.Title,
+            CambrianTrackId = track.CambrianTrackId ?? ""
+        };
     }
 }

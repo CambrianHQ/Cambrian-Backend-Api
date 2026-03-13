@@ -25,7 +25,7 @@ public class CheckoutController : BaseController
     public async Task<IActionResult> Checkout(CheckoutRequest request)
     {
         var session = await _checkout.CreateCheckoutAsync(request, User);
-        return OkResponse(new { checkoutUrl = session.CheckoutUrl, status = session.Status });
+        return OkResponse(session);
     }
 
     /// <summary>
