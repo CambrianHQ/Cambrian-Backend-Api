@@ -44,31 +44,31 @@ public sealed class CatalogControllerTests
     [Fact]
     public async Task Discover_ClampsPageToMinimumOne()
     {
-        _catalog.GetDiscoverAsync(1, 20, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetDiscoverAsync(1, 20, null, null, null, null, null, null).Returns(new List<TrackResponse>());
 
         await _controller.Discover(page: -5);
 
-        await _catalog.Received(1).GetDiscoverAsync(1, 20, null, null);
+        await _catalog.Received(1).GetDiscoverAsync(1, 20, null, null, null, null, null, null);
     }
 
     [Fact]
     public async Task Discover_ClampsPageSizeTo20_WhenOutOfRange()
     {
-        _catalog.GetDiscoverAsync(1, 20, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetDiscoverAsync(1, 20, null, null, null, null, null, null).Returns(new List<TrackResponse>());
 
         await _controller.Discover(pageSize: 999);
 
-        await _catalog.Received(1).GetDiscoverAsync(1, 20, null, null);
+        await _catalog.Received(1).GetDiscoverAsync(1, 20, null, null, null, null, null, null);
     }
 
     [Fact]
     public async Task Discover_PassesGenreAndSearch()
     {
-        _catalog.GetDiscoverAsync(1, 20, "hip-hop", "fire").Returns(new List<TrackResponse>());
+        _catalog.GetDiscoverAsync(1, 20, "hip-hop", "fire", null, null, null, null).Returns(new List<TrackResponse>());
 
         await _controller.Discover(genre: "hip-hop", search: "fire");
 
-        await _catalog.Received(1).GetDiscoverAsync(1, 20, "hip-hop", "fire");
+        await _catalog.Received(1).GetDiscoverAsync(1, 20, "hip-hop", "fire", null, null, null, null);
     }
 
     // ── Catalog ──
@@ -76,21 +76,21 @@ public sealed class CatalogControllerTests
     [Fact]
     public async Task Catalog_ClampsPageSizeTo50_WhenZero()
     {
-        _catalog.GetCatalogAsync(1, 50, null, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetCatalogAsync(1, 50, null, null, null, null, null, null, null).Returns(new List<TrackResponse>());
 
         await _controller.Catalog(pageSize: 0);
 
-        await _catalog.Received(1).GetCatalogAsync(1, 50, null, null, null);
+        await _catalog.Received(1).GetCatalogAsync(1, 50, null, null, null, null, null, null, null);
     }
 
     [Fact]
     public async Task Catalog_PassesSortParameter()
     {
-        _catalog.GetCatalogAsync(1, 50, null, null, "newest").Returns(new List<TrackResponse>());
+        _catalog.GetCatalogAsync(1, 50, null, null, "newest", null, null, null, null).Returns(new List<TrackResponse>());
 
         await _controller.Catalog(sort: "newest");
 
-        await _catalog.Received(1).GetCatalogAsync(1, 50, null, null, "newest");
+        await _catalog.Received(1).GetCatalogAsync(1, 50, null, null, "newest", null, null, null, null);
     }
 
     // ── GetTrack ──
@@ -140,7 +140,7 @@ public sealed class CatalogControllerTests
     [Fact]
     public async Task Trending_DelegatesCorrectly()
     {
-        _catalog.GetDiscoverAsync(1, 20, null).Returns(new List<TrackResponse>());
+        _catalog.GetDiscoverAsync(1, 20, null, null, null, null, null, null).Returns(new List<TrackResponse>());
 
         var result = await _controller.Trending();
 

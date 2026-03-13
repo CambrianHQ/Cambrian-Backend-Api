@@ -142,14 +142,18 @@ public sealed class LicenseCertificateIntegrationTests : IClassFixture<CambrianA
     [Fact]
     public async Task LicenseService_PreventsDuplicateCertificates()
     {
+        // Register users so FK constraints are satisfied
+        await _factory.RegisterUserAsync("dedup-buyer@cambrian.com", "Test1234!@");
+        var buyerId = await _factory.GetUserIdAsync("dedup-buyer@cambrian.com");
+        await _factory.RegisterUserAsync("dedup-creator@cambrian.com", "Test1234!@");
+        var creatorId = await _factory.GetUserIdAsync("dedup-creator@cambrian.com");
+
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
         var licenseService = scope.ServiceProvider.GetRequiredService<Cambrian.Application.Interfaces.ILicenseService>();
 
         var purchaseId = Guid.NewGuid();
         var trackId = "CAMB-TRK-0001";
-        var buyerId = "dedup-buyer";
-        var creatorId = "dedup-creator";
 
         // Issue twice with the same purchaseId
         var cert1 = await licenseService.IssueCertificateAsync(purchaseId, trackId, buyerId, creatorId, "non-exclusive", "personal");
@@ -168,6 +172,12 @@ public sealed class LicenseCertificateIntegrationTests : IClassFixture<CambrianA
     [Fact]
     public async Task LicenseCertificate_Fields_MatchExpectedShape()
     {
+        // Register users so FK constraints are satisfied
+        await _factory.RegisterUserAsync("fields-buyer@cambrian.com", "Test1234!@");
+        var buyerId = await _factory.GetUserIdAsync("fields-buyer@cambrian.com");
+        await _factory.RegisterUserAsync("fields-creator@cambrian.com", "Test1234!@");
+        var creatorId = await _factory.GetUserIdAsync("fields-creator@cambrian.com");
+
         using var scope = _factory.Services.CreateScope();
         var licenseService = scope.ServiceProvider.GetRequiredService<Cambrian.Application.Interfaces.ILicenseService>();
 
@@ -175,16 +185,16 @@ public sealed class LicenseCertificateIntegrationTests : IClassFixture<CambrianA
         var cert = await licenseService.IssueCertificateAsync(
             purchaseId,
             "CAMB-TRK-9999",
-            "fields-buyer",
-            "fields-creator",
+            buyerId,
+            creatorId,
             "non-exclusive",
             "youtube");
 
         // Required shape per the coverage gap spec
         Assert.False(string.IsNullOrEmpty(cert.LicenseId));
         Assert.Equal("CAMB-TRK-9999", cert.TrackId);
-        Assert.Equal("fields-buyer", cert.BuyerId);
-        Assert.Equal("fields-creator", cert.CreatorId);
+        Assert.Equal(buyerId, cert.BuyerId);
+        Assert.Equal(creatorId, cert.CreatorId);
         Assert.Equal("youtube", cert.UsageType);
         Assert.True(cert.IssuedAt > DateTime.UtcNow.AddMinutes(-5));
         Assert.NotNull(cert.AllowedUses);
