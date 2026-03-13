@@ -66,6 +66,7 @@ public class LicenseService : ILicenseService
     {
         LicenseId = cert.Id.ToString(),
         TrackId = cert.TrackId,
+        LicenseType = cert.LicenseType,
         BuyerId = cert.BuyerId,
         CreatorId = cert.CreatorId,
         UsageType = cert.UsageType,
