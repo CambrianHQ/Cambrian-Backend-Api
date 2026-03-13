@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -12,12 +13,14 @@ public class DownloadController : BaseController
     private readonly ITrackRepository _tracks;
     private readonly IObjectStorage _storage;
     private readonly ILibraryRepository _library;
+    private readonly ILogger<DownloadController> _logger;
 
-    public DownloadController(ITrackRepository tracks, IObjectStorage storage, ILibraryRepository library)
+    public DownloadController(ITrackRepository tracks, IObjectStorage storage, ILibraryRepository library, ILogger<DownloadController> logger)
     {
         _tracks = tracks;
         _storage = storage;
         _library = library;
+        _logger = logger;
     }
 
     [HttpGet("{trackId}")]
@@ -36,7 +39,7 @@ public class DownloadController : BaseController
         if (track?.AudioUrl is null)
             return NotFoundResponse("Track audio not found.");
 
-        Console.WriteLine($"[Download] trackId={trackId}, audioUrl={track.AudioUrl}");
+        _logger.LogInformation("Download requested: trackId={TrackId}, audioUrl={AudioUrl}", trackId, track.AudioUrl);
         var file = await _storage.OpenReadAsync(track.AudioUrl);
         if (file is null)
             return NotFoundResponse($"Audio file not found on storage. audioUrl={track.AudioUrl}");

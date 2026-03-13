@@ -35,11 +35,11 @@ public sealed class CheckoutTests
         new(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, userId) }));
 
     [Fact]
-    public async Task CreateCheckout_ThrowsFormatException_WhenTrackIdNotGuid()
+    public async Task CreateCheckout_ThrowsArgumentException_WhenTrackIdNotGuid()
     {
         var request = new CheckoutRequest { TrackId = "not-a-guid", LicenseType = "standard" };
 
-        await Assert.ThrowsAsync<FormatException>(() =>
+        await Assert.ThrowsAsync<ArgumentException>(() =>
             _sut.CreateCheckoutAsync(request, MakeUser()));
     }
 

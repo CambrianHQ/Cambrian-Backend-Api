@@ -30,7 +30,7 @@ public class StripeWebhookService : IWebhookService
         _licenseService = licenseService;
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "";
         _logger = logger;
-        _isDevelopment = env.IsDevelopment();
+        _isDevelopment = env.IsDevelopment() || env.EnvironmentName == "Testing";
     }
 
     public async Task HandleStripeAsync(string payload, string signature)

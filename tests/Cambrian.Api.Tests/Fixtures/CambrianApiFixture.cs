@@ -47,6 +47,11 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
             _connection = new SqliteConnection("DataSource=:memory:");
             _connection.Open();
 
+            // Disable FK enforcement so unit-style tests can insert orphaned rows
+            using var fkOff = _connection.CreateCommand();
+            fkOff.CommandText = "PRAGMA foreign_keys = OFF;";
+            fkOff.ExecuteNonQuery();
+
             services.AddDbContext<CambrianDbContext>(options =>
                 options.UseSqlite(_connection));
 
@@ -242,7 +247,12 @@ internal sealed class FakeObjectStorage : IObjectStorage
         => $"https://fake-cdn.cambrian.test/{key}";
 
     public Task<StorageFile?> OpenReadAsync(string key)
-        => Task.FromResult<StorageFile?>(null);
+        => Task.FromResult<StorageFile?>(new StorageFile
+        {
+            Stream = new MemoryStream(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }),
+            ContentType = "audio/mpeg",
+            Length = 4
+        });
 
     public Task DeleteAsync(string key)
         => Task.CompletedTask;

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -11,18 +12,21 @@ public class StreamController : BaseController
     private readonly ITrackRepository _tracks;
     private readonly IObjectStorage _storage;
     private readonly IStreamRepository _streams;
+    private readonly ILogger<StreamController> _logger;
 
-    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams)
+    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams, ILogger<StreamController> logger)
     {
         _tracks = tracks;
         _storage = storage;
         _streams = streams;
+        _logger = logger;
     }
 
     [Authorize]
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int take = 20)
     {
+        take = Math.Clamp(take, 1, 100);
         var tracks = await _tracks.BrowseAsync();
         var result = tracks.Take(take).Select(t => new
         {
@@ -75,7 +79,7 @@ public class StreamController : BaseController
         if (track?.AudioUrl is null)
             return NotFoundResponse("Track not found.");
 
-        Console.WriteLine($"[StreamAudio] trackId={trackId}, dbAudioUrl={track.AudioUrl}");
+        _logger.LogInformation("StreamAudio: trackId={TrackId}, dbAudioUrl={AudioUrl}", trackId, track.AudioUrl);
 
         StorageFile? file;
         try
@@ -84,14 +88,14 @@ public class StreamController : BaseController
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[StreamAudio] Storage error for key={track.AudioUrl}: {ex.GetType().Name}: {ex.Message}. Returning silent placeholder.");
+            _logger.LogWarning(ex, "StreamAudio: Storage error for key={AudioUrl}. Returning silent placeholder.", track.AudioUrl);
             var silentFallback = Cambrian.Api.Tools.SilentMp3Generator.Generate();
             return File(silentFallback, "audio/mpeg", enableRangeProcessing: true);
         }
 
         if (file is null)
         {
-            Console.WriteLine($"[StreamAudio] File not found in storage. key={track.AudioUrl}. Returning silent placeholder.");
+            _logger.LogWarning("StreamAudio: File not found in storage. key={AudioUrl}. Returning silent placeholder.", track.AudioUrl);
             // Return a generated silent MP3 so the player never breaks
             var silent = Cambrian.Api.Tools.SilentMp3Generator.Generate();
             return File(silent, "audio/mpeg", enableRangeProcessing: true);

@@ -5,6 +5,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -23,7 +24,8 @@ public sealed class DownloadControllerTests
 
     public DownloadControllerTests()
     {
-        _controller = new DownloadController(_tracks, _storage, _library);
+        var logger = Substitute.For<ILogger<DownloadController>>();
+        _controller = new DownloadController(_tracks, _storage, _library, logger);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -99,7 +101,7 @@ public sealed class DownloadControllerTests
     }
 
     [Fact]
-    public async Task Download_ReturnsSignedUrl_WhenUserOwnsTrack()
+    public async Task Download_ReturnsFile_WhenUserOwnsTrack()
     {
         var trackId = Guid.NewGuid();
         SetupUser();
@@ -112,11 +114,15 @@ public sealed class DownloadControllerTests
             AudioUrl = "tracks/beat.mp3",
             CreatorId = "c1"
         });
-        _storage.GenerateSignedUrl("tracks/beat.mp3").Returns("https://cdn.test/signed/beat.mp3");
+        _storage.OpenReadAsync("tracks/beat.mp3").Returns(new StorageFile
+        {
+            Stream = new MemoryStream(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }),
+            ContentType = "audio/mpeg"
+        });
 
         var result = await _controller.Download(trackId.ToString());
 
-        Assert.IsType<OkObjectResult>(result);
+        Assert.IsType<FileStreamResult>(result);
     }
 
     // ── SignedUrl ──

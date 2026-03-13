@@ -355,20 +355,24 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ── Auto-migrate database on startup ──
-try
+// ── Auto-migrate database on startup (skip for in-memory test DBs) ──
+if (app.Environment.EnvironmentName != "Testing")
 {
-    using var migrateScope = app.Services.CreateScope();
-    var migrateDb = migrateScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-    migrateDb.Database.Migrate();
-    Console.WriteLine("[Startup] Database migrations applied successfully");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[Startup] Migration error: {ex.Message}");
+    try
+    {
+        using var migrateScope = app.Services.CreateScope();
+        var migrateDb = migrateScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        migrateDb.Database.Migrate();
+        Console.WriteLine("[Startup] Database migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Startup] Migration error: {ex.Message}");
+    }
 }
 
 // ── Ensure audio files exist in storage (repair broken AudioUrl references) ──
+if (app.Environment.EnvironmentName != "Testing")
 {
     try
     {
@@ -425,6 +429,7 @@ catch (Exception ex)
 }
 
 // ── Seed demo tracks if the table is empty ──
+if (app.Environment.EnvironmentName != "Testing")
 {
     Console.WriteLine("[Seed] Checking for tracks...");
     try
