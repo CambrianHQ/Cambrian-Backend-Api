@@ -83,16 +83,53 @@ public class LicenseService : ILicenseService
         return licenseType switch
         {
             "standard" => (
-                new List<string> { "personal listening", "non-commercial projects" },
-                new List<string> { "no redistribution", "no commercial use" }
+                new List<string>
+                {
+                    "Personal listening",
+                    "Non-commercial projects",
+                    "Private use only"
+                },
+                new List<string>
+                {
+                    "No redistribution",
+                    "No commercial use",
+                    "No public performance"
+                }
             ),
             "non-exclusive" => (
-                new List<string> { "youtube", "ads", "podcast", "game", "film", "social", "streaming" },
-                new List<string> { "credit required", "no resale of license" }
+                new List<string>
+                {
+                    "Commercial use in media projects",
+                    "YouTube / video content",
+                    "Podcasts and streaming",
+                    "Advertising and social media",
+                    "Games and interactive media",
+                    "Film and TV"
+                },
+                new List<string>
+                {
+                    "Credit to original creator required",
+                    "No resale of license",
+                    "No redistribution of raw audio",
+                    "Track remains available on marketplace"
+                }
             ),
             "exclusive" => (
-                null, // unrestricted
-                new List<string> { "single-owner license" }
+                new List<string>
+                {
+                    "Exclusive commercial use",
+                    "Perpetual license",
+                    "Unlimited projects",
+                    "Global distribution",
+                    "Editing and modification",
+                    "Monetization rights"
+                },
+                new List<string>
+                {
+                    "No resale of standalone track",
+                    "No sublicensing",
+                    "No redistribution of raw audio"
+                }
             ),
             _ => (null, null)
         };
