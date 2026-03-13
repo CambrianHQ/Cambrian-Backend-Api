@@ -26,9 +26,10 @@ public class PaymentsController : BaseController
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(PaymentCheckoutRequest request)
     {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var userEmail = User.FindFirstValue(ClaimTypes.Email)
                      ?? User.FindFirstValue("email");
-        var result = await _payments.CreateCheckoutAsync(request, userEmail);
+        var result = await _payments.CreateCheckoutAsync(request, userId, userEmail);
         return OkResponse(result);
     }
 
