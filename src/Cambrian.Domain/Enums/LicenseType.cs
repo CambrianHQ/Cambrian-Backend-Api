@@ -4,5 +4,6 @@ public enum LicenseType
 {
     Standard = 1,
     Extended = 2,
-    Exclusive = 3
+    Exclusive = 3,
+    CopyrightBuyout = 4
 }

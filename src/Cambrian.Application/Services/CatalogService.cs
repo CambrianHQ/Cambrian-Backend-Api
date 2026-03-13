@@ -69,6 +69,8 @@ public class CatalogService : ICatalogService
             ExclusivePlatformFee = Math.Round(exPrice * PlatformFeeRate, 2),
             ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - PlatformFeeRate), 2),
             ExclusiveSold = t.ExclusiveSold,
+            Status = t.Status ?? "available",
+            CopyrightOwnerId = t.CopyrightOwnerId,
             LicenseType = t.LicenseType,
             Duration = t.Duration,
             AudioUrl = t.AudioUrl,
