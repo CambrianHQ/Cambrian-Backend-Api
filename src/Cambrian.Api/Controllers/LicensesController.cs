@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Cambrian.Application.Interfaces;
+using Cambrian.Api.Tools;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,10 +11,12 @@ namespace Cambrian.Api.Controllers;
 public class LicensesController : BaseController
 {
     private readonly ILicenseService _licenses;
+    private readonly ITrackRepository _tracks;
 
-    public LicensesController(ILicenseService licenses)
+    public LicensesController(ILicenseService licenses, ITrackRepository tracks)
     {
         _licenses = licenses;
+        _tracks = tracks;
     }
 
     /// <summary>
@@ -48,5 +51,34 @@ public class LicensesController : BaseController
 
         var certs = await _licenses.GetByBuyerAsync(userId);
         return OkResponse(certs);
+    }
+
+    /// <summary>
+    /// Download a license certificate as a PDF file.
+    /// </summary>
+    [HttpGet("{licenseId}/pdf")]
+    public async Task<IActionResult> DownloadPdf(string licenseId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        var cert = await _licenses.GetByIdAsync(licenseId);
+        if (cert is null || cert.BuyerId != userId)
+            return NotFoundResponse("No license found.");
+
+        // Resolve track title for the PDF
+        string? trackTitle = null;
+        if (Guid.TryParse(cert.TrackId, out var trackGuid))
+        {
+            var track = await _tracks.GetByIdAsync(trackGuid);
+            trackTitle = track?.Title;
+        }
+
+        var pdfBytes = LicensePdfGenerator.Generate(cert, trackTitle);
+        var safeTitle = string.Concat(
+            (trackTitle ?? "track").Where(c => !Path.GetInvalidFileNameChars().Contains(c)));
+        if (string.IsNullOrWhiteSpace(safeTitle)) safeTitle = "track";
+        var filename = $"license-{safeTitle}-{licenseId[..8]}.pdf";
+
+        return File(pdfBytes, "application/pdf", filename);
     }
 }
