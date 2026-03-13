@@ -12,6 +12,7 @@ public sealed class PaymentServiceTests
     private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
     private readonly IPurchaseRepository _purchases = Substitute.For<IPurchaseRepository>();
     private readonly PaymentService _sut;
+    private const string TestUserId = "user-1";
 
     public PaymentServiceTests()
     {
@@ -23,7 +24,7 @@ public sealed class PaymentServiceTests
     {
         var request = new PaymentCheckoutRequest { TrackId = "" };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request));
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request, TestUserId));
     }
 
     [Fact]
@@ -31,7 +32,15 @@ public sealed class PaymentServiceTests
     {
         var request = new PaymentCheckoutRequest { TrackId = null };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request));
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request, TestUserId));
+    }
+
+    [Fact]
+    public async Task CreateCheckout_ThrowsArgumentException_WhenUserIdEmpty()
+    {
+        var request = new PaymentCheckoutRequest { TrackId = Guid.NewGuid().ToString() };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateCheckoutAsync(request, ""));
     }
 
     [Fact]
@@ -42,7 +51,7 @@ public sealed class PaymentServiceTests
 
         var request = new PaymentCheckoutRequest { TrackId = trackId.ToString() };
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.CreateCheckoutAsync(request));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.CreateCheckoutAsync(request, TestUserId));
     }
 
     [Fact]
@@ -54,14 +63,14 @@ public sealed class PaymentServiceTests
         _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
             .Returns("https://stripe.test/session");
 
-        await _sut.CreateCheckoutAsync(new PaymentCheckoutRequest { TrackId = trackId.ToString() });
+        await _sut.CreateCheckoutAsync(new PaymentCheckoutRequest { TrackId = trackId.ToString() }, TestUserId);
 
         await _gateway.Received(1).CreateCheckoutSessionAsync(
             4999, "Beat", Arg.Any<string>(), null, null);
     }
 
     [Fact]
-    public async Task CreateCheckout_UsesClientReferenceIdIfProvided()
+    public async Task CreateCheckout_BuildsStandardizedClientReferenceId()
     {
         var trackId = Guid.NewGuid();
         var track = new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" };
@@ -72,15 +81,17 @@ public sealed class PaymentServiceTests
         await _sut.CreateCheckoutAsync(new PaymentCheckoutRequest
         {
             TrackId = trackId.ToString(),
-            ClientReferenceId = "custom-ref"
-        });
+            LicenseType = "exclusive",
+            UsageType = "commercial"
+        }, TestUserId);
 
+        var expectedRef = $"{TestUserId}:{trackId}:exclusive:commercial";
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            1000, "Beat", "custom-ref", null, null);
+            1000, "Beat", expectedRef, null, null);
     }
 
     [Fact]
-    public async Task CreateCheckout_FallsBackToTrackIdAsClientRef()
+    public async Task CreateCheckout_DefaultsLicenseAndUsageType()
     {
         var trackId = Guid.NewGuid();
         var track = new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" };
@@ -90,12 +101,12 @@ public sealed class PaymentServiceTests
 
         await _sut.CreateCheckoutAsync(new PaymentCheckoutRequest
         {
-            TrackId = trackId.ToString(),
-            ClientReferenceId = null
-        });
+            TrackId = trackId.ToString()
+        }, TestUserId);
 
+        var expectedRef = $"{TestUserId}:{trackId}:non-exclusive:personal";
         await _gateway.Received(1).CreateCheckoutSessionAsync(
-            1000, "Beat", trackId.ToString(), null, null);
+            1000, "Beat", expectedRef, null, null);
     }
 
     [Fact]

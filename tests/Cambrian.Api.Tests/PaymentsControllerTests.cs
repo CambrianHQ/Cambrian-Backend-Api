@@ -44,7 +44,7 @@ public sealed class PaymentsControllerTests
     public async Task Checkout_ReturnsOk_WithCheckoutUrl()
     {
         SetupUser();
-        _payments.CreateCheckoutAsync(Arg.Any<PaymentCheckoutRequest>())
+        _payments.CreateCheckoutAsync(Arg.Any<PaymentCheckoutRequest>(), Arg.Any<string>(), Arg.Any<string?>())
             .Returns(new PaymentCheckoutResponse { CheckoutUrl = "https://stripe.test/session" });
 
         var result = await _controller.Checkout(
@@ -57,7 +57,7 @@ public sealed class PaymentsControllerTests
     public async Task Checkout_PropagatesArgumentException_ForEmptyTrackId()
     {
         SetupUser();
-        _payments.CreateCheckoutAsync(Arg.Any<PaymentCheckoutRequest>())
+        _payments.CreateCheckoutAsync(Arg.Any<PaymentCheckoutRequest>(), Arg.Any<string>(), Arg.Any<string?>())
             .ThrowsAsync(new ArgumentException("TrackId is required."));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>

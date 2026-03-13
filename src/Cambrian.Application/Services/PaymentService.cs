@@ -17,20 +17,27 @@ public class PaymentService : IPaymentService
         _purchases = purchases;
     }
 
-    public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request, string? customerEmail = null)
+    public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request, string userId, string? customerEmail = null)
     {
         if (string.IsNullOrWhiteSpace(request.TrackId))
             throw new ArgumentException("TrackId is required.");
+
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new ArgumentException("UserId is required.");
 
         var track = await _tracks.GetByIdAsync(Guid.Parse(request.TrackId))
                     ?? throw new KeyNotFoundException($"Track {request.TrackId} not found.");
 
         var amountCents = (int)(track.Price * 100);
 
+        // Build standardized clientReferenceId: userId:trackId:licenseType:usageType
+        // This format is required by StripeWebhookService.HandleCheckoutCompleted
+        var clientReferenceId = $"{userId}:{request.TrackId}:{request.LicenseType}:{request.UsageType}";
+
         var url = await _gateway.CreateCheckoutSessionAsync(
             amountCents,
             track.Title,
-            clientReferenceId: request.ClientReferenceId ?? request.TrackId,
+            clientReferenceId: clientReferenceId,
             customerEmail: customerEmail);
 
         return new PaymentCheckoutResponse { CheckoutUrl = url };
