@@ -11,6 +11,9 @@ public class LicenseCertificateDto
     /// <summary>Cambrian track identifier (CAMB-TRK-XXXX).</summary>
     public string TrackId { get; set; } = string.Empty;
 
+    /// <summary>License type (standard, non-exclusive, exclusive).</summary>
+    public string LicenseType { get; set; } = string.Empty;
+
     /// <summary>User ID of the buyer.</summary>
     public string BuyerId { get; set; } = string.Empty;
 
