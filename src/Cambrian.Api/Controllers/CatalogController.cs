@@ -136,11 +136,4 @@ public class CatalogController : BaseController
         // Otherwise it's an object key (e.g. covers/{creatorId}/{guid}.jpg) — use storage provider
         return _storage.GetPublicUrl(rawUrl);
     }
-
-    [Authorize(Roles = "Creator")]
-    [HttpPost("tracks/upload")]
-    public IActionResult TracksUpload()
-    {
-        return CreatedResponse<object?>(null, "Track upload initiated.");
-    }
 }
