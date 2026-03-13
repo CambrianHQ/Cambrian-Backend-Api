@@ -157,4 +157,46 @@ public sealed class LibraryControllerTests
 
         Assert.IsType<OkObjectResult>(result);
     }
+
+    // ── ResolveAbsoluteUrl slash separator regression ──
+
+    [Fact]
+    public async Task GetLibrary_AudioUrl_NeverMissesSlash()
+    {
+        // S3ObjectStorage returns object keys without a leading "/" (e.g. "tracks/abc.mp3").
+        // ResolveAbsoluteUrl must insert "/" between host and path,
+        // otherwise we produce broken URLs like "onrender.comtracks/abc.mp3".
+        SetupUser();
+        _library.GetLibraryAsync(Arg.Any<ClaimsPrincipal>())
+            .Returns(new List<LibraryItemResponse>
+            {
+                new()
+                {
+                    TrackId = Guid.NewGuid().ToString(),
+                    Title = "Test",
+                    Artist = "Tester",
+                    AudioUrl = "tracks/creator/beat.mp3", // no leading /
+                }
+            });
+
+        // Give the controller a real HTTP context so ResolveAbsoluteUrl uses
+        // Request.Scheme + Request.Host instead of returning the path as-is.
+        var context = new DefaultHttpContext();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "user-1")
+        }, "Test"));
+        context.Request.Scheme = "https";
+        context.Request.Host = new HostString("cambrian-api-staging.onrender.com");
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
+
+        var result = await _controller.GetLibrary();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var envelope = ok.Value as ApiResponse<IReadOnlyCollection<LibraryItemResponse>>;
+        Assert.NotNull(envelope);
+        var item = Assert.Single(envelope!.Data!);
+        Assert.StartsWith("https://cambrian-api-staging.onrender.com/", item.AudioUrl);
+        Assert.DoesNotContain(".comtracks", item.AudioUrl);
+    }
 }
