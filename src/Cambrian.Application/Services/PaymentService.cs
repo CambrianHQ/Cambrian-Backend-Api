@@ -1,6 +1,7 @@
 using Cambrian.Application.DTOs.Payments;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
 
@@ -9,12 +10,14 @@ public class PaymentService : IPaymentService
     private readonly IPaymentGateway _gateway;
     private readonly ITrackRepository _tracks;
     private readonly IPurchaseRepository _purchases;
+    private readonly ILogger<PaymentService> _logger;
 
-    public PaymentService(IPaymentGateway gateway, ITrackRepository tracks, IPurchaseRepository purchases)
+    public PaymentService(IPaymentGateway gateway, ITrackRepository tracks, IPurchaseRepository purchases, ILogger<PaymentService> logger)
     {
         _gateway = gateway;
         _tracks = tracks;
         _purchases = purchases;
+        _logger = logger;
     }
 
     public async Task<PaymentCheckoutResponse> CreateCheckoutAsync(PaymentCheckoutRequest request, string userId, string? customerEmail = null)
@@ -77,6 +80,10 @@ public class PaymentService : IPaymentService
 
         if (purchase.BuyerId != userId)
             throw new UnauthorizedAccessException("You do not own this purchase.");
+
+        _logger.LogWarning(
+            "[LEGACY-PATH] ProcessAsync only marks purchase status — library/license creation is handled by Stripe webhook or CheckoutService.ConfirmAsync. PurchaseId={PurchaseId} UserId={UserId}",
+            purchase.Id, userId);
 
         purchase.Status = "completed";
         purchase.PaymentMethod = request.PaymentMethodId ?? "stripe";

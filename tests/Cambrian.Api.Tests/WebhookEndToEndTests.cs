@@ -84,6 +84,13 @@ public sealed class WebhookEndToEndTests : IClassFixture<CambrianApiFixture>
         var libraryItem = await db.Library
             .FirstOrDefaultAsync(l => l.UserId == buyerId && l.TrackId == trackId);
         Assert.NotNull(libraryItem);
+
+        // Verify license certificate was also created
+        var license = await db.LicenseCertificates
+            .FirstOrDefaultAsync(lc => lc.PurchaseId == purchase.Id);
+        Assert.NotNull(license);
+        Assert.Equal(buyerId, license.BuyerId);
+        Assert.Equal("non-exclusive", license.LicenseType);
     }
 
     /// <summary>
@@ -177,5 +184,69 @@ public sealed class WebhookEndToEndTests : IClassFixture<CambrianApiFixture>
             .FirstOrDefaultAsync(s => s.UserId == userId && s.Plan == "creator");
         Assert.NotNull(sub);
         Assert.Equal("active", sub.Status);
+    }
+
+    /// <summary>
+    /// Duplicate purchase webhook must back-fill library item if it's missing.
+    /// This protects against the scenario where a purchase was created but the
+    /// library linkage was lost.
+    /// </summary>
+    [Fact]
+    public async Task WebhookStripe_DuplicatePurchase_BackfillsLibraryItem()
+    {
+        var (creatorId, trackId) = await SeedCreatorAndTrackAsync("wh-duplib-creator@cambrian.com");
+
+        var buyerEmail = "wh-duplib-buyer@cambrian.com";
+        await _factory.RegisterUserAsync(buyerEmail, "Test1234!@");
+        var buyerId = await _factory.GetUserIdAsync(buyerEmail);
+
+        // Create a purchase WITHOUT a library item (simulating a gap)
+        using (var seedScope = _factory.Services.CreateScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            seedDb.Purchases.Add(new Purchase
+            {
+                Id = Guid.NewGuid(),
+                BuyerId = buyerId,
+                TrackId = trackId,
+                AmountCents = 1999,
+                LicenseType = "non-exclusive",
+                Status = "completed",
+                CreatedAt = DateTime.UtcNow
+            });
+            await seedDb.SaveChangesAsync();
+        }
+
+        var client = CreateClient();
+        var payload = $$"""
+        {
+            "id": "evt_duplib_{{Guid.NewGuid():N}}",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "{{buyerId}}:{{trackId}}:non-exclusive",
+                    "amount_total": 1999
+                }
+            }
+        }
+        """;
+
+        var res = await client.PostAsync("/webhook/stripe", WebhookPayload(payload));
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+
+        // Should still be single purchase
+        var purchases = await db.Purchases
+            .Where(p => p.BuyerId == buyerId && p.TrackId == trackId)
+            .ToListAsync();
+        Assert.Single(purchases);
+
+        // Library item should now exist (back-filled)
+        var lib = await db.Library
+            .FirstOrDefaultAsync(l => l.UserId == buyerId && l.TrackId == trackId);
+        Assert.NotNull(lib);
+        Assert.Equal(purchases[0].Id, lib.PurchaseId);
     }
 }
