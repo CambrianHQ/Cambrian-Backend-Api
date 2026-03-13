@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
@@ -431,5 +432,198 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
         await svc.HandleStripeAsync(payload, "");
         // No exception = handles missing customer ID gracefully
+    }
+
+    // ── License certificate creation ──
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_CheckoutCompleted_IssuesLicenseCertificate()
+    {
+        var trackId = Guid.NewGuid();
+        var userId = "user-license";
+        var licenseId = Guid.NewGuid();
+        _db.Tracks.Add(new Track { Id = trackId, Title = "License Beat", CreatorId = "creator-lic" });
+        await _db.SaveChangesAsync();
+
+        _licenseService.IssueCertificateAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
+            .Returns(new Cambrian.Application.DTOs.Licenses.LicenseCertificateDto
+            {
+                LicenseId = licenseId.ToString(),
+                TrackId = trackId.ToString(),
+                BuyerId = userId,
+                CreatorId = "creator-lic",
+                UsageType = "personal",
+                IssuedAt = DateTime.UtcNow
+            });
+
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = $$"""
+        {
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive:personal",
+                    "amount_total": 1999
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+
+        var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId);
+        Assert.NotNull(purchase);
+        Assert.Equal(licenseId, purchase.LicenseId);
+
+        await _licenseService.Received(1).IssueCertificateAsync(
+            purchase.Id,
+            Arg.Any<string>(),
+            userId,
+            "creator-lic",
+            "non-exclusive",
+            "personal");
+    }
+
+    // ── Duplicate purchase ensures library exists ──
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_DuplicatePurchase_BackfillsLibraryItem()
+    {
+        var trackId = Guid.NewGuid();
+        var userId = "user-dup-lib";
+        var purchaseId = Guid.NewGuid();
+        _db.Tracks.Add(new Track { Id = trackId, Title = "Dup Lib Beat", CreatorId = "creator-dup" });
+        _db.Purchases.Add(new Purchase
+        {
+            Id = purchaseId,
+            BuyerId = userId,
+            TrackId = trackId,
+            AmountCents = 1500,
+            LicenseType = "non-exclusive",
+            Status = "completed"
+        });
+        // Intentionally NO library item — simulating a gap
+        await _db.SaveChangesAsync();
+
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = $$"""
+        {
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
+                    "amount_total": 1500
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+
+        // Purchase should still be single
+        var purchases = await _db.Purchases
+            .Where(p => p.BuyerId == userId && p.TrackId == trackId)
+            .ToListAsync();
+        Assert.Single(purchases);
+
+        // Library item should now exist (back-filled)
+        var lib = await _db.Library
+            .FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == trackId);
+        Assert.NotNull(lib);
+        Assert.Equal(purchaseId, lib.PurchaseId);
+    }
+
+    // ── Dead-letter logging for invalid references ──
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_InvalidTrackId_DoesNotThrow()
+    {
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = """
+        {
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "user1:not-a-guid:non-exclusive",
+                    "amount_total": 999
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+
+        // No purchase created for invalid track ID
+        var purchases = await _db.Purchases.ToListAsync();
+        Assert.Empty(purchases);
+    }
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_MissingTrack_DoesNotThrow()
+    {
+        var missingTrackId = Guid.NewGuid();
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = $$"""
+        {
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "user1:{{missingTrackId}}:non-exclusive",
+                    "amount_total": 999
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+
+        // No purchase created for missing track
+        var purchases = await _db.Purchases.ToListAsync();
+        Assert.Empty(purchases);
+    }
+
+    // ── License failure does not block purchase+library ──
+
+    [Fact]
+    public async Task HandleStripeAsync_Dev_LicenseFailure_StillCreatesPurchaseAndLibrary()
+    {
+        var trackId = Guid.NewGuid();
+        var userId = "user-lic-fail";
+        _db.Tracks.Add(new Track { Id = trackId, Title = "Fail License Beat", CreatorId = "creator-fail" });
+        await _db.SaveChangesAsync();
+
+        _licenseService.IssueCertificateAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
+            .ThrowsAsync(new Exception("License service unavailable"));
+
+        var svc = CreateService(webhookSecret: "", isDevelopment: true);
+        var payload = $$"""
+        {
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
+                    "amount_total": 2000
+                }
+            }
+        }
+        """;
+
+        await svc.HandleStripeAsync(payload, "");
+
+        // Purchase should still be created
+        var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId);
+        Assert.NotNull(purchase);
+        Assert.Equal("completed", purchase.Status);
+
+        // Library should still be created
+        var lib = await _db.Library.FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == trackId);
+        Assert.NotNull(lib);
+
+        // License should NOT be linked (it failed)
+        Assert.Null(purchase.LicenseId);
     }
 }

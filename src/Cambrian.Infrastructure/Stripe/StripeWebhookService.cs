@@ -213,7 +213,7 @@ public class StripeWebhookService : IWebhookService
     {
         if (clientReferenceId is null)
         {
-            _logger.LogWarning("Checkout session completed but no ClientReferenceId");
+            _logger.LogError("[DEAD-LETTER] Checkout session completed but no ClientReferenceId — paid session cannot be fulfilled. StripeSessionId={SessionId}", stripeSessionId);
             return;
         }
 
@@ -243,6 +243,14 @@ public class StripeWebhookService : IWebhookService
                 await _db.SaveChangesAsync();
                 _logger.LogInformation("Purchase {PurchaseId} marked completed", purchaseId);
             }
+            else
+            {
+                _logger.LogError("[DEAD-LETTER] Legacy clientReferenceId GUID {PurchaseId} not found — paid session unfulfilled. StripeSessionId={SessionId}", purchaseId, stripeSessionId);
+            }
+        }
+        else
+        {
+            _logger.LogError("[DEAD-LETTER] Unrecognized clientReferenceId format: {Ref} — paid session unfulfilled. StripeSessionId={SessionId}", clientReferenceId, stripeSessionId);
         }
     }
 
@@ -255,14 +263,14 @@ public class StripeWebhookService : IWebhookService
     {
         if (!Guid.TryParse(trackIdStr, out var trackId))
         {
-            _logger.LogWarning("Invalid trackId in clientReferenceId: {TrackId}", trackIdStr);
+            _logger.LogError("[DEAD-LETTER] Invalid trackId in clientReferenceId: {TrackId} — paid session unfulfilled for user {UserId}. StripeSessionId={SessionId}", trackIdStr, userId, stripeSessionId);
             return;
         }
 
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null)
         {
-            _logger.LogWarning("Track {TrackId} not found for webhook", trackId);
+            _logger.LogError("[DEAD-LETTER] Track {TrackId} not found — paid session unfulfilled for user {UserId}. StripeSessionId={SessionId}", trackId, userId, stripeSessionId);
             return;
         }
 
@@ -297,6 +305,30 @@ public class StripeWebhookService : IWebhookService
                 existingPurchase.CompletedAt = DateTime.UtcNow;
                 existingPurchase.StripeSessionId ??= stripeSessionId;
             }
+
+            // Ensure library row exists even on duplicate purchase path
+            var existingLibDup = await _db.Library
+                .FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == trackId);
+            if (existingLibDup is null)
+            {
+                _db.Library.Add(new LibraryItem
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TrackId = trackId,
+                    PurchaseId = existingPurchase.Id,
+                    Title = track.Title,
+                    Artist = "",
+                    AudioUrl = track.AudioUrl,
+                    SavedAt = DateTime.UtcNow
+                });
+                _logger.LogInformation("Library item back-filled for duplicate purchase: User={UserId} Track={TrackId}", userId, trackId);
+            }
+            else if (existingLibDup.PurchaseId is null)
+            {
+                existingLibDup.PurchaseId = existingPurchase.Id;
+            }
+
             await _db.SaveChangesAsync();
             return;
         }
@@ -384,7 +416,9 @@ public class StripeWebhookService : IWebhookService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to issue license certificate for webhook purchase {PurchaseId}", purchase.Id);
+            _logger.LogError(ex,
+                "[LICENSE-FAILED] Failed to issue license certificate for purchase {PurchaseId} — purchase and library created but license missing. Manual reconciliation required.",
+                purchase.Id);
         }
 
         await _db.SaveChangesAsync();

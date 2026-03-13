@@ -157,6 +157,30 @@ public class CheckoutService : ICheckoutService
                 await _purchases.UpdateAsync(existingPurchase);
             }
 
+            // Ensure library row exists even on duplicate purchase path
+            var existingLibDup = await _library.GetByUserAndTrackAsync(userId, trackId);
+            if (existingLibDup is null)
+            {
+                var backfillItem = new LibraryItem
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TrackId = trackId,
+                    PurchaseId = existingPurchase.Id,
+                    Title = track.Title,
+                    Artist = track.Creator?.DisplayName ?? "",
+                    AudioUrl = track.AudioUrl,
+                    SavedAt = DateTime.UtcNow
+                };
+                await _library.AddAsync(backfillItem);
+                _logger.LogInformation("Library item back-filled for duplicate purchase: User={UserId} Track={TrackId}", userId, trackId);
+            }
+            else if (existingLibDup.PurchaseId is null)
+            {
+                existingLibDup.PurchaseId = existingPurchase.Id;
+                await _library.UpdateAsync(existingLibDup);
+            }
+
             return new CheckoutConfirmResponse
             {
                 Status = "paid",
@@ -262,7 +286,9 @@ public class CheckoutService : ICheckoutService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to issue license certificate for purchase {PurchaseId}", purchase.Id);
+            _logger.LogError(ex,
+                "[LICENSE-FAILED] Failed to issue license certificate for purchase {PurchaseId} — purchase and library created but license missing. Manual reconciliation required.",
+                purchase.Id);
         }
 
         _logger.LogInformation(
