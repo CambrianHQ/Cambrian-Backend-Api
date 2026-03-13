@@ -158,29 +158,30 @@ public sealed class LibraryControllerTests
         Assert.IsType<OkObjectResult>(result);
     }
 
-    // ── ResolveAbsoluteUrl slash separator regression ──
+    // ── AudioUrl always uses stream proxy ──
 
     [Fact]
-    public async Task GetLibrary_AudioUrl_NeverMissesSlash()
+    public async Task GetLibrary_AudioUrl_UsesStreamProxy()
     {
-        // S3ObjectStorage returns object keys without a leading "/" (e.g. "tracks/abc.mp3").
-        // ResolveAbsoluteUrl must insert "/" between host and path,
-        // otherwise we produce broken URLs like "onrender.comtracks/abc.mp3".
+        // Library items carry raw storage keys (e.g. "demos/audio/demo7.mp3")
+        // but the controller must rewrite AudioUrl to the /stream/{trackId}/audio
+        // proxy so the frontend gets playable URLs, not raw S3 keys that 404.
+        var trackId = Guid.NewGuid().ToString();
         SetupUser();
         _library.GetLibraryAsync(Arg.Any<ClaimsPrincipal>())
             .Returns(new List<LibraryItemResponse>
             {
                 new()
                 {
-                    TrackId = Guid.NewGuid().ToString(),
+                    TrackId = trackId,
                     Title = "Test",
                     Artist = "Tester",
-                    AudioUrl = "tracks/creator/beat.mp3", // no leading /
+                    AudioUrl = "demos/audio/demo7.mp3", // raw S3 key
                 }
             });
 
-        // Give the controller a real HTTP context so ResolveAbsoluteUrl uses
-        // Request.Scheme + Request.Host instead of returning the path as-is.
+        // Give the controller a real HTTP context so ResolveAbsoluteUrl produces
+        // a fully-qualified URL instead of a relative path.
         var context = new DefaultHttpContext();
         context.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
         {
@@ -196,7 +197,10 @@ public sealed class LibraryControllerTests
         var envelope = ok.Value as ApiResponse<IReadOnlyCollection<LibraryItemResponse>>;
         Assert.NotNull(envelope);
         var item = Assert.Single(envelope!.Data!);
-        Assert.StartsWith("https://cambrian-api-staging.onrender.com/", item.AudioUrl);
-        Assert.DoesNotContain(".comtracks", item.AudioUrl);
+        // Must be the stream proxy URL, not the raw storage key
+        Assert.Equal($"https://cambrian-api-staging.onrender.com/stream/{trackId}/audio", item.AudioUrl);
+        // Must never contain raw S3 key fragments
+        Assert.DoesNotContain("demos/", item.AudioUrl);
+        Assert.DoesNotContain(".mp3", item.AudioUrl);
     }
 }
