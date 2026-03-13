@@ -101,7 +101,33 @@ public sealed class DownloadControllerTests
     }
 
     [Fact]
-    public async Task Download_ReturnsFile_WhenUserOwnsTrack()
+    public async Task Download_ReturnsSignedUrl_WhenUserOwnsTrack()
+    {
+        var trackId = Guid.NewGuid();
+        SetupUser();
+        _library.GetByUserAndTrackAsync("user-1", trackId)
+            .Returns(new LibraryItem { Id = Guid.NewGuid() });
+        _tracks.GetByIdAsync(trackId).Returns(new Track
+        {
+            Id = trackId,
+            Title = "Beat",
+            AudioUrl = "tracks/beat.mp3",
+            CreatorId = "c1"
+        });
+        _storage.GenerateSignedUrl("tracks/beat.mp3")
+            .Returns("https://cdn.test/signed-download");
+
+        var result = await _controller.Download(trackId.ToString());
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        // Envelope contains { url, expiresAt }
+        Assert.NotNull(ok.Value);
+    }
+
+    // ── DownloadFile (binary stream) ──
+
+    [Fact]
+    public async Task DownloadFile_ReturnsFile_WhenUserOwnsTrack()
     {
         var trackId = Guid.NewGuid();
         SetupUser();
@@ -120,7 +146,7 @@ public sealed class DownloadControllerTests
             ContentType = "audio/mpeg"
         });
 
-        var result = await _controller.Download(trackId.ToString());
+        var result = await _controller.DownloadFile(trackId.ToString());
 
         Assert.IsType<FileStreamResult>(result);
     }
