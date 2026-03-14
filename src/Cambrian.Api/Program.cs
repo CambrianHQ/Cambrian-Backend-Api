@@ -373,6 +373,56 @@ if (app.Environment.EnvironmentName != "Testing")
     }
 }
 
+// ── Seed admin user from environment variables ──
+if (app.Environment.EnvironmentName != "Testing")
+{
+    var adminEmail = app.Configuration["Admin:Email"];
+    var adminPassword = app.Configuration["Admin:Password"];
+
+    if (!string.IsNullOrWhiteSpace(adminEmail) && !string.IsNullOrWhiteSpace(adminPassword))
+    {
+        try
+        {
+            using var adminScope = app.Services.CreateScope();
+            var userManager = adminScope.ServiceProvider
+                .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
+
+            var existing = await userManager.FindByEmailAsync(adminEmail);
+            if (existing is null)
+            {
+                var admin = new ApplicationUser
+                {
+                    Email = adminEmail,
+                    UserName = adminEmail,
+                    DisplayName = "Admin",
+                    Role = "Admin",
+                    Tier = "creator",
+                    EmailConfirmed = true
+                };
+                var result = await userManager.CreateAsync(admin, adminPassword);
+                if (result.Succeeded)
+                    Console.WriteLine($"[Seed] Admin account created: {adminEmail}");
+                else
+                    Console.WriteLine($"[Seed] Admin creation failed: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+            }
+            else if (existing.Role != "Admin")
+            {
+                existing.Role = "Admin";
+                await userManager.UpdateAsync(existing);
+                Console.WriteLine($"[Seed] Promoted existing user {adminEmail} to Admin");
+            }
+            else
+            {
+                Console.WriteLine($"[Seed] Admin account already exists: {adminEmail}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Seed] Admin seed error: {ex.Message}");
+        }
+    }
+}
+
 // ── Ensure audio files exist in storage (repair broken AudioUrl references) ──
 if (app.Environment.EnvironmentName != "Testing")
 {
