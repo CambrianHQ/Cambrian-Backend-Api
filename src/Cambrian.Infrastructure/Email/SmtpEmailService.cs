@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Mail;
 using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Cambrian.Infrastructure.Email;
@@ -12,18 +13,24 @@ namespace Cambrian.Infrastructure.Email;
 public sealed class SmtpEmailService : IEmailService
 {
     private readonly EmailOptions _options;
+    private readonly ILogger<SmtpEmailService> _logger;
 
-    public SmtpEmailService(IOptions<EmailOptions> options)
+    public SmtpEmailService(IOptions<EmailOptions> options, ILogger<SmtpEmailService> logger)
     {
         _options = options.Value;
+        _logger = logger;
     }
 
     public async Task SendAsync(string to, string subject, string htmlBody)
     {
+        _logger.LogInformation("[Email] Sending to {To} via {Host}:{Port} from {From}",
+            to, _options.SmtpHost, _options.SmtpPort, _options.FromAddress);
+
         using var client = new SmtpClient(_options.SmtpHost, _options.SmtpPort)
         {
             Credentials = new NetworkCredential(_options.SmtpUser, _options.SmtpPass),
             EnableSsl = true,
+            Timeout = 30_000,  // 30-second timeout
         };
 
         var message = new MailMessage
@@ -35,7 +42,16 @@ public sealed class SmtpEmailService : IEmailService
         };
         message.To.Add(to);
 
-        await client.SendMailAsync(message);
+        try
+        {
+            await client.SendMailAsync(message);
+            _logger.LogInformation("[Email] Sent successfully to {To}", to);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Email] Failed to send to {To}: {Error}", to, ex.Message);
+            throw;
+        }
     }
 
     public Task SendPasswordResetAsync(string to, string code)
