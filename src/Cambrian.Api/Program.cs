@@ -244,6 +244,8 @@ builder.Services.AddScoped<ICreatorService, CreatorService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
+builder.Services.AddScoped<IDebugService, Cambrian.Persistence.Services.DebugService>();
+builder.Services.AddScoped<IHealthService, Cambrian.Persistence.Services.HealthService>();
 
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
