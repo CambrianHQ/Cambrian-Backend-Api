@@ -1,14 +1,16 @@
-using System.Net;
-using System.Net.Mail;
 using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Options;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MimeKit;
 
 namespace Cambrian.Infrastructure.Email;
 
 /// <summary>
-/// SMTP-based email service for production use.
+/// SMTP-based email service for production use (MailKit).
+/// Supports port 587 (STARTTLS) and port 465 (implicit SSL).
 /// </summary>
 public sealed class SmtpEmailService : IEmailService
 {
@@ -26,27 +28,28 @@ public sealed class SmtpEmailService : IEmailService
         _logger.LogInformation("[Email] Sending to {To} via {Host}:{Port} from {From} (user={User})",
             to, _options.SmtpHost, _options.SmtpPort, _options.FromAddress, _options.SmtpUser);
 
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(_options.FromName, _options.FromAddress));
+        message.To.Add(MailboxAddress.Parse(to));
+        message.Subject = subject;
+        message.Body = new TextPart("html") { Text = htmlBody };
+
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-
-        using var client = new SmtpClient(_options.SmtpHost, _options.SmtpPort)
-        {
-            Credentials = new NetworkCredential(_options.SmtpUser, _options.SmtpPass),
-            EnableSsl = true,
-            Timeout = 15_000,
-        };
-
-        var message = new MailMessage
-        {
-            From = new MailAddress(_options.FromAddress, _options.FromName),
-            Subject = subject,
-            Body = htmlBody,
-            IsBodyHtml = true,
-        };
-        message.To.Add(to);
 
         try
         {
-            await client.SendMailAsync(message, cts.Token);
+            using var client = new MailKit.Net.Smtp.SmtpClient();
+
+            // Port 465 = implicit SSL, port 587 = STARTTLS, other = auto
+            var secureSocket = _options.SmtpPort == 465
+                ? SecureSocketOptions.SslOnConnect
+                : SecureSocketOptions.StartTls;
+
+            await client.ConnectAsync(_options.SmtpHost, _options.SmtpPort, secureSocket, cts.Token);
+            await client.AuthenticateAsync(_options.SmtpUser, _options.SmtpPass, cts.Token);
+            await client.SendAsync(message, cts.Token);
+            await client.DisconnectAsync(true, cts.Token);
+
             _logger.LogInformation("[Email] Sent successfully to {To}", to);
         }
         catch (OperationCanceledException)
