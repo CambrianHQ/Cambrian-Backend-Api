@@ -303,6 +303,10 @@ switch (emailProvider)
     case "smtp":
         builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
         break;
+    case "resend":
+        builder.Services.AddHttpClient("Resend");
+        builder.Services.AddSingleton<IEmailService, ResendEmailService>();
+        break;
     default:
         builder.Services.AddSingleton<IEmailService, ConsoleEmailService>();
         break;
