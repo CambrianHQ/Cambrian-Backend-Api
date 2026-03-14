@@ -23,14 +23,16 @@ public sealed class SmtpEmailService : IEmailService
 
     public async Task SendAsync(string to, string subject, string htmlBody)
     {
-        _logger.LogInformation("[Email] Sending to {To} via {Host}:{Port} from {From}",
-            to, _options.SmtpHost, _options.SmtpPort, _options.FromAddress);
+        _logger.LogInformation("[Email] Sending to {To} via {Host}:{Port} from {From} (user={User})",
+            to, _options.SmtpHost, _options.SmtpPort, _options.FromAddress, _options.SmtpUser);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         using var client = new SmtpClient(_options.SmtpHost, _options.SmtpPort)
         {
             Credentials = new NetworkCredential(_options.SmtpUser, _options.SmtpPass),
             EnableSsl = true,
-            Timeout = 30_000,  // 30-second timeout
+            Timeout = 15_000,
         };
 
         var message = new MailMessage
@@ -44,8 +46,13 @@ public sealed class SmtpEmailService : IEmailService
 
         try
         {
-            await client.SendMailAsync(message);
+            await client.SendMailAsync(message, cts.Token);
             _logger.LogInformation("[Email] Sent successfully to {To}", to);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogError("[Email] Timed out sending to {To} after 15s", to);
+            throw new InvalidOperationException($"SMTP timeout sending to {to}");
         }
         catch (Exception ex)
         {
