@@ -2,6 +2,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -11,12 +12,14 @@ public class HealthController : ControllerBase
     private readonly CambrianDbContext _db;
     private readonly IWebHostEnvironment _env;
     private readonly IObjectStorage _storage;
+    private readonly ILogger<HealthController> _logger;
 
-    public HealthController(CambrianDbContext db, IWebHostEnvironment env, IObjectStorage storage)
+    public HealthController(CambrianDbContext db, IWebHostEnvironment env, IObjectStorage storage, ILogger<HealthController> logger)
     {
         _db = db;
         _env = env;
         _storage = storage;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -32,13 +35,42 @@ public class HealthController : ControllerBase
             // DB unreachable
         }
 
+        var trackCount = 0;
+        var purchaseCount = 0;
+        var userCount = 0;
+        var pendingPurchases = 0;
+
+        if (dbHealthy)
+        {
+            try
+            {
+                trackCount = await _db.Tracks.CountAsync();
+                purchaseCount = await _db.Purchases.CountAsync();
+                userCount = await _db.Users.CountAsync();
+                pendingPurchases = await _db.Purchases.CountAsync(p => p.Status == "pending");
+            }
+            catch
+            {
+                // stats unavailable — still report health
+            }
+        }
+
         var result = new
         {
             status = dbHealthy ? "ok" : "degraded",
             timestamp = DateTime.UtcNow,
             environment = _env.EnvironmentName,
-            database = dbHealthy ? "connected" : "unreachable"
+            database = dbHealthy ? "connected" : "unreachable",
+            counts = new
+            {
+                tracks = trackCount,
+                purchases = purchaseCount,
+                users = userCount,
+                pendingPurchases
+            }
         };
+
+        _logger.LogInformation("Health check: status={Status} db={DbStatus}", result.status, result.database);
 
         // Always return 200 so Render health-check passes and routes traffic
         return Ok(result);

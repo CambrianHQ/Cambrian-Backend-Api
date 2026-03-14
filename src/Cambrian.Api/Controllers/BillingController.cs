@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Billing;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -11,10 +12,12 @@ namespace Cambrian.Api.Controllers;
 public class BillingController : BaseController
 {
     private readonly IBillingService _billing;
+    private readonly ILogger<BillingController> _logger;
 
-    public BillingController(IBillingService billing)
+    public BillingController(IBillingService billing, ILogger<BillingController> logger)
     {
         _billing = billing;
+        _logger = logger;
     }
 
     [HttpPost("checkout")]
@@ -24,13 +27,17 @@ public class BillingController : BaseController
         var userEmail = User.FindFirstValue(ClaimTypes.Email)
                      ?? User.FindFirstValue("email");
 
+        _logger.LogInformation("EVENT: BillingCheckoutStarted userId:{UserId} tier:{Tier}", userId, request.Tier);
+
         try
         {
             var result = await _billing.CreateCheckoutAsync(request, userId, userEmail);
+            _logger.LogInformation("EVENT: BillingCheckoutCreated userId:{UserId} tier:{Tier}", userId, request.Tier);
             return OkResponse(new { url = result.CheckoutUrl });
         }
         catch (ArgumentException ex)
         {
+            _logger.LogWarning("EVENT: BillingCheckoutFailed userId:{UserId} tier:{Tier} error:{Error}", userId, request.Tier, ex.Message);
             return ErrorResponse(ex.Message);
         }
     }
@@ -46,6 +53,7 @@ public class BillingController : BaseController
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var status = await _billing.GetStatusAsync(userId);
+        _logger.LogInformation("EVENT: BillingStatusRetrieved userId:{UserId} tier:{Tier}", userId, status.Tier);
         return OkResponse(status);
     }
 
@@ -56,7 +64,9 @@ public class BillingController : BaseController
             return ErrorResponse("sessionId is required.");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        _logger.LogInformation("EVENT: BillingSessionConfirmStarted userId:{UserId} sessionId:{SessionId}", userId, sessionId);
         var result = await _billing.ConfirmCheckoutAsync(sessionId, userId);
+        _logger.LogInformation("EVENT: BillingSessionConfirmCompleted userId:{UserId} sessionId:{SessionId} status:{Status}", userId, sessionId, result.Status);
         return OkResponse(result);
     }
 }

@@ -141,6 +141,7 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasKey(w => w.Id);
             e.Property(w => w.EventId).HasMaxLength(255).IsRequired();
             e.Property(w => w.EventType).HasMaxLength(100).IsRequired();
+            e.Property(w => w.Payload).HasColumnType("text");
             e.HasIndex(w => w.EventId).IsUnique();
         });
 

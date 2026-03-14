@@ -72,7 +72,7 @@ public class StripeWebhookService : IWebhookService
                 stripeCustomerId = invoice?.CustomerId;
             }
 
-            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId);
+            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, payload);
             _logger.LogInformation("Stripe webhook received (verified): {EventType}", eventType);
             return;
         }
@@ -114,7 +114,7 @@ public class StripeWebhookService : IWebhookService
             stripeCustomerId = dataObj.TryGetProperty("customer", out var cust) ? cust.GetString() : null;
         }
 
-        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId);
+        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, payload);
     }
 
     private async Task ProcessEventAsync(
@@ -123,7 +123,8 @@ public class StripeWebhookService : IWebhookService
         string? clientReferenceId,
         long? amountTotal,
         string? stripeCustomerId,
-        string? stripeSessionId)
+        string? stripeSessionId,
+        string? payload = null)
     {
         if (string.IsNullOrWhiteSpace(eventId))
         {
@@ -168,6 +169,8 @@ public class StripeWebhookService : IWebhookService
                 Id = Guid.NewGuid(),
                 EventId = eventId,
                 EventType = eventType,
+                Payload = payload,
+                Processed = true,
                 ProcessedAt = DateTime.UtcNow
             });
 
@@ -240,8 +243,9 @@ public class StripeWebhookService : IWebhookService
             if (purchase is not null)
             {
                 purchase.Status = "completed";
+                purchase.UpdatedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync();
-                _logger.LogInformation("Purchase {PurchaseId} marked completed", purchaseId);
+                _logger.LogInformation("PURCHASE_TIMELINE: Purchase {PurchaseId} marked completed via legacy path", purchaseId);
             }
             else
             {
@@ -320,6 +324,7 @@ public class StripeWebhookService : IWebhookService
             {
                 existingPurchase.Status = "completed";
                 existingPurchase.CompletedAt = DateTime.UtcNow;
+                existingPurchase.UpdatedAt = DateTime.UtcNow;
                 existingPurchase.StripeSessionId ??= stripeSessionId;
             }
 
@@ -351,6 +356,8 @@ public class StripeWebhookService : IWebhookService
         }
 
         // ── Create completed Purchase ──
+        _logger.LogInformation("PURCHASE_TIMELINE: Creating purchase userId:{UserId} trackId:{TrackId} license:{LicenseType} amount:{AmountCents}c sessionId:{SessionId}",
+            userId, trackId, licenseType, (int)(amountTotal ?? 0), stripeSessionId);
         var purchase = new Purchase
         {
             Id = Guid.NewGuid(),
@@ -363,6 +370,7 @@ public class StripeWebhookService : IWebhookService
             Status = "completed",
             StripeSessionId = stripeSessionId,
             CompletedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow
         };
         _db.Purchases.Add(purchase);
@@ -441,8 +449,18 @@ public class StripeWebhookService : IWebhookService
         await _db.SaveChangesAsync();
 
         _logger.LogInformation(
-            "Purchase created & track added to library: User={UserId} Track={TrackId} License={License}",
-            userId, trackId, licenseType);
+            "PURCHASE_TIMELINE: Purchase complete & library granted: User={UserId} Track={TrackId} License={License} PurchaseId={PurchaseId}",
+            userId, trackId, licenseType, purchase.Id);
+
+        // ── Library consistency check ──
+        var libraryCheck = await _db.Library
+            .AnyAsync(l => l.UserId == userId && l.TrackId == trackId);
+        if (!libraryCheck)
+        {
+            _logger.LogError(
+                "[CONSISTENCY] Purchase {PurchaseId} completed but NO library item found for user {UserId} track {TrackId}. Manual reconciliation needed.",
+                purchase.Id, userId, trackId);
+        }
     }
 
     /// <summary>

@@ -4,6 +4,7 @@ using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
@@ -21,7 +22,8 @@ public sealed class CheckoutControllerTests
 
     public CheckoutControllerTests()
     {
-        _controller = new CheckoutController(_checkout);
+        var logger = Substitute.For<ILogger<CheckoutController>>();
+        _controller = new CheckoutController(_checkout, logger);
     }
 
     private void SetupUser(string userId = "user-1")

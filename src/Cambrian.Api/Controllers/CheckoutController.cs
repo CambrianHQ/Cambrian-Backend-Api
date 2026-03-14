@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -10,10 +11,12 @@ namespace Cambrian.Api.Controllers;
 public class CheckoutController : BaseController
 {
     private readonly ICheckoutService _checkout;
+    private readonly ILogger<CheckoutController> _logger;
 
-    public CheckoutController(ICheckoutService checkout)
+    public CheckoutController(ICheckoutService checkout, ILogger<CheckoutController> logger)
     {
         _checkout = checkout;
+        _logger = logger;
     }
 
     /// <summary>
@@ -24,7 +27,10 @@ public class CheckoutController : BaseController
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(CheckoutRequest request)
     {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        _logger.LogInformation("EVENT: CheckoutStarted userId:{UserId} trackId:{TrackId} licenseType:{LicenseType}", userId, request.TrackId, request.LicenseType);
         var session = await _checkout.CreateCheckoutAsync(request, User);
+        _logger.LogInformation("EVENT: CheckoutSessionCreated userId:{UserId} trackId:{TrackId} checkoutUrl:{CheckoutUrl}", userId, request.TrackId, session.CheckoutUrl);
         return OkResponse(session);
     }
 
@@ -41,7 +47,9 @@ public class CheckoutController : BaseController
             return ErrorResponse("sessionId is required.");
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        _logger.LogInformation("EVENT: CheckoutConfirmStarted userId:{UserId} sessionId:{SessionId}", userId, sessionId);
         var result = await _checkout.ConfirmAsync(sessionId, userId);
+        _logger.LogInformation("EVENT: CheckoutConfirmCompleted userId:{UserId} sessionId:{SessionId} status:{Status}", userId, sessionId, result.Status);
         return OkResponse(result);
     }
 }
