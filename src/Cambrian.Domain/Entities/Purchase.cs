@@ -39,4 +39,7 @@ public class Purchase
     public DateTime? ExpiresAt { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Last time the Status field was updated (for timeline tracking).</summary>
+    public DateTime? UpdatedAt { get; set; }
 }

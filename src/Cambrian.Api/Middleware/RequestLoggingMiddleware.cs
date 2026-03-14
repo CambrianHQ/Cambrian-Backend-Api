@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Security.Claims;
+
 namespace Cambrian.Api.Middleware;
 
 public sealed class RequestLoggingMiddleware
@@ -13,7 +16,24 @@ public sealed class RequestLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        _logger.LogInformation("{Method} {Path}", context.Request.Method, context.Request.Path);
+        // Attach a Request ID for correlation
+        var requestId = context.Request.Headers["X-Request-ID"].FirstOrDefault()
+                        ?? Guid.NewGuid().ToString("N")[..12];
+        context.Items["RequestId"] = requestId;
+        context.Response.Headers["X-Request-ID"] = requestId;
+
+        var sw = Stopwatch.StartNew();
         await _next(context);
+        sw.Stop();
+
+        var userId = context.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anon";
+        _logger.LogInformation(
+            "HTTP {Method} {Path} → {StatusCode} in {ElapsedMs}ms [rid:{RequestId} uid:{UserId}]",
+            context.Request.Method,
+            context.Request.Path,
+            context.Response.StatusCode,
+            sw.ElapsedMilliseconds,
+            requestId,
+            userId);
     }
 }

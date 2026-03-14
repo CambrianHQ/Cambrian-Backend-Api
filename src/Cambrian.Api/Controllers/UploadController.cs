@@ -4,6 +4,7 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -11,10 +12,12 @@ namespace Cambrian.Api.Controllers;
 public class UploadController : BaseController
 {
     private readonly IUploadService _upload;
+    private readonly ILogger<UploadController> _logger;
 
-    public UploadController(IUploadService upload)
+    public UploadController(IUploadService upload, ILogger<UploadController> logger)
     {
         _upload = upload;
+        _logger = logger;
     }
 
     [Authorize]
@@ -23,8 +26,11 @@ public class UploadController : BaseController
     [DisableRequestSizeLimit] // Allow large audio files — validated in UploadService
     public async Task<IActionResult> Upload([FromForm] UploadTrackRequest request)
     {
-        request.CreatorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        _logger.LogInformation("EVENT: UploadStarted userId:{UserId} title:{Title}", userId, request.Title);
+        request.CreatorId = userId;
         var result = await _upload.Upload(request);
+        _logger.LogInformation("EVENT: UploadCompleted userId:{UserId} trackId:{TrackId} title:{Title}", userId, result, request.Title);
         return CreatedResponse(result, "Track uploaded successfully.");
     }
 }

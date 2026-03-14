@@ -4,6 +4,7 @@ using Cambrian.Api.Controllers;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
@@ -16,7 +17,8 @@ public sealed class WebhookControllerTests
 
     public WebhookControllerTests()
     {
-        _controller = new WebhookController(_webhookService);
+        var logger = Substitute.For<ILogger<WebhookController>>();
+        _controller = new WebhookController(_webhookService, logger);
     }
 
     private void SetupRequest(string body, string? stripeSignature)
