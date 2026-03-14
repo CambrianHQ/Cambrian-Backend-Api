@@ -379,6 +379,8 @@ if (app.Environment.EnvironmentName != "Testing")
     var adminEmail = app.Configuration["Admin:Email"];
     var adminPassword = app.Configuration["Admin:Password"];
 
+    Console.WriteLine($"[Seed] Admin config — email={adminEmail ?? "(null)"}, passwordLength={adminPassword?.Length ?? 0}");
+
     if (!string.IsNullOrWhiteSpace(adminEmail) && !string.IsNullOrWhiteSpace(adminPassword))
     {
         try
@@ -388,6 +390,7 @@ if (app.Environment.EnvironmentName != "Testing")
                 .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
 
             var existing = await userManager.FindByEmailAsync(adminEmail);
+            Console.WriteLine($"[Seed] FindByEmailAsync result: {(existing is null ? "NOT FOUND" : $"FOUND id={existing.Id} role={existing.Role}")}");
             if (existing is null)
             {
                 var admin = new ApplicationUser

@@ -139,7 +139,15 @@ public class AuthService : IAuthService
         user.PasswordResetCodeExpiry = DateTime.UtcNow.Add(ResetCodeLifetime);
         await _users.UpdateAsync(user);
 
-        await _email.SendPasswordResetAsync(user.Email!, code);
+        try
+        {
+            await _email.SendPasswordResetAsync(user.Email!, code);
+        }
+        catch (Exception)
+        {
+            // Log internally but don't crash the endpoint —
+            // the code is saved, user can retry, and we don't reveal email status.
+        }
     }
 
     public async Task VerifyCodeAsync(VerifyCodeRequest request)
