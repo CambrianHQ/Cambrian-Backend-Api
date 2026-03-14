@@ -9,6 +9,10 @@
 ## 📋 Table of Contents
 
 - [Overview](#-overview)
+- [Features](#-features)
+- [API Endpoints](#-api-endpoints)
+- [Roles & Authorization](#-roles--authorization)
+- [Rate Limiting](#-rate-limiting)
 - [Core Principles](#-core-principles)
 - [Architecture](#-architecture)
 - [Getting Started](#-getting-started)
@@ -24,15 +28,128 @@
 
 ## 🌐 Overview
 
-Cambrian Backend API is the server-side backbone of the Cambrian platform. It provides authenticated REST endpoints for library management, checkout workflows, and payment processing — all governed by a published OpenAPI contract and enforced by an automated test suite.
+**Cambrian Backend API** is the server-side backbone of the Cambrian music platform. It exposes authenticated REST endpoints for user authentication, audio library management, streaming, purchases, creator revenue tools, subscriptions, billing, and administration — all governed by a published OpenAPI contract and enforced by an automated CI/CD test suite.
 
 **Tech stack:**
 - ⚙️ **Runtime** — .NET 8 / ASP.NET Core
 - 🗄️ **Database** — PostgreSQL (via Entity Framework Core)
-- 🔐 **Auth** — JWT Bearer tokens
-- 💳 **Payments** — Stripe
-- 🪣 **Object Storage** — S3-compatible (MinIO by default)
-- 📄 **API Docs** — Swagger / OpenAPI
+- 🔐 **Auth** — JWT Bearer tokens (ASP.NET Core Identity)
+- 💳 **Payments** — Stripe (checkout sessions + webhooks)
+- 🪣 **Object Storage** — S3-compatible (MinIO, AWS S3, Cloudflare R2)
+- 📄 **API Docs** — Swagger / OpenAPI 3.x
+- 🚦 **Rate Limiting** — Built-in ASP.NET Core rate limiting middleware
+
+---
+
+## ✨ Features
+
+| No. | Feature | Description |
+|-----|---------|-------------|
+| 1 | 🔐 **Authentication & Identity** | Register, login, logout, password reset, account info, and role-based access control |
+| 2 | 🎵 **Audio Library** | Add, browse, and remove tracks from a user's personal library |
+| 3 | 🛒 **Checkout & Purchases** | Stripe-backed checkout sessions, purchase history, and credit-creator flows |
+| 4 | 🎧 **Streaming** | Start and stop audio streams with real-time session tracking |
+| 5 | ⬇️ **Downloads** | Signed URL generation with purchase-gate enforcement for purchased tracks |
+| 6 | ⬆️ **Uploads** | Multipart audio file upload (up to 150 MB), gated to Creator role |
+| 7 | 🔍 **Catalog & Discovery** | Browse the full track catalog, discover featured tracks, and view trending content |
+| 8 | 🎙️ **Creator Tools** | Manage creator tracks, view revenue dashboards, and request payouts |
+| 9 | 💰 **Wallet & Credits** | Track wallet balance and credit creators on purchases |
+| 10 | 📋 **Subscriptions & Billing** | Manage subscription plans, upgrades, cancellations, and Stripe billing portals |
+| 11 | 🧾 **Invoices & Licenses** | Retrieve, list, and download invoices; browse music license types |
+| 12 | 🛡️ **Admin Panel** | Manage users, approve payouts, moderate tracks, view reports and audit logs |
+| 13 | ❤️ **Health Checks** | API, auth service, and object-storage health probe endpoints |
+
+---
+
+## 🗺️ API Endpoints
+
+All endpoints are defined in the versioned OpenAPI spec at [`contracts/openapi.v1.json`](contracts/openapi.v1.json). Below is a high-level reference by domain:
+
+| Domain | Method | Path | Auth Required |
+|--------|--------|------|:---:|
+| 🔐 **Auth** | `POST` | `/auth/register` | ❌ |
+| | `POST` | `/auth/login` | ❌ |
+| | `POST` | `/auth/logout` | ✅ |
+| | `GET` | `/auth/me` | ✅ |
+| | `POST` | `/auth/forgot-password` | ❌ |
+| | `POST` | `/auth/reset-password` | ❌ |
+| 📚 **Library** | `GET` | `/library` | ✅ |
+| | `POST` | `/library` | ✅ |
+| | `DELETE` | `/library/{trackId}` | ✅ |
+| | `GET` | `/library/purchased-track-ids` | ✅ |
+| 🛒 **Checkout** | `POST` | `/checkout` | ✅ |
+| | `GET` | `/checkout/session/{sessionId}` | ✅ |
+| 💳 **Payments** | `POST` | `/payments/checkout` | ✅ |
+| | `GET` | `/payments/state` | ✅ |
+| 🎧 **Streaming** | `GET` | `/stream/{trackId}` | ✅ |
+| | `POST` | `/stream/start` | ✅ |
+| | `POST` | `/stream/stop` | ✅ |
+| ⬇️ **Downloads** | `GET` | `/download/{trackId}` | ✅ |
+| | `GET` | `/download/{trackId}/signed` | ✅ |
+| ⬆️ **Uploads** | `POST` | `/upload` | ✅ (Creator) |
+| 🔍 **Catalog** | `GET` | `/catalog` | ❌ |
+| | `GET` | `/discover` | ❌ |
+| | `GET` | `/trending` | ❌ |
+| | `GET` | `/tracks` | ❌ |
+| | `GET` | `/tracks/{id}` | ❌ |
+| 🎙️ **Creator** | `GET` | `/creator/tracks` | ✅ (Creator) |
+| | `GET` | `/creator/revenue` | ✅ (Creator) |
+| | `GET` | `/payouts` | ✅ (Creator) |
+| | `POST` | `/payouts` | ✅ (Creator) |
+| 💰 **Wallet** | `GET` | `/wallet` | ✅ |
+| | `POST` | `/purchases/credit-creator` | ✅ |
+| 📋 **Subscriptions** | `GET` | `/subscriptions/plans` | ❌ |
+| | `POST` | `/subscriptions/update` | ✅ |
+| | `POST` | `/subscriptions/cancel` | ✅ |
+| 🏦 **Billing** | `POST` | `/billing/checkout` | ✅ |
+| 🧾 **Invoices** | `GET` | `/invoices` | ✅ |
+| | `GET` | `/invoices/{invoiceId}` | ✅ |
+| | `GET` | `/invoices/{invoiceId}/download` | ✅ |
+| 📜 **Licenses** | `GET` | `/licenses` | ❌ |
+| | `GET` | `/licenses/{licenseId}` | ❌ |
+| 🛡️ **Admin** | `GET` | `/admin/users` | ✅ (Admin) |
+| | `POST` | `/admin/users` | ✅ (Admin) |
+| | `PATCH` | `/admin/users/{id}` | ✅ (Admin) |
+| | `DELETE` | `/admin/users/{id}` | ✅ (Admin) |
+| | `GET` | `/admin/payouts` | ✅ (Admin) |
+| | `POST` | `/admin/payouts` | ✅ (Admin) |
+| | `PATCH` | `/admin/payouts/{id}` | ✅ (Admin) |
+| | `GET` | `/admin/tracks` | ✅ (Admin) |
+| | `PATCH` | `/admin/tracks/{id}` | ✅ (Admin) |
+| | `DELETE` | `/admin/tracks/{id}` | ✅ (Admin) |
+| | `GET` | `/admin/reports` | ✅ (Admin) |
+| | `GET` | `/admin/audit` | ✅ (Admin) |
+| ❤️ **Health** | `GET` | `/health` | ❌ |
+| | `GET` | `/auth/health` | ❌ |
+| | `GET` | `/health/storage` | ❌ |
+
+> 📄 For the complete request/response schemas, see the [OpenAPI spec](contracts/openapi.v1.json) or browse the interactive **Swagger UI** at `http://localhost:8080/swagger` when the API is running.
+
+---
+
+## 👥 Roles & Authorization
+
+The API uses **role-based access control** enforced via JWT claims:
+
+| Role | Symbol | Access |
+|------|--------|--------|
+| **Anonymous** | 🌍 | Public endpoints only (catalog, health, auth) |
+| **User** | 👤 | Library, checkout, downloads, streaming, wallet, subscriptions, invoices |
+| **Creator** | 🎙️ | All User permissions + upload, creator dashboard, revenue, payouts |
+| **Admin** | 🛡️ | Full access including the `/admin/*` management panel |
+
+---
+
+## 🚦 Rate Limiting
+
+Built-in rate limiting protects the API from abuse:
+
+| Scope | Limit |
+|-------|-------|
+| 🔐 Auth endpoints (`/auth/*`) | **10 requests / minute** per IP |
+| 🌐 All other endpoints | **100 requests / minute** per IP |
+
+Requests that exceed the limit receive a `429 Too Many Requests` response.
 
 ---
 
