@@ -65,7 +65,9 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
         options.Password.RequiredLength = 8;
         options.User.RequireUniqueEmail = true;
     })
-    .AddEntityFrameworkStores<CambrianDbContext>();
+    .AddEntityFrameworkStores<CambrianDbContext>()
+    .AddTokenProvider<Microsoft.AspNetCore.Identity.DataProtectorTokenProvider<ApplicationUser>>(
+        Microsoft.AspNetCore.Identity.TokenOptions.DefaultProvider);
 
 // --- Startup validation: require critical secrets in non-Development ---
 Console.WriteLine($"[Startup] Environment: {builder.Environment.EnvironmentName}");
