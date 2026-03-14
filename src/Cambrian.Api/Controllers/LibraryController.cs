@@ -1,7 +1,9 @@
+using System.Security.Claims;
 using Cambrian.Application.DTOs.Library;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -10,21 +12,26 @@ namespace Cambrian.Api.Controllers;
 public class LibraryController : BaseController
 {
     private readonly ILibraryService _library;
+    private readonly ILogger<LibraryController> _logger;
 
-    public LibraryController(ILibraryService library)
+    public LibraryController(ILibraryService library, ILogger<LibraryController> logger)
     {
         _library = library;
+        _logger = logger;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetLibrary()
     {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        _logger.LogInformation("EVENT: LibraryRequested userId:{UserId}", userId);
         var items = await _library.GetLibraryAsync(User);
         // Point audioUrl at the authenticated streaming proxy so browsers
         // always get the correct Content-Type, Range support, and CORS headers.
         // Raw storage keys (e.g. "demos/audio/demo7.mp3") are never useful to the frontend.
         foreach (var item in items)
             item.AudioUrl = ResolveAbsoluteUrl($"/stream/{item.TrackId}/audio");
+        _logger.LogInformation("EVENT: LibraryLoaded userId:{UserId} itemCount:{Count}", userId, items.Count);
         return OkResponse(items);
     }
 

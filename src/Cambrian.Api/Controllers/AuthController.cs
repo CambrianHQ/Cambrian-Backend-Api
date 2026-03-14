@@ -4,6 +4,7 @@ using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -12,18 +13,22 @@ public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
+        _logger = logger;
     }
 
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request)
     {
+        _logger.LogInformation("EVENT: RegisterStarted email:{Email}", request.Email);
         var result = await _auth.RegisterAsync(request);
+        _logger.LogInformation("EVENT: RegisterCompleted userId:{UserId} email:{Email} tier:{Tier}", result.UserId, result.Email, result.Tier);
         return CreatedResponse(ToSession(result));
     }
 
@@ -31,7 +36,9 @@ public class AuthController : BaseController
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
+        _logger.LogInformation("EVENT: LoginStarted email:{Email}", request.Email);
         var result = await _auth.LoginAsync(request);
+        _logger.LogInformation("EVENT: LoginCompleted userId:{UserId} email:{Email} tier:{Tier}", result.UserId, result.Email, result.Tier);
         return OkResponse(ToSession(result));
     }
 
@@ -42,13 +49,20 @@ public class AuthController : BaseController
         var profile = await _auth.GetCurrentUserAsync(User);
 
         if (profile is null)
+        {
+            _logger.LogWarning("EVENT: MeFailed — user not found in database");
             return NotFoundResponse("User not found.");
+        }
 
         // Re-issue a fresh JWT so the frontend gets updated tier/role claims
         var freshToken = await _auth.GenerateFreshTokenAsync(profile.UserId);
 
         var sub = await _subscriptions.GetActiveAsync(profile.UserId);
         var tier = sub?.Plan ?? profile.Tier ?? "free";
+
+        _logger.LogInformation(
+            "EVENT: MeResolved userId:{UserId} email:{Email} profileTier:{ProfileTier} subscriptionPlan:{SubPlan} resolvedTier:{ResolvedTier}",
+            profile.UserId, profile.Email, profile.Tier, sub?.Plan, tier.ToLowerInvariant());
 
         return OkResponse(new
         {

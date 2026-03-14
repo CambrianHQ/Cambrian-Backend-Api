@@ -5,6 +5,7 @@ using Cambrian.Application.DTOs.Library;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
@@ -22,7 +23,8 @@ public sealed class LibraryControllerTests
 
     public LibraryControllerTests()
     {
-        _controller = new LibraryController(_library);
+        var logger = Substitute.For<ILogger<LibraryController>>();
+        _controller = new LibraryController(_library, logger);
     }
 
     private void SetupUser(string userId = "user-1")
