@@ -405,15 +405,31 @@ if (app.Environment.EnvironmentName != "Testing")
                 else
                     Console.WriteLine($"[Seed] Admin creation failed: {string.Join("; ", result.Errors.Select(e => e.Description))}");
             }
-            else if (existing.Role != "Admin")
-            {
-                existing.Role = "Admin";
-                await userManager.UpdateAsync(existing);
-                Console.WriteLine($"[Seed] Promoted existing user {adminEmail} to Admin");
-            }
             else
             {
-                Console.WriteLine($"[Seed] Admin account already exists: {adminEmail}");
+                var changed = false;
+                if (existing.Role != "Admin")
+                {
+                    existing.Role = "Admin";
+                    changed = true;
+                }
+                // Always ensure password matches the env var
+                var token = await userManager.GeneratePasswordResetTokenAsync(existing);
+                var pwResult = await userManager.ResetPasswordAsync(existing, token, adminPassword);
+                if (!pwResult.Succeeded)
+                    Console.WriteLine($"[Seed] Admin password sync failed: {string.Join("; ", pwResult.Errors.Select(e => e.Description))}");
+                else
+                    changed = true;
+
+                if (changed)
+                {
+                    await userManager.UpdateAsync(existing);
+                    Console.WriteLine($"[Seed] Admin account synced: {adminEmail} (role=Admin, password updated)");
+                }
+                else
+                {
+                    Console.WriteLine($"[Seed] Admin account already up to date: {adminEmail}");
+                }
             }
         }
         catch (Exception ex)
