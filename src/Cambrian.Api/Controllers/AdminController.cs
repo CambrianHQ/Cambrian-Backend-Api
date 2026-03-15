@@ -86,21 +86,31 @@ public class AdminController : BaseController
 
     // --- User management ---
 
+    public record SetRoleRequest(string Role);
+    public record SuspendRequest(string? Reason);
+
     [HttpPost("users/{id}/role")]
-    public IActionResult SetUserRole(string id)
+    public async Task<IActionResult> SetUserRole(string id, [FromBody] SetRoleRequest? body)
     {
-        return OkResponse(new { success = true, message = "Role updated." });
+        var role = body?.Role ?? "User";
+        var ok = await _admin.SetUserRoleAsync(id, role);
+        if (!ok) return NotFound(new { success = false, message = "User not found." });
+        return OkResponse(new { success = true, message = $"Role updated to {role}." });
     }
 
     [HttpPost("users/{id}/suspend")]
-    public IActionResult SuspendUser(string id)
+    public async Task<IActionResult> SuspendUser(string id, [FromBody] SuspendRequest? body)
     {
+        var ok = await _admin.SuspendUserAsync(id, body?.Reason);
+        if (!ok) return NotFound(new { success = false, message = "User not found." });
         return OkResponse(new { success = true, message = "User suspended." });
     }
 
     [HttpPost("users/{id}/reactivate")]
-    public IActionResult ReactivateUser(string id)
+    public async Task<IActionResult> ReactivateUser(string id)
     {
+        var ok = await _admin.ReactivateUserAsync(id);
+        if (!ok) return NotFound(new { success = false, message = "User not found." });
         return OkResponse(new { success = true, message = "User reactivated." });
     }
 
@@ -111,8 +121,10 @@ public class AdminController : BaseController
     }
 
     [HttpPost("users/{id}/verify-creator")]
-    public IActionResult VerifyCreator(string id)
+    public async Task<IActionResult> VerifyCreator(string id)
     {
+        var ok = await _admin.VerifyCreatorAsync(id);
+        if (!ok) return NotFound(new { success = false, message = "User not found." });
         return OkResponse(new { success = true, message = "Creator verified." });
     }
 
@@ -131,26 +143,34 @@ public class AdminController : BaseController
     }
 
     [HttpPost("tracks/{id}/remove")]
-    public IActionResult RemoveTrack(string id)
+    public async Task<IActionResult> RemoveTrack(string id)
     {
+        var ok = await _admin.RemoveTrackAsync(id);
+        if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track removed." });
     }
 
     [HttpPost("tracks/{id}/restore")]
-    public IActionResult RestoreTrack(string id)
+    public async Task<IActionResult> RestoreTrack(string id)
     {
+        var ok = await _admin.RestoreTrackAsync(id);
+        if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track restored." });
     }
 
     [HttpPost("tracks/{id}/hide")]
-    public IActionResult HideTrack(string id)
+    public async Task<IActionResult> HideTrack(string id)
     {
+        var ok = await _admin.HideTrackAsync(id);
+        if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track hidden." });
     }
 
     [HttpPost("tracks/{id}/flag")]
-    public IActionResult FlagTrack(string id)
+    public async Task<IActionResult> FlagTrack(string id)
     {
+        var ok = await _admin.FlagTrackAsync(id);
+        if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track flagged." });
     }
 
@@ -166,9 +186,14 @@ public class AdminController : BaseController
         return OkResponse(new { success = true, message = "Track pinned." });
     }
 
+    public record VisibilityRequest(string Visibility);
+
     [HttpPost("tracks/{id}/visibility")]
-    public IActionResult SetTrackVisibility(string id)
+    public async Task<IActionResult> SetTrackVisibility(string id, [FromBody] VisibilityRequest? body)
     {
+        var visibility = body?.Visibility ?? "public";
+        var ok = await _admin.SetTrackVisibilityAsync(id, visibility);
+        if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track visibility updated." });
     }
 

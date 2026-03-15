@@ -145,4 +145,164 @@ public class AdminRepository : IAdminRepository
         await _db.SaveChangesAsync();
         return result;
     }
+
+    // ══════════════════════════════════════════════
+    // User management
+    // ══════════════════════════════════════════════
+
+    public async Task<bool> SuspendUserAsync(string userId, string? reason)
+    {
+        var user = await _users.FindByIdAsync(userId);
+        if (user is null) return false;
+        user.Status = "suspended";
+        await _users.UpdateAsync(user);
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "suspend_user",
+            Admin = "system",
+            Details = $"Suspended user {user.Email}. Reason: {reason ?? "N/A"}"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> ReactivateUserAsync(string userId)
+    {
+        var user = await _users.FindByIdAsync(userId);
+        if (user is null) return false;
+        user.Status = "active";
+        await _users.UpdateAsync(user);
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "reactivate_user",
+            Admin = "system",
+            Details = $"Reactivated user {user.Email}"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> SetUserRoleAsync(string userId, string role)
+    {
+        var user = await _users.FindByIdAsync(userId);
+        if (user is null) return false;
+        var oldRole = user.Role;
+        user.Role = role;
+        await _users.UpdateAsync(user);
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "change_user_role",
+            Admin = "system",
+            Details = $"Changed role for {user.Email} from {oldRole} to {role}"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> VerifyCreatorAsync(string userId)
+    {
+        var user = await _users.FindByIdAsync(userId);
+        if (user is null) return false;
+        user.VerifiedCreator = true;
+        user.Tier = "creator";
+        await _users.UpdateAsync(user);
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "verify_creator",
+            Admin = "system",
+            Details = $"Verified creator {user.Email}"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    // ══════════════════════════════════════════════
+    // Track moderation
+    // ══════════════════════════════════════════════
+
+    public async Task<bool> RemoveTrackAsync(Guid trackId)
+    {
+        var track = await _db.Tracks.FindAsync(trackId);
+        if (track is null) return false;
+        track.Visibility = "hidden";
+        track.Status = "removed";
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "remove_track",
+            Admin = "system",
+            Details = $"Removed track '{track.Title}' (id={trackId})"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RestoreTrackAsync(Guid trackId)
+    {
+        var track = await _db.Tracks.FindAsync(trackId);
+        if (track is null) return false;
+        track.Visibility = "public";
+        track.Status = "available";
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "restore_track",
+            Admin = "system",
+            Details = $"Restored track '{track.Title}' (id={trackId})"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> HideTrackAsync(Guid trackId)
+    {
+        var track = await _db.Tracks.FindAsync(trackId);
+        if (track is null) return false;
+        track.Visibility = "hidden";
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "hide_track",
+            Admin = "system",
+            Details = $"Hidden track '{track.Title}' (id={trackId})"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> FlagTrackAsync(Guid trackId)
+    {
+        var track = await _db.Tracks.FindAsync(trackId);
+        if (track is null) return false;
+        track.Status = "flagged";
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "flag_track",
+            Admin = "system",
+            Details = $"Flagged track '{track.Title}' (id={trackId})"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> SetTrackVisibilityAsync(Guid trackId, string visibility)
+    {
+        var track = await _db.Tracks.FindAsync(trackId);
+        if (track is null) return false;
+        track.Visibility = visibility;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "set_track_visibility",
+            Admin = "system",
+            Details = $"Set visibility of '{track.Title}' to {visibility} (id={trackId})"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
 }
