@@ -9,4 +9,9 @@ public interface IAdminRepository
     Task<IReadOnlyCollection<AdminAuditLog>> GetAuditLogsAsync(int take = 200);
 
     Task<IReadOnlyCollection<AdminUser>> GetUsersAsync(int take = 500);
+
+    /// <summary>
+    /// Purge all test/mock data from the database, keeping only the admin account.
+    /// </summary>
+    Task<PurgeResult> PurgeTestDataAsync(string adminEmail);
 }

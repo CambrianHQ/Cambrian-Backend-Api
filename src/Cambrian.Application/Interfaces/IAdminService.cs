@@ -9,4 +9,6 @@ public interface IAdminService
     Task<IReadOnlyCollection<AdminAuditLog>> GetAuditLogsAsync();
 
     Task<IReadOnlyCollection<AdminUser>> GetUsersAsync();
+
+    Task<PurgeResult> PurgeTestDataAsync(string adminEmail);
 }
