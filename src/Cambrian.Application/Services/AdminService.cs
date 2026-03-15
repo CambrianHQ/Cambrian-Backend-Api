@@ -42,4 +42,9 @@ public class AdminService : IAdminService
     {
         return await _admin.GetUsersAsync();
     }
+
+    public async Task<PurgeResult> PurgeTestDataAsync(string adminEmail)
+    {
+        return await _admin.PurgeTestDataAsync(adminEmail);
+    }
 }

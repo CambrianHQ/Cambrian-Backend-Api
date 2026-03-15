@@ -185,4 +185,24 @@ public class AdminController : BaseController
     {
         return OkResponse(new { success = true, message = "Tags updated." });
     }
+
+    /// <summary>
+    /// Permanently delete all test/mock data (users, tracks, purchases, etc.).
+    /// Preserves only the admin account. Requires ?confirm=yes query parameter.
+    /// </summary>
+    [HttpPost("purge-test-data")]
+    public async Task<IActionResult> PurgeTestData([FromQuery] string confirm)
+    {
+        if (confirm != "yes")
+            return BadRequest(new { error = "Pass ?confirm=yes to confirm destructive operation." });
+
+        var adminEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                      ?? User.FindFirst("email")?.Value
+                      ?? "";
+        if (string.IsNullOrWhiteSpace(adminEmail))
+            return BadRequest(new { error = "Cannot determine admin email from token." });
+
+        var result = await _admin.PurgeTestDataAsync(adminEmail);
+        return OkResponse(result);
+    }
 }
