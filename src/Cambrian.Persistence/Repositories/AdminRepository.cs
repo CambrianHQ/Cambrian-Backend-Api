@@ -75,74 +75,58 @@ public class AdminRepository : IAdminRepository
 
     /// <summary>
     /// Delete all transactional data and non-admin users. FK-safe order.
+    /// Uses raw SQL to avoid EF Core circular-dependency tracking issues
+    /// (LicenseCertificate ↔ Purchase).
     /// </summary>
     public async Task<PurgeResult> PurgeTestDataAsync(string adminEmail)
     {
         var result = new PurgeResult { AdminPreserved = adminEmail };
 
-        // 1. Child tables first (no FK dependents)
-        var licenseCerts = await _db.LicenseCertificates.ToListAsync();
-        _db.LicenseCertificates.RemoveRange(licenseCerts);
-        result.LicenseCertificatesDeleted = licenseCerts.Count;
+        // Break the circular FK first: Purchase.LicenseId → LicenseCertificate
+        await _db.Database.ExecuteSqlRawAsync("UPDATE \"Purchases\" SET \"LicenseId\" = NULL");
 
-        var streamSessions = await _db.StreamSessions.ToListAsync();
-        _db.StreamSessions.RemoveRange(streamSessions);
-        result.StreamSessionsDeleted = streamSessions.Count;
+        // Delete in FK-safe order using raw SQL counts
+        result.LicenseCertificatesDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"LicenseCertificates\"");
+        result.StreamSessionsDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"StreamSessions\"");
+        result.WalletTransactionsDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"WalletTransactions\"");
+        result.WebhookEventsDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"StripeWebhookEvents\"");
+        result.AuditLogsDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"AuditLogs\"");
+        result.AbuseReportsDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"AbuseReports\"");
+        result.SubscriptionsDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"Subscriptions\"");
+        result.LibraryItemsDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"Library\"");
+        result.InvoicesDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"Invoices\"");
+        result.PayoutsDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"Payouts\"");
+        result.PurchasesDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"Purchases\"");
+        result.TracksDeleted = await _db.Database.ExecuteSqlRawAsync("DELETE FROM \"Tracks\"");
 
-        var walletTxns = await _db.WalletTransactions.ToListAsync();
-        _db.WalletTransactions.RemoveRange(walletTxns);
-        result.WalletTransactionsDeleted = walletTxns.Count;
-
-        var webhookEvents = await _db.StripeWebhookEvents.ToListAsync();
-        _db.StripeWebhookEvents.RemoveRange(webhookEvents);
-        result.WebhookEventsDeleted = webhookEvents.Count;
-
-        var auditLogs = await _db.AuditLogs.ToListAsync();
-        _db.AuditLogs.RemoveRange(auditLogs);
-        result.AuditLogsDeleted = auditLogs.Count;
-
-        var abuseReports = await _db.AbuseReports.ToListAsync();
-        _db.AbuseReports.RemoveRange(abuseReports);
-        result.AbuseReportsDeleted = abuseReports.Count;
-
-        var subscriptions = await _db.Subscriptions.ToListAsync();
-        _db.Subscriptions.RemoveRange(subscriptions);
-        result.SubscriptionsDeleted = subscriptions.Count;
-
-        // 2. Library items (FK → Purchase, Track)
-        var libraryItems = await _db.Library.ToListAsync();
-        _db.Library.RemoveRange(libraryItems);
-        result.LibraryItemsDeleted = libraryItems.Count;
-
-        // 3. Invoices (FK → Purchase)
-        var invoices = await _db.Invoices.ToListAsync();
-        _db.Invoices.RemoveRange(invoices);
-        result.InvoicesDeleted = invoices.Count;
-
-        // 4. Payouts (FK → User)
-        var payouts = await _db.Payouts.ToListAsync();
-        _db.Payouts.RemoveRange(payouts);
-        result.PayoutsDeleted = payouts.Count;
-
-        // 5. Purchases (FK → Track, User)
-        var purchases = await _db.Purchases.ToListAsync();
-        _db.Purchases.RemoveRange(purchases);
-        result.PurchasesDeleted = purchases.Count;
-
-        // 6. Tracks (FK → User/Creator)
-        var tracks = await _db.Tracks.ToListAsync();
-        _db.Tracks.RemoveRange(tracks);
-        result.TracksDeleted = tracks.Count;
-
-        // 7. Users — delete everyone except the admin
+        // Delete non-admin users (Identity tables: roles, claims, tokens, logins first)
         var nonAdminUsers = await _users.Users
             .Where(u => u.Email != adminEmail)
             .ToListAsync();
-        foreach (var u in nonAdminUsers)
-            _db.Users.Remove(u);
-        result.UsersDeleted = nonAdminUsers.Count;
+        var nonAdminIds = nonAdminUsers.Select(u => u.Id).ToList();
 
+        if (nonAdminIds.Count > 0)
+        {
+            // Clean up Identity join tables for non-admin users
+            foreach (var uid in nonAdminIds)
+            {
+                await _db.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM \"AspNetUserRoles\" WHERE \"UserId\" = {0}", uid);
+                await _db.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM \"AspNetUserClaims\" WHERE \"UserId\" = {0}", uid);
+                await _db.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM \"AspNetUserTokens\" WHERE \"UserId\" = {0}", uid);
+                await _db.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM \"AspNetUserLogins\" WHERE \"UserId\" = {0}", uid);
+            }
+
+            // Now delete the user rows from AspNetUsers / Users
+            foreach (var u in nonAdminUsers)
+                _db.Users.Remove(u);
+        }
+        result.UsersDeleted = nonAdminUsers.Count;
         await _db.SaveChangesAsync();
+
         return result;
     }
 
