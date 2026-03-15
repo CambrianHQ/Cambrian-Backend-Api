@@ -19,7 +19,7 @@ public class WebhookController : BaseController
     [HttpPost("stripe")]
     public async Task<IActionResult> Stripe()
     {
-        var signature = Request.Headers["Stripe-Signature"].FirstOrDefault();
+        var signature = Request.Headers["Stripe-Signature"].ToString();
 
         using var reader = new StreamReader(Request.Body);
         var json = await reader.ReadToEndAsync();

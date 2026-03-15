@@ -28,15 +28,19 @@ public class StreamController : BaseController
     {
         take = Math.Clamp(take, 1, 100);
         var tracks = await _tracks.BrowseAsync();
-        var result = tracks.Take(take).Select(t => new
+        var result = new List<object>();
+        foreach (var t in tracks.Take(take))
         {
-            id = t.Id.ToString(),
-            title = t.Title,
-            artist = t.Creator?.DisplayName ?? t.Creator?.Email ?? "Unknown",
-            genre = t.Genre,
-            duration = t.Duration,
-            audioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio")
-        }).ToList();
+            result.Add(new
+            {
+                id = t.Id.ToString(),
+                title = t.Title,
+                artist = t.Creator?.DisplayName ?? t.Creator?.Email ?? "Unknown",
+                genre = t.Genre,
+                duration = t.Duration,
+                audioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio")
+            });
+        }
 
         return OkResponse(result);
     }

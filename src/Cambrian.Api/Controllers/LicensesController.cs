@@ -74,11 +74,23 @@ public class LicensesController : BaseController
         }
 
         var pdfBytes = LicensePdfGenerator.Generate(cert, trackTitle);
-        var safeTitle = string.Concat(
-            (trackTitle ?? "track").Where(c => !Path.GetInvalidFileNameChars().Contains(c)));
-        if (string.IsNullOrWhiteSpace(safeTitle)) safeTitle = "track";
+        var safeTitle = SanitizeFilename(trackTitle ?? "track");
         var filename = $"license-{safeTitle}-{licenseId[..8]}.pdf";
 
         return File(pdfBytes, "application/pdf", filename);
+    }
+
+    private static string SanitizeFilename(string raw)
+    {
+        var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
+        var result = new char[raw.Length];
+        var count = 0;
+        foreach (var c in raw)
+        {
+            if (!invalid.Contains(c))
+                result[count++] = c;
+        }
+        var sanitized = new string(result, 0, count);
+        return string.IsNullOrWhiteSpace(sanitized) ? "track" : sanitized;
     }
 }
