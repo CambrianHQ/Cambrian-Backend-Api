@@ -10,11 +10,13 @@ public class AdminController : BaseController
 {
     private readonly IAdminService _admin;
     private readonly IMarketplaceIntegrityService _integrity;
+    private readonly ILogger<AdminController> _logger;
 
-    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity)
+    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger)
     {
         _admin = admin;
         _integrity = integrity;
+        _logger = logger;
     }
 
     [HttpGet("dashboard")]
@@ -93,6 +95,7 @@ public class AdminController : BaseController
     public async Task<IActionResult> SetUserRole(string id, [FromBody] SetRoleRequest? body)
     {
         var role = body?.Role ?? "User";
+        _logger.LogInformation("[Admin] SetUserRole id={UserId} role={Role}", id, role);
         var ok = await _admin.SetUserRoleAsync(id, role);
         if (!ok) return NotFound(new { success = false, message = "User not found." });
         return OkResponse(new { success = true, message = $"Role updated to {role}." });
@@ -101,6 +104,7 @@ public class AdminController : BaseController
     [HttpPost("users/{id}/suspend")]
     public async Task<IActionResult> SuspendUser(string id, [FromBody] SuspendRequest? body)
     {
+        _logger.LogInformation("[Admin] SuspendUser id={UserId} reason={Reason}", id, body?.Reason);
         var ok = await _admin.SuspendUserAsync(id, body?.Reason);
         if (!ok) return NotFound(new { success = false, message = "User not found." });
         return OkResponse(new { success = true, message = "User suspended." });
@@ -109,6 +113,7 @@ public class AdminController : BaseController
     [HttpPost("users/{id}/reactivate")]
     public async Task<IActionResult> ReactivateUser(string id)
     {
+        _logger.LogInformation("[Admin] ReactivateUser id={UserId}", id);
         var ok = await _admin.ReactivateUserAsync(id);
         if (!ok) return NotFound(new { success = false, message = "User not found." });
         return OkResponse(new { success = true, message = "User reactivated." });
@@ -123,6 +128,7 @@ public class AdminController : BaseController
     [HttpPost("users/{id}/verify-creator")]
     public async Task<IActionResult> VerifyCreator(string id)
     {
+        _logger.LogInformation("[Admin] VerifyCreator id={UserId}", id);
         var ok = await _admin.VerifyCreatorAsync(id);
         if (!ok) return NotFound(new { success = false, message = "User not found." });
         return OkResponse(new { success = true, message = "Creator verified." });
@@ -145,6 +151,7 @@ public class AdminController : BaseController
     [HttpPost("tracks/{id}/remove")]
     public async Task<IActionResult> RemoveTrack(string id)
     {
+        _logger.LogInformation("[Admin] RemoveTrack id={TrackId}", id);
         var ok = await _admin.RemoveTrackAsync(id);
         if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track removed." });
@@ -153,6 +160,7 @@ public class AdminController : BaseController
     [HttpPost("tracks/{id}/restore")]
     public async Task<IActionResult> RestoreTrack(string id)
     {
+        _logger.LogInformation("[Admin] RestoreTrack id={TrackId}", id);
         var ok = await _admin.RestoreTrackAsync(id);
         if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track restored." });
@@ -161,6 +169,7 @@ public class AdminController : BaseController
     [HttpPost("tracks/{id}/hide")]
     public async Task<IActionResult> HideTrack(string id)
     {
+        _logger.LogInformation("[Admin] HideTrack id={TrackId}", id);
         var ok = await _admin.HideTrackAsync(id);
         if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track hidden." });
@@ -169,6 +178,7 @@ public class AdminController : BaseController
     [HttpPost("tracks/{id}/flag")]
     public async Task<IActionResult> FlagTrack(string id)
     {
+        _logger.LogInformation("[Admin] FlagTrack id={TrackId}", id);
         var ok = await _admin.FlagTrackAsync(id);
         if (!ok) return NotFound(new { success = false, message = "Track not found." });
         return OkResponse(new { success = true, message = "Track flagged." });
