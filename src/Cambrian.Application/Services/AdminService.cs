@@ -47,4 +47,35 @@ public class AdminService : IAdminService
     {
         return await _admin.PurgeTestDataAsync(adminEmail);
     }
+
+    // ── User management ──
+
+    public Task<bool> SuspendUserAsync(string userId, string? reason)
+        => _admin.SuspendUserAsync(userId, reason);
+
+    public Task<bool> ReactivateUserAsync(string userId)
+        => _admin.ReactivateUserAsync(userId);
+
+    public Task<bool> SetUserRoleAsync(string userId, string role)
+        => _admin.SetUserRoleAsync(userId, role);
+
+    public Task<bool> VerifyCreatorAsync(string userId)
+        => _admin.VerifyCreatorAsync(userId);
+
+    // ── Track moderation ──
+
+    public Task<bool> RemoveTrackAsync(string trackId)
+        => Guid.TryParse(trackId, out var id) ? _admin.RemoveTrackAsync(id) : Task.FromResult(false);
+
+    public Task<bool> RestoreTrackAsync(string trackId)
+        => Guid.TryParse(trackId, out var id) ? _admin.RestoreTrackAsync(id) : Task.FromResult(false);
+
+    public Task<bool> HideTrackAsync(string trackId)
+        => Guid.TryParse(trackId, out var id) ? _admin.HideTrackAsync(id) : Task.FromResult(false);
+
+    public Task<bool> FlagTrackAsync(string trackId)
+        => Guid.TryParse(trackId, out var id) ? _admin.FlagTrackAsync(id) : Task.FromResult(false);
+
+    public Task<bool> SetTrackVisibilityAsync(string trackId, string visibility)
+        => Guid.TryParse(trackId, out var id) ? _admin.SetTrackVisibilityAsync(id, visibility) : Task.FromResult(false);
 }
