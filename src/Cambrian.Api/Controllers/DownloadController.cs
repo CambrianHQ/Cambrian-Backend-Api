@@ -53,9 +53,7 @@ public class DownloadController : BaseController
         // Build a user-friendly filename from the track title
         var ext = Path.GetExtension(track.AudioUrl);
         if (string.IsNullOrWhiteSpace(ext)) ext = ".mp3";
-        var safeTitle = string.Concat(
-            (track.Title ?? "track").Where(c => !Path.GetInvalidFileNameChars().Contains(c)));
-        if (string.IsNullOrWhiteSpace(safeTitle)) safeTitle = "track";
+        var safeTitle = SanitizeFilename(track.Title ?? "track");
         var filename = $"{safeTitle}{ext}";
 
         // Generate a URL with Content-Disposition: attachment so the browser
@@ -102,9 +100,7 @@ public class DownloadController : BaseController
 
         // Build a user-friendly filename from the track title
         var ext = Path.GetExtension(track.AudioUrl) ?? ".mp3";
-        var safeTitle = string.Concat(
-            (track.Title ?? "track").Where(c => !Path.GetInvalidFileNameChars().Contains(c)));
-        if (string.IsNullOrWhiteSpace(safeTitle)) safeTitle = "track";
+        var safeTitle = SanitizeFilename(track.Title ?? "track");
         var fileName = $"{safeTitle}{ext}";
 
         Response.Headers["Cache-Control"] = "private, no-store";
@@ -139,5 +135,19 @@ public class DownloadController : BaseController
             signedUrl = ResolveAbsoluteUrl($"/download/{trackId}/file");
 
         return OkResponse(new { signedUrl, expiresAt = DateTime.UtcNow.AddMinutes(15) });
+    }
+
+    private static string SanitizeFilename(string raw)
+    {
+        var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
+        var result = new char[raw.Length];
+        var count = 0;
+        foreach (var c in raw)
+        {
+            if (!invalid.Contains(c))
+                result[count++] = c;
+        }
+        var sanitized = new string(result, 0, count);
+        return string.IsNullOrWhiteSpace(sanitized) ? "track" : sanitized;
     }
 }
