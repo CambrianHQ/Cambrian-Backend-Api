@@ -30,8 +30,8 @@ services:
   - type: web
     name: cambrian-api-staging
     runtime: docker
-    repo: https://github.com/loganbryanx/Cambrian-Backend-Api
-    branch: main
+    repo: https://github.com/Cambrian-by-Kinetix-Interactive/Cambrian-Backend-Api
+    branch: staging
     plan: free
     region: oregon
     dockerfilePath: ./Dockerfile
@@ -48,7 +48,7 @@ services:
         fromDatabase:
           name: cambrian-db-staging
           property: connectionString
-      # JWT -- generate a strong >=32-char secret in the Render dashboard
+      # JWT -- generate a strong >=32-char secret in the Render dashboard       
       - key: Jwt__Key
         sync: false
       - key: Jwt__Issuer
@@ -60,31 +60,50 @@ services:
         sync: false
       - key: Stripe__WebhookSecret
         sync: false
-      # Object storage -- local for now; switch to S3/R2 when ready
+      # Object storage -- S3/R2 (same provider as production, separate bucket)
       - key: Storage__Provider
-        value: local
-      # Email -- console logger for staging
+        sync: false
+      - key: Storage__Endpoint
+        sync: false
+      - key: Storage__Bucket
+        value: cambrian-audio-staging
+      - key: Storage__AccessKey
+        sync: false
+      - key: Storage__SecretKey
+        sync: false
+      - key: Storage__Region
+        value: auto
+      - key: Storage__UsePathStyle
+        value: "true"
+      - key: Storage__PublicUrl
+        sync: false
+      # Email -- Resend for staging (same domain, tagged sender name)
       - key: Email__Provider
-        value: console
+        value: resend
+      - key: Email__FromAddress
+        value: noreply@cambrianmusic.com
+      - key: Email__FromName
+        value: "Cambrian Music (Staging)"
+      - key: Email__ResendApiKey
+        sync: false
       # Rate limiting -- relaxed for staging
       - key: RateLimiting__GlobalPermitLimit
         value: "500"
       - key: RateLimiting__AuthPermitLimit
         value: "100"
+      # Admin seed account
+      - key: Admin__Email
+        sync: false
+      - key: Admin__Password
+        sync: false
       # Frontend CORS
       - key: App__FrontendUrl
-        value: https://cambrian-amber.vercel.app
+        value: https://staging.cambrianmusic.com
       - key: App__CorsOrigins
-        value: "https://cambrian-amber.vercel.app,https://cambrian-test.vercel.app,https://cambrian-staging.vercel.app"
+        value: "https://staging.cambrianmusic.com,http://localhost:5173"
       # Vercel preview deployment CORS wildcard
       - key: App__VercelProjectSlug
-        value: cambrian-amber
-    buildFilter:
-      paths:
-        - src/**
-        - Dockerfile
-        - Cambrian.sln
-
+        value: cambrian
   # ====================================================================
   #  PRODUCTION API  (uncomment when ready to go live)
   # ====================================================================
