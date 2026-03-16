@@ -105,11 +105,19 @@ public class StreamController : BaseController
             return File(silent, "audio/mpeg", enableRangeProcessing: true);
         }
 
-        // Let ASP.NET Core handle Range requests (required by Safari / iOS)
+        // Safari / iOS sends Range requests and expects 206 Partial Content.
+        // The S3 response stream is not seekable, so ASP.NET Core's
+        // enableRangeProcessing silently falls back to 200 OK — which Safari
+        // rejects. Buffer into a seekable MemoryStream to fix this.
+        var seekable = new MemoryStream();
+        await file.Stream.CopyToAsync(seekable);
+        seekable.Position = 0;
+        file.Stream.Dispose();
+
         Response.Headers["Accept-Ranges"] = "bytes";
         Response.Headers["Cache-Control"] = "private, max-age=3600";
 
-        return File(file.Stream, file.ContentType, enableRangeProcessing: true);
+        return File(seekable, file.ContentType, enableRangeProcessing: true);
     }
 
     [Authorize]
