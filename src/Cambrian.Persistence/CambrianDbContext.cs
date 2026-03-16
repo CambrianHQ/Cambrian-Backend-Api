@@ -36,6 +36,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<LicenseCertificate> LicenseCertificates => Set<LicenseCertificate>();
 
+    public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
+
+    public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -209,6 +213,22 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                     v => v == null ? null : string.Join(',', v),
                     v => v == null ? null : v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())
                 .Metadata.SetValueComparer(listComparer);
+        });
+
+        builder.Entity<AnalyticsEvent>(e =>
+        {
+            e.HasKey(a => a.Id);
+            e.Property(a => a.EventType).HasMaxLength(50).IsRequired();
+            e.Property(a => a.Metadata).HasMaxLength(500);
+            e.HasIndex(a => a.EventType);
+            e.HasIndex(a => a.CreatedAt);
+        });
+
+        builder.Entity<FeatureFlag>(e =>
+        {
+            e.HasKey(f => f.Id);
+            e.Property(f => f.Name).HasMaxLength(100).IsRequired();
+            e.HasIndex(f => f.Name).IsUnique();
         });
     }
 }

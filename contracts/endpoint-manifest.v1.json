@@ -691,6 +691,48 @@
                           "path":  "/webhook/stripe",
                           "requiresAuth":  false,
                           "tag":  "Webhook"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/analytics/track",
+                          "requiresAuth":  true,
+                          "tag":  "Analytics"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/analytics/summary",
+                          "requiresAuth":  true,
+                          "tag":  "Analytics"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/analytics/events",
+                          "requiresAuth":  true,
+                          "tag":  "Analytics"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/feature-flags/check/{name}",
+                          "requiresAuth":  true,
+                          "tag":  "FeatureFlags"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/feature-flags",
+                          "requiresAuth":  true,
+                          "tag":  "FeatureFlags"
+                      },
+                      {
+                          "method":  "PUT",
+                          "path":  "/feature-flags/{name}",
+                          "requiresAuth":  true,
+                          "tag":  "FeatureFlags"
+                      },
+                      {
+                          "method":  "DELETE",
+                          "path":  "/feature-flags/{name}",
+                          "requiresAuth":  true,
+                          "tag":  "FeatureFlags"
                       }
                   ],
     "source":  "contracts/openapi.v1.json"
