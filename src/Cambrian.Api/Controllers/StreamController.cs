@@ -66,9 +66,9 @@ public class StreamController : BaseController
     }
 
     /// <summary>
-    /// Proxy-streams the actual audio bytes for a track.
-    /// This endpoint is what the &lt;audio&gt; element should point at.
-    /// Supports HTTP Range requests for seeking / Safari compatibility.
+    /// Redirects to a pre-signed storage URL for the track audio.
+    /// The CDN (R2/S3) handles Range requests natively, giving Safari/iOS
+    /// proper 206 Partial Content without any server-side buffering.
     /// Open to anonymous users — this is the marketplace discovery/preview model.
     /// Full-quality downloads require a verified purchase (see DownloadController).
     /// </summary>
@@ -83,41 +83,10 @@ public class StreamController : BaseController
         if (track?.AudioUrl is null)
             return NotFoundResponse("Track not found.");
 
-        _logger.LogInformation("StreamAudio: trackId={TrackId}, dbAudioUrl={AudioUrl}", trackId, track.AudioUrl);
+        _logger.LogInformation("StreamAudio: redirecting trackId={TrackId} to signed storage URL", trackId);
 
-        StorageFile? file;
-        try
-        {
-            file = await _storage.OpenReadAsync(track.AudioUrl);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "StreamAudio: Storage error for key={AudioUrl}. Returning silent placeholder.", track.AudioUrl);
-            var silentFallback = Cambrian.Api.Tools.SilentMp3Generator.Generate();
-            return File(silentFallback, "audio/mpeg", enableRangeProcessing: true);
-        }
-
-        if (file is null)
-        {
-            _logger.LogWarning("StreamAudio: File not found in storage. key={AudioUrl}. Returning silent placeholder.", track.AudioUrl);
-            // Return a generated silent MP3 so the player never breaks
-            var silent = Cambrian.Api.Tools.SilentMp3Generator.Generate();
-            return File(silent, "audio/mpeg", enableRangeProcessing: true);
-        }
-
-        // Safari / iOS sends Range requests and expects 206 Partial Content.
-        // The S3 response stream is not seekable, so ASP.NET Core's
-        // enableRangeProcessing silently falls back to 200 OK — which Safari
-        // rejects. Buffer into a seekable MemoryStream to fix this.
-        var seekable = new MemoryStream();
-        await file.Stream.CopyToAsync(seekable);
-        seekable.Position = 0;
-        file.Stream.Dispose();
-
-        Response.Headers["Accept-Ranges"] = "bytes";
-        Response.Headers["Cache-Control"] = "private, max-age=3600";
-
-        return File(seekable, file.ContentType, enableRangeProcessing: true);
+        var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
+        return Redirect(signedUrl);
     }
 
     [Authorize]
