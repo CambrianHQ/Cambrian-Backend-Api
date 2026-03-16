@@ -189,11 +189,18 @@ var frontendUrl = builder.Configuration["App:FrontendUrl"] ?? "";
 var defaultOrigins = builder.Environment.IsDevelopment()
     ? new[] { "http://localhost:5173", "http://localhost:5174", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173", "http://127.0.0.1:5174" }
     : Array.Empty<string>();
-// Always allow the custom domain (production) so CORS works even if env vars are misconfigured
-var productionOrigins = new[] { "https://cambrianmusic.com", "https://www.cambrianmusic.com" };
+// Hardcode production custom domain only in the Production environment
+var productionOrigins = builder.Environment.IsProduction()
+    ? new[] { "https://cambrianmusic.com", "https://www.cambrianmusic.com" }
+    : Array.Empty<string>();
+// Hardcode staging custom domain only in the Staging environment
+var stagingOrigins = builder.Environment.EnvironmentName == "Staging"
+    ? new[] { "https://staging.cambrianmusic.com", "https://api-staging.cambrianmusic.com" }
+    : Array.Empty<string>();
 var allOrigins = defaultOrigins
     .Concat(corsOrigins)
     .Concat(productionOrigins)
+    .Concat(stagingOrigins)
     .Concat(string.IsNullOrWhiteSpace(frontendUrl) ? Array.Empty<string>() : new[] { frontendUrl })
     .Where(o => !string.IsNullOrWhiteSpace(o))
     .Distinct()
