@@ -733,6 +733,60 @@
                           "path":  "/feature-flags/{name}",
                           "requiresAuth":  true,
                           "tag":  "FeatureFlags"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/creator-profile/{slug}",
+                          "requiresAuth":  false,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/creator-profile/me",
+                          "requiresAuth":  true,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "PUT",
+                          "path":  "/creator-profile/me",
+                          "requiresAuth":  true,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/creator-profile/me/banner",
+                          "requiresAuth":  true,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/creator-profile/me/avatar",
+                          "requiresAuth":  true,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/creator-profile/{slug}/collections",
+                          "requiresAuth":  false,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/creator-profile/me/collections",
+                          "requiresAuth":  true,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "PUT",
+                          "path":  "/creator-profile/me/collections/{collectionId}",
+                          "requiresAuth":  true,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "DELETE",
+                          "path":  "/creator-profile/me/collections/{collectionId}",
+                          "requiresAuth":  true,
+                          "tag":  "CreatorProfile"
                       }
                   ],
     "source":  "contracts/openapi.v1.json"

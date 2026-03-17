@@ -272,6 +272,7 @@ builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 builder.Services.AddScoped<ILicenseCertificateRepository, LicenseCertificateRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
+builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
 
 // Infrastructure
 builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
