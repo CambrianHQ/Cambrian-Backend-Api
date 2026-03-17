@@ -227,6 +227,15 @@ builder.Services.AddCors(options =>
                     && uri.Host.Contains(vercelSlug, StringComparison.OrdinalIgnoreCase))
                     return true;
 
+                // Allow Cloudflare Pages preview deployments for the specific project slug
+                // Configure via App:CloudflarePagesSlug (e.g. "cambrian-ciz")
+                var cfSlug = builder.Configuration["App:CloudflarePagesSlug"] ?? "";
+                if (!string.IsNullOrEmpty(cfSlug)
+                    && Uri.TryCreate(origin, UriKind.Absolute, out var cfUri)
+                    && cfUri.Host.EndsWith(".pages.dev", StringComparison.OrdinalIgnoreCase)
+                    && cfUri.Host.Contains(cfSlug, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
                 return false;
             })
               .AllowAnyHeader()

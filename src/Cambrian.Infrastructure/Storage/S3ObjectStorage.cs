@@ -27,7 +27,7 @@ public sealed class S3ObjectStorage : IObjectStorage
             ServiceURL = _options.Endpoint,
             ForcePathStyle = _options.UsePathStyle,
         };
-        if (!string.IsNullOrWhiteSpace(_options.Region) && _options.Region != "auto")
+        if (!string.IsNullOrWhiteSpace(_options.Region))
             config.AuthenticationRegion = _options.Region;
 
         _client = new AmazonS3Client(
