@@ -40,6 +40,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
 
+    public DbSet<CreatorProfile> CreatorProfiles => Set<CreatorProfile>();
+
+    public DbSet<TrackCollection> TrackCollections => Set<TrackCollection>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -229,6 +233,31 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasKey(f => f.Id);
             e.Property(f => f.Name).HasMaxLength(100).IsRequired();
             e.HasIndex(f => f.Name).IsUnique();
+        });
+
+        builder.Entity<CreatorProfile>(e =>
+        {
+            e.HasKey(cp => cp.Id);
+            e.Property(cp => cp.UserId).HasMaxLength(450).IsRequired();
+            e.HasIndex(cp => cp.UserId).IsUnique();
+            e.Property(cp => cp.Slug).HasMaxLength(100).IsRequired();
+            e.HasIndex(cp => cp.Slug).IsUnique();
+            e.Property(cp => cp.Bio).HasMaxLength(2000);
+            e.Property(cp => cp.Niche).HasMaxLength(100);
+            e.Property(cp => cp.SocialLinks).HasMaxLength(2000);
+            e.Property(cp => cp.BannerImageUrl).HasMaxLength(500);
+            e.Property(cp => cp.ProfileImageUrl).HasMaxLength(500);
+        });
+
+        builder.Entity<TrackCollection>(e =>
+        {
+            e.HasKey(tc => tc.Id);
+            e.Property(tc => tc.CreatorId).HasMaxLength(450).IsRequired();
+            e.HasIndex(tc => tc.CreatorId);
+            e.Property(tc => tc.Title).HasMaxLength(200).IsRequired();
+            e.Property(tc => tc.Description).HasMaxLength(2000);
+            e.Property(tc => tc.CoverImageUrl).HasMaxLength(500);
+            e.Property(tc => tc.TrackIds).HasMaxLength(5000);
         });
     }
 }
