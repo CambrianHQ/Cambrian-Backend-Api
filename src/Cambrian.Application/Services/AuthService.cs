@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
@@ -97,6 +98,7 @@ public class AuthService : IAuthService
         var user = await _users.FindByIdAsync(userId)
                    ?? throw new UnauthorizedAccessException("User not found");
 
+        var tierConfig = TierManifest.For(user.CreatorTier);
         return new UserProfileResponse
         {
             UserId = user.Id,
@@ -104,7 +106,14 @@ public class AuthService : IAuthService
             DisplayName = user.DisplayName,
             Role = user.Role,
             Tier = user.Tier,
-            VerifiedCreator = user.VerifiedCreator
+            VerifiedCreator = user.VerifiedCreator,
+            CreatorTier = user.CreatorTier.ToString(),
+            UploadCount = user.UploadCount,
+            UploadLimit = tierConfig.UploadLimit,
+            SubscriptionStatus = user.SubscriptionStatus,
+            SubscriptionEndDate = user.SubscriptionEndDate,
+            PlatformFeePercent = tierConfig.FeeRate,
+            ContractVersion = TierManifest.ContractVersion
         };
     }
 

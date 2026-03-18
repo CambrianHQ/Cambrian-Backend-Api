@@ -1,6 +1,9 @@
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
 
@@ -8,6 +11,8 @@ public class UploadService : IUploadService
 {
     private readonly IObjectStorage _storage;
     private readonly ITrackRepository _tracks;
+    private readonly UserManager<ApplicationUser> _users;
+    private readonly ILogger<UploadService> _logger;
 
     /// <summary>Allowed audio file extensions (lowercase, with dot).</summary>
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -41,10 +46,12 @@ public class UploadService : IUploadService
     /// <summary>Maximum cover art size in bytes (10 MB).</summary>
     private const long MaxCoverArtSizeBytes = 10 * 1024 * 1024;
 
-    public UploadService(IObjectStorage storage, ITrackRepository tracks)
+    public UploadService(IObjectStorage storage, ITrackRepository tracks, UserManager<ApplicationUser> users, ILogger<UploadService> logger)
     {
         _storage = storage;
         _tracks = tracks;
+        _users = users;
+        _logger = logger;
     }
 
     public async Task<UploadTrackResponse> Upload(UploadTrackRequest request)
@@ -54,6 +61,20 @@ public class UploadService : IUploadService
 
         if (string.IsNullOrWhiteSpace(request.CreatorId))
             throw new ArgumentException("CreatorId is required.");
+
+        // ── Tier-based upload limit enforcement ──
+        var creator = await _users.FindByIdAsync(request.CreatorId);
+        if (creator is null)
+            throw new ArgumentException("Creator not found.");
+
+        var tierConfig = TierManifest.For(creator.CreatorTier);
+        if (tierConfig.UploadLimit.HasValue && creator.UploadCount >= tierConfig.UploadLimit.Value)
+        {
+            _logger.LogWarning("Upload denied: creator {CreatorId} has {Count}/{Limit} tracks (tier={Tier})",
+                request.CreatorId, creator.UploadCount, tierConfig.UploadLimit.Value, tierConfig.Slug);
+            throw new InvalidOperationException(
+                $"Upload limit reached. {tierConfig.DisplayName} tier allows {tierConfig.UploadLimit} tracks. Upgrade to Pro for unlimited uploads.");
+        }
 
         // ── File-type validation ──
         var extension = Path.GetExtension(request.Audio.FileName)?.ToLowerInvariant() ?? "";
@@ -147,6 +168,13 @@ public class UploadService : IUploadService
         };
 
         await _tracks.AddAsync(track);
+
+        // ── Increment upload count ──
+        creator.UploadCount += 1;
+        await _users.UpdateAsync(creator);
+
+        _logger.LogInformation("Track uploaded: {TrackId} by creator {CreatorId} (upload #{Count}, tier={Tier})",
+            track.Id, request.CreatorId, creator.UploadCount, tierConfig.Slug);
 
         return new UploadTrackResponse
         {

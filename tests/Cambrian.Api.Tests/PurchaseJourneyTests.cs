@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Identity;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -79,8 +80,10 @@ public sealed class PurchaseJourneyTests : IDisposable
         var config = Substitute.For<IConfiguration>();
         config["App:FrontendUrl"].Returns("http://localhost:5173");
         _purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var checkoutUsers = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         var checkoutLogger = Substitute.For<ILogger<CheckoutService>>();
-        _checkoutService = new CheckoutService(_gateway, _tracks, _purchases, _libraryRepo, _walletRepo, _licenseService, config, checkoutLogger);
+        _checkoutService = new CheckoutService(_gateway, _tracks, _purchases, _libraryRepo, _walletRepo, _licenseService, config, checkoutUsers, checkoutLogger);
 
         // ── Configure webhook service ──
         var webhookConfig = Substitute.For<IConfiguration>();

@@ -3,6 +3,8 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -20,7 +22,19 @@ public sealed class CoverArtUploadTests
     {
         _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/file");
-        _sut = new UploadService(_storage, _tracks);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        users.FindByIdAsync("creator-1").Returns(new ApplicationUser
+        {
+            Id = "creator-1",
+            UserName = "creator1",
+            Email = "creator1@test.com",
+            CreatorTier = Cambrian.Domain.Enums.CreatorTier.Free,
+            UploadCount = 0
+        });
+        users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        var logger = Substitute.For<ILogger<UploadService>>();
+        _sut = new UploadService(_storage, _tracks, users, logger);
     }
 
     private static IFormFile MakeAudioFile(string name = "beat.mp3", long length = 1024)

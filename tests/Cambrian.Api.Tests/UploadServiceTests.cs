@@ -3,6 +3,8 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -15,7 +17,12 @@ public sealed class UploadServiceTests
 
     public UploadServiceTests()
     {
-        _sut = new UploadService(_storage, _tracks);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        users.FindByIdAsync(Arg.Any<string>()).Returns(new ApplicationUser { Id = "c1", CreatorTier = Cambrian.Domain.Enums.CreatorTier.Free, UploadCount = 0 });
+        users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        var logger = Substitute.For<ILogger<UploadService>>();
+        _sut = new UploadService(_storage, _tracks, users, logger);
     }
 
     private static IFormFile MakeFile(string name = "beat.mp3", long length = 1024)
