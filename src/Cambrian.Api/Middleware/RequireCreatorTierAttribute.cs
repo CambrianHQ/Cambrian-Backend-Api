@@ -41,7 +41,7 @@ public class RequireCreatorTierAttribute : Attribute, IAsyncActionFilter
             tier = (user.Tier ?? "free").ToLowerInvariant();
         }
 
-        if (tier != "creator")
+        if (tier != "creator" && tier != "pro")
         {
             context.Result = new ObjectResult(ApiResponse.Fail("Creator tier required."))
             {

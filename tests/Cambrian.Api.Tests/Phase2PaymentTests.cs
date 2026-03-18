@@ -29,7 +29,9 @@ public sealed class Phase2PaymentTests
             .Build();
         var subService = Substitute.For<ISubscriptionService>();
         var logger = Substitute.For<ILogger<BillingService>>();
-        var sut = new BillingService(subs, subService, gateway, config, logger);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        var sut = new BillingService(subs, subService, gateway, users, config, logger);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = "invalid" }, "user-1"));
@@ -37,7 +39,7 @@ public sealed class Phase2PaymentTests
 
     [Theory]
     [InlineData("paid", 499)]
-    [InlineData("creator", 999)]
+    [InlineData("pro", 1499)]
     public async Task BillingService_CreateCheckout_UsesCorrectAmount(string tier, int expectedCents)
     {
         var subs = Substitute.For<ISubscriptionRepository>();
@@ -50,7 +52,9 @@ public sealed class Phase2PaymentTests
             .Build();
         var subService = Substitute.For<ISubscriptionService>();
         var logger = Substitute.For<ILogger<BillingService>>();
-        var sut = new BillingService(subs, subService, gateway, config, logger);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        var sut = new BillingService(subs, subService, gateway, users, config, logger);
 
         var result = await sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = tier }, "user-1");
 
@@ -85,9 +89,9 @@ public sealed class Phase2PaymentTests
         users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
         var sut = new SubscriptionService(subs, users);
 
-        var result = await sut.UpdateAsync(new UpdateSubscriptionRequest { Plan = "creator" }, "user-1");
+        var result = await sut.UpdateAsync(new UpdateSubscriptionRequest { Plan = "pro" }, "user-1");
 
-        Assert.Equal("creator", result.Plan);
+        Assert.Equal("pro", result.Plan);
         Assert.Equal("active", result.Status);
     }
 

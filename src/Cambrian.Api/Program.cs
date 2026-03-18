@@ -262,6 +262,7 @@ builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IStreamService, StreamService>();
 builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
+builder.Services.AddSingleton<IFeeService, FeeService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();

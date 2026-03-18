@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -15,6 +17,7 @@ public class CheckoutService : ICheckoutService
     private readonly ILibraryRepository _library;
     private readonly IWalletRepository _wallet;
     private readonly ILicenseService _licenseService;
+    private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<CheckoutService> _logger;
     private readonly string _frontendUrl;
 
@@ -26,6 +29,7 @@ public class CheckoutService : ICheckoutService
         IWalletRepository wallet,
         ILicenseService licenseService,
         IConfiguration configuration,
+        UserManager<ApplicationUser> users,
         ILogger<CheckoutService> logger)
     {
         _gateway = gateway;
@@ -34,6 +38,7 @@ public class CheckoutService : ICheckoutService
         _library = library;
         _wallet = wallet;
         _licenseService = licenseService;
+        _users = users;
         _logger = logger;
         _frontendUrl = configuration["App:FrontendUrl"] ?? "http://localhost:5173";
     }
@@ -258,7 +263,11 @@ public class CheckoutService : ICheckoutService
         // ── Credit creator wallet (platform takes 15% fee) ──
         if (!string.IsNullOrEmpty(track.CreatorId) && session.AmountTotal is > 0)
         {
-            const decimal platformFeeRate = 0.15m;
+            // Resolve the creator's actual tier-based fee rate
+            var creatorUser = await _users.FindByIdAsync(track.CreatorId);
+            var platformFeeRate = creatorUser is not null
+                ? TierManifest.For(creatorUser.CreatorTier).FeeRate
+                : TierManifest.Free.FeeRate;
             var grossCents = session.AmountTotal.Value;
             var creatorCents = (long)Math.Floor(grossCents * (1 - platformFeeRate));
 

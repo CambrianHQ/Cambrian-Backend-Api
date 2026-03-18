@@ -1,6 +1,8 @@
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Subscriptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Cambrian.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 
 namespace Cambrian.Application.Services;
@@ -34,9 +36,9 @@ public class SubscriptionService : ISubscriptionService
             },
             new()
             {
-                Name = "Creator",
-                PriceCents = 999,
-                Features = ["Everything in Paid", "Upload tracks", "Sell licenses", "Analytics dashboard", "Payout access"]
+                Name = TierManifest.Pro.DisplayName,
+                PriceCents = TierManifest.Pro.PriceCents,
+                Features = TierManifest.Pro.Features.ToList()
             }
         };
 
@@ -62,13 +64,19 @@ public class SubscriptionService : ISubscriptionService
         var existing = await _subscriptions.GetActiveAsync(userId);
         var user = await _users.FindByIdAsync(userId);
 
+        // Normalize "creator" -> "pro"
+        var plan = request.Plan;
+        if (string.Equals(plan, "creator", StringComparison.OrdinalIgnoreCase))
+            plan = "pro";
+
         if (existing is not null)
         {
-            if (existing.Plan == request.Plan)
+            if (existing.Plan == plan)
             {
-                if (user is not null && user.Tier != request.Plan)
+                if (user is not null && user.Tier != plan)
                 {
-                    user.Tier = request.Plan;
+                    user.Tier = plan;
+                    SyncCreatorTier(user);
                     await _users.UpdateAsync(user);
                 }
                 return new SubscriptionResponse { Plan = existing.Plan, Status = existing.Status };
@@ -77,9 +85,14 @@ public class SubscriptionService : ISubscriptionService
             await _subscriptions.CancelAsync(existing.Id);
         }
 
-        if (request.Plan == "free")
+        if (plan == "free")
         {
-            if (user is not null) { user.Tier = "free"; await _users.UpdateAsync(user); }
+            if (user is not null)
+            {
+                user.Tier = "free";
+                SyncCreatorTier(user);
+                await _users.UpdateAsync(user);
+            }
             return new SubscriptionResponse { Plan = "free", Status = "active" };
         }
 
@@ -87,7 +100,7 @@ public class SubscriptionService : ISubscriptionService
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            Plan = request.Plan,
+            Plan = plan,
             Status = "active",
             StartedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddMonths(1)
@@ -95,7 +108,14 @@ public class SubscriptionService : ISubscriptionService
 
         await _subscriptions.CreateAsync(subscription);
 
-        if (user is not null) { user.Tier = request.Plan; await _users.UpdateAsync(user); }
+        if (user is not null)
+        {
+            user.Tier = plan;
+            user.SubscriptionStatus = "Active";
+            user.SubscriptionEndDate = subscription.ExpiresAt;
+            SyncCreatorTier(user);
+            await _users.UpdateAsync(user);
+        }
 
         return new SubscriptionResponse
         {
@@ -119,6 +139,8 @@ public class SubscriptionService : ISubscriptionService
         if (user is not null)
         {
             user.Tier = "free";
+            user.SubscriptionStatus = "Cancelled";
+            SyncCreatorTier(user);
             await _users.UpdateAsync(user);
         }
     }
@@ -135,5 +157,18 @@ public class SubscriptionService : ISubscriptionService
             StartedAt = s.StartedAt,
             ExpiresAt = s.ExpiresAt
         }).ToList();
+    }
+
+    /// <summary>
+    /// Keeps the CreatorTier enum in sync with the Tier string field.
+    /// Must be called whenever Tier changes.
+    /// </summary>
+    private static void SyncCreatorTier(ApplicationUser user)
+    {
+        user.CreatorTier = user.Tier switch
+        {
+            "pro" or "creator" => CreatorTier.Pro,
+            _ => CreatorTier.Free
+        };
     }
 }
