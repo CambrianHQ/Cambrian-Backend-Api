@@ -24,6 +24,9 @@ public sealed class CreatorProfile
     public bool ShowEarnings { get; set; }
     public bool ShowDownloadStats { get; set; }
 
+    /// <summary>Comma-separated track GUIDs pinned by the creator for storefront display order.</summary>
+    public string? PinnedTrackIds { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
