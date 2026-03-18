@@ -1,0 +1,30 @@
+name: Deploy Production Backend
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore Cambrian.sln
+      - name: Build
+        run: dotnet build Cambrian.sln --no-restore --configuration Release
+      - name: Test
+        run: dotnet test Cambrian.sln --no-build --configuration Release
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production  # Requires manual approval in GitHub settings
+    steps:
+      - name: Deploy to Render (production)
+        run: |
+          curl -sf -X POST "${{ secrets.PROD_DEPLOY_WEBHOOK }}" \
+            || echo "::warning::Deploy hook not configured — Render auto-deploys from main branch"
