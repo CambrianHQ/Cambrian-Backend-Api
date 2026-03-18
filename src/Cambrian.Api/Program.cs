@@ -481,6 +481,28 @@ if (app.Environment.EnvironmentName != "Testing")
 
 // ── Seed demo tracks removed for production — tracks are user-uploaded only ──
 
+// ── Seed default feature flags ──
+if (app.Environment.EnvironmentName != "Testing")
+{
+    try
+    {
+        using var flagScope = app.Services.CreateScope();
+        var flagRepo = flagScope.ServiceProvider.GetRequiredService<IFeatureFlagRepository>();
+
+        // creator_storefront: OFF by default — enable via admin API when ready
+        var existing = await flagRepo.GetByNameAsync("creator_storefront");
+        if (existing is null)
+        {
+            await flagRepo.UpsertAsync("creator_storefront", enabled: false);
+            Console.WriteLine("[Seed] Feature flag 'creator_storefront' created (disabled)");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Seed] Feature flag seed error: {ex.Message}");
+    }
+}
+
 app.Run();
 
 // Expose the implicit Program class for WebApplicationFactory<Program> in integration tests

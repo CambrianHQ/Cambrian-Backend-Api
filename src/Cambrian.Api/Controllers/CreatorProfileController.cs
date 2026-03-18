@@ -17,6 +17,7 @@ public class CreatorProfileController : BaseController
     private readonly ICreatorProfileRepository _profiles;
     private readonly IObjectStorage _storage;
     private readonly IStorefrontService _storefront;
+    private readonly IFeatureFlagRepository _flags;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -25,11 +26,12 @@ public class CreatorProfileController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront)
+    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags)
     {
         _profiles = profiles;
         _storage = storage;
         _storefront = storefront;
+        _flags = flags;
     }
 
     // ───── Public: view a creator profile by slug ─────
@@ -47,6 +49,9 @@ public class CreatorProfileController : BaseController
     [HttpGet("{slug}/storefront")]
     public async Task<IActionResult> GetStorefront(string slug)
     {
+        if (!await _flags.IsEnabledAsync("creator_storefront"))
+            return NotFoundResponse("Storefront is not available.");
+
         var storefront = await _storefront.GetStorefrontAsync(slug);
         if (storefront is null) return NotFoundResponse("Creator not found.");
         return OkResponse(storefront);
