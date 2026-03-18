@@ -2,148 +2,132 @@
 
 ## Architecture
 
-| Component | Hosting | Staging URL | Production URL |
-|-----------|---------|-------------|----------------|
-| Frontend  | **Vercel** | cambrian-test.vercel.app | cambrianmusic.com |
-| Backend   | **Render** (Docker) | cambrian-api-staging.onrender.com | cambrian-api.onrender.com |
-| Database  | **Render** PostgreSQL | cambrian-db-staging | cambrian-db-prod |
+| Component | Hosting | Staging | Production |
+|-----------|---------|---------|------------|
+| Frontend  | **Vercel** | `staging.cambrianmusic.com` (or preview URLs) | `cambrianmusic.com` |
+| Backend   | **Render** (Docker) | `cambrian-api-staging` service | `cambrian-api` service (commented in `render.yaml`) |
+| Database  | **Render PostgreSQL** | `cambrian-db-staging` | `cambrian-db-prod` (commented in `render.yaml`) |
+| Storage   | S3-compatible (R2/S3) | `cambrian-audio-staging` bucket | separate production bucket |
 
 ---
 
-## 1. Backend - Render
+## 1) Backend - Render (staging)
 
-### Staging (ready now)
+`render.yaml` already defines an isolated staging stack (DB + API + staging bucket name).
 
-1. **Create the Blueprint** - push this repo to main, open **Render Dashboard -> Blueprints -> New Blueprint Instance**, select this repo.  Render reads render.yaml and creates:
-   - PostgreSQL database cambrian-db-staging
-   - Web service cambrian-api-staging (Docker, free plan)
+1. **Create/refresh blueprint**
+   - Render Dashboard -> **Blueprints** -> New Blueprint Instance
+   - Select this repo and confirm `render.yaml` resources
+   - Staging API service is configured to deploy from branch `staging`
 
-2. **Set secret env vars** in the Render dashboard for cambrian-api-staging:
+2. **Set required secrets in Render dashboard**
 
-   | Variable | Value | Notes |
-   |----------|-------|-------|
-   | Jwt__Key | openssl rand -base64 48 | >= 32 chars, generate a strong random value |
-   | Stripe__SecretKey | sk_test_51Sw962Pl... | Your Stripe **test** secret key |
-   | Stripe__WebhookSecret | whsec_... | From stripe listen --forward-to (staging) |
+   | Variable | Required | Notes |
+   |----------|----------|-------|
+   | `Jwt__Key` | Yes | Generate strong secret (`openssl rand -base64 48`), min length 32 |
+   | `Stripe__SecretKey` | Recommended | Use Stripe **test** key in staging |
+   | `Stripe__WebhookSecret` | If webhooks enabled | From Stripe webhook endpoint |
+   | `Storage__Provider` | Yes (for persistence) | `r2` or `s3` (leave `local` only for temporary testing) |
+   | `Storage__Endpoint` | When `r2`/`s3` | e.g. `https://<account-id>.r2.cloudflarestorage.com` |
+   | `Storage__AccessKey` | When `r2`/`s3` | Storage credential |
+   | `Storage__SecretKey` | When `r2`/`s3` | Storage credential |
+   | `Storage__PublicUrl` | Optional | Public bucket URL for cover art links |
+   | `Email__ResendApiKey` | If `Email__Provider=resend` | Required by staging email setup |
+   | `Admin__Email` / `Admin__Password` | Recommended | Seeds admin account at startup |
 
-   > DATABASE_URL is auto-populated by fromDatabase in render.yaml.
+   `DATABASE_URL`, `Storage__Bucket=cambrian-audio-staging`, `Storage__Region=auto`, and `Storage__UsePathStyle=true` are already defined by `render.yaml`.
 
-3. **Stripe webhook** - in the Stripe Dashboard -> Webhooks, add an endpoint:
-   - URL: https://cambrian-api-staging.onrender.com/webhook/stripe
-   - Events: checkout.session.completed, customer.subscription.*, invoice.*, account.updated
-   - Copy the signing secret -> paste as Stripe__WebhookSecret
+3. **Stripe webhook setup (staging)**
+   - Endpoint: `https://<staging-api-domain>/webhook/stripe`
+   - Events: `checkout.session.completed`, `customer.subscription.*`, `invoice.*`, `account.updated`
+   - Copy signing secret into `Stripe__WebhookSecret`
 
-4. **Verify** - once deployed, hit https://cambrian-api-staging.onrender.com/health and confirm status: ok.
+4. **Verification checks**
+   - `GET /health` should return OK
+   - `GET /health/storage` should pass when storage credentials are valid
+   - Stream/download endpoints should return valid signed URLs (or redirects) for existing tracks
 
 ### Production (when ready)
 
-1. Uncomment the production service and database blocks in render.yaml
-2. Push to main - Render will create the new resources
-3. Set env vars in the Render dashboard (same as staging but with **live** Stripe keys and a different JWT secret)
-4. Point cambrian-api.onrender.com or add a custom domain in Render settings
+1. Uncomment production DB + API blocks in `render.yaml`
+2. Set production secrets (live Stripe keys, separate JWT secret, separate storage bucket)
+3. Configure production CORS/frontend origins (`App__FrontendUrl`, `App__CorsOrigins`)
+4. Validate `health`, Stripe webhook, and storage signed URLs after deploy
 
 ---
 
-## 2. Frontend - Vercel
+## 2) Frontend - Vercel
 
-### Staging (Vercel Preview)
+Vercel deploys preview builds for non-default branches and production builds for the default branch.
 
-Vercel automatically deploys **Preview** builds for every push to non-production branches, and **Production** builds for the default branch.
+| Environment | Variable | Value |
+|-------------|----------|-------|
+| Preview | `VITE_BACKEND_API` | staging backend URL |
+| Preview | `VITE_AUTH_API` | staging backend URL (or dedicated auth URL if split) |
+| Production | `VITE_BACKEND_API` | production backend URL |
+| Production | `VITE_AUTH_API` | production backend URL (or dedicated auth URL if split) |
 
-1. **Link the repo** - in Vercel Dashboard, import the cambrian repo, framework = Vite, output dir = dist.
-
-2. **Set environment variables** in Vercel -> Project Settings -> Environment Variables:
-
-   **Preview** environment:
-
-   | Variable | Value |
-   |----------|-------|
-   | VITE_BACKEND_API | https://cambrian-api-staging.onrender.com |
-   | VITE_AUTH_API | https://cambrian-api-staging.onrender.com |
-
-   **Production** environment:
-
-   | Variable | Value |
-   |----------|-------|
-   | VITE_BACKEND_API | https://cambrian-api.onrender.com |
-   | VITE_AUTH_API | https://cambrian-api.onrender.com |
-
-3. **Custom domain** - in Vercel -> Project Settings -> Domains:
-   - Add cambrianmusic.com and www.cambrianmusic.com
-   - The vercel.json already redirects www -> apex domain
-
-4. **Verify** - visit https://cambrian-test.vercel.app and confirm the app loads and connects to the staging API.
+If using preview domains heavily, keep backend CORS configured with:
+- `App__CorsOrigins` for explicit domains
+- `App__VercelProjectSlug` to allow matching `*.vercel.app` previews for the project
 
 ---
 
-## 3. Environment Variable Reference
-
-### Backend (Render)
+## 3) Environment Variable Reference (backend)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| ASPNETCORE_ENVIRONMENT | Yes | - | Staging or Production |
-| DATABASE_URL | Yes | - | Auto-set by Render from linked DB |
-| Jwt__Key | Yes | - | JWT signing secret (>= 32 chars) |
-| Jwt__Issuer | No | cambrian-api | JWT issuer claim |
-| Jwt__Audience | No | cambrian-client | JWT audience claim |
-| Stripe__SecretKey | Staging: optional | - | Stripe API secret key |
-| Stripe__WebhookSecret | When using webhooks | - | Stripe webhook signing secret |
-| Storage__Provider | No | local | local, s3, or r2 |
-| Storage__Endpoint | When S3/R2 | - | S3-compatible endpoint URL |
-| Storage__Bucket | When S3/R2 | cambrian-audio | Bucket name |
-| Storage__AccessKey | When S3/R2 | - | Access key |
-| Storage__SecretKey | When S3/R2 | - | Secret key |
-| Email__Provider | No | console | console or smtp |
-| Email__SmtpHost | When SMTP | - | SMTP server host |
-| Email__SmtpPort | When SMTP | 587 | SMTP port |
-| Email__SmtpUser | When SMTP | - | SMTP username |
-| Email__SmtpPass | When SMTP | - | SMTP password |
-| App__FrontendUrl | Yes | - | Frontend origin for Stripe return URLs |
-| App__CorsOrigins | Yes | - | Comma-separated allowed origins |
-| App__VercelProjectSlug | Staging only | - | Allows Vercel preview CORS |
-| RateLimiting__GlobalPermitLimit | No | 100 | Requests/min per IP |
-| RateLimiting__AuthPermitLimit | No | 10 | Auth requests/min per IP |
-
-### Frontend (Vercel)
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| VITE_BACKEND_API | Yes | staging Render URL | Backend API origin |
-| VITE_AUTH_API | No | same as VITE_BACKEND_API | Auth API origin (if split) |
-| VITE_DEV_BYPASS_AUTH | No | false | Skip auth in local dev |
+| `ASPNETCORE_ENVIRONMENT` | Yes | - | `Staging` or `Production` |
+| `DATABASE_URL` | Yes (Render) | - | Auto-linked Render PostgreSQL URL |
+| `ConnectionStrings__DefaultConnection` | Yes (non-Render) | - | ADO.NET connection string |
+| `Jwt__Key` (or `JWT_KEY`) | Yes | - | JWT signing secret (>= 32 chars) |
+| `Jwt__Issuer` | No | `cambrian-api` | JWT issuer claim |
+| `Jwt__Audience` | No | `cambrian-client` | JWT audience claim |
+| `Stripe__SecretKey` | Optional in non-prod | - | Stripe API key |
+| `Stripe__WebhookSecret` | When webhooks enabled | - | Stripe webhook signing secret |
+| `Storage__Provider` | No | `local` | `local`, `s3`, or `r2` |
+| `Storage__Endpoint` | When `s3`/`r2` | - | S3-compatible endpoint URL |
+| `Storage__Bucket` | When `s3`/`r2` | `cambrian-audio` | Bucket name |
+| `Storage__AccessKey` | When `s3`/`r2` | - | Storage access key |
+| `Storage__SecretKey` | When `s3`/`r2` | - | Storage secret key |
+| `Storage__Region` | When `s3`/`r2` | `auto` | For R2, keep `auto` |
+| `Storage__UsePathStyle` | When `s3`/`r2` | `true` | Required for R2 path-style requests |
+| `Storage__PublicUrl` | Optional | - | Public base URL for cover art |
+| `Email__Provider` | No | `console` | `console`, `smtp`, `resend`, `sendgrid` |
+| `Email__ResendApiKey` | When provider=`resend` | - | Resend API key |
+| `Email__SmtpHost` / `Email__SmtpPort` / `Email__SmtpUser` / `Email__SmtpPass` | When provider=`smtp` | - | SMTP settings |
+| `App__FrontendUrl` | Yes | - | Primary frontend origin |
+| `App__CorsOrigins` | Yes | - | Comma-separated allowed origins |
+| `App__VercelProjectSlug` | Optional | - | Allow Vercel preview origins matching project slug |
+| `RateLimiting__GlobalPermitLimit` | No | `100` | Requests/min per IP |
+| `RateLimiting__AuthPermitLimit` | No | `10` | Auth requests/min per IP |
 
 ---
 
-## 4. File Storage Note
+## 4) Troubleshooting
 
-Currently using Storage__Provider=local which stores files in wwwroot/uploads inside the container. **Files are lost on every Render redeploy.** For production, switch to S3 or Cloudflare R2:
-
-    Storage__Provider=r2
-    Storage__Endpoint=https://<account-id>.r2.cloudflarestorage.com
-    Storage__Bucket=cambrian-audio
-    Storage__AccessKey=<R2 access key>
-    Storage__SecretKey=<R2 secret key>
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Signed URL returns `403` from R2 | Wrong signature region/path style | Set `Storage__Region=auto` and `Storage__UsePathStyle=true`; confirm endpoint/bucket/keys |
+| `health/storage` fails | Missing or invalid storage credentials | Recheck `Storage__Provider`, endpoint, bucket, access key, secret key |
+| CORS failures from preview frontends | Origin not allowlisted | Add explicit origin to `App__CorsOrigins` or set `App__VercelProjectSlug` |
+| Webhook signature verification fails | Wrong webhook secret | Copy latest Stripe endpoint secret into `Stripe__WebhookSecret` |
+| Uploads disappear after redeploy | Using local storage in containers | Move to `Storage__Provider=r2` or `s3` with persistent bucket |
 
 ---
 
-## 5. Quick Deploy Checklist
+## 5) Quick Deploy Checklist
 
 ### Staging
-- [ ] Push backend repo to main
-- [ ] Create Render Blueprint from render.yaml
-- [ ] Set Jwt__Key, Stripe__SecretKey, Stripe__WebhookSecret in Render dashboard
-- [ ] Verify https://cambrian-api-staging.onrender.com/health returns OK
-- [ ] Set VITE_BACKEND_API in Vercel Preview environment
-- [ ] Push frontend repo - Vercel auto-deploys
-- [ ] Verify https://cambrian-test.vercel.app loads and API works
-- [ ] Create Stripe webhook for staging endpoint
+- [ ] Deploy/refresh Render blueprint from `render.yaml`
+- [ ] Set required secrets (`Jwt__Key`, Stripe, storage, email, admin seed)
+- [ ] Verify `GET /health` and `GET /health/storage`
+- [ ] Configure Stripe staging webhook to `/webhook/stripe`
+- [ ] Set Vercel preview env (`VITE_BACKEND_API`, `VITE_AUTH_API`)
+- [ ] Validate stream/download signed URL behavior on a real track
 
-### Production (when ready)
-- [ ] Uncomment production blocks in render.yaml
-- [ ] Set production env vars in Render dashboard (live Stripe keys, separate JWT secret)
-- [ ] Set VITE_BACKEND_API in Vercel Production environment
-- [ ] Add custom domain in Vercel (cambrianmusic.com)
-- [ ] Switch Storage__Provider to s3 or r2 for persistent file storage
-- [ ] Create Stripe live webhook endpoint
-- [ ] Change Stripe to live mode in production
+### Production
+- [ ] Uncomment production blocks in `render.yaml`
+- [ ] Set production secrets (live Stripe keys, distinct storage bucket, JWT key)
+- [ ] Configure frontend and CORS origins
+- [ ] Verify health endpoints, webhook delivery, and storage signed URLs
