@@ -13,15 +13,38 @@ namespace Cambrian.Api.Tests;
 /// Integration tests for the storefront endpoint (GET /creator-profile/{slug}/storefront)
 /// and pinned-tracks management (PUT /creator-profile/me/pinned-tracks).
 /// </summary>
-public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>
+public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncLifetime
 {
     private readonly CambrianApiFixture _fixture;
 
     public StorefrontTests(CambrianApiFixture fixture) => _fixture = fixture;
 
+    public async Task InitializeAsync()
+    {
+        await _fixture.SetFeatureFlagAsync("creator_storefront", true);
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
     // ────────────────────────────────────────────────────────────
     //  GET /creator-profile/{slug}/storefront
     // ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Storefront_FlagDisabled_Returns404()
+    {
+        await _fixture.SetFeatureFlagAsync("creator_storefront", false);
+        try
+        {
+            var client = _fixture.CreateClient();
+            var res = await client.GetAsync("/creator-profile/any-slug/storefront");
+            Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
+        }
+        finally
+        {
+            await _fixture.SetFeatureFlagAsync("creator_storefront", true);
+        }
+    }
 
     [Fact]
     public async Task Storefront_NonExistentSlug_Returns404()

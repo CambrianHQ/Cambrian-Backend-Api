@@ -169,6 +169,29 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         });
         await db.SaveChangesAsync();
     }
+
+    /// <summary>Enable or disable a feature flag in the test database.</summary>
+    public async Task SetFeatureFlagAsync(string name, bool enabled)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var flag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Name == name);
+        if (flag is null)
+        {
+            db.FeatureFlags.Add(new FeatureFlag
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                Enabled = enabled,
+                RolloutPercentage = 100,
+            });
+        }
+        else
+        {
+            flag.Enabled = enabled;
+        }
+        await db.SaveChangesAsync();
+    }
 }
 
 // ---------- Fakes ----------
