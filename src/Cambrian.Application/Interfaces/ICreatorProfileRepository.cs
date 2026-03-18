@@ -14,6 +14,8 @@ public interface ICreatorProfileRepository
 
     Task<CreatorProfileDto> UpdateImageAsync(string userId, string? bannerImageUrl, string? profileImageUrl);
 
+    Task<CreatorProfileDto> UpdatePinnedTracksAsync(string userId, string pinnedTrackIds);
+
     Task<IReadOnlyList<TrackCollectionDto>> GetCollectionsAsync(string creatorId);
 
     Task<TrackCollectionDto?> GetCollectionByIdAsync(Guid id);

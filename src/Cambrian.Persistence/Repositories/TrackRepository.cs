@@ -88,7 +88,17 @@ public class TrackRepository : ITrackRepository
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
     }
-
+    public async Task<List<Track>> GetStorefrontTracksAsync(string creatorId)
+    {
+        return await _db.Tracks
+            .Include(t => t.Creator)
+            .Where(t => t.CreatorId == creatorId
+                && t.Visibility == "public"
+                && t.Status != "copyright_transferred"
+                && !t.ExclusiveSold)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+    }
     public async Task AddAsync(Track track)
     {
         _db.Tracks.Add(track);

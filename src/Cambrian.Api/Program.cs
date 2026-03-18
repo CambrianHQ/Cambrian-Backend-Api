@@ -150,9 +150,14 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Rate Limiting (configurable via RateLimiting section)
+// Rate Limiting (configurable via RateLimiting section; disabled in Testing)
 var globalLimit = builder.Configuration.GetValue("RateLimiting:GlobalPermitLimit", 100);
 var authLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
+if (builder.Environment.EnvironmentName == "Testing")
+{
+    globalLimit = int.MaxValue;
+    authLimit = int.MaxValue;
+}
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -263,6 +268,7 @@ builder.Services.AddScoped<IStreamService, StreamService>();
 builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
 builder.Services.AddSingleton<IFeeService, FeeService>();
+builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
