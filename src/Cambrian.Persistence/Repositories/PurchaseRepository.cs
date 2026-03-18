@@ -39,6 +39,15 @@ public class PurchaseRepository : IPurchaseRepository
             .ToListAsync();
     }
 
+    public async Task<List<Purchase>> GetByCreatorIdAsync(string creatorId)
+    {
+        return await _db.Purchases
+            .Include(p => p.Track)
+            .Where(p => p.Track.CreatorId == creatorId)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
+    }
+
     public async Task<Purchase?> GetByStripeSessionIdAsync(string stripeSessionId)
     {
         return await _db.Purchases
