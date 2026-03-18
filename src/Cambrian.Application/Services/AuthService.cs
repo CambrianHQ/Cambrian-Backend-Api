@@ -6,6 +6,7 @@ using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Cambrian.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -60,11 +61,14 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
+var isCreator = string.Equals(request.Role, "creator", StringComparison.OrdinalIgnoreCase);
         var user = new ApplicationUser
         {
             Email = request.Email,
             UserName = request.Email,
-            DisplayName = request.DisplayName ?? request.Email.Split('@')[0]
+            DisplayName = request.DisplayName ?? request.Email.Split('@')[0],
+            Tier = isCreator ? "creator" : "free",
+            CreatorTier = CreatorTier.Free
         };
 
         var result = await _users.CreateAsync(user, request.Password);
@@ -82,7 +86,7 @@ public class AuthService : IAuthService
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
             Token = token,
-            Tier = "free",
+            Tier = user.Tier,
             Role = "User"
         };
     }
