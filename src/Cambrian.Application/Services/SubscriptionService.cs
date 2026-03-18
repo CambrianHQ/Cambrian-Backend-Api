@@ -89,7 +89,8 @@ public class SubscriptionService : ISubscriptionService
         {
             if (user is not null)
             {
-                user.Tier = "free";
+                // Keep creator access when downgrading — creators stay as "creator" tier
+                user.Tier = IsCreator(user) ? "creator" : "free";
                 SyncCreatorTier(user);
                 await _users.UpdateAsync(user);
             }
@@ -138,7 +139,8 @@ public class SubscriptionService : ISubscriptionService
         var user = await _users.FindByIdAsync(userId);
         if (user is not null)
         {
-            user.Tier = "free";
+            // Keep creator access when cancelling — creators drop to free creator, not consumer
+            user.Tier = IsCreator(user) ? "creator" : "free";
             user.SubscriptionStatus = "Cancelled";
             SyncCreatorTier(user);
             await _users.UpdateAsync(user);
@@ -167,8 +169,12 @@ public class SubscriptionService : ISubscriptionService
     {
         user.CreatorTier = user.Tier switch
         {
-            "pro" or "creator" => CreatorTier.Pro,
+            "pro" => CreatorTier.Pro,
             _ => CreatorTier.Free
         };
     }
+
+    /// <summary>Returns true if the user has ever been a creator (tier is creator or pro).</summary>
+    private static bool IsCreator(ApplicationUser user) =>
+        user.Tier is "creator" or "pro";
 }
