@@ -4,12 +4,33 @@
 **Scope:** End-to-end user flow analysis — Landing → Sign-up → Upload → Marketplace → Monetization
 **Method:** Static code review of backend API (`Cambrian.Api` / .NET 8) and all supporting services
 **Branch:** `cursor/user-flow-validation-c7b9`
+**Status:** 10 of 15 issues fixed in this branch
 
 ---
 
 ## Executive Summary
 
-The Cambrian Music Marketplace backend is a well-structured .NET 8 REST API with Clean Architecture. The core happy paths (register, upload, browse, purchase) are functional, but there are **15 issues** across the user journey — including 3 potentially broken flows, 5 points of significant friction, and 7 UX/consistency concerns that would confuse or frustrate real users.
+The Cambrian Music Marketplace backend is a well-structured .NET 8 REST API with Clean Architecture. The core happy paths (register, upload, browse, purchase) are functional, but there were **15 issues** across the user journey — including 3 potentially broken flows, 5 points of significant friction, and 7 UX/consistency concerns that would confuse or frustrate real users.
+
+### Fixes Applied
+
+| Issue | Status |
+|-------|--------|
+| BUG-001: Creator role mismatch | **FIXED** |
+| BUG-002: Webhook fee rate hardcoded | **FIXED** |
+| BUG-003: Payment pricing wrong | **FIXED** |
+| FRICTION-001: Password validation mismatch | **FIXED** |
+| FRICTION-002: No email verification | Not addressed (requires frontend + email infra) |
+| FRICTION-003: Stale JWT blocks uploads | **FIXED** |
+| FRICTION-004: Storefront disabled | Not addressed (product decision) |
+| FRICTION-005: No duration extraction | Not addressed (requires audio processing lib) |
+| UX-001: Duplicate payment endpoints | Not addressed (breaking API change) |
+| UX-002: Cache stale after upload | **FIXED** |
+| UX-003: Stream auth inconsistency | Not addressed (by design for preview) |
+| UX-004: No pagination metadata | **FIXED** |
+| UX-005: Price double precision | **FIXED** |
+| UX-006: Self-purchase allowed | **FIXED** |
+| UX-007: Subscription webhook no-op | **FIXED** |
 
 ---
 
