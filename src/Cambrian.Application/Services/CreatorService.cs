@@ -44,7 +44,7 @@ public class CreatorService : ICreatorService
                     Id = t.Id.ToString(),
                     Title = t.Title,
                     Genre = t.Genre ?? "",
-                    Price = (decimal)t.Price,
+                    Price = t.Price,
                     NonExclusivePrice = nonExPrice,
                     ExclusivePrice = exPrice,
                     PlatformFeePercent = feeRate,
