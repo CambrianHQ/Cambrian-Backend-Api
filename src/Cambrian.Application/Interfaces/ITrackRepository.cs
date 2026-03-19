@@ -25,6 +25,10 @@ public interface ITrackRepository
     /// </summary>
     Task<List<Track>> GetStorefrontTracksAsync(string creatorId);
 
+    /// <summary>Count tracks matching the given filters (for pagination metadata).</summary>
+    Task<int> CountAsync(string? genre = null, string? search = null,
+        string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null);
+
     Task AddAsync(Track track);
 
     Task UpdateAsync(Track track);

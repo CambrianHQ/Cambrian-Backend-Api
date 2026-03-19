@@ -34,14 +34,14 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
-        var cacheKey = $"discover:{page}:{pageSize}:{genre}:{search}:{mood}:{tempo}:{instrumental}:{duration}";
-        var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        var cacheKey = $"discover:paged:{page}:{pageSize}:{genre}:{search}:{mood}:{tempo}:{instrumental}:{duration}";
+        var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _catalog.GetDiscoverAsync(page, pageSize, genre, search, mood, tempo, instrumental, duration);
+            return await _catalog.GetDiscoverPagedAsync(page, pageSize, genre, search, mood, tempo, instrumental, duration);
         });
-        ResolveTrackUrls(items!);
-        return OkResponse(items);
+        ResolveTrackUrls(result!.Items);
+        return OkResponse(result);
     }
 
     [HttpGet("catalog")]
@@ -58,14 +58,14 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 50;
-        var cacheKey = $"catalog:{page}:{pageSize}:{genre}:{search}:{sort}:{mood}:{tempo}:{instrumental}:{duration}";
-        var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        var cacheKey = $"catalog:paged:{page}:{pageSize}:{genre}:{search}:{sort}:{mood}:{tempo}:{instrumental}:{duration}";
+        var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _catalog.GetCatalogAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
+            return await _catalog.GetCatalogPagedAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
         });
-        ResolveTrackUrls(items!);
-        return OkResponse(items);
+        ResolveTrackUrls(result!.Items);
+        return OkResponse(result);
     }
 
     [HttpGet("tracks/{trackId}")]

@@ -43,6 +43,30 @@ public class CatalogService : ICatalogService
         return await GetCatalogAsync(page, pageSize, genre, search, null, mood, tempo, instrumental, duration);
     }
 
+    public async Task<PagedResult<TrackResponse>> GetCatalogPagedAsync(int page, int pageSize, string? genre, string? search, string? sort,
+        string? mood, string? tempo, bool? instrumental, string? duration)
+    {
+        var totalCount = await _tracks.CountAsync(genre, search, mood, tempo, instrumental, duration);
+        var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
+        var items = new List<TrackResponse>(tracks.Count);
+        foreach (var t in tracks)
+            items.Add(await MapToResponseAsync(t));
+
+        return new PagedResult<TrackResponse>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
+    }
+
+    public async Task<PagedResult<TrackResponse>> GetDiscoverPagedAsync(int page, int pageSize, string? genre, string? search,
+        string? mood, string? tempo, bool? instrumental, string? duration)
+    {
+        return await GetCatalogPagedAsync(page, pageSize, genre, search, null, mood, tempo, instrumental, duration);
+    }
+
     public async Task<TrackResponse?> GetTrackAsync(string trackId)
     {
         if (!Guid.TryParse(trackId, out var id))
