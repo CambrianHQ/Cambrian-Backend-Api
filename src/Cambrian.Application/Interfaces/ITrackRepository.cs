@@ -29,6 +29,12 @@ public interface ITrackRepository
     Task<int> CountAsync(string? genre = null, string? search = null,
         string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null);
 
+    /// <summary>
+    /// Check if a track with the given audio file hash already exists for this creator.
+    /// Returns the existing track if found, null otherwise.
+    /// </summary>
+    Task<Track?> FindByCreatorAndHashAsync(string creatorId, string audioFileHash);
+
     Task AddAsync(Track track);
 
     Task UpdateAsync(Track track);

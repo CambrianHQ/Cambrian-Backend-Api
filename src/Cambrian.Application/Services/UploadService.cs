@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
@@ -92,11 +93,22 @@ public class UploadService : IUploadService
             throw new ArgumentException(
                 $"File size ({request.Audio.Length / (1024 * 1024)} MB) exceeds the {MaxFileSizeBytes / (1024 * 1024)} MB limit.");
 
-        // Sanitize filename — strip path traversal characters, use a unique key
-        var safeFileName = Path.GetFileNameWithoutExtension(request.Audio.FileName)
-            .Replace("..", "")
-            .Replace("/", "")
-            .Replace("\\", "");
+        // ── Compute SHA-256 of audio content for duplicate detection ──
+        string audioFileHash;
+        await using var hashStream = request.Audio.OpenReadStream();
+        var hashBytes = await SHA256.HashDataAsync(hashStream);
+        audioFileHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+
+        var existingTrack = await _tracks.FindByCreatorAndHashAsync(request.CreatorId, audioFileHash);
+        if (existingTrack is not null)
+        {
+            _logger.LogWarning(
+                "Duplicate upload blocked: creator {CreatorId} already has track {TrackId} with hash {Hash}",
+                request.CreatorId, existingTrack.Id, audioFileHash);
+            throw new InvalidOperationException(
+                $"You have already uploaded this audio file. Existing track: \"{existingTrack.Title}\" (ID: {existingTrack.CambrianTrackId}).");
+        }
+
         var key = $"tracks/{request.CreatorId}/{Guid.NewGuid()}{extension}";
 
         await using var stream = request.Audio.OpenReadStream();
@@ -149,6 +161,7 @@ public class UploadService : IUploadService
             LicenseType = request.LicenseType ?? "streaming",
             AudioUrl = audioUrl,
             CoverArtUrl = coverArtUrl,
+            AudioFileHash = audioFileHash,
             NonExclusivePriceCents = request.NonExclusivePrice.HasValue
                 ? (int)Math.Round(request.NonExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
                 : priceCents,

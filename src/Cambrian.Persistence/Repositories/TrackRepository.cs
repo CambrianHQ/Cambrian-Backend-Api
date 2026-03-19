@@ -121,6 +121,13 @@ public class TrackRepository : ITrackRepository
         return await query.CountAsync();
     }
 
+    public async Task<Track?> FindByCreatorAndHashAsync(string creatorId, string audioFileHash)
+    {
+        return await _db.Tracks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.CreatorId == creatorId && t.AudioFileHash == audioFileHash);
+    }
+
     public async Task AddAsync(Track track)
     {
         _db.Tracks.Add(track);
