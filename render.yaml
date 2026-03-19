@@ -185,15 +185,3 @@ services:
         - Dockerfile
         - Cambrian.sln
 
-  # ====================================================================
-  #  KEEP-ALIVE — prevent free-tier staging spin-down
-  # ====================================================================
-  - type: cron
-    name: keep-alive-staging
-    schedule: "*/14 * * * *"
-    region: oregon
-    plan: free
-    runtime: image
-    image:
-      url: docker.io/curlimages/curl:latest
-    command: "curl -sf https://cambrian-api-staging-99kn.onrender.com/health"
