@@ -113,7 +113,7 @@ public sealed class StorefrontService : IStorefrontService
             Title = t.Title,
             Description = t.Description,
             Genre = t.Genre ?? "",
-            Price = (decimal)t.Price,
+            Price = t.Price,
             NonExclusivePrice = nonExPrice,
             ExclusivePrice = exPrice,
             CopyrightBuyoutPrice = buyoutPrice,
