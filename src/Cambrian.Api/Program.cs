@@ -150,9 +150,14 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Rate Limiting (configurable via RateLimiting section)
+// Rate Limiting (configurable via RateLimiting section; disabled in Testing)
 var globalLimit = builder.Configuration.GetValue("RateLimiting:GlobalPermitLimit", 100);
 var authLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
+if (builder.Environment.EnvironmentName == "Testing")
+{
+    globalLimit = int.MaxValue;
+    authLimit = int.MaxValue;
+}
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -262,6 +267,9 @@ builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IStreamService, StreamService>();
 builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
+builder.Services.AddSingleton<IFeeService, FeeService>();
+builder.Services.AddSingleton<ITierService, TierService>();
+builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
@@ -473,6 +481,28 @@ if (app.Environment.EnvironmentName != "Testing")
 // ── Audio file repair removed — production tracks are user-uploaded with real files ──
 
 // ── Seed demo tracks removed for production — tracks are user-uploaded only ──
+
+// ── Seed default feature flags ──
+if (app.Environment.EnvironmentName != "Testing")
+{
+    try
+    {
+        using var flagScope = app.Services.CreateScope();
+        var flagRepo = flagScope.ServiceProvider.GetRequiredService<IFeatureFlagRepository>();
+
+        // creator_storefront: OFF by default — enable via admin API when ready
+        var existing = await flagRepo.GetByNameAsync("creator_storefront");
+        if (existing is null)
+        {
+            await flagRepo.UpsertAsync("creator_storefront", enabled: false);
+            Console.WriteLine("[Seed] Feature flag 'creator_storefront' created (disabled)");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Seed] Feature flag seed error: {ex.Message}");
+    }
+}
 
 app.Run();
 

@@ -4,6 +4,7 @@ using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Identity;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -16,7 +17,7 @@ public sealed class BillingTierTests
         return normalized switch
         {
             "paid" => (499, "Paid Listener"),
-            "creator" => (999, "Creator"),
+            "creator" or "pro" => (1499, "Pro Creator"),
             _ => (0, "")
         };
     }
@@ -25,9 +26,9 @@ public sealed class BillingTierTests
     [InlineData("paid", 499, "Paid Listener")]
     [InlineData("Paid", 499, "Paid Listener")]
     [InlineData("PAID", 499, "Paid Listener")]
-    [InlineData("creator", 999, "Creator")]
-    [InlineData("Creator", 999, "Creator")]
-    [InlineData("CREATOR", 999, "Creator")]
+    [InlineData("creator", 1499, "Pro Creator")]
+    [InlineData("Creator", 1499, "Pro Creator")]
+    [InlineData("CREATOR", 1499, "Pro Creator")]
     public void ValidTiers_MapToCorrectPricing(string tier, int expectedCents, string expectedName)
     {
         var (cents, name) = MapTier(tier);
@@ -63,7 +64,9 @@ public sealed class BillingTierTests
 
         var subService = Substitute.For<ISubscriptionService>();
         var logger = Substitute.For<ILogger<BillingService>>();
-        var sut = new BillingService(subscriptions, subService, gateway, config, logger);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        var sut = new BillingService(subscriptions, subService, gateway, users, config, logger);
 
         var result = await sut.GetStatusAsync("user-1");
 
@@ -85,7 +88,9 @@ public sealed class BillingTierTests
 
         var subService = Substitute.For<ISubscriptionService>();
         var logger = Substitute.For<ILogger<BillingService>>();
-        var sut = new BillingService(subscriptions, subService, gateway, config, logger);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        var sut = new BillingService(subscriptions, subService, gateway, users, config, logger);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = "enterprise" }, "user-1"));

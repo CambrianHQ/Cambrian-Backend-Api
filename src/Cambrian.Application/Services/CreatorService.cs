@@ -1,5 +1,8 @@
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
 
 namespace Cambrian.Application.Services;
 
@@ -8,19 +11,25 @@ public class CreatorService : ICreatorService
     private readonly ITrackRepository _tracks;
     private readonly IPurchaseRepository _purchases;
     private readonly IPayoutRepository _payouts;
+    private readonly UserManager<ApplicationUser> _users;
 
-    public CreatorService(ITrackRepository tracks, IPurchaseRepository purchases, IPayoutRepository payouts)
+    public CreatorService(ITrackRepository tracks, IPurchaseRepository purchases, IPayoutRepository payouts, UserManager<ApplicationUser> users)
     {
         _tracks = tracks;
         _purchases = purchases;
         _payouts = payouts;
+        _users = users;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetTracksAsync(string userId, int page, int pageSize)
     {
         var tracks = await _tracks.GetByCreatorIdAsync(userId);
 
-        const decimal feeRate = 0.15m;
+        // Resolve creator's actual fee rate from TierManifest
+        var creator = await _users.FindByIdAsync(userId);
+        var feeRate = creator is not null
+            ? TierManifest.For(creator.CreatorTier).FeeRate
+            : TierManifest.Free.FeeRate;
 
         return tracks
             .Skip((page - 1) * pageSize)
@@ -35,7 +44,7 @@ public class CreatorService : ICreatorService
                     Id = t.Id.ToString(),
                     Title = t.Title,
                     Genre = t.Genre ?? "",
-                    Price = (decimal)t.Price,
+                    Price = t.Price,
                     NonExclusivePrice = nonExPrice,
                     ExclusivePrice = exPrice,
                     PlatformFeePercent = feeRate,
@@ -62,7 +71,12 @@ public class CreatorService : ICreatorService
             allPurchases.AddRange(tp.Where(p => p.Status == "completed"));
         }
 
-        const decimal feeRate = 0.15m;
+        // Resolve creator's actual fee rate from TierManifest
+        var creator = await _users.FindByIdAsync(userId);
+        var feeRate = creator is not null
+            ? TierManifest.For(creator.CreatorTier).FeeRate
+            : TierManifest.Free.FeeRate;
+
         var grossCents = allPurchases.Sum(p => p.AmountCents);
         var totalGross = grossCents / 100m;
         var totalPlatformFee = Math.Round(totalGross * feeRate, 2);

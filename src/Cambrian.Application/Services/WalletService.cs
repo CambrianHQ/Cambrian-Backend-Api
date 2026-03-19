@@ -37,7 +37,7 @@ public class WalletService : IWalletService
         }).ToList();
     }
 
-    public async Task WithdrawAsync(double amount, string userId)
+    public async Task WithdrawAsync(decimal amount, string userId)
     {
         if (amount <= 0)
             throw new ArgumentException("Withdrawal amount must be greater than zero.");

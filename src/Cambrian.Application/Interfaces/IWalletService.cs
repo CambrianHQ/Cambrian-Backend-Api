@@ -8,5 +8,5 @@ public interface IWalletService
 
     Task<IReadOnlyCollection<WalletTransactionResponse>> GetHistoryAsync(string userId, int take = 50);
 
-    Task WithdrawAsync(double amount, string userId);
+    Task WithdrawAsync(decimal amount, string userId);
 }

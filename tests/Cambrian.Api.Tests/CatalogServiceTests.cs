@@ -1,6 +1,7 @@
 using Cambrian.Application.Services;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -12,7 +13,9 @@ public sealed class CatalogServiceTests
 
     public CatalogServiceTests()
     {
-        _sut = new CatalogService(_tracks);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        _sut = new CatalogService(_tracks, users);
     }
 
     [Fact]
@@ -44,7 +47,7 @@ public sealed class CatalogServiceTests
             Title = "Beat 1",
             Description = "Chill",
             Genre = "Lo-fi",
-            Price = 29.99,
+            Price = 29.99m,
             NonExclusivePriceCents = 2999,
             ExclusivePriceCents = 49900,
             ExclusiveSold = false,

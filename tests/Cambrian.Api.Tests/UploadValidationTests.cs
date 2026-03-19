@@ -2,6 +2,9 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
+using Cambrian.Domain.Entities;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -19,7 +22,19 @@ public sealed class UploadValidationTests
     {
         _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/file.mp3");
-        _sut = new UploadService(_storage, _tracks);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        users.FindByIdAsync("creator-1").Returns(new ApplicationUser
+        {
+            Id = "creator-1",
+            UserName = "creator1",
+            Email = "creator1@test.com",
+            CreatorTier = Cambrian.Domain.Enums.CreatorTier.Free,
+            UploadCount = 0
+        });
+        users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        var logger = Substitute.For<ILogger<UploadService>>();
+        _sut = new UploadService(_storage, _tracks, users, logger);
     }
 
     private static IFormFile MakeFile(string fileName, string contentType, long sizeBytes = 1024)

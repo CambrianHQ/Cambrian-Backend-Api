@@ -72,7 +72,14 @@ public class AuthController : BaseController
                 id = profile.UserId,
                 email = profile.Email,
                 tier = tier.ToLowerInvariant(),
-                role = profile.Role ?? "User"
+                role = profile.Role ?? "User",
+                creatorTier = profile.CreatorTier,
+                uploadCount = profile.UploadCount,
+                uploadLimit = profile.UploadLimit,
+                subscriptionStatus = profile.SubscriptionStatus,
+                subscriptionEndDate = profile.SubscriptionEndDate,
+                platformFeePercent = profile.PlatformFeePercent,
+                contractVersion = profile.ContractVersion
             }
         });
     }

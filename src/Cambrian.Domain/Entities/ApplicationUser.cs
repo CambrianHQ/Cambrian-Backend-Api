@@ -1,3 +1,4 @@
+using Cambrian.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 
 namespace Cambrian.Domain.Entities;
@@ -10,11 +11,23 @@ public class ApplicationUser : IdentityUser
 
     public string Status { get; set; } = "active"; // active, suspended
 
-    public string Tier { get; set; } = "free"; // free, paid, creator
+    public string Tier { get; set; } = "free"; // free, paid, creator, pro
 
     public bool VerifiedCreator { get; set; }
 
     public string? Plan { get; set; }
+
+    /// <summary>Creator-specific tier (Free or Pro). Only meaningful when Role includes Creator access.</summary>
+    public CreatorTier CreatorTier { get; set; } = CreatorTier.Free;
+
+    /// <summary>Number of tracks this creator has uploaded (denormalized for fast limit checks).</summary>
+    public int UploadCount { get; set; }
+
+    /// <summary>Creator subscription status: Active, Inactive, Cancelled.</summary>
+    public string SubscriptionStatus { get; set; } = "Inactive";
+
+    /// <summary>When the current creator Pro subscription expires (null if free or no subscription).</summary>
+    public DateTime? SubscriptionEndDate { get; set; }
 
     /// <summary>Stripe Connect Express account ID (e.g. acct_xxx). Null if not connected.</summary>
     public string? StripeAccountId { get; set; }

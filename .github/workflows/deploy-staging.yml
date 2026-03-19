@@ -1,0 +1,29 @@
+name: Deploy Staging Backend
+
+on:
+  push:
+    branches: [staging]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore Cambrian.sln
+      - name: Build
+        run: dotnet build Cambrian.sln --no-restore --configuration Release
+      - name: Test
+        run: dotnet test Cambrian.sln --no-build --configuration Release
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Render (staging)
+        run: |
+          curl -sf -X POST "${{ secrets.STAGING_DEPLOY_WEBHOOK }}" \
+            || echo "::warning::Deploy hook not configured — Render auto-deploys from staging branch"
