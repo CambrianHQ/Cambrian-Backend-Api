@@ -268,6 +268,7 @@ builder.Services.AddScoped<IStreamService, StreamService>();
 builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
 builder.Services.AddSingleton<IFeeService, FeeService>();
+builder.Services.AddSingleton<ITierService, TierService>();
 builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
