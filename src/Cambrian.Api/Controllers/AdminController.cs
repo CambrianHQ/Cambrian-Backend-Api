@@ -11,12 +11,14 @@ public class AdminController : BaseController
     private readonly IAdminService _admin;
     private readonly IMarketplaceIntegrityService _integrity;
     private readonly ILogger<AdminController> _logger;
+    private readonly IWebHostEnvironment _env;
 
-    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger)
+    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env)
     {
         _admin = admin;
         _integrity = integrity;
         _logger = logger;
+        _env = env;
     }
 
     [HttpGet("dashboard")]
@@ -224,10 +226,17 @@ public class AdminController : BaseController
     /// <summary>
     /// Permanently delete all test/mock data (users, tracks, purchases, etc.).
     /// Preserves only the admin account. Requires ?confirm=yes query parameter.
+    /// Blocked entirely in Production to prevent accidental data loss.
     /// </summary>
     [HttpPost("purge-test-data")]
     public async Task<IActionResult> PurgeTestData([FromQuery] string confirm)
     {
+        if (_env.IsProduction())
+        {
+            _logger.LogCritical("[Admin] Purge attempt BLOCKED in Production environment");
+            return StatusCode(403, new { error = "Purge is disabled in Production. This incident has been logged." });
+        }
+
         if (confirm != "yes")
             return BadRequest(new { error = "Pass ?confirm=yes to confirm destructive operation." });
 
@@ -237,6 +246,7 @@ public class AdminController : BaseController
         if (string.IsNullOrWhiteSpace(adminEmail))
             return BadRequest(new { error = "Cannot determine admin email from token." });
 
+        _logger.LogWarning("[Admin] Purge initiated by {AdminEmail} in {Environment}", adminEmail, _env.EnvironmentName);
         var result = await _admin.PurgeTestDataAsync(adminEmail);
         return OkResponse(result);
     }
