@@ -1,0 +1,81 @@
+{
+  "version": "1.0.0",
+  "description": "Cambrian Backend Manifest — entities, services, repositories, env vars",
+  "generatedAt": "2026-03-19T00:00:00Z",
+  "entities": {
+    "ApplicationUser": {
+      "table": "AspNetUsers",
+      "keyFields": ["Id"],
+      "publicFields": ["DisplayName", "Role", "Tier", "VerifiedCreator", "CreatorTier"],
+      "internalFields": ["Email", "UserName", "PasswordHash", "PasswordResetCode", "PasswordResetCodeExpiry", "StripeAccountId"],
+      "notes": "DisplayName is the public identity. Email is internal-only for auth."
+    },
+    "Track": {
+      "table": "Tracks",
+      "keyFields": ["Id"],
+      "uniqueConstraints": ["CambrianTrackId"],
+      "indexedFields": ["CreatorId", "AudioFileHash"],
+      "newFields": {
+        "AudioFileHash": {
+          "type": "varchar(64)",
+          "nullable": true,
+          "description": "SHA-256 hex digest of the uploaded audio file content. Used for per-creator duplicate detection."
+        }
+      }
+    },
+    "CreatorProfile": {
+      "table": "CreatorProfiles",
+      "keyFields": ["Id"],
+      "uniqueConstraints": ["UserId", "Slug"],
+      "publicFields": ["Slug", "Bio", "Niche", "ProfileImageUrl", "BannerImageUrl", "SocialLinks", "ShowEarnings", "ShowDownloadStats", "PinnedTrackIds"]
+    },
+    "TrackCollection": {
+      "table": "TrackCollections",
+      "keyFields": ["Id"],
+      "indexedFields": ["CreatorId"]
+    }
+  },
+  "services": {
+    "UploadService": {
+      "responsibility": "Track upload with validation, storage, and duplicate detection",
+      "duplicateDetection": "SHA-256 hash computed during upload, checked against existing tracks for same creator"
+    },
+    "CatalogService": {
+      "responsibility": "Track browsing, search, and detail",
+      "creatorFields": "Populates creatorUsername, creatorSlug, creatorProfileImageUrl from ApplicationUser and CreatorProfile"
+    },
+    "StorefrontService": {
+      "responsibility": "Full creator storefront aggregation"
+    },
+    "AuthService": {
+      "responsibility": "Registration, login, JWT generation, password reset"
+    },
+    "CreatorProfileRepository": {
+      "responsibility": "CreatorProfile CRUD, collections, pinned tracks"
+    }
+  },
+  "environmentVariables": {
+    "required": [
+      "POSTGRES_PASSWORD",
+      "JWT_KEY",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET"
+    ],
+    "optional": [
+      "STORAGE_PROVIDER",
+      "STORAGE_ENDPOINT",
+      "STORAGE_BUCKET",
+      "STORAGE_ACCESS_KEY",
+      "STORAGE_SECRET_KEY",
+      "EMAIL_PROVIDER",
+      "FRONTEND_URL",
+      "CORS_ORIGINS"
+    ],
+    "newVariables": []
+  },
+  "policies": {
+    "publicCreatorIdentity": "DisplayName, never email",
+    "duplicateUploadScope": "Per-creator via (CreatorId, AudioFileHash)",
+    "migrationSafety": "Additive only, no destructive changes"
+  }
+}

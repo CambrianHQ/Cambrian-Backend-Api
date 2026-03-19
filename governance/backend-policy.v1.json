@@ -73,6 +73,23 @@
       "name": "dto-required",
       "description": "Controllers must not expose domain entities.",
       "requiredPattern": "Dto"
+    },
+
+    {
+      "name": "no-email-in-public-responses",
+      "description": "Public API responses must never include user email addresses. Use DisplayName for artist/creator display.",
+      "forbiddenPatterns": [
+        "?? t.Creator?.Email",
+        "?? track.Creator?.Email",
+        "?? creator.Email"
+      ],
+      "scope": "Services,Controllers"
+    },
+
+    {
+      "name": "upload-duplicate-detection-required",
+      "description": "Track uploads must compute SHA-256 of audio content and check for per-creator duplicates before persisting.",
+      "requiredIn": "UploadService"
     }
 
   ]

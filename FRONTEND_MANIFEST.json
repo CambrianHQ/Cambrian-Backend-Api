@@ -1,0 +1,88 @@
+{
+  "version": "1.0.0",
+  "description": "Cambrian Frontend Manifest — expected pages, components, and behaviors",
+  "generatedAt": "2026-03-19T00:00:00Z",
+  "pages": {
+    "discover": {
+      "route": "/discover",
+      "apiEndpoint": "GET /discover",
+      "description": "Browse tracks with filters. Song cards display creator username, not email."
+    },
+    "catalog": {
+      "route": "/catalog",
+      "apiEndpoint": "GET /catalog",
+      "description": "Full catalog with pagination, sorting, and filters."
+    },
+    "trackDetail": {
+      "route": "/tracks/:trackId",
+      "apiEndpoint": "GET /tracks/{trackId}",
+      "description": "Single track detail page. Creator username links to profile."
+    },
+    "creatorProfile": {
+      "route": "/creator/:slug",
+      "apiEndpoint": "GET /creator-profile/{slug}/storefront",
+      "description": "Public creator profile with bio, avatar, banner, tracks, collections."
+    },
+    "upload": {
+      "route": "/upload",
+      "apiEndpoint": "POST /upload",
+      "description": "Track upload form. Must handle 409 duplicate error with clear UX message."
+    },
+    "login": {
+      "route": "/login",
+      "apiEndpoint": "POST /auth/login",
+      "description": "Login page."
+    },
+    "register": {
+      "route": "/register",
+      "apiEndpoint": "POST /auth/register",
+      "description": "Registration page. DisplayName field recommended."
+    },
+    "settings": {
+      "route": "/settings",
+      "apiEndpoint": "GET /settings/profile",
+      "description": "User settings. Email shown here (private, auth-scoped)."
+    }
+  },
+  "components": {
+    "songCard": {
+      "description": "Displays track info. Shows artist (creatorUsername). Clicking username navigates to /creator/{creatorSlug}.",
+      "fields": ["title", "artist", "creatorUsername", "creatorSlug", "creatorProfileImageUrl", "genre", "price", "coverArtUrl"],
+      "behavior": {
+        "creatorLink": "If creatorSlug is non-null, clicking creatorUsername navigates to /creator/{creatorSlug}. If null, username is plain text.",
+        "profileImage": "If creatorProfileImageUrl is non-null, show it. Otherwise render a default avatar placeholder.",
+        "artist": "Display creatorUsername (or artist). NEVER display email."
+      }
+    },
+    "creatorProfilePage": {
+      "description": "Public creator profile page.",
+      "fields": ["displayName", "slug", "bio", "niche", "profileImageUrl", "bannerImageUrl", "socialLinks", "tracks", "collections", "stats"],
+      "behavior": {
+        "defaultAvatar": "If profileImageUrl is null, render a default avatar.",
+        "email": "NEVER display email on this page."
+      }
+    },
+    "uploadForm": {
+      "description": "Track upload form.",
+      "behavior": {
+        "duplicateError": "On 409 response, show: 'You have already uploaded this audio file.' with the existing track title.",
+        "validation": "Audio: mp3/wav/flac/aac/ogg/m4a, max 100MB. Cover art: jpg/png/webp, max 10MB."
+      }
+    }
+  },
+  "types": {
+    "TrackResponse": {
+      "requiredFields": ["id", "cambrianTrackId", "title", "genre", "price", "creatorId", "createdAt"],
+      "optionalFields": ["description", "artist", "creatorUsername", "creatorSlug", "creatorProfileImageUrl", "audioUrl", "coverArtUrl", "duration", "licenseType", "copyrightOwnerId", "status", "exclusiveSold"]
+    },
+    "CreatorProfileResponse": {
+      "requiredFields": ["id", "userId", "slug", "bio", "showEarnings", "showDownloadStats", "createdAt", "updatedAt"],
+      "optionalFields": ["displayName", "niche", "profileImageUrl", "bannerImageUrl", "socialLinks", "pinnedTrackIds", "stats"]
+    }
+  },
+  "policies": {
+    "publicIdentity": "Creator public identity = displayName or username prefix. NEVER email.",
+    "defaultAvatar": "When profileImageUrl is null, render a generic avatar SVG/PNG.",
+    "duplicateUpload": "Show 409 error clearly. Do not retry silently."
+  }
+}

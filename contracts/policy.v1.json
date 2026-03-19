@@ -67,6 +67,23 @@
       "description": "Payout endpoints require creator role.",
       "pathPrefix": "/payouts",
       "requiredRole": "creator"
+    },
+
+    {
+      "name": "public-creator-identity-is-username",
+      "description": "Public-facing creator identity must use DisplayName, never email. The 'artist' and 'creatorUsername' fields on TrackResponse must be populated from ApplicationUser.DisplayName.",
+      "forbiddenPatterns": [
+        "Creator?.Email",
+        "creator.Email"
+      ],
+      "scope": "public-api-responses"
+    },
+
+    {
+      "name": "duplicate-upload-prevention",
+      "description": "The same creator cannot upload the same audio file twice. Enforced via SHA-256 hash scoped per creator.",
+      "enforcement": "backend-validation",
+      "httpStatus": 409
     }
 
   ]
