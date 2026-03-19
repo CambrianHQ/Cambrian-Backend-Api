@@ -55,7 +55,8 @@ internal static class StartupExtensions
             ?? "";
         Console.WriteLine($"[Startup] JWT key present: {!string.IsNullOrWhiteSpace(jwtKey)} (len={jwtKey.Length})");
         var isNonProd = builder.Environment.IsDevelopment()
-            || builder.Environment.EnvironmentName == TestingEnvironment;
+            || builder.Environment.EnvironmentName == TestingEnvironment
+            || builder.Environment.EnvironmentName == "Staging";
 
         if (string.IsNullOrWhiteSpace(jwtKey))
         {
