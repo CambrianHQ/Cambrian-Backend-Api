@@ -171,11 +171,7 @@ public class AuthController : BaseController
 
     [Authorize]
     [HttpPut("/settings/password")]
-    public async Task<IActionResult> UpdatePassword([FromBody] ChangePasswordRequest request)
-    {
-        await _auth.ChangePasswordAsync(User, request);
-        return MessageResponse("Password updated.");
-    }
+    public Task<IActionResult> UpdatePassword([FromBody] ChangePasswordRequest request) => ChangePassword(request);
 
     [Authorize]
     [HttpPost("/settings/email")]
@@ -187,9 +183,5 @@ public class AuthController : BaseController
 
     [Authorize]
     [HttpPut("/settings/email")]
-    public async Task<IActionResult> UpdateEmail([FromBody] ChangeEmailRequest request)
-    {
-        await _auth.ChangeEmailAsync(User, request);
-        return MessageResponse("Email updated.");
-    }
+    public Task<IActionResult> UpdateEmail([FromBody] ChangeEmailRequest request) => ChangeEmail(request);
 }

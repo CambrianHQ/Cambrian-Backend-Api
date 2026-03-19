@@ -5,8 +5,8 @@
 | Component | Hosting | Staging | Production |
 |-----------|---------|---------|------------|
 | Frontend  | **Vercel** | `staging.cambrianmusic.com` (or preview URLs) | `cambrianmusic.com` |
-| Backend   | **Render** (Docker) | `cambrian-api-staging` service | `cambrian-api` service (commented in `render.yaml`) |
-| Database  | **Render PostgreSQL** | `cambrian-db-staging` | `cambrian-db-prod` (commented in `render.yaml`) |
+| Backend   | **Render** (Docker) | `cambrian-api-staging` service | `cambrian-api` service |
+| Database  | **Render PostgreSQL** | `cambrian-db-staging` | `cambrian-db-prod` |
 | Storage   | S3-compatible (R2/S3) | `cambrian-audio-staging` bucket | separate production bucket |
 
 ---
@@ -153,7 +153,6 @@ dotnet user-secrets set "Stripe:WebhookSecret" "whsec_..."
 - [ ] Validate stream/download signed URL behavior on a real track
 
 ### Production
-- [ ] Uncomment production blocks in `render.yaml`
 - [ ] Set production secrets (live Stripe keys, distinct storage bucket, JWT key)
 - [ ] Configure frontend and CORS origins
 - [ ] Verify health endpoints, webhook delivery, and storage signed URLs
