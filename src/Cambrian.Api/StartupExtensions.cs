@@ -95,9 +95,13 @@ internal static class StartupExtensions
                 if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(bucket)
                     || string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
                 {
-                    throw new InvalidOperationException(
-                        $"Storage provider '{storageProvider}' requires Storage:Endpoint, Storage:Bucket, "
-                        + "Storage:AccessKey, and Storage:SecretKey to be configured.");
+                    if (builder.Environment.IsProduction())
+                        throw new InvalidOperationException(
+                            $"Storage provider '{storageProvider}' requires Storage:Endpoint, Storage:Bucket, "
+                            + "Storage:AccessKey, and Storage:SecretKey to be configured.");
+                    Console.WriteLine($"[WARN] Storage provider '{storageProvider}' credentials incomplete — falling back to local storage.");
+                    builder.Services.AddSingleton<IObjectStorage, LocalObjectStorage>();
+                    break;
                 }
                 Console.WriteLine($"[Startup] S3 endpoint={endpoint}, bucket={bucket}");
                 builder.Services.AddSingleton<IObjectStorage, S3ObjectStorage>();
