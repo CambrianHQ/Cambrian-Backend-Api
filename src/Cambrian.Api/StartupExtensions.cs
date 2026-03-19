@@ -198,6 +198,10 @@ internal static class StartupExtensions
         {
             using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+
+            var dbName = db.Database.GetDbConnection().Database;
+            Console.WriteLine($"[Startup] Connected to database: {dbName}");
+
             var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
             if (pending.Count > 0)
             {
@@ -207,10 +211,15 @@ internal static class StartupExtensions
             }
             await db.Database.MigrateAsync();
             Console.WriteLine("[Startup] Database migrations applied successfully");
+
+            var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
+            Console.WriteLine($"[Startup] Total applied migrations: {applied.Count} (latest: {applied.LastOrDefault() ?? "none"})");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[Startup] Migration error: {ex.Message}");
+            if (app.Environment.IsProduction())
+                throw;
         }
     }
 
