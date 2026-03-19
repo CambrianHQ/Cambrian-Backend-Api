@@ -1,4 +1,4 @@
-using Cambrian.Application.Configuration;
+using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
@@ -6,24 +6,16 @@ namespace Cambrian.Api.Controllers;
 [Route("tiers")]
 public class TierController : BaseController
 {
+    private readonly ITierService _tiers;
+
+    public TierController(ITierService tiers)
+    {
+        _tiers = tiers;
+    }
+
     [HttpGet("config")]
     public IActionResult GetConfig()
     {
-        var configs = TierManifest.All.Select(t => new
-        {
-            tier = t.Slug,
-            displayName = t.DisplayName,
-            uploadLimit = t.UploadLimit,
-            feeRate = t.FeeRate,
-            priceCents = t.PriceCents,
-            features = t.Features,
-            analyticsAccess = t.AnalyticsAccess.ToString().ToLowerInvariant()
-        });
-
-        return OkResponse(new
-        {
-            version = TierManifest.ContractVersion,
-            tiers = configs
-        });
+        return OkResponse(_tiers.GetTierConfig());
     }
 }
