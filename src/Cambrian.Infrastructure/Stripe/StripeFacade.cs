@@ -11,7 +11,8 @@ public class StripeFacade : IPaymentGateway
 
     public StripeFacade(IConfiguration configuration)
     {
-        _frontendUrl = configuration["App:FrontendUrl"] ?? "http://localhost:5173";
+        _frontendUrl = configuration["App:FrontendUrl"]
+            ?? throw new InvalidOperationException("App:FrontendUrl must be configured. Stripe checkout redirects require a valid frontend URL.");
     }
 
     public async Task<string> CreateCheckoutSessionAsync(

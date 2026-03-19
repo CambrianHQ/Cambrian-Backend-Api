@@ -11,8 +11,12 @@
 - [Overview](#-overview)
 - [Features](#-features)
 - [API Endpoints](#-api-endpoints)
+- [Creator Profile Workflow](#-creator-profile-workflow)
+- [Feature Flags & Analytics Workflow](#-feature-flags--analytics-workflow)
 - [Roles & Authorization](#-roles--authorization)
 - [Rate Limiting](#-rate-limiting)
+- [Storage & Streaming Notes](#-storage--streaming-notes)
+- [Troubleshooting](#-troubleshooting)
 - [Core Principles](#-core-principles)
 - [Architecture](#-architecture)
 - [Getting Started](#-getting-started)
@@ -57,7 +61,10 @@
 | 10 | 📋 **Subscriptions & Billing** | Manage subscription plans, upgrades, cancellations, and Stripe billing portals |
 | 11 | 🧾 **Invoices & Licenses** | Retrieve, list, and download invoices; browse music license types |
 | 12 | 🛡️ **Admin Panel** | Manage users, approve payouts, moderate tracks, view reports and audit logs |
-| 13 | ❤️ **Health Checks** | API, auth service, and object-storage health probe endpoints |
+| 13 | 🚩 **Feature Flags** | Per-user feature checks and admin-controlled rollout percentages |
+| 14 | 📈 **Analytics** | Track usage events and query admin summaries/events |
+| 15 | 🎨 **Creator Profiles** | Public creator pages with editable profile media and collections |
+| 16 | ❤️ **Health Checks** | API, auth service, and object-storage health probe endpoints |
 
 ---
 
@@ -82,6 +89,7 @@ All endpoints are defined in the versioned OpenAPI spec at [`contracts/openapi.v
 | 💳 **Payments** | `POST` | `/payments/checkout` | ✅ |
 | | `GET` | `/payments/state` | ✅ |
 | 🎧 **Streaming** | `GET` | `/stream/{trackId}` | ✅ |
+| | `GET` | `/stream/{trackId}/audio` | ❌ |
 | | `POST` | `/stream/start` | ✅ |
 | | `POST` | `/stream/stop` | ✅ |
 | ⬇️ **Downloads** | `GET` | `/download/{trackId}` | ✅ |
@@ -96,6 +104,22 @@ All endpoints are defined in the versioned OpenAPI spec at [`contracts/openapi.v
 | | `GET` | `/creator/revenue` | ✅ (Creator) |
 | | `GET` | `/payouts` | ✅ (Creator) |
 | | `POST` | `/payouts` | ✅ (Creator) |
+| 🎨 **Creator Profile** | `GET` | `/creator-profile/{slug}` | ❌ |
+| | `GET` | `/creator-profile/me` | ✅ (Creator tier) |
+| | `PUT` | `/creator-profile/me` | ✅ (Creator tier) |
+| | `POST` | `/creator-profile/me/banner` | ✅ (Creator tier) |
+| | `POST` | `/creator-profile/me/avatar` | ✅ (Creator tier) |
+| | `GET` | `/creator-profile/{slug}/collections` | ❌ |
+| | `POST` | `/creator-profile/me/collections` | ✅ (Creator tier) |
+| | `PUT` | `/creator-profile/me/collections/{collectionId}` | ✅ (Creator tier) |
+| | `DELETE` | `/creator-profile/me/collections/{collectionId}` | ✅ (Creator tier) |
+| 🚩 **Feature Flags** | `GET` | `/feature-flags/check/{name}` | ✅ |
+| | `GET` | `/feature-flags` | ✅ (Admin) |
+| | `PUT` | `/feature-flags/{name}` | ✅ (Admin) |
+| | `DELETE` | `/feature-flags/{name}` | ✅ (Admin) |
+| 📈 **Analytics** | `POST` | `/analytics/track` | ✅ |
+| | `GET` | `/analytics/summary` | ✅ (Admin) |
+| | `GET` | `/analytics/events` | ✅ (Admin) |
 | 💰 **Wallet** | `GET` | `/wallet` | ✅ |
 | | `POST` | `/purchases/credit-creator` | ✅ |
 | 📋 **Subscriptions** | `GET` | `/subscriptions/plans` | ❌ |
@@ -127,6 +151,76 @@ All endpoints are defined in the versioned OpenAPI spec at [`contracts/openapi.v
 
 ---
 
+## 🎨 Creator Profile Workflow
+
+Creator profile endpoints are intended for creator-facing branding pages and are protected by the `RequireCreatorTier` filter where relevant.
+
+**What the code enforces:**
+- `PUT /creator-profile/me` requires a `slug` that is trimmed/lowercased, **3-100 chars**, and globally unique.
+- `POST /creator-profile/me/banner` and `POST /creator-profile/me/avatar` require multipart field `file` and accept only `.jpg`, `.jpeg`, `.png`, `.webp` up to **10 MB**.
+- Banner/avatar upload endpoints return `404` if the creator has not created a profile yet.
+
+```bash
+# Upsert creator profile
+curl -X PUT "http://localhost:8080/creator-profile/me" \
+  -H "Authorization: Bearer <creator-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug": "dj-aurora",
+    "bio": "Ambient producer and live performer.",
+    "niche": "ambient",
+    "socialLinks": [{"platform":"instagram","url":"https://instagram.com/djaurora"}],
+    "showEarnings": false,
+    "showDownloadStats": true
+  }'
+
+# Upload avatar (must use multipart/form-data)
+curl -X POST "http://localhost:8080/creator-profile/me/avatar" \
+  -H "Authorization: Bearer <creator-jwt>" \
+  -F "file=@avatar.png"
+```
+
+---
+
+## 🚩 Feature Flags & Analytics Workflow
+
+### Feature flags
+
+Feature flags are stored in the database and support deterministic percentage rollout by `(flagName, userId)` hash so the same user gets stable behavior.
+
+- Rollout percentage is clamped to `0..100`.
+- `GET /feature-flags/check/{name}` is user-facing.
+- `GET|PUT|DELETE /feature-flags/*` are Admin-only.
+
+```bash
+# Admin: enable 25% rollout for creator profile UI
+curl -X PUT "http://localhost:8080/feature-flags/creator_profiles" \
+  -H "Authorization: Bearer <admin-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "rolloutPercentage": 25}'
+
+# Authenticated user: check whether feature is enabled for this user
+curl "http://localhost:8080/feature-flags/check/creator_profiles" \
+  -H "Authorization: Bearer <user-jwt>"
+```
+
+### Analytics
+
+`POST /analytics/track` accepts only these event types: `play`, `download`, `purchase`, `search`, `upload`.
+
+- `trackId` is optional; if provided it must parse as a GUID.
+- Admin queries: `GET /analytics/summary` and `GET /analytics/events`.
+- Query `limit` is clamped to `1..1000`.
+
+```bash
+curl -X POST "http://localhost:8080/analytics/track" \
+  -H "Authorization: Bearer <user-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"eventType":"play","trackId":"11111111-1111-1111-1111-111111111111","metadata":"{\"surface\":\"catalog\"}"}'
+```
+
+---
+
 ## 👥 Roles & Authorization
 
 The API uses **role-based access control** enforced via JWT claims:
@@ -150,6 +244,30 @@ Built-in rate limiting protects the API from abuse:
 | 🌐 All other endpoints | **100 requests / minute** per IP |
 
 Requests that exceed the limit receive a `429 Too Many Requests` response.
+
+---
+
+## 🪣 Storage & Streaming Notes
+
+- `GET /stream/{trackId}/audio` performs a redirect to object storage (S3/R2 signed URL), allowing CDN/native range handling for browser audio playback.
+- Download endpoints (`/download/*`) still enforce purchase entitlement before returning a download URL or file stream.
+- Local storage (`Storage__Provider=local`) is useful for development but is ephemeral in containerized deployments.
+- For Cloudflare R2, keep:
+  - `Storage__Provider=r2`
+  - `Storage__Region=auto`
+  - `Storage__UsePathStyle=true`
+
+---
+
+## 🧯 Troubleshooting
+
+| Symptom | Likely cause | What to check |
+|---|---|---|
+| Signed stream/download URL returns `403` from R2 | Signature mismatch config | Ensure `Storage__Region=auto` and `Storage__UsePathStyle=true`; verify endpoint/bucket/key pair |
+| `POST /creator-profile/me/avatar` returns "Invalid image file." | Unsupported type, missing multipart field, or file >10 MB | Use form field name `file`; only jpg/jpeg/png/webp; keep size <= 10 MB |
+| Creator profile endpoints return `403 Creator tier required.` | JWT/user tier is not `creator` | Confirm token includes tier claim or user tier is set to creator |
+| Browser CORS failures from preview deploys | Missing origin allow-list | Configure `App__CorsOrigins` and `App__VercelProjectSlug` for preview environments |
+| Download returns purchase-required message | User has no library entitlement for track | Verify purchase/library row exists for `(userId, trackId)` |
 
 ---
 
@@ -247,8 +365,10 @@ Copy [`.env.example`](.env.example) to `.env` and fill in the values. **Never co
 | `Storage__Bucket` | Storage bucket name |
 | `Storage__AccessKey` | Storage access key |
 | `Storage__SecretKey` | Storage secret key |
-| `Storage__Region` | Storage region |
-| `Storage__UsePathStyle` | Use path-style S3 URLs (`true` for MinIO) |
+| `Storage__Region` | Storage region (`auto` for Cloudflare R2) |
+| `Storage__UsePathStyle` | Use path-style S3 URLs (`true` for MinIO/R2) |
+| `Storage__PublicUrl` | Optional public bucket base URL (used for cover art URLs) |
+| `App__VercelProjectSlug` | Optional Vercel preview-domain allowlist slug for CORS |
 
 ---
 
