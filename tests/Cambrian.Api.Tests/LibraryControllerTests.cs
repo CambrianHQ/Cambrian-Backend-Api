@@ -190,7 +190,7 @@ public sealed class LibraryControllerTests
             new Claim(ClaimTypes.NameIdentifier, "user-1")
         }, "Test"));
         context.Request.Scheme = "https";
-        context.Request.Host = new HostString("cambrian-api-staging.onrender.com");
+        context.Request.Host = new HostString("api.example.com");
         _controller.ControllerContext = new ControllerContext { HttpContext = context };
 
         var result = await _controller.GetLibrary();

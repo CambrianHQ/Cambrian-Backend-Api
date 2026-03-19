@@ -153,8 +153,8 @@ public sealed class BillingService : IBillingService
     private static string ResolveFrontendUrl(IConfiguration configuration)
     {
         var configuredUrl = configuration["App:FrontendUrl"];
-        return string.IsNullOrWhiteSpace(configuredUrl)
-            ? "http://localhost:5173"
-            : configuredUrl.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(configuredUrl))
+            throw new InvalidOperationException("App:FrontendUrl must be configured. Billing checkout redirects require a valid frontend URL.");
+        return configuredUrl.TrimEnd('/');
     }
 }
