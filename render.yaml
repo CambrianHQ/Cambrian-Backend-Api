@@ -196,4 +196,4 @@ services:
     runtime: image
     image:
       url: docker.io/curlimages/curl:latest
-    command: "curl -sf https://cambrian-api-staging.onrender.com/health"
+    command: "curl -sf https://cambrian-api-staging-99kn.onrender.com/health"
