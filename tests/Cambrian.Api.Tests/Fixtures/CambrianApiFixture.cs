@@ -123,7 +123,7 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
             Id = trackId,
             CambrianTrackId = $"CAMB-TRK-{trackId.ToString()[..8].ToUpper()}",
             Title = title,
-            Price = 29.99,
+            Price = 29.99m,
             LicenseType = "standard",
             AudioUrl = "tracks/test-beat.mp3",
             CreatorId = creatorId,

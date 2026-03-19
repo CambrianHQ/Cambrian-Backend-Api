@@ -105,7 +105,7 @@ public sealed class Phase2PaymentTests
         var sut = new WalletService(repo);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.WithdrawAsync(50.00, "user-1")); // $50 > $10
+            sut.WithdrawAsync(50.00m, "user-1")); // $50 > $10
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class Phase2PaymentTests
         var sut = new WalletService(repo);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            sut.WithdrawAsync(-10.00, "user-1"));
+            sut.WithdrawAsync(-10.00m, "user-1"));
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class Phase2PaymentTests
         repo.AtomicWithdrawAsync("user-1", 2500, Arg.Any<string>()).Returns(true);
         var sut = new WalletService(repo);
 
-        await sut.WithdrawAsync(25.00, "user-1");
+        await sut.WithdrawAsync(25.00m, "user-1");
 
         await repo.Received(1).AtomicWithdrawAsync("user-1", 2500,
             Arg.Is<string>(d => d.Contains("25.00")));
@@ -149,7 +149,7 @@ public sealed class Phase2PaymentTests
         {
             Id = trackId,
             Title = "Test Beat",
-            Price = 29.99,
+            Price = 29.99m,
             NonExclusivePriceCents = 2999,
             CreatorId = "creator-1"
         });
@@ -181,7 +181,7 @@ public sealed class Phase2PaymentTests
         {
             Id = trackId,
             Title = "Exclusive Beat",
-            Price = 10.00,
+            Price = 10.00m,
             NonExclusivePriceCents = 1000,
             ExclusivePriceCents = 5000,
             CreatorId = "creator-1"
