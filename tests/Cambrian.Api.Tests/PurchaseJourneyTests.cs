@@ -50,7 +50,7 @@ public sealed class PurchaseJourneyTests : IDisposable
             Title = "Journey Test Beat",
             CambrianTrackId = $"CBR-{TrackId.ToString()[..8]}",
             CreatorId = CreatorId,
-            Price = 9.99,
+            Price = 9.99m,
             NonExclusivePriceCents = 999,
             ExclusivePriceCents = 4999,
             AudioUrl = "test/audio.mp3"

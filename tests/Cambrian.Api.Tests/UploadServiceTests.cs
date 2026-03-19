@@ -122,8 +122,8 @@ public sealed class UploadServiceTests
             Audio = MakeFile(),
             CreatorId = "c1",
             Title = "Beat",
-            NonExclusivePrice = 29.99,
-            ExclusivePrice = 499.99
+            NonExclusivePrice = 29.99m,
+            ExclusivePrice = 499.99m
         };
 
         await _sut.Upload(request);

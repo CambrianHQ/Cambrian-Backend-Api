@@ -30,7 +30,7 @@ public sealed class PurchaseServiceTests
     {
         Id = id ?? Guid.NewGuid(),
         Title = "Test Beat",
-        Price = 29.99,
+        Price = 29.99m,
         CreatorId = "creator-1",
         Creator = new ApplicationUser { DisplayName = "DJ Creator", Email = "dj@test.com" },
         AudioUrl = "https://cdn.test/beat.mp3"
