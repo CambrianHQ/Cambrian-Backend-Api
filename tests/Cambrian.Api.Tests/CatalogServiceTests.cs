@@ -15,7 +15,8 @@ public sealed class CatalogServiceTests
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
-        _sut = new CatalogService(_tracks, users);
+        var profiles = Substitute.For<ICreatorProfileRepository>();
+        _sut = new CatalogService(_tracks, users, profiles);
     }
 
     [Fact]
@@ -74,7 +75,7 @@ public sealed class CatalogServiceTests
     }
 
     [Fact]
-    public async Task GetTrackAsync_UsesEmail_WhenDisplayNameIsNull()
+    public async Task GetTrackAsync_UsesEmailPrefix_WhenDisplayNameIsNull()
     {
         var id = Guid.NewGuid();
         var track = new Track
@@ -89,7 +90,8 @@ public sealed class CatalogServiceTests
 
         var result = await _sut.GetTrackAsync(id.ToString());
 
-        Assert.Equal("artist@test.com", result!.Artist);
+        Assert.Equal("artist", result!.Artist);
+        Assert.DoesNotContain("@", result.Artist!);
     }
 
     [Fact]
