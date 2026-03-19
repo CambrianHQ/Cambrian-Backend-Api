@@ -26,7 +26,7 @@ public class UploadController : BaseController
     [Authorize]
     [RequireCreatorTier]
     [HttpPost("upload")]
-    [DisableRequestSizeLimit]
+    [RequestSizeLimit(150 * 1024 * 1024)]
     public async Task<IActionResult> Upload([FromForm] UploadTrackRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

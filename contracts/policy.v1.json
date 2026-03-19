@@ -1,6 +1,17 @@
 {
   "version": "v1",
   "description": "Cambrian Architecture Compliance Policy",
+  "governanceVersion": "2.0.0",
+  "governanceDocs": {
+    "architecture": "architecture/ARCHITECTURE.md",
+    "apiContracts": "contracts/API_CONTRACTS.md",
+    "policy": "policy/POLICY.md",
+    "backendManifest": "manifests/BACKEND_MANIFEST.json",
+    "frontendManifest": "manifests/FRONTEND_MANIFEST.json",
+    "envExample": "config/.env.example",
+    "sourceOfTruth": "governance/SOURCE_OF_TRUTH.md",
+    "aiGovernance": "governance/AI_GOVERNANCE.md"
+  },
 
   "rules": [
 

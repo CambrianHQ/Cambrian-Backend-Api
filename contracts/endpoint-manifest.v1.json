@@ -162,13 +162,13 @@
                           "method":  "GET",
                           "path":  "/creator/tracks",
                           "requiresAuth":  true,
-                          "tag":  "Ai"
+                          "tag":  "Creator"
                       },
                       {
                           "method":  "GET",
                           "path":  "/creator/revenue",
                           "requiresAuth":  true,
-                          "tag":  "Ai"
+                          "tag":  "Creator"
                       },
                       {
                           "method":  "GET",
@@ -251,25 +251,25 @@
                       {
                           "method":  "GET",
                           "path":  "/discover",
-                          "requiresAuth":  true,
+                          "requiresAuth":  false,
                           "tag":  "Catalog"
                       },
                       {
                           "method":  "GET",
                           "path":  "/catalog",
-                          "requiresAuth":  true,
+                          "requiresAuth":  false,
                           "tag":  "Catalog"
                       },
                       {
                           "method":  "GET",
                           "path":  "/trending",
-                          "requiresAuth":  true,
+                          "requiresAuth":  false,
                           "tag":  "Catalog"
                       },
                       {
                           "method":  "GET",
                           "path":  "/tracks/{trackId}",
-                          "requiresAuth":  true,
+                          "requiresAuth":  false,
                           "tag":  "Catalog"
                       },
                       {
@@ -299,7 +299,7 @@
                       {
                           "method":  "GET",
                           "path":  "/community",
-                          "requiresAuth":  true,
+                          "requiresAuth":  false,
                           "tag":  "Community"
                       },
                       {

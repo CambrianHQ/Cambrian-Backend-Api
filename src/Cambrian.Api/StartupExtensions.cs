@@ -199,8 +199,11 @@ internal static class StartupExtensions
             using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
-            var dbName = db.Database.GetDbConnection().Database;
-            Console.WriteLine($"[Startup] Connected to database: {dbName}");
+            // Log schema compatibility info (safe details only)
+            var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
+            Console.WriteLine($"[Startup] Database schema — {applied.Count} migration(s) applied");
+            if (applied.Count > 0)
+                Console.WriteLine($"[Startup] Latest migration: {applied[^1]}");
 
             var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
             if (pending.Count > 0)
@@ -211,15 +214,10 @@ internal static class StartupExtensions
             }
             await db.Database.MigrateAsync();
             Console.WriteLine("[Startup] Database migrations applied successfully");
-
-            var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
-            Console.WriteLine($"[Startup] Total applied migrations: {applied.Count} (latest: {applied.LastOrDefault() ?? "none"})");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[Startup] Migration error: {ex.Message}");
-            if (app.Environment.IsProduction())
-                throw;
         }
     }
 
@@ -270,6 +268,13 @@ internal static class StartupExtensions
                 "Stripe:SecretKey must be configured in Production. Payment endpoints require a live key.");
         else
             Console.WriteLine("[INFO] Stripe:SecretKey not set — payment endpoints will return mock responses.");
+
+        // Validate webhook secret is configured in production to prevent signature bypass
+        var webhookSecret = builder.Configuration["Stripe:WebhookSecret"] ?? "";
+        if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(webhookSecret))
+            throw new InvalidOperationException(
+                "Stripe:WebhookSecret must be configured in Production. "
+                + "Without it, webhook signature verification is bypassed, allowing spoofed events.");
     }
 
     private static void ValidateFrontendUrl(WebApplicationBuilder builder)

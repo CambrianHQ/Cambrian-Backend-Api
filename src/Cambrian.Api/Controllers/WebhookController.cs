@@ -35,12 +35,20 @@ public class WebhookController : BaseController
         catch (Stripe.StripeException ex)
         {
             _logger.LogError(ex, "EVENT: StripeWebhookFailed — invalid signature");
-            return ErrorResponse("Invalid webhook signature.");
+            // Return 400 for signature failures — Stripe should not retry these
+            return StatusCode(400, "Invalid webhook signature.");
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("signature verification"))
         {
             _logger.LogError(ex, "EVENT: StripeWebhookFailed — signature verification failed");
-            return ErrorResponse("Webhook signature verification failed.");
+            return StatusCode(400, "Webhook signature verification failed.");
+        }
+        catch (Exception ex)
+        {
+            // Return 200 OK even on processing errors to prevent Stripe retry storms.
+            // The error is logged for investigation but Stripe won't keep retrying for 72h.
+            _logger.LogError(ex, "EVENT: StripeWebhookProcessingError — returning 200 to stop retries");
+            return MessageResponse("Received (processing error logged).");
         }
     }
 }

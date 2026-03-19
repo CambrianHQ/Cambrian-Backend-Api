@@ -21,5 +21,5 @@ COPY --from=build /app/publish .
 ENV PORT=8080
 EXPOSE 8080
 
-# Use shell form so $PORT is expanded at runtime
-ENTRYPOINT sh -c "ASPNETCORE_URLS=http://+:$PORT dotnet Cambrian.Api.dll"
+# Use exec form with exec so SIGTERM reaches the .NET process for graceful shutdown
+ENTRYPOINT ["sh", "-c", "exec env ASPNETCORE_URLS=http://+:$PORT dotnet Cambrian.Api.dll"]

@@ -31,10 +31,17 @@ public sealed class ExceptionMiddleware
             _logger.LogError(ex, "Unhandled exception for {Method} {Path}",
                 context.Request.Method, context.Request.Path);
 
+            if (context.Response.HasStarted)
+            {
+                _logger.LogWarning("Response already started — cannot write error response for {Method} {Path}",
+                    context.Request.Method, context.Request.Path);
+                return;
+            }
+
             context.Response.ContentType = "application/json";
             context.Response.StatusCode = ex switch
             {
-                UnauthorizedAccessException => (int)HttpStatusCode.Forbidden,
+                UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
                 KeyNotFoundException        => (int)HttpStatusCode.NotFound,
                 ArgumentException           => (int)HttpStatusCode.BadRequest,
                 InvalidOperationException   => (int)HttpStatusCode.BadRequest,

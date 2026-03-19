@@ -25,7 +25,7 @@ LICENSE
 # Local env
 .env
 .env.*
-!.env.example
+!config/.env.example
 
 # OS
 .DS_Store

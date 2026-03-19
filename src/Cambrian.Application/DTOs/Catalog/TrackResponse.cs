@@ -13,6 +13,21 @@ public class TrackResponse
 
     public string Genre { get; set; } = string.Empty;
 
+    /// <summary>Mood tag for search filtering (e.g. happy, dark, chill, energetic).</summary>
+    public string? Mood { get; set; }
+
+    /// <summary>Tempo description or BPM value.</summary>
+    public string? Tempo { get; set; }
+
+    /// <summary>User-defined tags for discoverability.</summary>
+    public ICollection<string> Tags { get; set; } = new List<string>();
+
+    /// <summary>Whether the track is instrumental (no vocals).</summary>
+    public bool Instrumental { get; set; }
+
+    /// <summary>Track visibility: public, limited, hidden.</summary>
+    public string Visibility { get; set; } = "public";
+
     public decimal Price { get; set; }
 
     public decimal NonExclusivePrice { get; set; }
@@ -59,6 +74,12 @@ public class TrackResponse
     public string? CoverArtUrl { get; set; }
 
     public string CreatorId { get; set; } = string.Empty;
+
+    /// <summary>Creator's public storefront slug (for linking to /creator/{slug}).</summary>
+    public string? CreatorSlug { get; set; }
+
+    /// <summary>Creator's profile image URL.</summary>
+    public string? CreatorProfileImageUrl { get; set; }
 
     public string? Artist { get; set; }
 

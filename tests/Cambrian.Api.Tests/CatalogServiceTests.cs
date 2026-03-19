@@ -15,7 +15,8 @@ public sealed class CatalogServiceTests
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
-        _sut = new CatalogService(_tracks, users);
+        var profiles = Substitute.For<ICreatorProfileRepository>();
+        _sut = new CatalogService(_tracks, users, profiles);
     }
 
     [Fact]

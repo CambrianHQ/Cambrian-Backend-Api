@@ -14,34 +14,24 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     public async Task<CreatorProfileDto?> GetByUserIdAsync(string userId)
     {
-        var profiles = await _db.CreatorProfiles.AsNoTracking().ToListAsync();
-        foreach (var p in profiles)
-        {
-            if (p.UserId == userId) return MapToDto(p);
-        }
-        return null;
+        var p = await _db.CreatorProfiles.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.UserId == userId);
+        return p is null ? null : MapToDto(p);
     }
 
     public async Task<CreatorProfileDto?> GetBySlugAsync(string slug)
     {
-        var profiles = await _db.CreatorProfiles.AsNoTracking().ToListAsync();
-        foreach (var p in profiles)
-        {
-            if (string.Equals(p.Slug, slug, StringComparison.OrdinalIgnoreCase)) return MapToDto(p);
-        }
-        return null;
+        var p = await _db.CreatorProfiles.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Slug.ToLower() == slug.ToLower());
+        return p is null ? null : MapToDto(p);
     }
 
     public async Task<CreatorProfileDto> UpsertAsync(string userId, string slug, string bio, string? niche,
         string? socialLinksJson, bool showEarnings, bool showDownloadStats,
         string? bannerImageUrl, string? profileImageUrl)
     {
-        CreatorProfile? existing = null;
-        var all = await _db.CreatorProfiles.ToListAsync();
-        foreach (var p in all)
-        {
-            if (p.UserId == userId) { existing = p; break; }
-        }
+        var existing = await _db.CreatorProfiles
+            .FirstOrDefaultAsync(p => p.UserId == userId);
 
         if (existing is null)
         {
@@ -80,12 +70,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     public async Task<CreatorProfileDto> UpdateImageAsync(string userId, string? bannerImageUrl, string? profileImageUrl)
     {
-        CreatorProfile? existing = null;
-        var all = await _db.CreatorProfiles.ToListAsync();
-        foreach (var p in all)
-        {
-            if (p.UserId == userId) { existing = p; break; }
-        }
+        var existing = await _db.CreatorProfiles
+            .FirstOrDefaultAsync(p => p.UserId == userId);
         if (existing is null) throw new KeyNotFoundException("Profile not found.");
 
         if (bannerImageUrl is not null) existing.BannerImageUrl = bannerImageUrl;
@@ -97,12 +83,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     public async Task<CreatorProfileDto> UpdatePinnedTracksAsync(string userId, string pinnedTrackIds)
     {
-        CreatorProfile? existing = null;
-        var all = await _db.CreatorProfiles.ToListAsync();
-        foreach (var p in all)
-        {
-            if (p.UserId == userId) { existing = p; break; }
-        }
+        var existing = await _db.CreatorProfiles
+            .FirstOrDefaultAsync(p => p.UserId == userId);
         if (existing is null) throw new KeyNotFoundException("Profile not found.");
 
         existing.PinnedTrackIds = pinnedTrackIds;
@@ -113,13 +95,10 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     public async Task<IReadOnlyList<TrackCollectionDto>> GetCollectionsAsync(string creatorId)
     {
-        var all = await _db.TrackCollections.AsNoTracking().ToListAsync();
-        var result = new List<TrackCollectionDto>();
-        foreach (var c in all)
-        {
-            if (c.CreatorId == creatorId) result.Add(MapCollectionToDto(c));
-        }
-        return result;
+        var collections = await _db.TrackCollections.AsNoTracking()
+            .Where(c => c.CreatorId == creatorId)
+            .ToListAsync();
+        return collections.Select(MapCollectionToDto).ToList();
     }
 
     public async Task<TrackCollectionDto?> GetCollectionByIdAsync(Guid id)

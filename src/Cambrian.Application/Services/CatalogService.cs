@@ -10,11 +10,13 @@ public class CatalogService : ICatalogService
 {
     private readonly ITrackRepository _tracks;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly ICreatorProfileRepository _profiles;
 
-    public CatalogService(ITrackRepository tracks, UserManager<ApplicationUser> users)
+    public CatalogService(ITrackRepository tracks, UserManager<ApplicationUser> users, ICreatorProfileRepository profiles)
     {
         _tracks = tracks;
         _users = users;
+        _profiles = profiles;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync(int page = 1, int pageSize = 50, string? genre = null, string? search = null, string? sort = null)
@@ -81,11 +83,20 @@ public class CatalogService : ICatalogService
     {
         // Resolve the creator's tier to get the correct fee rate
         decimal feeRate = TierManifest.Free.FeeRate; // default
+        string? creatorSlug = null;
+        string? creatorProfileImageUrl = null;
         if (!string.IsNullOrEmpty(t.CreatorId))
         {
             var creator = await _users.FindByIdAsync(t.CreatorId);
             if (creator is not null)
                 feeRate = TierManifest.For(creator.CreatorTier).FeeRate;
+
+            var profile = await _profiles.GetByUserIdAsync(t.CreatorId);
+            if (profile is not null)
+            {
+                creatorSlug = profile.Slug;
+                creatorProfileImageUrl = profile.ProfileImageUrl;
+            }
         }
 
         var nonExPrice = t.NonExclusivePriceCents / 100m;
@@ -99,6 +110,11 @@ public class CatalogService : ICatalogService
             Title = t.Title,
             Description = t.Description,
             Genre = t.Genre ?? "",
+            Mood = t.Mood,
+            Tempo = t.Tempo,
+            Tags = t.Tags,
+            Instrumental = t.Instrumental,
+            Visibility = t.Visibility,
             Price = t.Price,
             NonExclusivePrice = nonExPrice,
             ExclusivePrice = exPrice,
@@ -118,6 +134,8 @@ public class CatalogService : ICatalogService
             AudioUrl = t.AudioUrl,
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
+            CreatorSlug = creatorSlug,
+            CreatorProfileImageUrl = creatorProfileImageUrl,
             Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
             CreatedAt = t.CreatedAt,
         };
