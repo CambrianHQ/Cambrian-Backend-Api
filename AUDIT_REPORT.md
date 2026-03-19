@@ -1,497 +1,1384 @@
 # Platform Stability Audit Report
 
-**Date:** 2026-03-19
-**Scope:** All repositories (`Cambrian.Persistence/Repositories/`), persistence services (`Cambrian.Persistence/Services/`), application services (`Cambrian.Application/Services/`), and interface contracts (`Cambrian.Application/Interfaces/`).
-
-**Severity Legend:**
-- **CRITICAL** -- Data loss, financial loss, or security vulnerability
-- **HIGH** -- Correctness bug likely to manifest under real traffic
-- **MEDIUM** -- Performance degradation or latent defect
-- **LOW** -- Code quality, robustness, or minor risk
+**Generated:** 2026-03-19  
+**Scope:** All DTOs (`src/Cambrian.Application/DTOs/`), Domain Entities (`src/Cambrian.Domain/Entities/`), Enums (`src/Cambrian.Domain/Enums/`), DbContext, and Repositories.
 
 ---
 
 ## Table of Contents
 
-1. [Repository Audit](#1-repository-audit)
-2. [Persistence Service Audit](#2-persistence-service-audit)
-3. [Application Service Audit](#3-application-service-audit)
-4. [Interface Contract Compliance](#4-interface-contract-compliance)
-5. [Cross-Cutting Concerns](#5-cross-cutting-concerns)
-6. [Summary Statistics](#6-summary-statistics)
+1. [All Enums](#1-all-enums)
+2. [All Entities (with full field listing)](#2-all-entities)
+3. [All DTOs (with full field listing)](#3-all-dtos)
+4. [Orphaned Entities (no DbSet, no repository)](#4-orphaned-entities)
+5. [Enum vs String Mismatches](#5-enum-vs-string-mismatches)
+6. [Type Mismatches (DTO ↔ Entity)](#6-type-mismatches)
+7. [Nullable vs Non-Nullable Mismatches](#7-nullable-vs-non-nullable-mismatches)
+8. [Entity Fields NOT Exposed in Any DTO](#8-entity-fields-not-exposed-in-any-dto)
+9. [DTO Fields with No Corresponding Entity Field](#9-dto-fields-with-no-corresponding-entity-field)
+10. [Missing Validation Annotations](#10-missing-validation-annotations)
+11. [Naming Inconsistencies](#11-naming-inconsistencies)
+12. [Duplicate/Overlapping Definitions](#12-duplicateoverlapping-definitions)
+13. [Structural/Architectural Issues](#13-structuralarchitectural-issues)
+14. [Summary of All Issues](#14-summary-of-all-issues)
 
 ---
 
-## 1. Repository Audit
+## 1. All Enums
 
-### 1.1 CreatorProfileRepository.cs
+### `UserRole` (`Enums/UserRole.cs`)
+| Value | Int |
+|-------|-----|
+| Listener | 1 |
+| Creator | 2 |
+| Admin | 3 |
 
-**File:** `src/Cambrian.Persistence/Repositories/CreatorProfileRepository.cs`
+### `LicenseType` (`Enums/LicenseType.cs`)
+| Value | Int |
+|-------|-----|
+| Standard | 1 |
+| Extended | 2 |
+| Exclusive | 3 |
+| CopyrightBuyout | 4 |
 
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **CRITICAL** | 17-22 | **Full table scan in `GetByUserIdAsync`.** Calls `_db.CreatorProfiles.AsNoTracking().ToListAsync()` then filters in a `foreach` loop. Should use `FirstOrDefaultAsync(p => p.UserId == userId)`. Every single call loads the entire `CreatorProfiles` table into memory. |
-| 2 | **CRITICAL** | 26-32 | **Full table scan in `GetBySlugAsync`.** Same pattern -- loads ALL rows then iterates. Should use `FirstOrDefaultAsync(p => p.Slug == slug)` (case-insensitive comparison can be handled by the DB collation or `EF.Functions.ILike`). |
-| 3 | **CRITICAL** | 40-43 | **Full table scan in `UpsertAsync`.** Calls `_db.CreatorProfiles.ToListAsync()` (tracked, not even `AsNoTracking`) then loops to find by userId. Loads entire table on every upsert. |
-| 4 | **CRITICAL** | 83-88 | **Full table scan in `UpdateImageAsync`.** Same `ToListAsync()` + foreach pattern. |
-| 5 | **CRITICAL** | 100-105 | **Full table scan in `UpdatePinnedTracksAsync`.** Same pattern. |
-| 6 | **CRITICAL** | 116-122 | **Full table scan in `GetCollectionsAsync`.** Loads ALL `TrackCollections` via `ToListAsync()` and then filters by `creatorId` in memory. Should use `.Where(c => c.CreatorId == creatorId)`. |
-| 7 | MEDIUM | 184-185 | **Silently swallowed JSON parse error.** Malformed `SocialLinks` JSON produces `null` with no logging. |
+### `CreatorTier` (`Enums/CreatorTier.cs`)
+| Value | Int |
+|-------|-----|
+| Free | 0 |
+| Pro | 1 |
 
-**Impact:** Every method on this repository triggers a full table scan. As the platform scales, this will cause catastrophic memory consumption and query latency. This is the single most impactful set of bugs in the codebase.
+### `PayoutStatus` (`Enums/PayoutStatus.cs`)
+| Value | Int |
+|-------|-----|
+| Pending | 1 |
+| Processing | 2 |
+| Paid | 3 |
+| Failed | 4 |
 
----
-
-### 1.2 AdminRepository.cs
-
-**File:** `src/Cambrian.Persistence/Repositories/AdminRepository.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **HIGH** | 25-27 | **Full table scan for dashboard stats.** `_db.Purchases.Where(p => p.Status == "completed").ToListAsync()` loads ALL completed purchases into memory just to call `.Count` and `.Sum()`. Should use `CountAsync()` and `SumAsync(p => p.AmountCents)` directly on the query. |
-| 2 | **HIGH** | 81-131 | **`PurgeTestDataAsync` not wrapped in a transaction.** If the operation fails partway (e.g. after deleting LicenseCertificates but before deleting Purchases), the database is left in an inconsistent state with orphaned foreign keys. The raw SQL deletes should be wrapped in an explicit transaction. |
-| 3 | MEDIUM | 137-152 | **Non-atomic user update + audit log in `SuspendUserAsync`.** Calls `_users.UpdateAsync(user)` (which calls its own `SaveChanges`) and then adds an AuditLog + `_db.SaveChangesAsync()`. If the second save fails, the user is suspended but no audit log exists. Same issue in `ReactivateUserAsync` (154-168), `SetUserRoleAsync` (171-187), and `VerifyCreatorAsync` (189-205). |
-| 4 | MEDIUM | 144-148 | **Audit log always records `Admin = "system"`.** The actual admin performing the action is never recorded. The caller's identity should be passed through. Same in all moderation methods (218-291). |
-| 5 | LOW | 60-73 | **`GetUsersAsync` fetches into memory then maps.** Acceptable with `Take(500)` cap, but projection should be done in the query to avoid pulling all User columns. |
-
----
-
-### 1.3 TrackRepository.cs
-
-**File:** `src/Cambrian.Persistence/Repositories/TrackRepository.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 16-23 | **Parameterless `BrowseAsync()` loads ALL public tracks.** No pagination. Used by `StreamService.ListStreamableAsync` which then `.Take(20)` in memory. Should accept a `take` parameter or use the paginated overload. |
-| 2 | LOW | 38, 41 | **`ToLower()` for case-insensitive comparison.** `t.Genre.ToLower() == genre.ToLower()` forces the DB to do per-row string transformation. Use `EF.Functions.ILike` (PostgreSQL) or configure case-insensitive collation for better index utilization. Same pattern on lines 45, 48, 54, 109-119. |
-| 3 | **GOOD** | 147-154 | `TryMarkExclusiveSoldAsync` correctly uses an atomic SQL `UPDATE ... WHERE` to prevent race conditions. This is the model other operations should follow. |
+### `UsageType` (`Enums/UsageType.cs`)
+| Value | Int |
+|-------|-----|
+| Personal | 1 |
+| Youtube | 2 |
+| Ads | 3 |
+| Podcast | 4 |
+| Game | 5 |
+| Film | 6 |
+| Social | 7 |
 
 ---
 
-### 1.4 SubscriptionRepository.cs
+## 2. All Entities
 
-**File:** `src/Cambrian.Persistence/Repositories/SubscriptionRepository.cs`
+### `ApplicationUser` (extends `IdentityUser`) — `Entities/ApplicationUser.cs`
+| Property | Type | Default | Notes |
+|----------|------|---------|-------|
+| *(inherited)* Id | string | — | From IdentityUser |
+| *(inherited)* Email | string? | — | From IdentityUser |
+| *(inherited)* UserName | string? | — | From IdentityUser |
+| *(inherited)* PhoneNumber | string? | — | From IdentityUser |
+| DisplayName | string? | — | |
+| Role | string | "User" | Uses string, not UserRole enum |
+| Status | string | "active" | active, suspended |
+| Tier | string | "free" | free, paid, creator, pro |
+| VerifiedCreator | bool | false | |
+| Plan | string? | — | |
+| CreatorTier | CreatorTier (enum) | CreatorTier.Free | |
+| UploadCount | int | 0 | |
+| SubscriptionStatus | string | "Inactive" | Active, Inactive, Cancelled |
+| SubscriptionEndDate | DateTime? | — | |
+| StripeAccountId | string? | — | |
+| WalletBalanceCents | long | 0 | |
+| PasswordResetCode | string? | — | |
+| PasswordResetCodeExpiry | DateTime? | — | |
+| CreatedAt | DateTime | DateTime.UtcNow | |
+| Tracks | ICollection\<Track\> | new List | Navigation |
+| Purchases | ICollection\<Purchase\> | new List | Navigation |
+| Library | ICollection\<LibraryItem\> | new List | Navigation |
+| Payouts | ICollection\<Payout\> | new List | Navigation |
 
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 45-53 | **No concurrency control on `CancelAsync`.** Uses `FindAsync` + mutate + `SaveChangesAsync`. Two concurrent cancellation requests would both succeed. Low real-world risk (idempotent outcome) but no row version check. |
-| 2 | LOW | 50-51 | **`ExpiresAt` set to `DateTime.UtcNow` on cancel.** This means the subscription expires immediately rather than at the end of the billing period. May not match the business intent. |
-
----
-
-### 1.5 StreamRepository.cs
-
-**File:** `src/Cambrian.Persistence/Repositories/StreamRepository.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 18-27 | **Missing track existence validation in `StartAsync`.** Fetches the track with `FindAsync` but creates a `StreamSession` regardless of whether the track exists. `track?.Title` will be null for non-existent tracks. Should return an error or throw if the track is not found. |
-
----
-
-### 1.6 FeatureFlagRepository.cs
-
-**File:** `src/Cambrian.Persistence/Repositories/FeatureFlagRepository.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 28-51 | **Race condition in `UpsertAsync`.** Performs a read-check-write without any locking. Two concurrent upserts for the same flag name could both pass the `flag is null` check and insert duplicates, violating uniqueness (unless a DB-level unique constraint exists on `Name`). |
-
----
-
-### 1.7 WalletRepository.cs
-
-**File:** `src/Cambrian.Persistence/Repositories/WalletRepository.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **GOOD** | 38-74 | `AtomicWithdrawAsync` correctly uses `IsolationLevel.Serializable` transaction with proper rollback handling. Model implementation for financial operations. |
+**DbSet:** Managed by `IdentityDbContext<ApplicationUser>`.  
+**Repositories:** Accessed via `UserManager<ApplicationUser>`.
 
 ---
 
-### 1.8 PayoutRepository.cs, InvoiceRepository.cs, PurchaseRepository.cs, LicenseCertificateRepository.cs, LibraryRepository.cs, AnalyticsRepository.cs
+### `User` — `Entities/User.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| Email | string | string.Empty |
+| DisplayName | string | string.Empty |
+| Role | UserRole (enum) | UserRole.Listener |
 
-**Files:** `src/Cambrian.Persistence/Repositories/{Payout,Invoice,Purchase,LicenseCertificate,Library,Analytics}Repository.cs`
-
-These repositories use proper EF Core query patterns (`FirstOrDefaultAsync` with predicates, `Where` before `ToListAsync`). No significant issues found.
-
-| # | Severity | File | Lines | Issue |
-|---|----------|------|-------|-------|
-| 1 | LOW | PayoutRepository.cs | 37-41 | `Update` uses `_db.Payouts.Update(payout)` which marks all properties as modified. Could use change tracking instead. Minor -- same pattern across all repositories. |
-
----
-
-## 2. Persistence Service Audit
-
-### 2.1 HealthService.cs
-
-**File:** `src/Cambrian.Persistence/Services/HealthService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | LOW | 83-88 | **Potential resource leak.** `file.Stream.Dispose()` is called in the `try` block. If an exception occurs between `OpenReadAsync` returning a non-null result and the `Dispose()` call, the stream leaks. Should use `using var file = ...` or a `finally` block. |
-| 2 | LOW | 83 | **Null-dereference risk.** `_storage.OpenReadAsync(t.AudioUrl ?? "")` -- passing an empty string to OpenReadAsync could cause unexpected behavior depending on the storage implementation. |
+**DbSet:** NONE  
+**Repository:** NONE  
+**Status: ORPHANED** — duplicate of ApplicationUser with incompatible ID type.
 
 ---
 
-### 2.2 DebugService.cs
+### `Track` — `Entities/Track.cs`
+| Property | Type | Default | Notes |
+|----------|------|---------|-------|
+| Id | Guid | — | |
+| CambrianTrackId | string | "" | Human-readable ID (CAMB-TRK-XXXX) |
+| Title | string | "" | |
+| Description | string? | — | |
+| Genre | string? | — | |
+| Mood | string? | — | Search filter |
+| Tempo | string? | — | Search filter |
+| Instrumental | bool | false | |
+| Price | decimal | 0 | |
+| Duration | string? | — | |
+| LicenseType | string? | — | Uses string, NOT LicenseType enum |
+| AudioUrl | string? | — | |
+| CoverArtUrl | string? | — | |
+| NonExclusivePriceCents | int | 0 | In cents |
+| ExclusivePriceCents | int | 0 | In cents |
+| CopyrightBuyoutPriceCents | int | 0 | In cents |
+| ExclusiveSold | bool | false | |
+| Status | string | "available" | available, exclusive_sold, copyright_transferred |
+| CopyrightOwnerId | string? | — | |
+| CopyrightTransferredAt | DateTime? | — | |
+| OriginalCreatorId | string? | — | |
+| Visibility | string | "public" | public, limited, hidden |
+| CreatedAt | DateTime | DateTime.UtcNow | |
+| CreatorId | string | "" | FK to ApplicationUser |
+| Creator | ApplicationUser | null! | Navigation |
+| Tags | ICollection\<string\> | new List | Stored as CSV |
+| Purchases | ICollection\<Purchase\> | new List | Navigation |
+| LibraryItems | ICollection\<LibraryItem\> | new List | Navigation |
 
-**File:** `src/Cambrian.Persistence/Services/DebugService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 136-167 | **`RunConsistencyCheckAsync` loads entire tables.** Both `Purchases` (completed) and `Library` tables are fully loaded into memory. Acceptable for an admin diagnostic endpoint but should have clear warnings or be rate-limited. |
-| 2 | LOW | 114-134 | **No upper bound on `limit` parameter in `GetRecentWebhooksAsync`.** A malicious or accidental call with `limit=1000000` would load excessive data. |
-
----
-
-### 2.3 MarketplaceIntegrityService.cs
-
-**File:** `src/Cambrian.Persistence/Services/MarketplaceIntegrityService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 56-86, 167-189, 194-219 | **Multiple full table loads for cross-referencing.** Loads entire `Purchases`, `Library`, `Tracks`, and `Invoices` tables into memory. Acceptable for a periodic audit job, but could be refactored to use joins or subqueries. |
-| 2 | LOW | 140-147 | **N+1 query in `CheckPayoutAmountsMatchRevenue`.** For each creator with payouts, fetches their track IDs and then sums purchases. Could use a single joined query. |
-
----
-
-## 3. Application Service Audit
-
-### 3.1 PurchaseService.cs
-
-**File:** `src/Cambrian.Application/Services/PurchaseService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **CRITICAL** | 82-129 | **Multi-step write without transaction.** `CreateAsync` performs 4 sequential writes (purchase, library item, invoice, license certificate) without wrapping in a transaction. If any step after `AddAsync(purchase)` fails, the database has an incomplete purchase with no library item, invoice, or license. |
-| 2 | **HIGH** | 61-63 | **Non-atomic duplicate check.** `GetByBuyerIdAsync(userId)` followed by `.Any(p => p.TrackId == trackId)` is a TOCTOU race: two concurrent requests can both pass this check and create duplicate purchases for the same track. |
-| 3 | **HIGH** | 158-163 | **`CreditCreatorAsync` is a no-op stub.** The interface declares this method and it is callable, but it does nothing. Callers may rely on it to actually credit earnings. This is a silent money-loss bug if invoked in a real flow. |
-| 4 | MEDIUM | 74-79 | **Fallback price logic may produce $0 purchases.** If `ExclusivePriceCents` and `NonExclusivePriceCents` are both 0 and `track.Price` is 0, the purchase amount is 0 cents. No minimum price check. |
-
----
-
-### 3.2 PayoutService.cs
-
-**File:** `src/Cambrian.Application/Services/PayoutService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **CRITICAL** | 37 | **Hardcoded fee rate contradicts tier system.** `private const decimal PlatformFeeRate = 0.15m` is used in `GetEarningsAsync` (lines 52-53). But the rest of the platform uses `TierManifest.For(user.CreatorTier).FeeRate` which varies by tier (35% for free, 15% for pro). This means free-tier creators see earnings calculated at 15% fee in the payout screen, but purchases are processed at 35% fee. **Creators will see higher available earnings than they actually have, leading to payout failures or financial discrepancies.** |
-| 2 | **CRITICAL** | 96-122 | **Race condition: non-atomic balance check + debit.** The balance is checked on line 97 (`_wallet.GetBalanceAsync`), but the debit happens later on lines 114-122 (`_wallet.AddTransactionAsync`). Between the check and the debit, a concurrent request could reduce the balance. Should use `_wallet.AtomicWithdrawAsync` instead of `AddTransactionAsync`. |
-| 3 | **HIGH** | 108 | **Integer truncation: `(int)requestCents`.** `requestCents` is a `long`, but `Payout.AmountCents` receives `(int)requestCents`. For payout amounts above ~$21,474.83 (Int32.MaxValue cents), this silently overflows, potentially creating a negative or incorrect payout amount. |
-| 4 | MEDIUM | 42-48 | **N+1 query in `GetEarningsAsync`.** Fetches all creator tracks, then iterates fetching purchases per track. Should use `_purchases.GetByCreatorIdAsync(userId)` directly (which already exists and does a single query with a join). |
+**DbSet:** `Tracks`  
+**Repository:** `ITrackRepository` / `TrackRepository`
 
 ---
 
-### 3.3 CheckoutService.cs
+### `Purchase` — `Entities/Purchase.cs`
+| Property | Type | Default | Notes |
+|----------|------|---------|-------|
+| Id | Guid | — | |
+| BuyerId | string | "" | FK to ApplicationUser |
+| Buyer | ApplicationUser | null! | Navigation |
+| TrackId | Guid | — | FK to Track |
+| Track | Track | null! | Navigation |
+| AmountCents | int | 0 | In cents |
+| PaymentMethod | string? | — | |
+| LicenseType | string? | — | Uses string, NOT LicenseType enum |
+| Status | string | "pending" | pending, completed, refunded |
+| UsageType | string | "personal" | Uses string, NOT UsageType enum |
+| StripeSessionId | string? | — | |
+| LicenseId | Guid? | — | FK to LicenseCertificate |
+| License | LicenseCertificate? | — | Navigation |
+| CompletedAt | DateTime? | — | |
+| ExpiresAt | DateTime? | — | |
+| CreatedAt | DateTime | DateTime.UtcNow | |
+| UpdatedAt | DateTime? | — | |
 
-**File:** `src/Cambrian.Application/Services/CheckoutService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **HIGH** | 226-231 | **Non-atomic exclusive flag set in `ConfirmAsync`.** Uses `track.ExclusiveSold = true; await _tracks.UpdateAsync(track)` instead of `TryMarkExclusiveSoldAsync`. Two concurrent confirmations for the same exclusive track could both succeed, creating two exclusive purchases. The atomic SQL-based method exists in the repository but is not used here. |
-| 2 | MEDIUM | 208-296 | **Multi-step write without transaction.** `ConfirmAsync` creates a purchase, updates the track, adds a library item, credits the wallet, and issues a license -- all without a transaction. If any intermediate step fails, partial state persists. Partially mitigated by idempotency checks. |
-| 3 | LOW | 303-323 | **License issuance failure is logged but not surfaced.** If `IssueCertificateAsync` throws, the purchase and library item exist but no license is issued. The response still shows `Status = "paid"`. Manual reconciliation is noted in the log but no alerting mechanism exists. |
-
----
-
-### 3.4 CreatorService.cs
-
-**File:** `src/Cambrian.Application/Services/CreatorService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **HIGH** | 26, 34-35 | **In-memory pagination.** `GetTracksAsync` fetches ALL tracks for a creator via `GetByCreatorIdAsync`, then paginates in memory with `.Skip().Take()`. For creators with many tracks, this loads all rows unnecessarily. Pagination should be pushed to the repository/database. |
-| 2 | MEDIUM | 67-71 | **N+1 query pattern in `GetRevenueAsync`.** Iterates over all creator track IDs and calls `_purchases.GetByTrackIdAsync(trackId)` for each. Should use `_purchases.GetByCreatorIdAsync(userId)` (single query). |
-
----
-
-### 3.5 PaymentService.cs
-
-**File:** `src/Cambrian.Application/Services/PaymentService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **HIGH** | 84-98 | **Authorization bypass risk in `ProcessAsync`.** This "legacy path" allows any authenticated user to mark their purchase as `"completed"` by calling `ProcessAsync` with a `PurchaseId`, without verifying that Stripe actually received payment. The ownership check (line 89) only verifies the purchase belongs to the user -- not that payment was completed. This could be exploited to get completed purchases without paying. |
-| 2 | MEDIUM | 31 | **Unguarded `Guid.Parse` in `CreateCheckoutAsync`.** `Guid.Parse(request.TrackId)` throws `FormatException` on invalid input. Should use `TryParse`. |
-| 3 | MEDIUM | 73 | **Unguarded `Guid.Parse` in `GetResultAsync`.** Same issue. |
-| 4 | MEDIUM | 86 | **Unguarded `Guid.Parse` in `ProcessAsync`.** Same issue. |
+**DbSet:** `Purchases`  
+**Repository:** `IPurchaseRepository` / `PurchaseRepository`
 
 ---
 
-### 3.6 CatalogService.cs
+### `LibraryItem` — `Entities/LibraryItem.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| UserId | string | "" |
+| User | ApplicationUser | null! |
+| TrackId | Guid | — |
+| Track | Track | null! |
+| PurchaseId | Guid? | — |
+| Purchase | Purchase? | — |
+| Title | string? | — |
+| Artist | string? | — |
+| AudioUrl | string? | — |
+| SavedAt | DateTime | DateTime.UtcNow |
 
-**File:** `src/Cambrian.Application/Services/CatalogService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **HIGH** | 30-32, 80-89 | **N+1 query: per-track user lookup.** `MapToResponseAsync` calls `_users.FindByIdAsync(t.CreatorId)` for every track individually. A catalog page with 50 tracks makes 50 separate DB queries to resolve creator tiers. Should batch-load creators or cache tier information. |
-
----
-
-### 3.7 StorefrontService.cs
-
-**File:** `src/Cambrian.Application/Services/StorefrontService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | LOW | 29-74 | Clean implementation. Good use of parallel `Task.WhenAll` for independent fetches. No significant issues. |
-
----
-
-### 3.8 BillingService.cs
-
-**File:** `src/Cambrian.Application/Services/BillingService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | LOW | 37-65 | Clean implementation with proper validation. No issues found. |
+**DbSet:** `Library`  
+**Repository:** `ILibraryRepository` / `LibraryRepository`
 
 ---
 
-### 3.9 WalletService.cs
+### `Payout` — `Entities/Payout.cs`
+| Property | Type | Default | Notes |
+|----------|------|---------|-------|
+| Id | Guid | — | |
+| CreatorId | string | "" | FK to ApplicationUser |
+| Creator | ApplicationUser | null! | Navigation |
+| AmountCents | int | 0 | In cents |
+| Status | string | "pending" | Uses string, NOT PayoutStatus enum |
+| RequestedAt | DateTime | DateTime.UtcNow | |
+| CompletedAt | DateTime? | — | |
 
-**File:** `src/Cambrian.Application/Services/WalletService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **GOOD** | 40-55 | Correctly uses `AtomicWithdrawAsync` for thread-safe withdrawal. Proper input validation. |
-
----
-
-### 3.10 InvoiceService.cs
-
-**File:** `src/Cambrian.Application/Services/InvoiceService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | LOW | 51-55 | **`DownloadAsync` always returns null.** Stub implementation. Interface declares it; callers receive null. Should throw `NotImplementedException` or return a 501 status. |
-| 2 | LOW | 51-55 | **No authorization check in `DownloadAsync`.** The `userId` parameter is accepted but not used. When this method is eventually implemented, it must verify the invoice belongs to the user. `GetByIdAsync` (line 30-48) does this correctly -- `DownloadAsync` should mirror that pattern. |
+**DbSet:** `Payouts`  
+**Repository:** `IPayoutRepository` / `PayoutRepository`
 
 ---
 
-### 3.11 DownloadService.cs
+### `Subscription` — `Entities/Subscription.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| UserId | string | "" |
+| User | ApplicationUser | null! |
+| Plan | string | "free" |
+| Status | string | "active" |
+| StartedAt | DateTime | DateTime.UtcNow |
+| ExpiresAt | DateTime? | — |
 
-**File:** `src/Cambrian.Application/Services/DownloadService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **GOOD** | 18-29 | Proper authorization: checks library ownership before generating download URL. |
-| 2 | LOW | 18-29, 32-44 | **Code duplication.** `GetDownloadUrlAsync` and `GetSignedUrlAsync` have nearly identical logic. Could be refactored to share a common method. |
-
----
-
-### 3.12 AdminService.cs
-
-**File:** `src/Cambrian.Application/Services/AdminService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 59 | **No validation on `role` parameter in `SetUserRoleAsync`.** Any arbitrary string can be set as a role (e.g., "SuperAdmin", "root", empty string). Should validate against a whitelist of allowed roles. |
-| 2 | MEDIUM | 79-80 | **No validation on `visibility` parameter in `SetTrackVisibilityAsync`.** Any string is accepted. Should validate against allowed values ("public", "hidden", "private"). |
+**DbSet:** `Subscriptions`  
+**Repository:** `ISubscriptionRepository` / `SubscriptionRepository`
 
 ---
 
-### 3.13 SubscriptionService.cs
+### `Invoice` — `Entities/Invoice.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| UserId | string | "" |
+| User | ApplicationUser | null! |
+| PurchaseId | Guid | — |
+| Purchase | Purchase | null! |
+| AmountCents | int | 0 |
+| Currency | string | "usd" |
+| Status | string | "issued" |
+| IssuedAt | DateTime | DateTime.UtcNow |
+| PaidAt | DateTime? | — |
 
-**File:** `src/Cambrian.Application/Services/SubscriptionService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | LOW | 62-129 | Clean implementation. Proper tier sync logic. |
-| 2 | LOW | 100-108 | **Subscription expiry is always +1 month from now.** Doesn't account for actual billing period or proration. Acceptable for current stage. |
-
----
-
-### 3.14 StreamService.cs
-
-**File:** `src/Cambrian.Application/Services/StreamService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 20-21 | **Loads ALL public tracks to list 20 streamable.** `_tracks.BrowseAsync()` (parameterless) fetches the entire public catalog. Then `.Take(20)` is applied in memory. Should use the paginated overload: `BrowseAsync(1, take, ...)`. |
+**DbSet:** `Invoices`  
+**Repository:** `IInvoiceRepository` / `InvoiceRepository`
 
 ---
 
-### 3.15 LibraryService.cs
+### `WalletTransaction` — `Entities/WalletTransaction.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| UserId | string | "" |
+| User | ApplicationUser | null! |
+| AmountCents | long | 0 |
+| Type | string | "" |
+| Description | string? | — |
+| RelatedPurchaseId | Guid? | — |
+| CreatedAt | DateTime | DateTime.UtcNow |
 
-**File:** `src/Cambrian.Application/Services/LibraryService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | MEDIUM | 54 | **Unguarded `Guid.Parse` in `SaveAsync`.** `Guid.Parse(request.TrackId)` throws `FormatException` on invalid input instead of returning a user-friendly error. Should use `TryParse`. |
-| 2 | MEDIUM | 80 | **Unguarded `Guid.Parse` in `RemoveAsync`.** Same issue. |
-
----
-
-### 3.16 AuthService.cs
-
-**File:** `src/Cambrian.Application/Services/AuthService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | LOW | 156-164 | **Silent email failure in `ForgotPasswordAsync`.** If the email service throws, the exception is caught and swallowed. The user receives a success response but never gets the reset code. Intentional for security (don't reveal email existence), but should be logged. |
-| 2 | LOW | 319 | **JWT expiry is 24 hours.** For a music marketplace, this is relatively long. Consider shorter expiry with refresh tokens for improved security. |
-| 3 | **GOOD** | 279-292 | Password reset codes are properly hashed (SHA-256) and have a 15-minute expiry. Codes are invalidated after use. |
+**DbSet:** `WalletTransactions`  
+**Repository:** `IWalletRepository` / `WalletRepository`
 
 ---
 
-### 3.17 UploadService.cs
+### `LicenseCertificate` — `Entities/LicenseCertificate.cs`
+| Property | Type | Default | Notes |
+|----------|------|---------|-------|
+| Id | Guid | — | |
+| TrackId | string | "" | CambrianTrackId, NOT Guid FK |
+| BuyerId | string | "" | |
+| Buyer | ApplicationUser | null! | Navigation |
+| CreatorId | string | "" | |
+| Creator | ApplicationUser | null! | Navigation |
+| PurchaseId | Guid | — | |
+| Purchase | Purchase | null! | Navigation |
+| LicenseType | string | "non-exclusive" | Uses string, NOT enum |
+| UsageType | string | "personal" | Uses string, NOT enum |
+| IssuedAt | DateTime | DateTime.UtcNow | |
+| AllowedUses | List\<string\>? | — | Stored as CSV |
+| Restrictions | List\<string\>? | — | Stored as CSV |
+| CopyrightOwner | string? | — | |
 
-**File:** `src/Cambrian.Application/Services/UploadService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **HIGH** | 141-174 | **Non-atomic track creation + upload count increment.** `_tracks.AddAsync(track)` and `_users.UpdateAsync(creator)` are separate operations. If the user update fails (network blip, concurrent modification), the track exists but the count is stale. This could allow creators to exceed their upload limit. Should be wrapped in a transaction. |
-| 2 | LOW | 96-99 | **Filename sanitization is incomplete.** Replaces `..`, `/`, and `\\` but doesn't strip other special characters. The key uses a GUID anyway, so this is low risk, but the sanitized `safeFileName` variable is never actually used in the final key. |
-
----
-
-### 3.18 LicenseService.cs
-
-**File:** `src/Cambrian.Application/Services/LicenseService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **GOOD** | 24-27 | Idempotent: checks for existing certificate by `purchaseId` before creating. |
-| 2 | LOW | 83-155 | Clean implementation with well-defined license terms. |
-
----
-
-### 3.19 TierService.cs, FeeService.cs
-
-**Files:** `src/Cambrian.Application/Services/TierService.cs`, `src/Cambrian.Application/Services/FeeService.cs`
-
-No issues found. Clean, simple implementations that correctly delegate to `TierManifest`.
+**DbSet:** `LicenseCertificates`  
+**Repository:** `ILicenseCertificateRepository` / `LicenseCertificateRepository`
 
 ---
 
-### 3.20 CreatorConnectService.cs
+### `CreatorProfile` — `Entities/CreatorProfile.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| UserId | string | "" |
+| Slug | string | "" |
+| BannerImageUrl | string? | — |
+| ProfileImageUrl | string? | — |
+| Bio | string | "" |
+| Niche | string? | — |
+| SocialLinks | string? | — |
+| ShowEarnings | bool | false |
+| ShowDownloadStats | bool | false |
+| PinnedTrackIds | string? | — |
+| CreatedAt | DateTime | DateTime.UtcNow |
+| UpdatedAt | DateTime | DateTime.UtcNow |
 
-**File:** `src/Cambrian.Application/Services/CreatorConnectService.cs`
-
-| # | Severity | Lines | Issue |
-|---|----------|-------|-------|
-| 1 | **GOOD** | 28-60 | Properly re-uses existing Stripe account on retry. Good idempotency. |
-| 2 | **GOOD** | 118-144 | `DisconnectAsync` is idempotent and handles Stripe API errors gracefully. |
-
----
-
-## 4. Interface Contract Compliance
-
-All implementations were checked against their interface definitions. Results:
-
-| Interface | Implementor | Status | Notes |
-|-----------|-------------|--------|-------|
-| `IPayoutRepository` | `PayoutRepository` | **PASS** | All 4 methods implemented. |
-| `ISubscriptionRepository` | `SubscriptionRepository` | **PASS** | All 5 methods implemented. |
-| `IInvoiceRepository` | `InvoiceRepository` | **PASS** | All 4 methods implemented. |
-| `IPurchaseRepository` | `PurchaseRepository` | **PASS** | All 7 methods implemented. |
-| `ILicenseCertificateRepository` | `LicenseCertificateRepository` | **PASS** | All 5 methods implemented. |
-| `IAdminRepository` | `AdminRepository` | **PASS** | All 10 methods implemented. |
-| `ITrackRepository` | `TrackRepository` | **PASS** | All 12 methods implemented. |
-| `IAnalyticsRepository` | `AnalyticsRepository` | **PASS** | All 3 methods implemented. |
-| `IWalletRepository` | `WalletRepository` | **PASS** | All 4 methods implemented. |
-| `ICreatorProfileRepository` | `CreatorProfileRepository` | **PASS** | All 11 methods implemented. |
-| `IStreamRepository` | `StreamRepository` | **PASS** | All 3 methods implemented. |
-| `IFeatureFlagRepository` | `FeatureFlagRepository` | **PASS** | All 5 methods implemented. |
-| `ILibraryRepository` | `LibraryRepository` | **PASS** | All 5 methods implemented. |
-| `IHealthService` | `HealthService` | **PASS** | Both methods implemented. |
-| `IDebugService` | `DebugService` | **PASS** | All 3 methods implemented. |
-| `IMarketplaceIntegrityService` | `MarketplaceIntegrityService` | **PASS** | Single method implemented. |
-| `IStorefrontService` | `StorefrontService` | **PASS** | Single method implemented. |
-| `IUploadService` | `UploadService` | **PASS** | Single method implemented. |
-| `IBillingService` | `BillingService` | **PASS** | All 3 methods implemented. |
-| `ICreatorConnectService` | `CreatorConnectService` | **PASS** | All 4 methods implemented. |
-| `IWalletService` | `WalletService` | **PASS** | All 3 methods implemented. |
-| `IPurchaseService` | `PurchaseService` | **PASS** (but `CreditCreatorAsync` is a no-op) | See section 3.1 issue #3. |
-| `IInvoiceService` | `InvoiceService` | **PASS** (but `DownloadAsync` returns null) | See section 3.10 issue #1. |
-| `IDownloadService` | `DownloadService` | **PASS** | Both methods implemented. |
-| `ICreatorService` | `CreatorService` | **PASS** | Both methods implemented. |
-| `IAdminService` | `AdminService` | **PASS** | All 10 methods implemented. |
-| `ISubscriptionService` | `SubscriptionService` | **PASS** | All 5 methods implemented. |
-| `ICatalogService` | `CatalogService` | **PASS** | All 7 methods implemented. |
-| `ITierService` | `TierService` | **PASS** | Single method implemented. |
-| `IFeeService` | `FeeService` | **PASS** | All 3 members implemented. |
-| `IPayoutService` | `PayoutService` | **PASS** | All 3 methods implemented. |
-| `IStreamService` | `StreamService` | **PASS** | All 4 methods implemented. |
-| `ILibraryService` | `LibraryService` | **PASS** | All 4 methods implemented. |
-| `IAuthService` | `AuthService` | **PASS** | All 11 methods implemented. |
-| `IPaymentService` | `PaymentService` | **PASS** | All 4 methods implemented. |
-| `ILicenseService` | `LicenseService` | **PASS** | All 3 methods implemented. |
-| `ICheckoutService` | `CheckoutService` | **PASS** | Both methods implemented. |
+**DbSet:** `CreatorProfiles`  
+**Repository:** `ICreatorProfileRepository` / `CreatorProfileRepository`
 
 ---
 
-## 5. Cross-Cutting Concerns
+### `TrackCollection` — `Entities/TrackCollection.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| CreatorId | string | "" |
+| Title | string | "" |
+| Description | string? | — |
+| CoverImageUrl | string? | — |
+| TrackIds | string | "" |
+| CreatedAt | DateTime | DateTime.UtcNow |
+| UpdatedAt | DateTime | DateTime.UtcNow |
 
-### 5.1 Inconsistent Fee Rate Usage
-
-| Location | Fee Rate Source | Value |
-|----------|----------------|-------|
-| `PayoutService.GetEarningsAsync` (line 37) | Hardcoded `const` | **0.15 (15%)** |
-| `CreatorService.GetRevenueAsync` (line 77) | `TierManifest.For(creatorTier).FeeRate` | **Tier-dependent (35%/15%)** |
-| `CheckoutService.ConfirmAsync` (line 274) | `TierManifest.For(creatorTier).FeeRate` | **Tier-dependent** |
-| `CatalogService.MapToResponseAsync` (line 88) | `TierManifest.For(creatorTier).FeeRate` | **Tier-dependent** |
-| `StorefrontService.MapTrack` (line 47-49) | `TierManifest.For(creatorTier).FeeRate` | **Tier-dependent** |
-
-**Impact:** Free-tier creators (35% fee) will see incorrect earnings in the payout screen (calculated at 15% fee). When they request a payout based on these inflated numbers, the balance check may fail or they may be overpaid.
-
-### 5.2 Missing Transaction Boundaries
-
-Critical multi-step operations that lack transactions:
-
-1. **`PurchaseService.CreateAsync`** -- 4 writes (purchase, library, invoice, license)
-2. **`CheckoutService.ConfirmAsync`** -- 5 writes (purchase, track update, library, wallet credit, license)
-3. **`UploadService.Upload`** -- 2 writes (track, user update)
-4. **`AdminRepository.PurgeTestDataAsync`** -- 12+ raw SQL deletes
-5. **`AdminRepository.SuspendUserAsync`** (and similar) -- user update + audit log
-
-### 5.3 Race Conditions Summary
-
-| Risk | Location | Mechanism | Mitigation |
-|------|----------|-----------|------------|
-| Double exclusive purchase | `CheckoutService.ConfirmAsync:226-231` | Non-atomic flag set | Use `TryMarkExclusiveSoldAsync` |
-| Double purchase (same track) | `PurchaseService.CreateAsync:61-63` | TOCTOU duplicate check | Use unique DB constraint or atomic check-and-insert |
-| Double payout withdrawal | `PayoutService.RequestAsync:96-122` | Non-atomic balance check + debit | Use `AtomicWithdrawAsync` |
-| Feature flag duplicate insert | `FeatureFlagRepository.UpsertAsync:28-51` | Non-atomic read-then-write | Add unique constraint or use UPSERT SQL |
-
-### 5.4 Unguarded Guid.Parse Calls
-
-The following locations use `Guid.Parse` without `TryParse`, risking `FormatException`:
-
-- `PaymentService.cs:31` -- `CreateCheckoutAsync`
-- `PaymentService.cs:73` -- `GetResultAsync`
-- `PaymentService.cs:86` -- `ProcessAsync`
-- `LibraryService.cs:54` -- `SaveAsync`
-- `LibraryService.cs:80` -- `RemoveAsync`
+**DbSet:** `TrackCollections`  
+**Repository:** `ICreatorProfileRepository` (shared)
 
 ---
 
-## 6. Summary Statistics
+### `AuditLog` — `Entities/AuditLog.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| Action | string | "" |
+| Admin | string | "" |
+| Timestamp | DateTime | DateTime.UtcNow |
+| Details | string? | — |
 
-| Category | Count |
-|----------|-------|
-| **CRITICAL** issues | 10 |
-| **HIGH** issues | 8 |
-| **MEDIUM** issues | 14 |
-| **LOW** issues | 13 |
-| **GOOD** patterns noted | 6 |
-| Total repositories audited | 13 |
-| Total persistence services audited | 3 |
-| Total application services audited | 21 |
-| Total interfaces verified | 36 |
-| Interface contract violations | 0 (2 stubs noted) |
+**DbSet:** `AuditLogs`  
+**Repository:** `IAdminRepository` (shared)
 
-### Top 5 Priority Fixes
+---
 
-1. **CreatorProfileRepository full table scans** (6 methods) -- Replace every `ToListAsync()` + foreach with `FirstOrDefaultAsync` / `Where` predicates. Immediate performance and scalability impact.
+### `AbuseReport` — `Entities/AbuseReport.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| TrackId | Guid | — |
+| Track | Track | null! |
+| Reason | string | "" |
+| Status | string | "open" |
+| ReportedAt | DateTime | DateTime.UtcNow |
+| ReportedByUserId | string? | — |
 
-2. **PayoutService hardcoded fee rate** -- Replace `const PlatformFeeRate = 0.15m` with `TierManifest.For(creatorTier).FeeRate`. Financial correctness bug causing creators to see wrong earnings.
+**DbSet:** `AbuseReports`  
+**Repository:** `IAdminRepository` (shared)
 
-3. **PayoutService non-atomic balance check** -- Replace `GetBalanceAsync` + `AddTransactionAsync` with `AtomicWithdrawAsync` to prevent double-withdrawal race condition.
+---
 
-4. **CheckoutService non-atomic exclusive flag** -- Replace `track.ExclusiveSold = true` + `UpdateAsync` with `TryMarkExclusiveSoldAsync` to prevent selling the same exclusive track twice.
+### `StreamSession` — `Entities/StreamSession.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| TrackId | Guid | — |
+| Track | Track | null! |
+| UserId | string? | — |
+| Title | string? | — |
+| StartedAt | DateTime | DateTime.UtcNow |
+| StoppedAt | DateTime? | — |
 
-5. **PurchaseService/CheckoutService missing transactions** -- Wrap multi-step purchase flows in explicit database transactions to prevent partial state on failure.
+**DbSet:** `StreamSessions`  
+**Repository:** `IStreamRepository` / `StreamRepository`
+
+---
+
+### `StripeWebhookEvent` — `Entities/StripeWebhookEvent.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| EventId | string | "" |
+| EventType | string | "" |
+| Processed | bool | false |
+| Payload | string? | — |
+| ProcessedAt | DateTime | DateTime.UtcNow |
+
+**DbSet:** `StripeWebhookEvents`  
+**Repository:** Accessed directly via DbContext
+
+---
+
+### `AnalyticsEvent` — `Entities/AnalyticsEvent.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| EventType | string | "" |
+| UserId | string? | — |
+| TrackId | Guid? | — |
+| Metadata | string? | — |
+| CreatedAt | DateTime | DateTime.UtcNow |
+
+**DbSet:** `AnalyticsEvents`  
+**Repository:** `IAnalyticsRepository` / `AnalyticsRepository`
+
+---
+
+### `FeatureFlag` — `Entities/FeatureFlag.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| Name | string | "" |
+| Enabled | bool | false |
+| RolloutPercentage | int | 100 |
+| CreatedAt | DateTime | DateTime.UtcNow |
+| UpdatedAt | DateTime | DateTime.UtcNow |
+
+**DbSet:** `FeatureFlags`  
+**Repository:** `IFeatureFlagRepository` / `FeatureFlagRepository`
+
+---
+
+### `CreatorBalance` — `Entities/CreatorBalance.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| CreatorId | Guid | — |
+| AvailableAmount | decimal | 0 |
+
+**DbSet:** NONE  
+**Repository:** NONE  
+**Status: ORPHANED**
+
+---
+
+### `TrackFile` — `Entities/TrackFile.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| TrackId | Guid | — |
+| FileName | string | string.Empty |
+| StorageKey | string | string.Empty |
+
+**DbSet:** NONE  
+**Repository:** NONE  
+**Status: ORPHANED** — no navigation property to Track either.
+
+---
+
+### `License` — `Entities/License.cs`
+| Property | Type | Default | Notes |
+|----------|------|---------|-------|
+| Id | Guid | — | |
+| TrackId | Guid | — | |
+| Type | LicenseType (enum) | LicenseType.Standard | Only entity using this enum |
+| Price | decimal | 0 | |
+
+**DbSet:** NONE  
+**Repository:** NONE  
+**Status: ORPHANED** — overlaps with LicenseCertificate.
+
+---
+
+### `ModerationAction` — `Entities/ModerationAction.cs`
+| Property | Type | Default | Notes |
+|----------|------|---------|-------|
+| Id | Guid | — | |
+| TargetId | Guid | — | |
+| Action | string | string.Empty | |
+| Reason | string | string.Empty | |
+| CreatedAt | DateTimeOffset | DateTimeOffset.UtcNow | Uses DateTimeOffset, not DateTime |
+
+**DbSet:** NONE  
+**Repository:** NONE  
+**Status: ORPHANED**
+
+---
+
+### `Payment` — `Entities/Payment.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| PurchaseId | Guid | — |
+| ProviderReference | string | string.Empty |
+| Status | string | "pending" |
+
+**DbSet:** NONE  
+**Repository:** NONE  
+**Status: ORPHANED** — no navigation properties, appears to be an unused stub.
+
+---
+
+## 3. All DTOs
+
+### Auth DTOs
+
+#### `LoginRequest` — `DTOs/Auth/LoginRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Email | string | [Required], [EmailAddress] |
+| Password | string | [Required], [MinLength(8)] |
+
+#### `RegisterRequest` — `DTOs/Auth/RegisterRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Email | string | [Required], [EmailAddress] |
+| Password | string | [Required], [MinLength(8)], [RegularExpression] |
+| DisplayName | string? | [MaxLength(100)] |
+| Role | string? | [RegularExpression("^(user|creator)$")] |
+
+#### `AuthResponse` — `DTOs/Auth/AuthResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| UserId | Guid | — |
+| Email | string | string.Empty |
+| Token | string | string.Empty |
+| Tier | string | "free" |
+| Role | string | "User" |
+
+#### `UserProfileResponse` — `DTOs/Auth/UserProfileResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| UserId | string | string.Empty |
+| Email | string | string.Empty |
+| DisplayName | string | string.Empty |
+| Role | string | string.Empty |
+| Tier | string | string.Empty |
+| VerifiedCreator | bool | false |
+| CreatorTier | string | "Free" |
+| UploadCount | int | 0 |
+| UploadLimit | int? | — |
+| SubscriptionStatus | string | "Inactive" |
+| SubscriptionEndDate | DateTime? | — |
+| PlatformFeePercent | decimal | 0 |
+| ContractVersion | string | "1.0.0" |
+
+#### `ChangePasswordRequest` — `DTOs/Auth/ChangePasswordRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| CurrentPassword | string | [Required] |
+| NewPassword | string | [Required], [MinLength(8)] |
+
+#### `ChangeEmailRequest` — `DTOs/Auth/ChangeEmailRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Password | string | [Required] |
+| NewEmail | string | [Required], [EmailAddress] |
+
+#### `ForgotPasswordRequest` — `DTOs/Auth/ForgotPasswordRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Email | string? | NONE |
+| PhoneNumber | string? | NONE |
+
+#### `VerifyCodeRequest` — `DTOs/Auth/VerifyCodeRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Email | string? | NONE |
+| PhoneNumber | string? | NONE |
+| Code | string | [Required], [StringLength(6, Min=6)] |
+
+#### `ResetPasswordRequest` — `DTOs/Auth/ResetPasswordRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Email | string? | NONE |
+| PhoneNumber | string? | NONE |
+| Code | string | [Required], [StringLength(6, Min=6)] |
+| NewPassword | string | [Required], [MinLength(8)] |
+
+#### `RecoverUsernameRequest` — `DTOs/Auth/RecoverUsernameRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Email | string? | NONE |
+| PhoneNumber | string? | NONE |
+
+---
+
+### Catalog DTOs
+
+#### `TrackResponse` — `DTOs/Catalog/TrackResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | string | Guid.NewGuid().ToString() |
+| CambrianTrackId | string | string.Empty |
+| Title | string | string.Empty |
+| Description | string? | — |
+| Genre | string | string.Empty |
+| Price | decimal | 0 |
+| NonExclusivePrice | decimal | 0 |
+| ExclusivePrice | decimal | 0 |
+| CopyrightBuyoutPrice | decimal | 0 |
+| PlatformFeePercent | decimal | 0.15m |
+| NonExclusivePlatformFee | decimal | 0 |
+| NonExclusiveCreatorEarnings | decimal | 0 |
+| ExclusivePlatformFee | decimal | 0 |
+| ExclusiveCreatorEarnings | decimal | 0 |
+| CopyrightBuyoutPlatformFee | decimal | 0 |
+| CopyrightBuyoutCreatorEarnings | decimal | 0 |
+| ExclusiveSold | bool | false |
+| Status | string | "available" |
+| CopyrightOwnerId | string? | — |
+| LicenseType | string? | — |
+| Duration | string? | — |
+| AudioUrl | string? | — |
+| CoverArtUrl | string? | — |
+| CreatorId | string | string.Empty |
+| Artist | string? | — |
+| CreatedAt | DateTime | — |
+
+#### `UploadTrackRequest` — `DTOs/Catalog/UploadTrackRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Audio | IFormFile | [Required] |
+| CoverArt | IFormFile? | NONE |
+| Title | string | [Required], [MaxLength(200)] |
+| Description | string? | [MaxLength(2000)] |
+| Genre | string? | [MaxLength(60)] |
+| Price | decimal? | NONE |
+| LicenseType | string? | NONE |
+| Tags | string? | NONE |
+| NonExclusivePrice | decimal? | NONE |
+| ExclusivePrice | decimal? | NONE |
+| CopyrightBuyoutPrice | decimal? | NONE |
+| CreatorId | string? | NONE |
+
+#### `UploadTrackResponse` — `DTOs/Catalog/UploadTrackResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| TrackId | string | string.Empty |
+| Title | string | string.Empty |
+| CambrianTrackId | string | string.Empty |
+
+#### `TrackIdDto` — `DTOs/Catalog/TrackIdDto.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| TrackId | string | [Required], [RegularExpression] |
+
+#### `CatalogSearchFilters` — `DTOs/Catalog/CatalogSearchFilters.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Genre | string? | — |
+| Search | string? | — |
+| Sort | string? | — |
+| Mood | string? | — |
+| Tempo | string? | — |
+| Instrumental | bool? | — |
+| Duration | string? | — |
+| Page | int | 1 |
+| PageSize | int | 20 |
+
+#### `PagedResult<T>` — `DTOs/Catalog/PagedResult.cs`
+| Property | Type |
+|----------|------|
+| Items | IReadOnlyCollection\<T\> |
+| Page | int |
+| PageSize | int |
+| TotalCount | int |
+| TotalPages | int (computed) |
+| HasNextPage | bool (computed) |
+| HasPreviousPage | bool (computed) |
+
+---
+
+### Checkout DTOs
+
+#### `CheckoutRequest` — `DTOs/Checkout/CheckoutRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| TrackId | string | [Required] |
+| LicenseType | string | [Required], [RegularExpression] |
+| ClientReferenceId | string? | NONE |
+| UsageType | string? | [RegularExpression] |
+
+#### `CheckoutResponse` — `DTOs/Checkout/CheckoutResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| CheckoutUrl | string | string.Empty |
+| Status | string | "created" |
+| LicenseCertificate | LicenseCertificateDto? | — |
+
+#### `CheckoutConfirmResponse` — `DTOs/Checkout/CheckoutConfirmResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Status | string | "pending" |
+| TrackId | string? | — |
+| LicenseType | string? | — |
+| AddedToLibrary | bool | false |
+| SessionId | string | "" |
+| LicenseId | string? | — |
+
+---
+
+### Billing DTOs
+
+#### `BillingCheckoutRequest` — `DTOs/Billing/BillingCheckoutRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Tier | string? | NONE |
+
+#### `CheckoutResponse` — `DTOs/Billing/CheckoutResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| CheckoutUrl | string | string.Empty |
+
+#### `CheckoutSessionStatusResponse` — `DTOs/Billing/CheckoutSessionStatusResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Status | string | "pending" |
+| Tier | string? | — |
+| SessionId | string | "" |
+
+#### `BillingStatusResponse` — `DTOs/Billing/BillingStatusResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Tier | string | "free" |
+| Status | string | "active" |
+| ExpiresAt | DateTime? | — |
+| CreatorTier | string | "Free" |
+| UploadCount | int | 0 |
+| UploadLimit | int? | — |
+| PlatformFeePercent | decimal | 0 |
+
+---
+
+### Purchase DTOs
+
+#### `PurchaseCreateRequest` — `DTOs/Purchases/PurchaseCreateRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| TrackId | string | NONE (has default "") |
+| LicenseType | string? | NONE |
+| PaymentMethod | string? | NONE |
+| StripeSessionId | string? | NONE |
+| UsageType | string? | NONE |
+
+#### `PurchaseResponse` — `DTOs/Purchases/PurchaseResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | string | "" |
+| TrackId | string | "" |
+| TrackTitle | string | "" |
+| AmountCents | int | 0 |
+| Currency | string | "usd" |
+| LicenseType | string | "non-exclusive" |
+| Status | string | "pending" |
+| CreatedAt | DateTime | — |
+| CompletedAt | DateTime? | — |
+
+#### `CreditCreatorRequest` — `DTOs/Purchases/CreditCreatorRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| CreatorId | string? | NONE |
+| TrackId | string? | NONE |
+| TrackTitle | string? | NONE |
+| AmountCents | int | NONE |
+| LicenseType | string? | NONE |
+
+---
+
+### Subscription DTOs
+
+#### `UpdateSubscriptionRequest` — `DTOs/Subscriptions/UpdateSubscriptionRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Plan | string | [Required], [RegularExpression("^(free|paid|creator)$")] |
+
+#### `SubscriptionResponse` — `DTOs/Subscriptions/SubscriptionResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | Guid | — |
+| Plan | string | "free" |
+| Status | string | "active" |
+| StartedAt | DateTime | — |
+| ExpiresAt | DateTime? | — |
+
+#### `PlanResponse` — `DTOs/Subscriptions/PlanResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Name | string | "" |
+| Description | string | "" |
+| PriceCents | int | 0 |
+| Interval | string | "month" |
+| Features | List\<string\> | [] |
+
+---
+
+### Payout DTOs
+
+#### `PayoutRequest` — `DTOs/Payouts/PayoutRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Amount | decimal | NONE |
+
+#### `PayoutResponse` — `DTOs/Payouts/PayoutResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Amount | decimal | 0 |
+| Status | string | "pending" |
+
+---
+
+### Wallet DTOs
+
+#### `WalletResponse` — `DTOs/Wallet/WalletResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| BalanceCents | long | 0 |
+| Currency | string | "usd" |
+
+#### `WalletTransactionResponse` — `DTOs/Wallet/WalletTransactionResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | string | "" |
+| AmountCents | long | 0 |
+| Type | string | "" |
+| Description | string? | — |
+| CreatedAt | DateTime | — |
+
+#### `WithdrawRequest` — `DTOs/Wallet/WithdrawRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Amount | decimal | NONE |
+
+---
+
+### Library DTOs
+
+#### `LibraryItemResponse` — `DTOs/Library/LibraryItemResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| TrackId | string | string.Empty |
+| Id | string | (computed: => TrackId) |
+| Title | string | string.Empty |
+| Artist | string | string.Empty |
+| Purchased | bool | false |
+| PurchasedOn | string? | — |
+| AudioUrl | string? | — |
+| Genre | string? | — |
+
+#### `LibrarySaveRequest` — `DTOs/Library/LibrarySaveRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| TrackId | string | [Required] |
+| Title | string? | NONE |
+| Artist | string? | NONE |
+| AudioUrl | string? | NONE |
+
+---
+
+### Invoice DTOs
+
+#### `InvoiceResponse` — `DTOs/Invoices/InvoiceResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | string | "" |
+| PurchaseId | string | "" |
+| AmountCents | int | 0 |
+| Currency | string | "usd" |
+| Status | string | "issued" |
+| IssuedAt | DateTime | — |
+| PaidAt | DateTime? | — |
+
+---
+
+### License DTOs
+
+#### `LicenseCertificateDto` — `DTOs/Licenses/LicenseCertificateDto.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| LicenseId | string | string.Empty |
+| TrackId | string | string.Empty |
+| LicenseType | string | string.Empty |
+| BuyerId | string | string.Empty |
+| CreatorId | string | string.Empty |
+| UsageType | string? | — |
+| IssuedAt | DateTime | — |
+| AllowedUses | List\<string\>? | — |
+| Restrictions | List\<string\>? | — |
+| CopyrightOwner | string? | — |
+
+---
+
+### CreatorProfile DTOs
+
+#### `CreatorProfileDto` — `DTOs/CreatorProfile/CreatorProfileDto.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | string | "" |
+| UserId | string | "" |
+| Slug | string | "" |
+| Bio | string | "" |
+| Niche | string? | — |
+| ProfileImageUrl | string? | — |
+| BannerImageUrl | string? | — |
+| SocialLinks | List\<SocialLinkDto\>? | — |
+| Stats | CreatorStatsDto | new() |
+| ShowEarnings | bool | false |
+| ShowDownloadStats | bool | false |
+| PinnedTrackIds | string? | — |
+| CreatedAt | DateTime | — |
+| UpdatedAt | DateTime | — |
+
+#### `UpsertCreatorProfileRequest` — `DTOs/CreatorProfile/UpsertCreatorProfileRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Slug | string? | NONE |
+| Bio | string? | NONE |
+| Niche | string? | NONE |
+| SocialLinks | List\<SocialLinkDto\>? | NONE |
+| ShowEarnings | bool | NONE |
+| ShowDownloadStats | bool | NONE |
+
+#### `CreatorStatsDto` — `DTOs/CreatorProfile/CreatorStatsDto.cs`
+| Property | Type |
+|----------|------|
+| TotalDownloads | int |
+| TotalEarnings | decimal |
+
+#### `SocialLinkDto` — `DTOs/CreatorProfile/SocialLinkDto.cs`
+| Property | Type |
+|----------|------|
+| Platform | string |
+| Url | string |
+
+#### `TrackCollectionDto` — `DTOs/CreatorProfile/TrackCollectionDto.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | string | "" |
+| Title | string | "" |
+| Description | string? | — |
+| CoverImageUrl | string? | — |
+| TrackIds | string | "" |
+| CreatedAt | DateTime | — |
+| UpdatedAt | DateTime | — |
+
+#### `UpsertCollectionRequest` — `DTOs/CreatorProfile/UpsertCollectionRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| Title | string? | NONE |
+| Description | string? | NONE |
+| TrackIds | string? | NONE |
+
+#### `UpdatePinnedTracksRequest` — `DTOs/CreatorProfile/UpdatePinnedTracksRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| TrackIds | string? | NONE |
+
+#### `StorefrontResponse` — `DTOs/CreatorProfile/StorefrontResponse.cs`
+| Property | Type |
+|----------|------|
+| Profile | CreatorProfileDto |
+| Stats | CreatorStatsDto |
+| PinnedTracks | IReadOnlyList\<TrackResponse\> |
+| Collections | IReadOnlyList\<TrackCollectionDto\> |
+| Tracks | IReadOnlyList\<TrackResponse\> |
+
+---
+
+### Payment DTOs
+
+#### `PaymentCheckoutRequest` — `DTOs/Payments/PaymentCheckoutRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| TrackId | string? | NONE |
+| LicenseType | string | NONE (default "non-exclusive") |
+| UsageType | string | NONE (default "personal") |
+
+#### `PaymentCheckoutResponse` — `DTOs/Payments/PaymentCheckoutResponse.cs`
+| Property | Type |
+|----------|------|
+| CheckoutUrl | string? |
+
+#### `PaymentProcessRequest` — `DTOs/Payments/PaymentProcessRequest.cs`
+| Property | Type | Validation |
+|----------|------|------------|
+| PurchaseId | string | [Required] |
+| PaymentMethodId | string? | NONE |
+
+#### `PaymentResultResponse` — `DTOs/Payments/PaymentResultResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Status | string | "pending" |
+| PurchaseId | string? | — |
+| EventId | string? | — |
+| EventType | string? | — |
+| Duplicate | bool | false |
+
+#### `PaymentStateResponse` — `DTOs/Payments/PaymentStateResponse.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Status | string | "pending" |
+| PurchaseIds | List\<string\> | [] |
+| ProcessedEventIds | List\<string\> | [] |
+
+---
+
+### Admin DTOs
+
+#### `AdminUser` — `DTOs/Admin/AdminUser.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | string | string.Empty |
+| Email | string | string.Empty |
+| Role | string | "User" |
+| Status | string | "active" |
+| Tier | string | "free" |
+| VerifiedCreator | bool | false |
+
+#### `AdminAuditLog` — `DTOs/Admin/AdminAuditLog.cs`
+| Property | Type | Default |
+|----------|------|---------|
+| Id | string | string.Empty |
+| Action | string | string.Empty |
+| Admin | string | string.Empty |
+| Timestamp | DateTime | — |
+| Details | string? | — |
+
+#### `AdminDashboardSummary` — `DTOs/Admin/AdminDashboardSummary.cs`
+| Property | Type |
+|----------|------|
+| TotalUsers | double |
+| ActiveCreators | double |
+| TracksUploaded | double |
+| LicensesSold | double |
+| TotalRevenue | double |
+| PendingPayouts | double |
+
+#### `PurgeResult` — `DTOs/Admin/PurgeResult.cs`
+| Property | Type |
+|----------|------|
+| UsersDeleted | int |
+| TracksDeleted | int |
+| PurchasesDeleted | int |
+| LibraryItemsDeleted | int |
+| InvoicesDeleted | int |
+| PayoutsDeleted | int |
+| SubscriptionsDeleted | int |
+| StreamSessionsDeleted | int |
+| WalletTransactionsDeleted | int |
+| WebhookEventsDeleted | int |
+| AuditLogsDeleted | int |
+| AbuseReportsDeleted | int |
+| LicenseCertificatesDeleted | int |
+| AdminPreserved | string |
+
+#### `IntegrityReport` — `DTOs/Admin/IntegrityReport.cs`
+| Property | Type |
+|----------|------|
+| GeneratedAt | DateTime |
+| TotalViolations | int (computed) |
+| Violations | List\<IntegrityViolation\> |
+| Summary | IntegritySummary |
+
+#### `IntegrityViolation` — `DTOs/Admin/IntegrityReport.cs`
+| Property | Type |
+|----------|------|
+| Rule | string |
+| Severity | string |
+| EntityType | string |
+| EntityId | string |
+| Description | string |
+
+#### `IntegritySummary` — `DTOs/Admin/IntegrityReport.cs`
+| Property | Type |
+|----------|------|
+| CompletedPurchasesWithoutLibrary | int |
+| ExclusiveSoldButBrowsable | int |
+| PayoutAmountMismatches | int |
+| OrphanedLibraryItems | int |
+| PurchasesWithoutInvoice | int |
+| ExclusivePurchasesWithoutFlag | int |
+
+---
+
+## 4. Orphaned Entities
+
+These entities exist in `Cambrian.Domain.Entities` but have **no DbSet** in `CambrianDbContext` and **no repository**:
+
+| Entity | Issue | Risk |
+|--------|-------|------|
+| **User** | Duplicate of ApplicationUser with incompatible `Guid` Id (vs Identity `string` Id). Uses `UserRole` enum while ApplicationUser uses `string`. | Dead code. Confusing for developers. Enum `UserRole` is only used here. |
+| **CreatorBalance** | `CreatorId` is `Guid` (inconsistent with the `string` FK convention used everywhere else). No DbSet, no repository, no service. | Dead code. `ApplicationUser.WalletBalanceCents` serves this purpose. |
+| **TrackFile** | No navigation property to `Track`, no DbSet, no repository. | Dead code. File management appears to use cloud storage URLs directly on `Track.AudioUrl`. |
+| **License** | Only entity using `LicenseType` enum. Overlaps with `LicenseCertificate` which uses string-typed LicenseType. No DbSet, no repository. | Dead code. `LicenseCertificate` is the active entity for licenses. |
+| **ModerationAction** | No DbSet, no repository, no service. Uses `DateTimeOffset` (unique in the codebase). | Dead code. Moderation may use `AbuseReport` + `AuditLog` instead. |
+| **Payment** | Stub entity with only 4 properties, no navigation properties, no DbSet, no repository. | Dead code. Payment processing uses `Purchase.StripeSessionId` and `StripeWebhookEvent`. |
+
+---
+
+## 5. Enum vs String Mismatches
+
+These are the most dangerous class of bugs — defined enums exist but entities/DTOs use raw strings instead:
+
+| Location | Field | Actual Type | Enum Available | Risk |
+|----------|-------|-------------|----------------|------|
+| `ApplicationUser.Role` | Role | `string` ("User", "Admin") | `UserRole` (Listener, Creator, Admin) | Enum values don't match string values ("User" vs "Listener"). Enum is only used by orphaned `User` entity. |
+| `ApplicationUser.Tier` | Tier | `string` ("free", "paid", "creator", "pro") | `CreatorTier` (Free, Pro) | `Tier` has 4 values but `CreatorTier` enum only has 2. These are semantically different concepts sharing confusing names. |
+| `ApplicationUser.CreatorTier` | CreatorTier | `CreatorTier` enum | ✓ used correctly | OK, but coexists with string `Tier` field — confusing. |
+| `Payout.Status` | Status | `string` ("pending", "approved", "rejected", "completed") | `PayoutStatus` (Pending, Processing, Paid, Failed) | **Values don't match.** Entity uses "approved"/"rejected"/"completed"; enum uses "Processing"/"Paid"/"Failed". |
+| `Purchase.LicenseType` | LicenseType | `string?` | `LicenseType` (Standard, Extended, Exclusive, CopyrightBuyout) | Enum exists but is unused. String values in practice are "standard", "non-exclusive", "exclusive", "copyright_buyout" — **"non-exclusive" has no enum member**, "Extended" has no string usage. |
+| `Purchase.UsageType` | UsageType | `string` ("personal") | `UsageType` (Personal, Youtube, Ads, ...) | Enum exists but is unused. |
+| `Track.LicenseType` | LicenseType | `string?` | `LicenseType` enum | Enum unused. |
+| `LicenseCertificate.LicenseType` | LicenseType | `string` ("non-exclusive") | `LicenseType` enum | Enum unused. "non-exclusive" has no enum member. |
+| `LicenseCertificate.UsageType` | UsageType | `string` ("personal") | `UsageType` enum | Enum unused. |
+| `UserProfileResponse.CreatorTier` | CreatorTier | `string` ("Free") | `CreatorTier` enum | DTO converts enum to string for JSON. Acceptable but adds a manual serialization step. |
+| `BillingStatusResponse.CreatorTier` | CreatorTier | `string` ("Free") | `CreatorTier` enum | Same as above. |
+
+**Key finding:** The `LicenseType` enum defines `Extended` (no string usage) but omits `NonExclusive` (used extensively as the string "non-exclusive"). The `PayoutStatus` enum values don't match the string values used in the `Payout` entity at all.
+
+---
+
+## 6. Type Mismatches (DTO ↔ Entity)
+
+| DTO Field | DTO Type | Entity Field | Entity Type | Issue |
+|-----------|----------|--------------|-------------|-------|
+| `AuthResponse.UserId` | **Guid** | `ApplicationUser.Id` | **string** | Guid vs string. Will throw at runtime if ID isn't a valid GUID. |
+| `AdminAuditLog.Id` | **string** | `AuditLog.Id` | **Guid** | String representation of Guid. Minor but inconsistent with `SubscriptionResponse.Id` which is `Guid`. |
+| `WalletTransactionResponse.Id` | **string** | `WalletTransaction.Id` | **Guid** | Same pattern. |
+| `PurchaseResponse.Id` | **string** | `Purchase.Id` | **Guid** | Same pattern. |
+| `PurchaseResponse.TrackId` | **string** | `Purchase.TrackId` | **Guid** | Same pattern. |
+| `InvoiceResponse.Id` | **string** | `Invoice.Id` | **Guid** | Same pattern. |
+| `InvoiceResponse.PurchaseId` | **string** | `Invoice.PurchaseId` | **Guid** | Same pattern. |
+| `CreatorProfileDto.Id` | **string** | `CreatorProfile.Id` | **Guid** | Same pattern. |
+| `TrackCollectionDto.Id` | **string** | `TrackCollection.Id` | **Guid** | Same pattern. |
+| `TrackResponse.Id` | **string** | `Track.Id` | **Guid** | Same pattern. Worse: defaults to `Guid.NewGuid().ToString()` in DTO constructor. |
+| `SubscriptionResponse.Id` | **Guid** | `Subscription.Id` | **Guid** | **Consistent** — but inconsistent with all other response DTOs using string. |
+| `PayoutResponse.Amount` | **decimal** (dollars) | `Payout.AmountCents` | **int** (cents) | **Unit mismatch.** Requires cents→dollars conversion. Easy to forget / get wrong. |
+| `PayoutRequest.Amount` | **decimal** (dollars) | `Payout.AmountCents` | **int** (cents) | Same unit mismatch. |
+| `WithdrawRequest.Amount` | **decimal** (dollars) | `ApplicationUser.WalletBalanceCents` | **long** (cents) | Same unit mismatch. |
+| `TrackResponse.NonExclusivePrice` | **decimal** (dollars) | `Track.NonExclusivePriceCents` | **int** (cents) | Different name AND unit. |
+| `TrackResponse.ExclusivePrice` | **decimal** (dollars) | `Track.ExclusivePriceCents` | **int** (cents) | Different name AND unit. |
+| `TrackResponse.CopyrightBuyoutPrice` | **decimal** (dollars) | `Track.CopyrightBuyoutPriceCents` | **int** (cents) | Different name AND unit. |
+| `AdminDashboardSummary.*` | **double** | N/A (computed) | N/A | `double` for integer counts (TotalUsers, TracksUploaded) is wrong — should be `int` or `long`. |
+| `LicenseCertificateDto.LicenseId` | **string** | `LicenseCertificate.Id` | **Guid** | Field name also differs (LicenseId vs Id). |
+
+---
+
+## 7. Nullable vs Non-Nullable Mismatches
+
+| DTO Field | DTO Nullability | Entity Field | Entity Nullability | Issue |
+|-----------|-----------------|--------------|--------------------|----|
+| `TrackResponse.Genre` | `string` (non-null) | `Track.Genre` | `string?` (nullable) | DTO forces empty string when entity is null. May hide missing data. |
+| `UserProfileResponse.DisplayName` | `string` (non-null) | `ApplicationUser.DisplayName` | `string?` (nullable) | Same issue. |
+| `PurchaseResponse.LicenseType` | `string` (non-null, default "non-exclusive") | `Purchase.LicenseType` | `string?` (nullable) | DTO silently converts null to "non-exclusive". |
+| `LibraryItemResponse.Title` | `string` (non-null) | `LibraryItem.Title` | `string?` (nullable) | Null→empty conversion. |
+| `LibraryItemResponse.Artist` | `string` (non-null) | `LibraryItem.Artist` | `string?` (nullable) | Null→empty conversion. |
+| `LicenseCertificateDto.UsageType` | `string?` (nullable) | `LicenseCertificate.UsageType` | `string` (non-null, default "personal") | Reversed: DTO is more permissive than entity. |
+| `PaymentCheckoutRequest.TrackId` | `string?` (nullable) | — | — | Should be required for a checkout request. |
+| `CreditCreatorRequest.CreatorId` | `string?` (nullable) | — | — | Should be required to credit a creator. |
+| `CreditCreatorRequest.TrackId` | `string?` (nullable) | — | — | Should be required. |
+| `ForgotPasswordRequest.Email` | `string?` | — | — | Both Email and PhoneNumber are nullable — can submit an empty request. |
+| `RecoverUsernameRequest.Email` | `string?` | — | — | Same issue. |
+
+---
+
+## 8. Entity Fields NOT Exposed in Any DTO
+
+These entity fields have no corresponding property in any response DTO, meaning they are invisible to the API:
+
+### Track (6 unexposed fields)
+| Field | Type | Impact |
+|-------|------|--------|
+| `Mood` | string? | Cannot search/display mood in frontend despite CatalogSearchFilters supporting Mood filter |
+| `Tempo` | string? | Same — filter exists but value never returned |
+| `Instrumental` | bool | Same — filter exists but value never returned |
+| `Tags` | ICollection\<string\> | Tags uploaded but never returned in TrackResponse |
+| `CopyrightTransferredAt` | DateTime? | Copyright transfer timestamp invisible |
+| `OriginalCreatorId` | string? | Original creator invisible after copyright transfer |
+| `Visibility` | string | Track visibility not returned (public/limited/hidden) |
+
+### Purchase (7 unexposed fields)
+| Field | Type | Impact |
+|-------|------|--------|
+| `BuyerId` | string | Buyer identity not in PurchaseResponse |
+| `PaymentMethod` | string? | Payment method not exposed |
+| `UsageType` | string | License usage context not in purchase response |
+| `StripeSessionId` | string? | Internal, acceptable |
+| `LicenseId` | Guid? | License reference not in purchase response |
+| `ExpiresAt` | DateTime? | Pending purchase expiry not visible |
+| `UpdatedAt` | DateTime? | Status change timestamp not visible |
+
+### ApplicationUser (5 unexposed fields)
+| Field | Type | Impact |
+|-------|------|--------|
+| `Plan` | string? | Plan field exists but is never exposed in any DTO |
+| `StripeAccountId` | string? | Stripe account not exposed (may be intentional) |
+| `WalletBalanceCents` | long | Only exposed via WalletResponse, not in UserProfile |
+| `CreatedAt` | DateTime | Account creation date not in UserProfileResponse |
+| `Status` | string | Only in AdminUser DTO, not in UserProfileResponse |
+
+### Payout (4 unexposed fields in PayoutResponse)
+| Field | Type | Impact |
+|-------|------|--------|
+| `Id` | Guid | Cannot reference specific payout |
+| `CreatorId` | string | Creator identity not returned |
+| `RequestedAt` | DateTime | When payout was requested not visible |
+| `CompletedAt` | DateTime? | When payout completed not visible |
+
+### WalletTransaction (2 unexposed fields)
+| Field | Type | Impact |
+|-------|------|--------|
+| `UserId` | string | Expected — injected from auth context |
+| `RelatedPurchaseId` | Guid? | Cannot trace transaction to purchase |
+
+### TrackCollection (1 unexposed field)
+| Field | Type | Impact |
+|-------|------|--------|
+| `CreatorId` | string | Owner not returned in TrackCollectionDto |
+
+### Invoice (1 unexposed field)
+| Field | Type | Impact |
+|-------|------|--------|
+| `UserId` | string | Owner not returned in InvoiceResponse |
+
+### LibraryItem (2 unexposed fields)
+| Field | Type | Impact |
+|-------|------|--------|
+| `PurchaseId` | Guid? | Cannot trace library item to purchase |
+| `SavedAt` | DateTime | When item was saved not visible |
+
+---
+
+## 9. DTO Fields with No Corresponding Entity Field
+
+These DTO fields do not map to any entity property. Some are legitimately computed; others may be mapping bugs.
+
+### Computed / Derived (acceptable)
+| DTO | Field | Type | Source |
+|-----|-------|------|--------|
+| `TrackResponse` | PlatformFeePercent | decimal | Computed from creator tier |
+| `TrackResponse` | NonExclusivePlatformFee | decimal | Computed |
+| `TrackResponse` | NonExclusiveCreatorEarnings | decimal | Computed |
+| `TrackResponse` | ExclusivePlatformFee | decimal | Computed |
+| `TrackResponse` | ExclusiveCreatorEarnings | decimal | Computed |
+| `TrackResponse` | CopyrightBuyoutPlatformFee | decimal | Computed |
+| `TrackResponse` | CopyrightBuyoutCreatorEarnings | decimal | Computed |
+| `UserProfileResponse` | UploadLimit | int? | Computed from tier |
+| `UserProfileResponse` | PlatformFeePercent | decimal | Computed from tier |
+| `UserProfileResponse` | ContractVersion | string | Hardcoded |
+| `BillingStatusResponse` | UploadLimit | int? | Computed from tier |
+| `BillingStatusResponse` | PlatformFeePercent | decimal | Computed from tier |
+| `CreatorProfileDto` | Stats | CreatorStatsDto | Aggregated from purchases |
+| `CreatorStatsDto` | TotalDownloads | int | Aggregated |
+| `CreatorStatsDto` | TotalEarnings | decimal | Aggregated |
+| `LibraryItemResponse` | Purchased | bool | Computed from purchase existence |
+| `LibraryItemResponse` | PurchasedOn | string? | Computed from purchase date |
+| `CheckoutConfirmResponse` | AddedToLibrary | bool | Computed from operation result |
+| `AdminDashboardSummary` | (all fields) | double | Aggregated |
+
+### Potentially problematic (no clear entity mapping)
+| DTO | Field | Type | Issue |
+|-----|-------|------|-------|
+| `TrackResponse.Artist` | Artist | string? | No `Artist` field on `Track` entity. Presumably mapped from `Creator.DisplayName` but naming is misleading. |
+| `PurchaseResponse.TrackTitle` | TrackTitle | string | Not on `Purchase` entity. Mapped via navigation `Purchase.Track.Title`. |
+| `PurchaseResponse.Currency` | Currency | string | Not on `Purchase` entity. Hardcoded to "usd". |
+| `LibraryItemResponse.Genre` | Genre | string? | Not on `LibraryItem` entity. Mapped via navigation `LibraryItem.Track.Genre`. |
+| `WalletResponse.Currency` | Currency | string | Not on any wallet entity. Hardcoded to "usd". |
+| `PlanResponse` | (all fields) | — | No `Plan` entity exists. This DTO represents configuration data with no backing entity. |
+
+---
+
+## 10. Missing Validation Annotations
+
+### Request DTOs with NO validation at all
+| DTO | Fields | Risk |
+|-----|--------|------|
+| `PayoutRequest` | Amount (decimal) | No [Required], no [Range] — can submit 0 or negative amounts |
+| `WithdrawRequest` | Amount (decimal) | Same issue |
+| `BillingCheckoutRequest` | Tier (string?) | No [Required] — can submit null tier |
+| `UpsertCreatorProfileRequest` | Slug, Bio, Niche, SocialLinks, ShowEarnings, ShowDownloadStats | No validation at all — Slug could be empty/malicious |
+| `UpsertCollectionRequest` | Title, Description, TrackIds | No validation — Title should be [Required] for creation |
+| `UpdatePinnedTracksRequest` | TrackIds | No validation |
+| `CreditCreatorRequest` | CreatorId, TrackId, TrackTitle, AmountCents, LicenseType | Admin endpoint with zero validation — AmountCents could be negative |
+| `PaymentCheckoutRequest` | TrackId, LicenseType, UsageType | TrackId nullable with no validation |
+
+### Request DTOs with partial validation gaps
+| DTO | Field | Issue |
+|-----|-------|-------|
+| `PurchaseCreateRequest` | TrackId | Has default "" but no [Required] annotation |
+| `ForgotPasswordRequest` | Email, PhoneNumber | Both nullable, no custom validation requiring at least one |
+| `RecoverUsernameRequest` | Email, PhoneNumber | Same issue |
+| `VerifyCodeRequest` | Email, PhoneNumber | Same — Code is validated but identifier is not |
+| `ResetPasswordRequest` | Email, PhoneNumber | Same — Code and NewPassword validated but identifier is not |
+| `UploadTrackRequest` | Price, NonExclusivePrice, ExclusivePrice, CopyrightBuyoutPrice | No [Range] — could be negative |
+
+---
+
+## 11. Naming Inconsistencies
+
+| Issue | Details |
+|-------|---------|
+| **Cents vs Dollars naming** | Entity: `AmountCents` / `NonExclusivePriceCents` (int, cents). DTO: `Amount` / `NonExclusivePrice` (decimal, dollars). The naming doesn't signal the unit conversion. |
+| **Id type inconsistency across DTOs** | `SubscriptionResponse.Id` is `Guid`, but all other response DTOs (`PurchaseResponse`, `InvoiceResponse`, `WalletTransactionResponse`, etc.) use `string` for `Id`. |
+| **AuthResponse.UserId** is `Guid` | But `UserProfileResponse.UserId` is `string`. Two DTOs for the same user with different ID types. |
+| **LicenseCertificate.TrackId** | This is a `string` containing the CambrianTrackId (e.g. "CAMB-TRK-XXXX"), but `Purchase.TrackId` is a `Guid` FK. Same field name, completely different semantics. |
+| **CreatorBalance.CreatorId** is `Guid` | Every other entity uses `string` for user FKs (Identity convention). Orphaned entity but still confusing. |
+| **ModerationAction uses DateTimeOffset** | Every other entity uses `DateTime`. Orphaned but inconsistent. |
+| **TrackResponse.Id defaults to `Guid.NewGuid().ToString()`** | Every other DTO defaults to `""` or `string.Empty`. This creates a new GUID on DTO construction. |
+| **Payout.RequestedAt** vs standard `CreatedAt` | Every other entity uses `CreatedAt` for the creation timestamp. Payout uses `RequestedAt`. |
+| **LibraryItem.SavedAt** vs standard `CreatedAt` | Same issue — non-standard timestamp naming. |
+
+---
+
+## 12. Duplicate/Overlapping Definitions
+
+| Issue | Details |
+|-------|---------|
+| **Two `CheckoutResponse` classes** | `Cambrian.Application.DTOs.Billing.CheckoutResponse` (only `CheckoutUrl`) and `Cambrian.Application.DTOs.Checkout.CheckoutResponse` (`CheckoutUrl` + `Status` + `LicenseCertificate`). Different capabilities, same class name. |
+| **`User` entity vs `ApplicationUser` entity** | `User` has `Guid Id`, `UserRole` enum. `ApplicationUser` has `string Id`, `string Role`. Both represent users. Only `ApplicationUser` is registered in DbContext. |
+| **`License` entity vs `LicenseCertificate` entity** | `License` uses `LicenseType` enum and has `Price`. `LicenseCertificate` uses string `LicenseType` and has no price. Only `LicenseCertificate` is registered in DbContext. |
+| **`ApplicationUser.Tier` (string) vs `ApplicationUser.CreatorTier` (enum)** | Two tier fields on the same entity with different types and different value sets. Confusing overlap. |
+| **`ApplicationUser.Plan` (string?) vs `Subscription.Plan` (string)** | Plan stored in two places — on the user and on a separate Subscription entity. |
+| **`Purchase.LicenseType` vs `Track.LicenseType`** | Both are `string?` — unclear which is authoritative for a given purchase. |
+
+---
+
+## 13. Structural/Architectural Issues
+
+### 13.1 Navigation Property Gaps
+
+| Entity | Missing Navigation | Impact |
+|--------|--------------------|--------|
+| `CreatorProfile` | No `ApplicationUser` navigation property | Cannot eagerly load user data with profile |
+| `TrackCollection` | No `ApplicationUser` navigation for `CreatorId` | Cannot eagerly load creator |
+| `TrackFile` | No `Track` navigation for `TrackId` | Completely disconnected |
+| `CreatorBalance` | No `ApplicationUser` navigation for `CreatorId` | Completely disconnected; also uses wrong ID type |
+| `Payment` | No `Purchase` navigation for `PurchaseId` | Completely disconnected |
+| `StreamSession` | No `ApplicationUser` navigation for `UserId` | Cannot eagerly load user |
+| `AnalyticsEvent` | No navigation properties at all | By design (event sourcing), acceptable |
+| `AuditLog` | No navigation properties | By design, acceptable |
+| `AbuseReport` | No `ApplicationUser` navigation for `ReportedByUserId` | Cannot eagerly load reporter |
+| `WalletTransaction` | No `Purchase` navigation for `RelatedPurchaseId` | Cannot trace transaction to purchase |
+
+### 13.2 Denormalization Risks
+
+| Field | Issue |
+|-------|-------|
+| `ApplicationUser.WalletBalanceCents` | Denormalized balance. Must stay in sync with `WalletTransaction` records. No database-level constraint. |
+| `ApplicationUser.UploadCount` | Denormalized count. Must stay in sync with `Track` records for that creator. |
+| `LibraryItem.Title`, `Artist`, `AudioUrl` | Copied from Track at save time. If Track is updated, LibraryItem data becomes stale. |
+| `StreamSession.Title` | Copied from Track. Same staleness risk. |
+| `Track.ExclusiveSold` | Denormalized flag. Must stay in sync with Purchase records for exclusive licenses. |
+| `CreatorProfile.PinnedTrackIds` | Comma-separated GUIDs stored as string. No referential integrity. Tracks could be deleted while still pinned. |
+| `TrackCollection.TrackIds` | Same CSV storage pattern. Same referential integrity risk. |
+
+### 13.3 PayoutResponse is Dangerously Sparse
+
+`PayoutResponse` contains only `Amount` (decimal) and `Status` (string). It is missing:
+- `Id` — caller cannot reference the payout
+- `CreatorId` — cannot identify who the payout is for
+- `RequestedAt` — cannot show when it was requested
+- `CompletedAt` — cannot show when it was fulfilled
+
+This is the most incomplete response DTO in the codebase.
+
+---
+
+## 14. Summary of All Issues
+
+| Category | Count | Severity |
+|----------|-------|----------|
+| Orphaned entities (no DbSet, no repository) | 6 | Medium — dead code, confusion |
+| Enum vs string mismatches (enum exists but string used) | 9 | **High** — PayoutStatus values don't match, LicenseType "non-exclusive" has no enum member |
+| Type mismatches (DTO ↔ entity) | 17 | **High** — `AuthResponse.UserId` Guid vs string could cause runtime errors |
+| Nullable mismatches | 11 | Medium — silent null→empty conversions |
+| Entity fields not in any DTO | 28 | Medium — Mood/Tempo/Tags/Visibility invisible despite filters existing |
+| DTO fields with no entity backing | 22 | Low — mostly computed, but `Artist` mapping is unclear |
+| Missing validation annotations | 20+ fields across 8 DTOs | **High** — admin endpoints with zero validation, negative amounts possible |
+| Naming inconsistencies | 9 | Medium — cents vs dollars confusion, mixed ID types |
+| Duplicate/overlapping definitions | 6 | Medium — two CheckoutResponse classes, two user entities |
+| Missing navigation properties | 10 | Low-Medium — prevents eager loading |
+| Denormalization risks | 7 | Medium — stale data if not carefully managed |
+
+### Top 5 Most Critical Issues
+
+1. **`AuthResponse.UserId` is `Guid` but `ApplicationUser.Id` is `string`** — will throw `FormatException` if Identity generates a non-GUID ID string.
+
+2. **`PayoutStatus` enum values don't match `Payout.Status` string values** — "approved"/"rejected"/"completed" in entity vs "Processing"/"Paid"/"Failed" in enum. Using either interchangeably will produce incorrect behavior.
+
+3. **`LicenseType` enum lacks "non-exclusive"** — the most common license type in the codebase ("non-exclusive") has no enum representation. The enum has "Extended" which is never used as a string.
+
+4. **Missing validation on financial DTOs** — `PayoutRequest`, `WithdrawRequest`, and `CreditCreatorRequest` have no `[Range]` validation, allowing zero or negative monetary amounts.
+
+5. **`PayoutResponse` missing Id, timestamps** — cannot identify, reference, or track payout lifecycle from the API response.
