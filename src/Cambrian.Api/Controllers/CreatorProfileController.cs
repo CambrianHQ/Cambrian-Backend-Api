@@ -16,6 +16,8 @@ public class CreatorProfileController : BaseController
 {
     private readonly ICreatorProfileRepository _profiles;
     private readonly IObjectStorage _storage;
+    private readonly IStorefrontService _storefront;
+    private readonly IFeatureFlagRepository _flags;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -24,10 +26,12 @@ public class CreatorProfileController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage)
+    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags)
     {
         _profiles = profiles;
         _storage = storage;
+        _storefront = storefront;
+        _flags = flags;
     }
 
     // ───── Public: view a creator profile by slug ─────
@@ -38,6 +42,19 @@ public class CreatorProfileController : BaseController
         var profile = await _profiles.GetBySlugAsync(slug);
         if (profile is null) return NotFoundResponse("Creator not found.");
         return OkResponse(profile);
+    }
+
+    // ───── Public: full storefront (profile + stats + pinned + collections + tracks) ─────
+
+    [HttpGet("{slug}/storefront")]
+    public async Task<IActionResult> GetStorefront(string slug)
+    {
+        if (!await _flags.IsEnabledAsync("creator_storefront"))
+            return NotFoundResponse("Storefront is not available.");
+
+        var storefront = await _storefront.GetStorefrontAsync(slug);
+        if (storefront is null) return NotFoundResponse("Creator not found.");
+        return OkResponse(storefront);
     }
 
     // ───── Authenticated creator: get own profile ─────
@@ -180,6 +197,21 @@ public class CreatorProfileController : BaseController
 
         await _profiles.DeleteCollectionAsync(collectionId);
         return MessageResponse("Collection deleted.");
+    }
+
+    // ───── Pinned tracks: update pinned track order ─────
+
+    [Authorize]
+    [RequireCreatorTier]
+    [HttpPut("me/pinned-tracks")]
+    public async Task<IActionResult> UpdatePinnedTracks([FromBody] UpdatePinnedTracksRequest body)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var existing = await _profiles.GetByUserIdAsync(userId);
+        if (existing is null) return NotFoundResponse("Create a profile first.");
+
+        var updated = await _profiles.UpdatePinnedTracksAsync(userId, body.TrackIds ?? "");
+        return OkResponse(new { pinnedTrackIds = updated.PinnedTrackIds });
     }
 
     // ───── Helpers ─────

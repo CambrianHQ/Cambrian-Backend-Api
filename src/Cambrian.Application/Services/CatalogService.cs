@@ -1,16 +1,20 @@
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
 
 namespace Cambrian.Application.Services;
 
 public class CatalogService : ICatalogService
 {
     private readonly ITrackRepository _tracks;
+    private readonly UserManager<ApplicationUser> _users;
 
-    public CatalogService(ITrackRepository tracks)
+    public CatalogService(ITrackRepository tracks, UserManager<ApplicationUser> users)
     {
         _tracks = tracks;
+        _users = users;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync(int page = 1, int pageSize = 50, string? genre = null, string? search = null, string? sort = null)
@@ -22,7 +26,10 @@ public class CatalogService : ICatalogService
         string? mood, string? tempo, bool? instrumental, string? duration)
     {
         var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
-        return tracks.Select(t => MapToResponse(t)).ToList();
+        var result = new List<TrackResponse>(tracks.Count);
+        foreach (var t in tracks)
+            result.Add(await MapToResponseAsync(t));
+        return result;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync(int page = 1, int pageSize = 20, string? genre = null, string? search = null)
@@ -36,6 +43,30 @@ public class CatalogService : ICatalogService
         return await GetCatalogAsync(page, pageSize, genre, search, null, mood, tempo, instrumental, duration);
     }
 
+    public async Task<PagedResult<TrackResponse>> GetCatalogPagedAsync(int page, int pageSize, string? genre, string? search, string? sort,
+        string? mood, string? tempo, bool? instrumental, string? duration)
+    {
+        var totalCount = await _tracks.CountAsync(genre, search, mood, tempo, instrumental, duration);
+        var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
+        var items = new List<TrackResponse>(tracks.Count);
+        foreach (var t in tracks)
+            items.Add(await MapToResponseAsync(t));
+
+        return new PagedResult<TrackResponse>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
+    }
+
+    public async Task<PagedResult<TrackResponse>> GetDiscoverPagedAsync(int page, int pageSize, string? genre, string? search,
+        string? mood, string? tempo, bool? instrumental, string? duration)
+    {
+        return await GetCatalogPagedAsync(page, pageSize, genre, search, null, mood, tempo, instrumental, duration);
+    }
+
     public async Task<TrackResponse?> GetTrackAsync(string trackId)
     {
         if (!Guid.TryParse(trackId, out var id))
@@ -43,13 +74,20 @@ public class CatalogService : ICatalogService
 
         var track = await _tracks.GetByIdAsync(id);
 
-        return track is null ? null : MapToResponse(track);
+        return track is null ? null : await MapToResponseAsync(track);
     }
 
-    private const decimal PlatformFeeRate = 0.15m;
-
-    private static TrackResponse MapToResponse(Track t)
+    private async Task<TrackResponse> MapToResponseAsync(Track t)
     {
+        // Resolve the creator's tier to get the correct fee rate
+        decimal feeRate = TierManifest.Free.FeeRate; // default
+        if (!string.IsNullOrEmpty(t.CreatorId))
+        {
+            var creator = await _users.FindByIdAsync(t.CreatorId);
+            if (creator is not null)
+                feeRate = TierManifest.For(creator.CreatorTier).FeeRate;
+        }
+
         var nonExPrice = t.NonExclusivePriceCents / 100m;
         var exPrice = t.ExclusivePriceCents / 100m;
         var buyoutPrice = t.CopyrightBuyoutPriceCents / 100m;
@@ -61,17 +99,17 @@ public class CatalogService : ICatalogService
             Title = t.Title,
             Description = t.Description,
             Genre = t.Genre ?? "",
-            Price = (decimal)t.Price,
+            Price = t.Price,
             NonExclusivePrice = nonExPrice,
             ExclusivePrice = exPrice,
             CopyrightBuyoutPrice = buyoutPrice,
-            PlatformFeePercent = PlatformFeeRate,
-            NonExclusivePlatformFee = Math.Round(nonExPrice * PlatformFeeRate, 2),
-            NonExclusiveCreatorEarnings = Math.Round(nonExPrice * (1 - PlatformFeeRate), 2),
-            ExclusivePlatformFee = Math.Round(exPrice * PlatformFeeRate, 2),
-            ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - PlatformFeeRate), 2),
-            CopyrightBuyoutPlatformFee = Math.Round(buyoutPrice * PlatformFeeRate, 2),
-            CopyrightBuyoutCreatorEarnings = Math.Round(buyoutPrice * (1 - PlatformFeeRate), 2),
+            PlatformFeePercent = feeRate,
+            NonExclusivePlatformFee = Math.Round(nonExPrice * feeRate, 2),
+            NonExclusiveCreatorEarnings = Math.Round(nonExPrice * (1 - feeRate), 2),
+            ExclusivePlatformFee = Math.Round(exPrice * feeRate, 2),
+            ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - feeRate), 2),
+            CopyrightBuyoutPlatformFee = Math.Round(buyoutPrice * feeRate, 2),
+            CopyrightBuyoutCreatorEarnings = Math.Round(buyoutPrice * (1 - feeRate), 2),
             ExclusiveSold = t.ExclusiveSold,
             Status = t.Status ?? "available",
             CopyrightOwnerId = t.CopyrightOwnerId,

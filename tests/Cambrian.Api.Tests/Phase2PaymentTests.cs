@@ -29,7 +29,9 @@ public sealed class Phase2PaymentTests
             .Build();
         var subService = Substitute.For<ISubscriptionService>();
         var logger = Substitute.For<ILogger<BillingService>>();
-        var sut = new BillingService(subs, subService, gateway, config, logger);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        var sut = new BillingService(subs, subService, gateway, users, config, logger);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = "invalid" }, "user-1"));
@@ -37,7 +39,7 @@ public sealed class Phase2PaymentTests
 
     [Theory]
     [InlineData("paid", 499)]
-    [InlineData("creator", 999)]
+    [InlineData("pro", 1499)]
     public async Task BillingService_CreateCheckout_UsesCorrectAmount(string tier, int expectedCents)
     {
         var subs = Substitute.For<ISubscriptionRepository>();
@@ -50,7 +52,9 @@ public sealed class Phase2PaymentTests
             .Build();
         var subService = Substitute.For<ISubscriptionService>();
         var logger = Substitute.For<ILogger<BillingService>>();
-        var sut = new BillingService(subs, subService, gateway, config, logger);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        var sut = new BillingService(subs, subService, gateway, users, config, logger);
 
         var result = await sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = tier }, "user-1");
 
@@ -85,9 +89,9 @@ public sealed class Phase2PaymentTests
         users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
         var sut = new SubscriptionService(subs, users);
 
-        var result = await sut.UpdateAsync(new UpdateSubscriptionRequest { Plan = "creator" }, "user-1");
+        var result = await sut.UpdateAsync(new UpdateSubscriptionRequest { Plan = "pro" }, "user-1");
 
-        Assert.Equal("creator", result.Plan);
+        Assert.Equal("pro", result.Plan);
         Assert.Equal("active", result.Status);
     }
 
@@ -101,7 +105,7 @@ public sealed class Phase2PaymentTests
         var sut = new WalletService(repo);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.WithdrawAsync(50.00, "user-1")); // $50 > $10
+            sut.WithdrawAsync(50.00m, "user-1")); // $50 > $10
     }
 
     [Fact]
@@ -111,7 +115,7 @@ public sealed class Phase2PaymentTests
         var sut = new WalletService(repo);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            sut.WithdrawAsync(-10.00, "user-1"));
+            sut.WithdrawAsync(-10.00m, "user-1"));
     }
 
     [Fact]
@@ -121,7 +125,7 @@ public sealed class Phase2PaymentTests
         repo.AtomicWithdrawAsync("user-1", 2500, Arg.Any<string>()).Returns(true);
         var sut = new WalletService(repo);
 
-        await sut.WithdrawAsync(25.00, "user-1");
+        await sut.WithdrawAsync(25.00m, "user-1");
 
         await repo.Received(1).AtomicWithdrawAsync("user-1", 2500,
             Arg.Is<string>(d => d.Contains("25.00")));
@@ -145,7 +149,7 @@ public sealed class Phase2PaymentTests
         {
             Id = trackId,
             Title = "Test Beat",
-            Price = 29.99,
+            Price = 29.99m,
             NonExclusivePriceCents = 2999,
             CreatorId = "creator-1"
         });
@@ -177,7 +181,7 @@ public sealed class Phase2PaymentTests
         {
             Id = trackId,
             Title = "Exclusive Beat",
-            Price = 10.00,
+            Price = 10.00m,
             NonExclusivePriceCents = 1000,
             ExclusivePriceCents = 5000,
             CreatorId = "creator-1"

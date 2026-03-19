@@ -5,6 +5,7 @@ using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Identity;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -27,8 +28,10 @@ public sealed class CheckoutTests
         var library = Substitute.For<ILibraryRepository>();
         var wallet = Substitute.For<IWalletRepository>();
         var licenseService = Substitute.For<ILicenseService>();
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         var logger = Substitute.For<ILogger<CheckoutService>>();
-        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, config, logger);
+        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, config, users, logger);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
