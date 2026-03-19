@@ -15,13 +15,13 @@ databases:
     user: cambrian
     postgresMajorVersion: "16"
 
-  # -- Production database (uncomment when ready) ---------------------
-  # - name: cambrian-db-prod
-  #   plan: starter          # paid plan for persistent storage
-  #   region: oregon
-  #   databaseName: cambrian_prod
-  #   user: cambrian
-  #   postgresMajorVersion: "16"
+  # -- Production database -----------------------------------------------
+  - name: cambrian-db-prod
+    plan: starter
+    region: oregon
+    databaseName: cambrian_prod
+    user: cambrian
+    postgresMajorVersion: "16"
 
 services:
   # ====================================================================
@@ -100,73 +100,83 @@ services:
       - key: App__FrontendUrl
         value: https://staging.cambrianmusic.com
       - key: App__CorsOrigins
-        value: "https://staging.cambrianmusic.com,http://localhost:5173"
+        value: "https://staging.cambrianmusic.com"
       # Vercel preview deployment CORS wildcard
       - key: App__VercelProjectSlug
         value: cambrian
   # ====================================================================
-  #  PRODUCTION API  (uncomment when ready to go live)
+  #  PRODUCTION API
   # ====================================================================
-  # - type: web
-  #   name: cambrian-api
-  #   runtime: docker
-  #   repo: https://github.com/loganbryanx/Cambrian-Backend-Api
-  #   branch: main
-  #   plan: starter
-  #   region: oregon
-  #   dockerfilePath: ./Dockerfile
-  #   healthCheckPath: /health
-  #   envVars:
-  #     - key: PORT
-  #       value: "10000"
-  #     - key: ASPNETCORE_ENVIRONMENT
-  #       value: Production
-  #     - key: DATABASE_URL
-  #       fromDatabase:
-  #         name: cambrian-db-prod
-  #         property: connectionString
-  #     - key: Jwt__Key
-  #       sync: false
-  #     - key: Jwt__Issuer
-  #       value: cambrian-api
-  #     - key: Jwt__Audience
-  #       value: cambrian-client
-  #     - key: Stripe__SecretKey
-  #       sync: false
-  #     - key: Stripe__WebhookSecret
-  #       sync: false
-  #     - key: Storage__Provider
-  #       sync: false           # set to s3 or r2 and fill keys below
-  #     - key: Storage__Endpoint
-  #       sync: false
-  #     - key: Storage__Bucket
-  #       sync: false
-  #     - key: Storage__AccessKey
-  #       sync: false
-  #     - key: Storage__SecretKey
-  #       sync: false
-  #     - key: Email__Provider
-  #       value: smtp
-  #     - key: Email__SmtpHost
-  #       sync: false
-  #     - key: Email__SmtpPort
-  #       value: "587"
-  #     - key: Email__SmtpUser
-  #       sync: false
-  #     - key: Email__SmtpPass
-  #       sync: false
-  #     - key: RateLimiting__GlobalPermitLimit
-  #       value: "100"
-  #     - key: RateLimiting__AuthPermitLimit
-  #       value: "10"
-  #     - key: App__FrontendUrl
-  #       value: https://cambrianmusic.com
-  #     - key: App__CorsOrigins
-  #       value: "https://cambrianmusic.com,https://www.cambrianmusic.com"
-  #     - key: App__VercelProjectSlug
-  #       value: ""
-  #   buildFilter:
-  #     paths:
-  #       - src/**
-  #       - Dockerfile
-  #       - Cambrian.sln
+  - type: web
+    name: cambrian-api
+    runtime: docker
+    repo: https://github.com/Cambrian-by-Kinetix-Interactive/Cambrian-Backend-Api
+    branch: main
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cambrian-db-prod
+          property: connectionString
+      - key: Jwt__Key
+        sync: false
+      - key: Jwt__Issuer
+        value: cambrian-api
+      - key: Jwt__Audience
+        value: cambrian-client
+      - key: Stripe__SecretKey
+        sync: false
+      - key: Stripe__WebhookSecret
+        sync: false
+      - key: Storage__Provider
+        sync: false
+      - key: Storage__Endpoint
+        sync: false
+      - key: Storage__Bucket
+        sync: false
+      - key: Storage__AccessKey
+        sync: false
+      - key: Storage__SecretKey
+        sync: false
+      - key: Storage__Region
+        value: auto
+      - key: Storage__UsePathStyle
+        value: "true"
+      - key: Storage__PublicUrl
+        sync: false
+      - key: Email__Provider
+        value: resend
+      - key: Email__FromAddress
+        value: noreply@cambrianmusic.com
+      - key: Email__FromName
+        value: Cambrian Music
+      - key: Email__ResendApiKey
+        sync: false
+      - key: RateLimiting__GlobalPermitLimit
+        value: "100"
+      - key: RateLimiting__AuthPermitLimit
+        value: "10"
+      - key: Admin__Email
+        sync: false
+      - key: Admin__Password
+        sync: false
+      - key: App__FrontendUrl
+        value: https://cambrianmusic.com
+      - key: App__CorsOrigins
+        value: "https://cambrianmusic.com,https://www.cambrianmusic.com"
+      - key: App__VercelProjectSlug
+        value: ""
+      - key: App__CloudflarePagesSlug
+        value: ""
+    buildFilter:
+      paths:
+        - src/**
+        - Dockerfile
+        - Cambrian.sln

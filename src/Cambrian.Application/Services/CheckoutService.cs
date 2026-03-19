@@ -40,7 +40,8 @@ public class CheckoutService : ICheckoutService
         _licenseService = licenseService;
         _users = users;
         _logger = logger;
-        _frontendUrl = configuration["App:FrontendUrl"] ?? "http://localhost:5173";
+        _frontendUrl = configuration["App:FrontendUrl"]
+            ?? throw new InvalidOperationException("App:FrontendUrl must be configured. Checkout redirects require a valid frontend URL.");
     }
 
     public async Task<CheckoutResponse> CreateCheckoutAsync(CheckoutRequest request, ClaimsPrincipal user)
