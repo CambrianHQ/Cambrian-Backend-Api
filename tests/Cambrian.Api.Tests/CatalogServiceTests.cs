@@ -47,7 +47,7 @@ public sealed class CatalogServiceTests
             Title = "Beat 1",
             Description = "Chill",
             Genre = "Lo-fi",
-            Price = 29.99,
+            Price = 29.99m,
             NonExclusivePriceCents = 2999,
             ExclusivePriceCents = 49900,
             ExclusiveSold = false,
