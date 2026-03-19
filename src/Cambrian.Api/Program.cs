@@ -77,7 +77,6 @@ var jwtKey = builder.Configuration["Jwt:Key"]
     ?? "";
 Console.WriteLine($"[Startup] JWT key present: {!string.IsNullOrWhiteSpace(jwtKey)} (len={jwtKey.Length})");
 var isNonProd = builder.Environment.IsDevelopment()
-    || builder.Environment.EnvironmentName == "Staging"
     || builder.Environment.EnvironmentName == "Testing";
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
@@ -95,11 +94,24 @@ builder.Configuration["Jwt:Key"] = jwtKey;
 
 var stripeKey = builder.Configuration["Stripe:SecretKey"] ?? "";
 if (!string.IsNullOrWhiteSpace(stripeKey))
+{
     Stripe.StripeConfiguration.ApiKey = stripeKey;
+
+    if (builder.Environment.IsProduction() && stripeKey.StartsWith("sk_test_"))
+        throw new InvalidOperationException(
+            "Production must not use Stripe test keys. Set Stripe:SecretKey to a live key (sk_live_).");
+    if (isNonProd && stripeKey.StartsWith("sk_live_"))
+        Console.WriteLine("[WARN] Non-production environment is using a LIVE Stripe key — real charges will be processed!");
+}
 else if (!isNonProd)
     Console.WriteLine("[WARN] Stripe:SecretKey is not configured — payment endpoints will fail.");
 else
     Console.WriteLine("[INFO] Stripe:SecretKey not set — payment endpoints will return mock responses.");
+
+if (builder.Environment.IsProduction()
+    && string.IsNullOrWhiteSpace(builder.Configuration["App:FrontendUrl"]))
+    throw new InvalidOperationException(
+        "App:FrontendUrl must be configured in Production. Without it, Stripe checkout redirects and email links will be broken.");
 
 // JWT Authentication
 builder.Services.AddAuthentication("Bearer")
@@ -318,6 +330,9 @@ switch (storageProvider)
         builder.Services.AddSingleton<IObjectStorage, S3ObjectStorage>();
         break;
     default:
+        if (builder.Environment.IsProduction())
+            throw new InvalidOperationException(
+                "Storage:Provider must be 's3' or 'r2' in Production. Local storage causes data loss on container restart.");
         if (!isNonProd)
             Console.WriteLine("[WARN] Using local storage in non-development environment. "
                 + "Uploaded files will be lost on container restart. Set Storage:Provider=r2 for persistence.");
@@ -338,6 +353,9 @@ switch (emailProvider)
         builder.Services.AddSingleton<IEmailService, ResendEmailService>();
         break;
     default:
+        if (builder.Environment.IsProduction())
+            throw new InvalidOperationException(
+                "Email:Provider must be 'smtp' or 'resend' in Production. Console email does not deliver messages to users.");
         builder.Services.AddSingleton<IEmailService, ConsoleEmailService>();
         break;
 }
@@ -393,8 +411,31 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ── Auto-migrate database on startup (skip for in-memory test DBs) ──
-if (app.Environment.EnvironmentName != "Testing")
+// ── Auto-migrate database on startup ──
+// Production: skip auto-migration — apply migrations via a dedicated CI step with backups.
+// Non-production: auto-migrate for convenience (skip in-memory test DBs).
+if (app.Environment.EnvironmentName == "Testing")
+{
+    Console.WriteLine("[Startup] Skipping migrations (Testing environment uses in-memory DB)");
+}
+else if (app.Environment.IsProduction())
+{
+    using var migrateScope = app.Services.CreateScope();
+    var migrateDb = migrateScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+    var pending = (await migrateDb.Database.GetPendingMigrationsAsync()).ToList();
+    if (pending.Count > 0)
+    {
+        Console.WriteLine($"[Startup] WARNING: {pending.Count} pending migration(s) detected in Production:");
+        foreach (var m in pending)
+            Console.WriteLine($"  - {m}");
+        Console.WriteLine("[Startup] Auto-migration is disabled in Production. Apply migrations via a controlled CI/CD step.");
+    }
+    else
+    {
+        Console.WriteLine("[Startup] Database schema is up to date (no pending migrations)");
+    }
+}
+else
 {
     try
     {
