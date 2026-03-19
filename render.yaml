@@ -104,6 +104,11 @@ services:
       # Vercel preview deployment CORS wildcard
       - key: App__VercelProjectSlug
         value: cambrian
+    buildFilter:
+      paths:
+        - src/**
+        - Dockerfile
+        - Cambrian.sln
   # ====================================================================
   #  PRODUCTION API
   # ====================================================================
@@ -145,15 +150,24 @@ services:
         sync: false
       - key: Storage__SecretKey
         sync: false
+      - key: Storage__Region
+        value: auto
+      - key: Storage__UsePathStyle
+        value: "true"
+      - key: Storage__PublicUrl
+        sync: false
       - key: Email__Provider
-        value: smtp
-      - key: Email__SmtpHost
+        value: resend
+      - key: Email__FromAddress
+        value: noreply@cambrianmusic.com
+      - key: Email__FromName
+        value: "Cambrian Music"
+      - key: Email__ResendApiKey
         sync: false
-      - key: Email__SmtpPort
-        value: "587"
-      - key: Email__SmtpUser
+      # Admin seed account
+      - key: Admin__Email
         sync: false
-      - key: Email__SmtpPass
+      - key: Admin__Password
         sync: false
       - key: RateLimiting__GlobalPermitLimit
         value: "100"
