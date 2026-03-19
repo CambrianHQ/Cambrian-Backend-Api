@@ -59,10 +59,14 @@ public class CheckoutService : ICheckoutService
         if (request.LicenseType == "copyright_buyout" && (track.ExclusiveSold || track.Status == "copyright_transferred"))
             throw new InvalidOperationException("This track is no longer available for purchase.");
 
-        // ── Reject if user already has a completed purchase for this track+license ──
         var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
             throw new UnauthorizedAccessException("User is not authenticated.");
+
+        if (string.Equals(track.CreatorId, userId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("You cannot purchase your own track.");
+
+        // ── Reject if user already has a completed purchase for this track+license ──
 
         var existingPurchases = await _purchases.GetByBuyerIdAsync(userId);
         var duplicate = existingPurchases
