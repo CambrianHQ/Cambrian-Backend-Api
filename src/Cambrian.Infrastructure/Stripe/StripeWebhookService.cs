@@ -1,5 +1,7 @@
+using Cambrian.Application.Configuration;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Cambrian.Domain.Enums;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -399,10 +401,13 @@ public class StripeWebhookService : IWebhookService
             existingLib.PurchaseId = purchase.Id;
         }
 
-        // ── Credit creator wallet (platform takes 15% fee) ──
+        // ── Credit creator wallet using tier-based fee rate ──
         if (!string.IsNullOrEmpty(track.CreatorId) && amountTotal.HasValue && amountTotal.Value > 0)
         {
-            const decimal platformFeeRate = 0.15m;
+            var creatorUser = await _db.Users.FindAsync(track.CreatorId);
+            var platformFeeRate = creatorUser is not null
+                ? TierManifest.For(creatorUser.CreatorTier).FeeRate
+                : TierManifest.Free.FeeRate;
             var grossCents = amountTotal.Value;
             var creatorCents = (long)Math.Floor(grossCents * (1 - platformFeeRate));
 
@@ -419,8 +424,8 @@ public class StripeWebhookService : IWebhookService
                     CreatedAt = DateTime.UtcNow
                 });
                 _logger.LogInformation(
-                    "Credited creator {CreatorId} with {AmountCents} cents for track {TrackId}",
-                    track.CreatorId, creatorCents, trackId);
+                    "Credited creator {CreatorId} with {AmountCents} cents (fee={FeeRate}%) for track {TrackId}",
+                    track.CreatorId, creatorCents, platformFeeRate * 100, trackId);
             }
         }
 
@@ -507,10 +512,7 @@ public class StripeWebhookService : IWebhookService
 
     /// <summary>
     /// Handle customer.subscription.deleted — downgrade user to free tier.
-    /// Stripe sends this when a subscription is cancelled (end of billing period or immediate).
-    /// NOTE: We cannot reliably match Stripe customer ID to our user yet.
-    /// A future improvement is to store StripeCustomerId on ApplicationUser during checkout.
-    /// For now, this logs the event so it can be handled manually if needed.
+    /// Matches the Stripe customer email to the local user account.
     /// </summary>
     private async Task HandleSubscriptionDeleted(string? stripeCustomerId)
     {
@@ -520,26 +522,87 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        _logger.LogWarning(
-            "Stripe subscription deleted for customer {CustomerId}. " +
-            "Manual review may be needed to downgrade the user's tier.",
-            stripeCustomerId);
+        var user = await FindUserByStripeCustomerAsync(stripeCustomerId);
+        if (user is null)
+        {
+            _logger.LogWarning(
+                "customer.subscription.deleted: could not match Stripe customer {CustomerId} to a local user. Manual review needed.",
+                stripeCustomerId);
+            return;
+        }
 
-        await Task.CompletedTask;
+        var activeSub = await _db.Subscriptions
+            .FirstOrDefaultAsync(s => s.UserId == user.Id && s.Status == "active");
+
+        if (activeSub is not null)
+        {
+            activeSub.Status = "cancelled";
+            activeSub.ExpiresAt = DateTime.UtcNow;
+        }
+
+        var wasPro = user.Tier is "pro" or "paid";
+        var isCreator = user.Tier is "creator" or "pro";
+        user.Tier = isCreator ? "creator" : "free";
+        user.CreatorTier = CreatorTier.Free;
+        user.SubscriptionStatus = "Cancelled";
+
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Subscription deleted via webhook: User={UserId} StripeCustomer={CustomerId} downgraded from {OldTier} to {NewTier}",
+            user.Id, stripeCustomerId, wasPro ? "pro" : "paid", user.Tier);
     }
 
     /// <summary>
-    /// Handle invoice.payment_failed — log the failure.
-    /// Stripe will retry payment automatically according to its retry schedule.
-    /// If all retries fail, Stripe sends customer.subscription.deleted.
+    /// Handle invoice.payment_failed — mark the user's subscription as at risk.
+    /// Stripe will retry automatically; if all retries fail it sends customer.subscription.deleted.
     /// </summary>
     private async Task HandleInvoicePaymentFailed(string? stripeCustomerId)
     {
-        _logger.LogWarning(
-            "Invoice payment failed for Stripe customer {CustomerId}. " +
-            "Stripe will retry or cancel the subscription automatically.",
-            stripeCustomerId ?? "unknown");
+        if (string.IsNullOrEmpty(stripeCustomerId))
+        {
+            _logger.LogWarning("invoice.payment_failed received without customer ID");
+            return;
+        }
 
-        await Task.CompletedTask;
+        var user = await FindUserByStripeCustomerAsync(stripeCustomerId);
+        if (user is not null)
+        {
+            user.SubscriptionStatus = "PastDue";
+            await _db.SaveChangesAsync();
+            _logger.LogWarning(
+                "Invoice payment failed: User={UserId} StripeCustomer={CustomerId} marked as PastDue",
+                user.Id, stripeCustomerId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "invoice.payment_failed: could not match Stripe customer {CustomerId} to a local user.",
+                stripeCustomerId);
+        }
+    }
+
+    /// <summary>
+    /// Attempt to match a Stripe customer ID to a local ApplicationUser by looking up
+    /// the customer's email in Stripe and matching it to our users table.
+    /// </summary>
+    private async Task<ApplicationUser?> FindUserByStripeCustomerAsync(string stripeCustomerId)
+    {
+        try
+        {
+            var customerService = new CustomerService();
+            var customer = await customerService.GetAsync(stripeCustomerId);
+            if (!string.IsNullOrEmpty(customer?.Email))
+            {
+                return await _db.Users
+                    .FirstOrDefaultAsync(u => u.NormalizedEmail == customer.Email.ToUpperInvariant());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to look up Stripe customer {CustomerId}", stripeCustomerId);
+        }
+
+        return null;
     }
 }
