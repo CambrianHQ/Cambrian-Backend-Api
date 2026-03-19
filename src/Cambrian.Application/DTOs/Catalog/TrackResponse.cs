@@ -62,5 +62,14 @@ public class TrackResponse
 
     public string? Artist { get; set; }
 
+    /// <summary>Creator display name for UI linking (same as Artist; never email).</summary>
+    public string? CreatorUsername { get; set; }
+
+    /// <summary>Creator profile slug for navigating to their public profile page. Null if no profile exists.</summary>
+    public string? CreatorSlug { get; set; }
+
+    /// <summary>Creator profile image URL. Null if not set; frontend should render a default avatar.</summary>
+    public string? CreatorProfileImageUrl { get; set; }
+
     public DateTime CreatedAt { get; set; }
 }

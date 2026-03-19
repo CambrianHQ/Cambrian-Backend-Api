@@ -71,6 +71,7 @@ public class AuthController : BaseController
             {
                 id = profile.UserId,
                 email = profile.Email,
+                displayName = profile.DisplayName,
                 tier = tier.ToLowerInvariant(),
                 role = profile.Role ?? "User",
                 creatorTier = profile.CreatorTier,
@@ -92,6 +93,7 @@ public class AuthController : BaseController
         {
             id = auth.UserId.ToString(),
             email = auth.Email,
+            displayName = auth.DisplayName,
             tier = (auth.Tier ?? "free").ToLowerInvariant(),
             role = auth.Role ?? "User"
         }

@@ -6,6 +6,9 @@ public class CreatorProfileDto
     public string UserId { get; set; } = "";
     public string Slug { get; set; } = "";
 
+    /// <summary>Creator's public display name (from ApplicationUser.DisplayName).</summary>
+    public string? DisplayName { get; set; }
+
     public string Bio { get; set; } = "";
     public string? Niche { get; set; }
 

@@ -42,14 +42,14 @@ public sealed class StorefrontService : IStorefrontService
         var collections = collectionsTask.Result;
         var purchases = purchasesTask.Result;
 
-        // Resolve creator fee rate
         var creator = await _users.FindByIdAsync(profile.UserId);
         var feeRate = creator is not null
             ? TierManifest.For(creator.CreatorTier).FeeRate
             : TierManifest.Free.FeeRate;
 
-        // Map tracks to responses
-        var trackResponses = tracks.Select(t => MapTrack(t, feeRate)).ToList();
+        profile.DisplayName = CatalogService.ResolveDisplayName(creator);
+
+        var trackResponses = tracks.Select(t => MapTrack(t, feeRate, profile)).ToList();
 
         // Build stats from completed purchases
         var completedPurchases = purchases.Where(p => p.Status == "completed").ToList();
@@ -100,8 +100,9 @@ public sealed class StorefrontService : IStorefrontService
         return allTracks.Take(5).ToList();
     }
 
-    private static TrackResponse MapTrack(Track t, decimal feeRate)
+    private static TrackResponse MapTrack(Track t, decimal feeRate, CreatorProfileDto? profile)
     {
+        var displayName = CatalogService.ResolveDisplayName(t.Creator);
         var nonExPrice = t.NonExclusivePriceCents / 100m;
         var exPrice = t.ExclusivePriceCents / 100m;
         var buyoutPrice = t.CopyrightBuyoutPriceCents / 100m;
@@ -132,7 +133,10 @@ public sealed class StorefrontService : IStorefrontService
             AudioUrl = t.AudioUrl,
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
-            Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
+            Artist = displayName,
+            CreatorUsername = displayName,
+            CreatorSlug = profile?.Slug,
+            CreatorProfileImageUrl = profile?.ProfileImageUrl,
             CreatedAt = t.CreatedAt,
         };
     }

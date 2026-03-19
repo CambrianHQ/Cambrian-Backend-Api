@@ -10,11 +10,13 @@ public class CatalogService : ICatalogService
 {
     private readonly ITrackRepository _tracks;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly ICreatorProfileRepository _profiles;
 
-    public CatalogService(ITrackRepository tracks, UserManager<ApplicationUser> users)
+    public CatalogService(ITrackRepository tracks, UserManager<ApplicationUser> users, ICreatorProfileRepository profiles)
     {
         _tracks = tracks;
         _users = users;
+        _profiles = profiles;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync(int page = 1, int pageSize = 50, string? genre = null, string? search = null, string? sort = null)
@@ -79,13 +81,26 @@ public class CatalogService : ICatalogService
 
     private async Task<TrackResponse> MapToResponseAsync(Track t)
     {
-        // Resolve the creator's tier to get the correct fee rate
-        decimal feeRate = TierManifest.Free.FeeRate; // default
+        decimal feeRate = TierManifest.Free.FeeRate;
         if (!string.IsNullOrEmpty(t.CreatorId))
         {
             var creator = await _users.FindByIdAsync(t.CreatorId);
             if (creator is not null)
                 feeRate = TierManifest.For(creator.CreatorTier).FeeRate;
+        }
+
+        var displayName = ResolveDisplayName(t.Creator);
+
+        string? creatorSlug = null;
+        string? creatorProfileImageUrl = null;
+        if (!string.IsNullOrEmpty(t.CreatorId))
+        {
+            var profile = await _profiles.GetByUserIdAsync(t.CreatorId);
+            if (profile is not null)
+            {
+                creatorSlug = profile.Slug;
+                creatorProfileImageUrl = profile.ProfileImageUrl;
+            }
         }
 
         var nonExPrice = t.NonExclusivePriceCents / 100m;
@@ -118,8 +133,27 @@ public class CatalogService : ICatalogService
             AudioUrl = t.AudioUrl,
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
-            Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
+            Artist = displayName,
+            CreatorUsername = displayName,
+            CreatorSlug = creatorSlug,
+            CreatorProfileImageUrl = creatorProfileImageUrl,
             CreatedAt = t.CreatedAt,
         };
+    }
+
+    /// <summary>
+    /// Resolve a safe public display name. Never returns the full email address.
+    /// Falls back to the email-prefix (before @) if DisplayName is empty.
+    /// </summary>
+    public static string ResolveDisplayName(ApplicationUser? user)
+    {
+        if (user is null) return "Unknown";
+        if (!string.IsNullOrWhiteSpace(user.DisplayName)) return user.DisplayName;
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            var atIndex = user.Email.IndexOf('@');
+            return atIndex > 0 ? user.Email[..atIndex] : "Unknown";
+        }
+        return "Unknown";
     }
 }

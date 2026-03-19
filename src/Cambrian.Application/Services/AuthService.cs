@@ -53,6 +53,7 @@ public class AuthService : IAuthService
         {
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
+            DisplayName = CatalogService.ResolveDisplayName(user),
             Token = token,
             Tier = (user.Tier ?? "free").ToLowerInvariant(),
             Role = user.Role ?? "User"
@@ -86,6 +87,7 @@ public class AuthService : IAuthService
         {
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
+            DisplayName = CatalogService.ResolveDisplayName(user),
             Token = token,
             Tier = user.Tier,
             Role = user.Role
@@ -132,6 +134,7 @@ public class AuthService : IAuthService
         {
             UserId = Guid.Parse(profile.UserId),
             Email = profile.Email,
+            DisplayName = profile.DisplayName,
             Token = "",
             Tier = tier.ToLowerInvariant()
         };

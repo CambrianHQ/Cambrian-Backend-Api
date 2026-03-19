@@ -35,7 +35,7 @@ public class StreamController : BaseController
             {
                 id = t.Id.ToString(),
                 title = t.Title,
-                artist = t.Creator?.DisplayName ?? t.Creator?.Email ?? "Unknown",
+                artist = Cambrian.Application.Services.CatalogService.ResolveDisplayName(t.Creator),
                 genre = t.Genre,
                 duration = t.Duration,
                 audioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio")

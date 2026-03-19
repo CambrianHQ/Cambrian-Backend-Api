@@ -3,7 +3,10 @@ using System.Text.Json;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Services;
+using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
@@ -18,6 +21,7 @@ public class CreatorProfileController : BaseController
     private readonly IObjectStorage _storage;
     private readonly IStorefrontService _storefront;
     private readonly IFeatureFlagRepository _flags;
+    private readonly UserManager<ApplicationUser> _users;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -26,12 +30,13 @@ public class CreatorProfileController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags)
+    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, UserManager<ApplicationUser> users)
     {
         _profiles = profiles;
         _storage = storage;
         _storefront = storefront;
         _flags = flags;
+        _users = users;
     }
 
     // ───── Public: view a creator profile by slug ─────
@@ -41,6 +46,7 @@ public class CreatorProfileController : BaseController
     {
         var profile = await _profiles.GetBySlugAsync(slug);
         if (profile is null) return NotFoundResponse("Creator not found.");
+        await EnrichDisplayNameAsync(profile);
         return OkResponse(profile);
     }
 
@@ -68,6 +74,7 @@ public class CreatorProfileController : BaseController
         var profile = await _profiles.GetByUserIdAsync(userId);
         if (profile is null)
             return OkResponse(new { exists = false });
+        await EnrichDisplayNameAsync(profile);
         return OkResponse(profile);
     }
 
@@ -99,6 +106,7 @@ public class CreatorProfileController : BaseController
         var saved = await _profiles.UpsertAsync(userId, slug, body.Bio?.Trim() ?? "",
             body.Niche?.Trim(), socialLinksJson, body.ShowEarnings, body.ShowDownloadStats);
 
+        await EnrichDisplayNameAsync(saved);
         return OkResponse(saved);
     }
 
@@ -215,6 +223,12 @@ public class CreatorProfileController : BaseController
     }
 
     // ───── Helpers ─────
+
+    private async Task EnrichDisplayNameAsync(CreatorProfileDto profile)
+    {
+        var user = await _users.FindByIdAsync(profile.UserId);
+        profile.DisplayName = CatalogService.ResolveDisplayName(user);
+    }
 
     private async Task<string?> UploadImage(IFormFile? file, string folder)
     {
