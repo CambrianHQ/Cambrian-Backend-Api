@@ -144,12 +144,12 @@ public sealed class PurchaseJourneyTests : IDisposable
         Assert.Equal(purchase.Id, libraryItem.PurchaseId);
         Assert.Equal("Journey Test Beat", libraryItem.Title);
 
-        // ── Step 4: Verify creator wallet was credited (85% of 999 cents) ──
+        // ── Step 4: Verify creator wallet was credited using tier-based fee ──
         var walletTx = await _db.WalletTransactions.FirstOrDefaultAsync(w => w.UserId == CreatorId);
         Assert.NotNull(walletTx);
         Assert.Equal("credit", walletTx.Type);
-        // Platform takes 15%: floor(999 * 0.85) = 849
-        Assert.Equal(849, walletTx.AmountCents);
+        // Free tier takes 35%: floor(999 * 0.65) = 649
+        Assert.Equal(649, walletTx.AmountCents);
 
         // ── Step 5: Verify license was attached ──
         Assert.NotNull(purchase.LicenseId);
