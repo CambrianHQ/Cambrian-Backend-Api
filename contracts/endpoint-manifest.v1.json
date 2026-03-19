@@ -766,6 +766,18 @@
                       },
                       {
                           "method":  "GET",
+                          "path":  "/creator-profile/{slug}/storefront",
+                          "requiresAuth":  false,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "PUT",
+                          "path":  "/creator-profile/me/pinned-tracks",
+                          "requiresAuth":  true,
+                          "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "GET",
                           "path":  "/creator-profile/{slug}/collections",
                           "requiresAuth":  false,
                           "tag":  "CreatorProfile"
@@ -787,6 +799,12 @@
                           "path":  "/creator-profile/me/collections/{collectionId}",
                           "requiresAuth":  true,
                           "tag":  "CreatorProfile"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/tiers/config",
+                          "requiresAuth":  false,
+                          "tag":  "Tiers"
                       }
                   ],
     "source":  "contracts/openapi.v1.json"
