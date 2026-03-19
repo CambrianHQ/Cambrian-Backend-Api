@@ -55,6 +55,11 @@ coverage/
 *.crt
 *.pfx
 
+# Dev/Staging appsettings may contain local secrets - use dotnet user-secrets instead
+src/Cambrian.Api/appsettings.Development.json
+src/Cambrian.Api/appsettings.Staging.json
+src/Cambrian.Api/appsettings.Production.json
+
 ################################################
 # Backend (.NET)
 ################################################
