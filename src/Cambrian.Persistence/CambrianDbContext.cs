@@ -54,6 +54,7 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(t => t.Title).HasMaxLength(200).IsRequired();
             e.Property(t => t.CambrianTrackId).HasMaxLength(25).IsRequired();
             e.HasIndex(t => t.CambrianTrackId).IsUnique();
+            e.Property(t => t.AudioFileHash).HasMaxLength(64);
             e.Property(t => t.Visibility).HasMaxLength(20).HasDefaultValue("public");
             e.Property(t => t.Status).HasMaxLength(30).HasDefaultValue("available");
             e.Property(t => t.Mood).HasMaxLength(50);

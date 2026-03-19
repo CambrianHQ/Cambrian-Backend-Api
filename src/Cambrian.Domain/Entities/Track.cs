@@ -52,6 +52,9 @@ public class Track
     /// <summary>Original creator ID preserved after copyright transfer.</summary>
     public string? OriginalCreatorId { get; set; }
 
+    /// <summary>SHA-256 hex digest of the uploaded audio file. Used for per-creator duplicate detection.</summary>
+    public string? AudioFileHash { get; set; }
+
     public string Visibility { get; set; } = "public"; // public, limited, hidden
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
