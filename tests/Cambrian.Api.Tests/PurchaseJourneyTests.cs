@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Identity;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -49,7 +50,7 @@ public sealed class PurchaseJourneyTests : IDisposable
             Title = "Journey Test Beat",
             CambrianTrackId = $"CBR-{TrackId.ToString()[..8]}",
             CreatorId = CreatorId,
-            Price = 9.99,
+            Price = 9.99m,
             NonExclusivePriceCents = 999,
             ExclusivePriceCents = 4999,
             AudioUrl = "test/audio.mp3"
@@ -79,8 +80,10 @@ public sealed class PurchaseJourneyTests : IDisposable
         var config = Substitute.For<IConfiguration>();
         config["App:FrontendUrl"].Returns("http://localhost:5173");
         _purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var checkoutUsers = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         var checkoutLogger = Substitute.For<ILogger<CheckoutService>>();
-        _checkoutService = new CheckoutService(_gateway, _tracks, _purchases, _libraryRepo, _walletRepo, _licenseService, config, checkoutLogger);
+        _checkoutService = new CheckoutService(_gateway, _tracks, _purchases, _libraryRepo, _walletRepo, _licenseService, config, checkoutUsers, checkoutLogger);
 
         // ── Configure webhook service ──
         var webhookConfig = Substitute.For<IConfiguration>();
@@ -141,12 +144,12 @@ public sealed class PurchaseJourneyTests : IDisposable
         Assert.Equal(purchase.Id, libraryItem.PurchaseId);
         Assert.Equal("Journey Test Beat", libraryItem.Title);
 
-        // ── Step 4: Verify creator wallet was credited (85% of 999 cents) ──
+        // ── Step 4: Verify creator wallet was credited using tier-based fee ──
         var walletTx = await _db.WalletTransactions.FirstOrDefaultAsync(w => w.UserId == CreatorId);
         Assert.NotNull(walletTx);
         Assert.Equal("credit", walletTx.Type);
-        // Platform takes 15%: floor(999 * 0.85) = 849
-        Assert.Equal(849, walletTx.AmountCents);
+        // Free tier takes 35%: floor(999 * 0.65) = 649
+        Assert.Equal(649, walletTx.AmountCents);
 
         // ── Step 5: Verify license was attached ──
         Assert.NotNull(purchase.LicenseId);

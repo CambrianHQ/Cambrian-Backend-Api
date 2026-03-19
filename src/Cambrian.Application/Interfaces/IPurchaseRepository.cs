@@ -10,6 +10,9 @@ public interface IPurchaseRepository
 
     Task<List<Purchase>> GetByTrackIdAsync(Guid trackId);
 
+    /// <summary>Returns all purchases for tracks owned by this creator.</summary>
+    Task<List<Purchase>> GetByCreatorIdAsync(string creatorId);
+
     /// <summary>Look up a purchase by its Stripe Checkout Session ID.</summary>
     Task<Purchase?> GetByStripeSessionIdAsync(string stripeSessionId);
 

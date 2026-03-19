@@ -60,7 +60,7 @@ public sealed class PaymentServiceTests
     public async Task CreateCheckout_ConvertsTrackPriceToCents()
     {
         var trackId = Guid.NewGuid();
-        var track = new Track { Id = trackId, Title = "Beat", Price = 49.99, CreatorId = "c1" };
+        var track = new Track { Id = trackId, Title = "Beat", Price = 49.99m, CreatorId = "c1" };
         _tracks.GetByIdAsync(trackId).Returns(track);
         _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), null, null)
             .Returns("https://stripe.test/session");

@@ -137,3 +137,6 @@ uploads/
 *.pubxml
 *.pubxml.user
 publish-out/
+
+# Test results
+**/TestResults/

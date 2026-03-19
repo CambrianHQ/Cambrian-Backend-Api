@@ -9,9 +9,15 @@ public interface ICatalogService
     Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync(int page, int pageSize, string? genre, string? search, string? sort,
         string? mood, string? tempo, bool? instrumental, string? duration);
 
+    Task<PagedResult<TrackResponse>> GetCatalogPagedAsync(int page, int pageSize, string? genre, string? search, string? sort,
+        string? mood, string? tempo, bool? instrumental, string? duration);
+
     Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync(int page = 1, int pageSize = 20, string? genre = null, string? search = null);
 
     Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync(int page, int pageSize, string? genre, string? search,
+        string? mood, string? tempo, bool? instrumental, string? duration);
+
+    Task<PagedResult<TrackResponse>> GetDiscoverPagedAsync(int page, int pageSize, string? genre, string? search,
         string? mood, string? tempo, bool? instrumental, string? duration);
 
     Task<TrackResponse?> GetTrackAsync(string trackId);

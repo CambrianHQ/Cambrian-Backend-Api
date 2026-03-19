@@ -16,6 +16,12 @@ public class CreatorProfileDto
 
     public CreatorStatsDto Stats { get; set; } = new();
 
+    public bool ShowEarnings { get; set; }
+    public bool ShowDownloadStats { get; set; }
+
+    /// <summary>Comma-separated track GUIDs pinned by the creator.</summary>
+    public string? PinnedTrackIds { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

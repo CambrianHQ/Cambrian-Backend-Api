@@ -34,14 +34,14 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
-        var cacheKey = $"discover:{page}:{pageSize}:{genre}:{search}:{mood}:{tempo}:{instrumental}:{duration}";
-        var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        var cacheKey = $"discover:paged:{page}:{pageSize}:{genre}:{search}:{mood}:{tempo}:{instrumental}:{duration}";
+        var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _catalog.GetDiscoverAsync(page, pageSize, genre, search, mood, tempo, instrumental, duration);
+            return await _catalog.GetDiscoverPagedAsync(page, pageSize, genre, search, mood, tempo, instrumental, duration);
         });
-        ResolveTrackUrls(items!);
-        return OkResponse(items);
+        ResolveTrackUrls(result!.Items);
+        return Ok(ToPaginatedEnvelope(result));
     }
 
     [HttpGet("catalog")]
@@ -58,15 +58,32 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 50;
-        var cacheKey = $"catalog:{page}:{pageSize}:{genre}:{search}:{sort}:{mood}:{tempo}:{instrumental}:{duration}";
-        var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        var cacheKey = $"catalog:paged:{page}:{pageSize}:{genre}:{search}:{sort}:{mood}:{tempo}:{instrumental}:{duration}";
+        var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _catalog.GetCatalogAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
+            return await _catalog.GetCatalogPagedAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
         });
-        ResolveTrackUrls(items!);
-        return OkResponse(items);
+        ResolveTrackUrls(result!.Items);
+        return Ok(ToPaginatedEnvelope(result));
     }
+
+    /// <summary>
+    /// Backward-compatible paginated envelope: "data" remains the track array
+    /// so existing clients are unaffected, and pagination metadata is added as
+    /// sibling fields.
+    /// </summary>
+    private static object ToPaginatedEnvelope<T>(Cambrian.Application.DTOs.Catalog.PagedResult<T> paged) => new
+    {
+        success = true,
+        data = paged.Items,
+        page = paged.Page,
+        pageSize = paged.PageSize,
+        totalCount = paged.TotalCount,
+        totalPages = paged.TotalPages,
+        hasNextPage = paged.HasNextPage,
+        hasPreviousPage = paged.HasPreviousPage
+    };
 
     [HttpGet("tracks/{trackId}")]
     public async Task<IActionResult> GetTrack(string trackId)

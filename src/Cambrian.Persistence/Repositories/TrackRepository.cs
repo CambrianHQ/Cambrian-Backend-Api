@@ -88,6 +88,38 @@ public class TrackRepository : ITrackRepository
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
     }
+    public async Task<List<Track>> GetStorefrontTracksAsync(string creatorId)
+    {
+        return await _db.Tracks
+            .Include(t => t.Creator)
+            .Where(t => t.CreatorId == creatorId
+                && t.Visibility == "public"
+                && t.Status != "copyright_transferred"
+                && !t.ExclusiveSold)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+    }
+    public async Task<int> CountAsync(string? genre = null, string? search = null,
+        string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null)
+    {
+        var query = _db.Tracks
+            .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public");
+
+        if (!string.IsNullOrWhiteSpace(genre))
+            query = query.Where(t => t.Genre != null && t.Genre.ToLower() == genre.ToLower());
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(t => t.Title.ToLower().Contains(search.ToLower()));
+        if (!string.IsNullOrWhiteSpace(mood))
+            query = query.Where(t => t.Mood != null && t.Mood.ToLower() == mood.ToLower());
+        if (!string.IsNullOrWhiteSpace(tempo))
+            query = query.Where(t => t.Tempo != null && t.Tempo.ToLower() == tempo.ToLower());
+        if (instrumental.HasValue)
+            query = query.Where(t => t.Instrumental == instrumental.Value);
+        if (!string.IsNullOrWhiteSpace(duration))
+            query = query.Where(t => t.Duration != null && t.Duration.ToLower() == duration.ToLower());
+
+        return await query.CountAsync();
+    }
 
     public async Task AddAsync(Track track)
     {

@@ -37,7 +37,7 @@ public sealed class DatabaseConsistencyTests : IDisposable
         {
             Id = trackId,
             Title = "Test Beat",
-            Price = 29.99,
+            Price = 29.99m,
             CreatorId = "creator-1"
         });
 
@@ -220,7 +220,7 @@ public sealed class DatabaseConsistencyTests : IDisposable
         {
             Id = trackId,
             Title = "Exclusive Beat",
-            Price = 499.99,
+            Price = 499.99m,
             ExclusivePriceCents = 49999,
             ExclusiveSold = false,
             CreatorId = "creator-1"

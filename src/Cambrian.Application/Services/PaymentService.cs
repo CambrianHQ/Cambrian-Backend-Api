@@ -31,7 +31,15 @@ public class PaymentService : IPaymentService
         var track = await _tracks.GetByIdAsync(Guid.Parse(request.TrackId))
                     ?? throw new KeyNotFoundException($"Track {request.TrackId} not found.");
 
-        var amountCents = (int)(track.Price * 100);
+        var amountCents = request.LicenseType switch
+        {
+            "exclusive" => track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100),
+            "non-exclusive" => track.NonExclusivePriceCents > 0 ? track.NonExclusivePriceCents : (int)(track.Price * 100),
+            "copyright_buyout" => track.CopyrightBuyoutPriceCents > 0
+                ? track.CopyrightBuyoutPriceCents
+                : (track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100)),
+            _ => (int)(track.Price * 100)
+        };
 
         // Build standardized clientReferenceId: userId:trackId:licenseType:usageType
         // This format is required by StripeWebhookService.HandleCheckoutCompleted

@@ -27,48 +27,58 @@ public sealed class CatalogControllerTests
 
     // ── Discover ──
 
+    private static PagedResult<TrackResponse> EmptyPaged(int page = 1, int pageSize = 20) => new()
+    {
+        Items = new List<TrackResponse>(),
+        Page = page,
+        PageSize = pageSize,
+        TotalCount = 0
+    };
+
     [Fact]
     public async Task Discover_ReturnsOk_WithTracks()
     {
-        _catalog.GetDiscoverAsync(1, 20, null, null).Returns(new List<TrackResponse>
+        _catalog.GetDiscoverPagedAsync(1, 20, null, null, null, null, null, null).Returns(new PagedResult<TrackResponse>
         {
-            new() { Id = Guid.NewGuid().ToString(), Title = "Beat 1" }
+            Items = new List<TrackResponse> { new() { Id = Guid.NewGuid().ToString(), Title = "Beat 1" } },
+            Page = 1,
+            PageSize = 20,
+            TotalCount = 1
         });
 
         var result = await _controller.Discover();
 
-        var ok = Assert.IsType<OkObjectResult>(result);
-        Assert.IsType<ApiResponse<IReadOnlyCollection<TrackResponse>>>(ok.Value);
+        Assert.IsType<OkObjectResult>(result);
     }
 
     [Fact]
     public async Task Discover_ClampsPageToMinimumOne()
     {
-        _catalog.GetDiscoverAsync(1, 20, null, null, null, null, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetDiscoverPagedAsync(1, 20, null, null, null, null, null, null).Returns(EmptyPaged());
 
         await _controller.Discover(page: -5);
 
-        await _catalog.Received(1).GetDiscoverAsync(1, 20, null, null, null, null, null, null);
+        await _catalog.Received(1).GetDiscoverPagedAsync(1, 20, null, null, null, null, null, null);
     }
 
     [Fact]
     public async Task Discover_ClampsPageSizeTo20_WhenOutOfRange()
     {
-        _catalog.GetDiscoverAsync(1, 20, null, null, null, null, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetDiscoverPagedAsync(1, 20, null, null, null, null, null, null).Returns(EmptyPaged());
 
         await _controller.Discover(pageSize: 999);
 
-        await _catalog.Received(1).GetDiscoverAsync(1, 20, null, null, null, null, null, null);
+        await _catalog.Received(1).GetDiscoverPagedAsync(1, 20, null, null, null, null, null, null);
     }
 
     [Fact]
     public async Task Discover_PassesGenreAndSearch()
     {
-        _catalog.GetDiscoverAsync(1, 20, "hip-hop", "fire", null, null, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetDiscoverPagedAsync(1, 20, "hip-hop", "fire", null, null, null, null).Returns(EmptyPaged());
 
         await _controller.Discover(genre: "hip-hop", search: "fire");
 
-        await _catalog.Received(1).GetDiscoverAsync(1, 20, "hip-hop", "fire", null, null, null, null);
+        await _catalog.Received(1).GetDiscoverPagedAsync(1, 20, "hip-hop", "fire", null, null, null, null);
     }
 
     // ── Catalog ──
@@ -76,21 +86,21 @@ public sealed class CatalogControllerTests
     [Fact]
     public async Task Catalog_ClampsPageSizeTo50_WhenZero()
     {
-        _catalog.GetCatalogAsync(1, 50, null, null, null, null, null, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetCatalogPagedAsync(1, 50, null, null, null, null, null, null, null).Returns(EmptyPaged(1, 50));
 
         await _controller.Catalog(pageSize: 0);
 
-        await _catalog.Received(1).GetCatalogAsync(1, 50, null, null, null, null, null, null, null);
+        await _catalog.Received(1).GetCatalogPagedAsync(1, 50, null, null, null, null, null, null, null);
     }
 
     [Fact]
     public async Task Catalog_PassesSortParameter()
     {
-        _catalog.GetCatalogAsync(1, 50, null, null, "newest", null, null, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetCatalogPagedAsync(1, 50, null, null, "newest", null, null, null, null).Returns(EmptyPaged(1, 50));
 
         await _controller.Catalog(sort: "newest");
 
-        await _catalog.Received(1).GetCatalogAsync(1, 50, null, null, "newest", null, null, null, null);
+        await _catalog.Received(1).GetCatalogPagedAsync(1, 50, null, null, "newest", null, null, null, null);
     }
 
     // ── GetTrack ──

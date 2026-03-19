@@ -95,6 +95,22 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return MapToDto(existing);
     }
 
+    public async Task<CreatorProfileDto> UpdatePinnedTracksAsync(string userId, string pinnedTrackIds)
+    {
+        CreatorProfile? existing = null;
+        var all = await _db.CreatorProfiles.ToListAsync();
+        foreach (var p in all)
+        {
+            if (p.UserId == userId) { existing = p; break; }
+        }
+        if (existing is null) throw new KeyNotFoundException("Profile not found.");
+
+        existing.PinnedTrackIds = pinnedTrackIds;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return MapToDto(existing);
+    }
+
     public async Task<IReadOnlyList<TrackCollectionDto>> GetCollectionsAsync(string creatorId)
     {
         var all = await _db.TrackCollections.AsNoTracking().ToListAsync();
@@ -179,6 +195,9 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             BannerImageUrl = p.BannerImageUrl,
             ProfileImageUrl = p.ProfileImageUrl,
             SocialLinks = links,
+            ShowEarnings = p.ShowEarnings,
+            ShowDownloadStats = p.ShowDownloadStats,
+            PinnedTrackIds = p.PinnedTrackIds,
             Stats = new CreatorStatsDto
             {
                 TotalDownloads = 0,

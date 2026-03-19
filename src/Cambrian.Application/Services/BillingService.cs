@@ -1,6 +1,9 @@
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Billing;
 using Cambrian.Application.DTOs.Subscriptions;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +14,7 @@ public sealed class BillingService : IBillingService
     private readonly ISubscriptionRepository _subscriptions;
     private readonly ISubscriptionService _subscriptionService;
     private readonly IPaymentGateway _gateway;
+    private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<BillingService> _logger;
     private readonly string _frontendUrl;
 
@@ -18,12 +22,14 @@ public sealed class BillingService : IBillingService
         ISubscriptionRepository subscriptions,
         ISubscriptionService subscriptionService,
         IPaymentGateway gateway,
+        UserManager<ApplicationUser> users,
         IConfiguration configuration,
         ILogger<BillingService> logger)
     {
         _subscriptions = subscriptions;
         _subscriptionService = subscriptionService;
         _gateway = gateway;
+        _users = users;
         _logger = logger;
         _frontendUrl = ResolveFrontendUrl(configuration);
     }
@@ -34,12 +40,15 @@ public sealed class BillingService : IBillingService
         var (amountCents, planName) = tier switch
         {
             "paid" => (499, "Paid Listener"),
-            "creator" => (999, "Creator"),
+            "creator" or "pro" => (TierManifest.Pro.PriceCents, TierManifest.Pro.DisplayName),
             _ => (0, "")
         };
 
+        // Normalize "creator" -> "pro" for consistency
+        if (tier == "creator") tier = "pro";
+
         if (amountCents == 0)
-            throw new ArgumentException("Invalid tier. Choose 'paid' or 'creator'.");
+            throw new ArgumentException("Invalid tier. Choose 'paid' or 'pro'.");
 
         var successUrl = $"{_frontendUrl}/payment?payment_success=true&session_id={{CHECKOUT_SESSION_ID}}";
         var cancelUrl = $"{_frontendUrl}/payment";
@@ -58,11 +67,20 @@ public sealed class BillingService : IBillingService
     public async Task<BillingStatusResponse> GetStatusAsync(string userId)
     {
         var sub = await _subscriptions.GetActiveAsync(userId);
+        var user = await _users.FindByIdAsync(userId);
+        var tierConfig = user is not null
+            ? TierManifest.For(user.CreatorTier)
+            : TierManifest.Free;
+
         return new BillingStatusResponse
         {
             Tier = sub?.Plan ?? "free",
             Status = sub?.Status ?? "active",
-            ExpiresAt = sub?.ExpiresAt
+            ExpiresAt = sub?.ExpiresAt,
+            CreatorTier = tierConfig.Tier.ToString(),
+            UploadCount = user?.UploadCount ?? 0,
+            UploadLimit = tierConfig.UploadLimit,
+            PlatformFeePercent = tierConfig.FeeRate
         };
     }
 

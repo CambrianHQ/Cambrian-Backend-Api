@@ -19,6 +19,16 @@ public interface ITrackRepository
 
     Task<List<Track>> GetByCreatorIdAsync(string creatorId);
 
+    /// <summary>
+    /// Returns public storefront-safe tracks for a creator: not deleted, not hidden,
+    /// not draft/private, not copyright-transferred. Ordered by creation date descending.
+    /// </summary>
+    Task<List<Track>> GetStorefrontTracksAsync(string creatorId);
+
+    /// <summary>Count tracks matching the given filters (for pagination metadata).</summary>
+    Task<int> CountAsync(string? genre = null, string? search = null,
+        string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null);
+
     Task AddAsync(Track track);
 
     Task UpdateAsync(Track track);
