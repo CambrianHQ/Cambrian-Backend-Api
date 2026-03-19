@@ -22,7 +22,7 @@ public class Track
     /// <summary>Whether the track is instrumental (no vocals).</summary>
     public bool Instrumental { get; set; }
 
-    public double Price { get; set; }
+    public decimal Price { get; set; }
 
     public string? Duration { get; set; }
 

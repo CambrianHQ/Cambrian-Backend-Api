@@ -21,17 +21,17 @@ public class UploadTrackRequest
     [MaxLength(60)]
     public string? Genre { get; set; }
 
-    public double? Price { get; set; }
+    public decimal? Price { get; set; }
 
     public string? LicenseType { get; set; }
 
     public string? Tags { get; set; }
 
-    public double? NonExclusivePrice { get; set; }
+    public decimal? NonExclusivePrice { get; set; }
 
-    public double? ExclusivePrice { get; set; }
+    public decimal? ExclusivePrice { get; set; }
 
-    public double? CopyrightBuyoutPrice { get; set; }
+    public decimal? CopyrightBuyoutPrice { get; set; }
 
     public string? CreatorId { get; set; }
 }

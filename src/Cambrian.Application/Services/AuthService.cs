@@ -61,13 +61,14 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
-var isCreator = string.Equals(request.Role, "creator", StringComparison.OrdinalIgnoreCase);
+        var isCreator = string.Equals(request.Role, "creator", StringComparison.OrdinalIgnoreCase);
         var user = new ApplicationUser
         {
             Email = request.Email,
             UserName = request.Email,
             DisplayName = request.DisplayName ?? request.Email.Split('@')[0],
             Tier = isCreator ? "creator" : "free",
+            Role = isCreator ? "Creator" : "User",
             CreatorTier = CreatorTier.Free
         };
 
@@ -87,7 +88,7 @@ var isCreator = string.Equals(request.Role, "creator", StringComparison.OrdinalI
             Email = user.Email ?? "",
             Token = token,
             Tier = user.Tier,
-            Role = "User"
+            Role = user.Role
         };
     }
 

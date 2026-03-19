@@ -2,5 +2,5 @@ namespace Cambrian.Application.DTOs.Wallet;
 
 public class WithdrawRequest
 {
-    public double Amount { get; set; }
+    public decimal Amount { get; set; }
 }

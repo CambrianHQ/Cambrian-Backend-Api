@@ -27,8 +27,9 @@ public class RequireCreatorTierAttribute : Attribute, IAsyncActionFilter
         // Fast path: read tier from JWT claim (set by AuthService.GenerateJwt)
         var tier = context.HttpContext.User.FindFirstValue("tier");
 
-        // Slow path: fall back to DB for legacy tokens missing the claim
-        if (string.IsNullOrEmpty(tier))
+        // If the JWT claim is missing or is not a creator tier, fall back to DB
+        // to handle stale tokens after a tier upgrade.
+        if (tier != "creator" && tier != "pro")
         {
             var userManager = context.HttpContext.RequestServices
                 .GetRequiredService<UserManager<ApplicationUser>>();
@@ -43,7 +44,7 @@ public class RequireCreatorTierAttribute : Attribute, IAsyncActionFilter
 
         if (tier != "creator" && tier != "pro")
         {
-            context.Result = new ObjectResult(ApiResponse.Fail("Creator tier required."))
+            context.Result = new ObjectResult(ApiResponse.Fail("Creator tier required. If you recently upgraded, refresh your session via GET /auth/me."))
             {
                 StatusCode = 403
             };
