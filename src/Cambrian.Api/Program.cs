@@ -33,12 +33,12 @@ if (string.IsNullOrWhiteSpace(connectionString))
     connectionString = Environment.GetEnvironmentVariable("DATABASE_URL");
 if (string.IsNullOrWhiteSpace(connectionString))
 {
-    if (builder.Environment.IsDevelopment()
-        || builder.Environment.EnvironmentName == "Testing")
-        connectionString = "***REDACTED***";
+    if (builder.Environment.EnvironmentName == "Testing")
+        connectionString = "Host=localhost;Port=5432;Database=cambrian_test;Username=postgres;Password=postgres";
     else
         throw new InvalidOperationException(
-            "Database connection string must be set via ConnectionStrings:DefaultConnection or DATABASE_URL.");
+            "Database connection string must be set via ConnectionStrings:DefaultConnection, DATABASE_URL, "
+            + "or 'dotnet user-secrets set ConnectionStrings:DefaultConnection <value>'.");
 }
 Console.WriteLine($"[Startup] DB connection source: {(connectionString.StartsWith("postgres") ? "URI" : "ADO.NET")}");
 
@@ -80,10 +80,12 @@ var isNonProd = builder.Environment.IsDevelopment()
     || builder.Environment.EnvironmentName == "Testing";
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
-    if (isNonProd)
-        jwtKey = "***REDACTED***";
+    if (builder.Environment.EnvironmentName == "Testing")
+        jwtKey = "cambrian-test-secret-key-min-32-chars!!";
     else
-        throw new InvalidOperationException("Jwt:Key must be set via environment variable or secret store.");
+        throw new InvalidOperationException(
+            "Jwt:Key must be set via environment variable, secret store, "
+            + "or 'dotnet user-secrets set Jwt:Key <value>'.");
 }
 if (jwtKey.Length < 32)
     throw new InvalidOperationException("Jwt:Key must be at least 32 characters.");
@@ -97,14 +99,15 @@ if (!string.IsNullOrWhiteSpace(stripeKey))
 {
     Stripe.StripeConfiguration.ApiKey = stripeKey;
 
-    if (builder.Environment.IsProduction() && stripeKey.StartsWith("sk_test_"))
+    if (builder.Environment.IsProduction() && stripeKey.StartsWith("sk_test_", StringComparison.Ordinal))
         throw new InvalidOperationException(
             "Production must not use Stripe test keys. Set Stripe:SecretKey to a live key (sk_live_).");
     if (isNonProd && stripeKey.StartsWith("sk_live_"))
         Console.WriteLine("[WARN] Non-production environment is using a LIVE Stripe key — real charges will be processed!");
 }
 else if (!isNonProd)
-    Console.WriteLine("[WARN] Stripe:SecretKey is not configured — payment endpoints will fail.");
+    throw new InvalidOperationException(
+        "Stripe:SecretKey must be configured in Production. Payment endpoints require a live key.");
 else
     Console.WriteLine("[INFO] Stripe:SecretKey not set — payment endpoints will return mock responses.");
 
@@ -202,6 +205,9 @@ var corsOrigins = builder.Configuration.GetSection("App:CorsOrigins").Value?
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     ?? Array.Empty<string>();
 var frontendUrl = builder.Configuration["App:FrontendUrl"] ?? "";
+if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(frontendUrl))
+    throw new InvalidOperationException(
+        "App:FrontendUrl must be set in Production (e.g. https://cambrianmusic.com).");
 // Only include localhost origins during development
 var defaultOrigins = builder.Environment.IsDevelopment()
     ? new[] { "http://localhost:5173", "http://localhost:5174", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173", "http://127.0.0.1:5174" }
@@ -333,9 +339,10 @@ switch (storageProvider)
         if (builder.Environment.IsProduction())
             throw new InvalidOperationException(
                 "Storage:Provider must be 's3' or 'r2' in Production. Local storage causes data loss on container restart.");
-        if (!isNonProd)
-            Console.WriteLine("[WARN] Using local storage in non-development environment. "
-                + "Uploaded files will be lost on container restart. Set Storage:Provider=r2 for persistence.");
+        if (builder.Environment.IsProduction())
+            throw new InvalidOperationException(
+                "Storage:Provider must be 's3' or 'r2' in Production. "
+                + "Local storage loses files on container restart.");
         builder.Services.AddSingleton<IObjectStorage, LocalObjectStorage>();
         break;
 }

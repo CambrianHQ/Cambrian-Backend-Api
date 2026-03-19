@@ -47,12 +47,26 @@
    - `GET /health/storage` should pass when storage credentials are valid
    - Stream/download endpoints should return valid signed URLs (or redirects) for existing tracks
 
-### Production (when ready)
+### Production
 
-1. Uncomment production DB + API blocks in `render.yaml`
-2. Set production secrets (live Stripe keys, separate JWT secret, separate storage bucket)
-3. Configure production CORS/frontend origins (`App__FrontendUrl`, `App__CorsOrigins`)
-4. Validate `health`, Stripe webhook, and storage signed URLs after deploy
+Production is defined in `render.yaml` alongside staging. The backend enforces strict startup guards — the app **refuses to start** if any of these are misconfigured:
+
+| Guard | Enforced | What happens |
+|-------|----------|--------------|
+| `Jwt__Key` ≥ 32 chars | All environments | App crashes with `InvalidOperationException` |
+| `DATABASE_URL` | Non-Testing | App crashes with `InvalidOperationException` |
+| `Stripe__SecretKey` required | Production | App crashes if missing |
+| `Stripe__SecretKey` must be `sk_live_` | Production | App crashes if `sk_test_` key is supplied |
+| `Storage__Provider` must be `s3` or `r2` | Production | App crashes if `local` or unset |
+| `Email__Provider` must be `smtp` or `resend` | Production | App crashes if `console` or unset |
+| `App__FrontendUrl` required | Production | App crashes if missing |
+| Auto-migration disabled | Production | Pending migrations are logged but NOT applied — run manually |
+
+**Steps:**
+1. Set all required secrets in Render dashboard for the production service
+2. Run pending migrations manually before deploying (or use a one-off job)
+3. Verify `GET /health` returns OK after deploy
+4. Configure Stripe production webhook to `/webhook/stripe` with live signing secret
 
 ---
 
@@ -117,6 +131,18 @@ If using preview domains heavily, keep backend CORS configured with:
 ---
 
 ## 5) Quick Deploy Checklist
+
+### Local Development Setup
+
+`appsettings.Development.json` ships with empty secrets. Use `dotnet user-secrets` to set credentials locally (never commit real values):
+
+```bash
+cd src/Cambrian.Api
+dotnet user-secrets init   # one-time
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=cambrian;Username=postgres;Password=postgres"
+dotnet user-secrets set "Jwt:Key" "my-local-dev-secret-key-min-32-chars!!"
+dotnet user-secrets set "Stripe:WebhookSecret" "whsec_..."
+```
 
 ### Staging
 - [ ] Deploy/refresh Render blueprint from `render.yaml`
