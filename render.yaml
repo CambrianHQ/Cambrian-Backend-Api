@@ -17,7 +17,7 @@ databases:
 
   # -- Production database ---------------------------------------------
   - name: cambrian-db-prod
-    plan: basic            # paid plan for persistent storage
+    plan: basic-256mb            # paid plan for persistent storage
     region: oregon
     databaseName: cambrian_prod
     user: cambrian
