@@ -15,9 +15,9 @@ databases:
     user: cambrian
     postgresMajorVersion: "16"
 
-  # -- Production database -----------------------------------------------
+  # -- Production database ---------------------------------------------
   - name: cambrian-db-prod
-    plan: starter
+    plan: basic-256mb            # paid plan for persistent storage
     region: oregon
     databaseName: cambrian_prod
     user: cambrian
@@ -100,10 +100,15 @@ services:
       - key: App__FrontendUrl
         value: https://staging.cambrianmusic.com
       - key: App__CorsOrigins
-        value: "https://staging.cambrianmusic.com"
+        value: "https://staging.cambrianmusic.com,http://localhost:5173"
       # Vercel preview deployment CORS wildcard
       - key: App__VercelProjectSlug
         value: cambrian
+    buildFilter:
+      paths:
+        - src/**
+        - Dockerfile
+        - Cambrian.sln
   # ====================================================================
   #  PRODUCTION API
   # ====================================================================
@@ -136,7 +141,7 @@ services:
       - key: Stripe__WebhookSecret
         sync: false
       - key: Storage__Provider
-        sync: false
+        sync: false           # must be s3 or r2 -- app refuses to start with local in Production
       - key: Storage__Endpoint
         sync: false
       - key: Storage__Bucket
@@ -156,24 +161,23 @@ services:
       - key: Email__FromAddress
         value: noreply@cambrianmusic.com
       - key: Email__FromName
-        value: Cambrian Music
+        value: "Cambrian Music"
       - key: Email__ResendApiKey
+        sync: false
+      # Admin seed account
+      - key: Admin__Email
+        sync: false
+      - key: Admin__Password
         sync: false
       - key: RateLimiting__GlobalPermitLimit
         value: "100"
       - key: RateLimiting__AuthPermitLimit
         value: "10"
-      - key: Admin__Email
-        sync: false
-      - key: Admin__Password
-        sync: false
       - key: App__FrontendUrl
         value: https://cambrianmusic.com
       - key: App__CorsOrigins
         value: "https://cambrianmusic.com,https://www.cambrianmusic.com"
       - key: App__VercelProjectSlug
-        value: ""
-      - key: App__CloudflarePagesSlug
         value: ""
     buildFilter:
       paths:

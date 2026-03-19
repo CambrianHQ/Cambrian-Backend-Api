@@ -1,20 +1,17 @@
 using System.Text;
 using System.Threading.RateLimiting;
+using Cambrian.Api;
 using Cambrian.Api.Common;
 using Cambrian.Api.Middleware;
 using Microsoft.AspNetCore.Mvc;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
-using Cambrian.Infrastructure.Email;
-using Cambrian.Infrastructure.Options;
-using Cambrian.Infrastructure.Storage;
 using Cambrian.Infrastructure.Stripe;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,31 +24,10 @@ if (args.Contains("--generate"))
 }
 // --- END TEMPORARY ---
 
-// Database — check ConnectionStrings:DefaultConnection, then DATABASE_URL (Render auto-sets this)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-if (string.IsNullOrWhiteSpace(connectionString))
-    connectionString = Environment.GetEnvironmentVariable("DATABASE_URL");
-if (string.IsNullOrWhiteSpace(connectionString))
-{
-    if (builder.Environment.IsDevelopment()
-        || builder.Environment.EnvironmentName == "Testing")
-        connectionString = "***REDACTED_DEV_DB_CONNECTION***";
-    else
-        throw new InvalidOperationException(
-            "Database connection string must be set via ConnectionStrings:DefaultConnection or DATABASE_URL.");
-}
-Console.WriteLine($"[Startup] DB connection source: {(connectionString.StartsWith("postgres") ? "URI" : "ADO.NET")}");
+const string TestingEnvironment = "Testing";
 
-// Render provides postgres:// URI — convert to Npgsql ADO.NET format
-if (connectionString.StartsWith("postgres://") || connectionString.StartsWith("postgresql://"))
-{
-    var uri = new Uri(connectionString);
-    var userInfo = uri.UserInfo.Split(':');
-    var port = uri.Port > 0 ? uri.Port : 5432; // Render may omit port, default to 5432
-    connectionString = $"Host={uri.Host};Port={port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
-    Console.WriteLine($"[Startup] Parsed DB URI → Host={uri.Host}, Port={port}, DB={uri.AbsolutePath.TrimStart('/')}");
-}
-
+// Database
+var connectionString = builder.ResolveConnectionString();
 builder.Services.AddDbContext<CambrianDbContext>(options =>
     options.UseNpgsql(connectionString));
 
@@ -69,49 +45,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddTokenProvider<Microsoft.AspNetCore.Identity.DataProtectorTokenProvider<ApplicationUser>>(
         Microsoft.AspNetCore.Identity.TokenOptions.DefaultProvider);
 
-// --- Startup validation: require critical secrets in non-Development ---
-Console.WriteLine($"[Startup] Environment: {builder.Environment.EnvironmentName}");
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? Environment.GetEnvironmentVariable("Jwt__Key")
-    ?? Environment.GetEnvironmentVariable("JWT_KEY")
-    ?? "";
-Console.WriteLine($"[Startup] JWT key present: {!string.IsNullOrWhiteSpace(jwtKey)} (len={jwtKey.Length})");
-var isNonProd = builder.Environment.IsDevelopment()
-    || builder.Environment.EnvironmentName == "Testing";
-if (string.IsNullOrWhiteSpace(jwtKey))
-{
-    if (isNonProd)
-        jwtKey = "***REDACTED_DEV_JWT_KEY***";
-    else
-        throw new InvalidOperationException("Jwt:Key must be set via environment variable or secret store.");
-}
-if (jwtKey.Length < 32)
-    throw new InvalidOperationException("Jwt:Key must be at least 32 characters.");
-
-// Store the resolved key so downstream services (AuthService) can read it from config
-// without their own hardcoded fallback.
-builder.Configuration["Jwt:Key"] = jwtKey;
-
-var stripeKey = builder.Configuration["Stripe:SecretKey"] ?? "";
-if (!string.IsNullOrWhiteSpace(stripeKey))
-{
-    Stripe.StripeConfiguration.ApiKey = stripeKey;
-
-    if (builder.Environment.IsProduction() && stripeKey.StartsWith("sk_test_"))
-        throw new InvalidOperationException(
-            "Production must not use Stripe test keys. Set Stripe:SecretKey to a live key (sk_live_).");
-    if (isNonProd && stripeKey.StartsWith("sk_live_"))
-        Console.WriteLine("[WARN] Non-production environment is using a LIVE Stripe key — real charges will be processed!");
-}
-else if (!isNonProd)
-    Console.WriteLine("[WARN] Stripe:SecretKey is not configured — payment endpoints will fail.");
-else
-    Console.WriteLine("[INFO] Stripe:SecretKey not set — payment endpoints will return mock responses.");
-
-if (builder.Environment.IsProduction()
-    && string.IsNullOrWhiteSpace(builder.Configuration["App:FrontendUrl"]))
-    throw new InvalidOperationException(
-        "App:FrontendUrl must be configured in Production. Without it, Stripe checkout redirects and email links will be broken.");
+// Validate secrets (JWT, Stripe, FrontendUrl)
+var (jwtKey, _) = builder.ValidateSecrets();
 
 // JWT Authentication
 builder.Services.AddAuthentication("Bearer")
@@ -130,18 +65,15 @@ builder.Services.AddAuthentication("Bearer")
     });
 
 builder.Services.AddAuthorization();
-
 builder.Services.AddMemoryCache();
-
 builder.Services.AddControllers();
 
-// Raise the multipart form body limit for audio uploads (default ≈128 MB,
-// but Kestrel's MaxRequestBodySize is only 30 MB — raise it too).
+// Raise the multipart form body limit for audio uploads
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
 {
     o.MultipartBodyLengthLimit = 150 * 1024 * 1024; // 150 MB
-    o.ValueLengthLimit        = 150 * 1024 * 1024; // 150 MB (default is only 4 MB!)
-    o.ValueCountLimit         = 20;                 // generous for upload form fields
+    o.ValueLengthLimit        = 150 * 1024 * 1024;
+    o.ValueCountLimit         = 20;
 });
 builder.WebHost.ConfigureKestrel(k =>
 {
@@ -162,10 +94,10 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Rate Limiting (configurable via RateLimiting section; disabled in Testing)
+// Rate Limiting
 var globalLimit = builder.Configuration.GetValue("RateLimiting:GlobalPermitLimit", 100);
 var authLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
-if (builder.Environment.EnvironmentName == "Testing")
+if (builder.Environment.EnvironmentName == TestingEnvironment)
 {
     globalLimit = int.MaxValue;
     authLimit = int.MaxValue;
@@ -173,8 +105,6 @@ if (builder.Environment.EnvironmentName == "Testing")
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-    // Global fixed-window per IP
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -184,8 +114,6 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
-
-    // Strict limiter for auth endpoints (login/register)
     options.AddPolicy("auth", ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -197,69 +125,8 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// CORS - allow the Vite frontend + any configured origins (staging / production)
-var corsOrigins = builder.Configuration.GetSection("App:CorsOrigins").Value?
-    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-    ?? Array.Empty<string>();
-var frontendUrl = builder.Configuration["App:FrontendUrl"] ?? "";
-// Only include localhost origins during development
-var defaultOrigins = builder.Environment.IsDevelopment()
-    ? new[] { "http://localhost:5173", "http://localhost:5174", "http://localhost:4174", "http://127.0.0.1:4174", "http://127.0.0.1:5173", "http://127.0.0.1:5174" }
-    : Array.Empty<string>();
-// Hardcode production custom domain only in the Production environment
-var productionOrigins = builder.Environment.IsProduction()
-    ? new[] { "https://cambrianmusic.com", "https://www.cambrianmusic.com" }
-    : Array.Empty<string>();
-// Hardcode staging custom domain only in the Staging environment
-var stagingOrigins = builder.Environment.EnvironmentName == "Staging"
-    ? new[] { "https://staging.cambrianmusic.com", "https://api-staging.cambrianmusic.com" }
-    : Array.Empty<string>();
-var allOrigins = defaultOrigins
-    .Concat(corsOrigins)
-    .Concat(productionOrigins)
-    .Concat(stagingOrigins)
-    .Concat(string.IsNullOrWhiteSpace(frontendUrl) ? Array.Empty<string>() : new[] { frontendUrl })
-    .Where(o => !string.IsNullOrWhiteSpace(o))
-    .Distinct()
-    .ToArray();
-Console.WriteLine($"[Startup] CORS origins: {string.Join(", ", allOrigins)}");
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        var originSet = new HashSet<string>(allOrigins, StringComparer.OrdinalIgnoreCase);
-
-        policy.SetIsOriginAllowed(origin =>
-            {
-                // Exact match against configured origins
-                if (originSet.Contains(origin))
-                    return true;
-
-                // Allow Vercel preview deployments only for the specific project slug
-                // Configure via App:VercelProjectSlug (e.g. "cambrian-frontend")
-                var vercelSlug = builder.Configuration["App:VercelProjectSlug"] ?? "";
-                if (!string.IsNullOrEmpty(vercelSlug)
-                    && Uri.TryCreate(origin, UriKind.Absolute, out var uri)
-                    && uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase)
-                    && uri.Host.Contains(vercelSlug, StringComparison.OrdinalIgnoreCase))
-                    return true;
-
-                // Allow Cloudflare Pages preview deployments for the specific project slug
-                // Configure via App:CloudflarePagesSlug (e.g. "cambrian-ciz")
-                var cfSlug = builder.Configuration["App:CloudflarePagesSlug"] ?? "";
-                if (!string.IsNullOrEmpty(cfSlug)
-                    && Uri.TryCreate(origin, UriKind.Absolute, out var cfUri)
-                    && cfUri.Host.EndsWith(".pages.dev", StringComparison.OrdinalIgnoreCase)
-                    && cfUri.Host.Contains(cfSlug, StringComparison.OrdinalIgnoreCase))
-                    return true;
-
-                return false;
-            })
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
-});
+// CORS
+builder.AddCorsPolicy();
 
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -305,60 +172,8 @@ builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>(
 
 // Infrastructure
 builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
-
-// Storage — choose provider based on config
-builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
-var storageProvider = builder.Configuration["Storage:Provider"]?.ToLowerInvariant() ?? "local";
-Console.WriteLine($"[Startup] Storage provider: {storageProvider}");
-switch (storageProvider)
-{
-    case "s3":
-    case "r2":
-        // Validate credentials at startup — fail fast if misconfigured
-        var endpoint = builder.Configuration["Storage:Endpoint"] ?? "";
-        var bucket   = builder.Configuration["Storage:Bucket"] ?? "";
-        var accessKey = builder.Configuration["Storage:AccessKey"] ?? "";
-        var secretKey = builder.Configuration["Storage:SecretKey"] ?? "";
-        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(bucket)
-            || string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
-        {
-            throw new InvalidOperationException(
-                $"Storage provider '{storageProvider}' requires Storage:Endpoint, Storage:Bucket, "
-                + "Storage:AccessKey, and Storage:SecretKey to be configured.");
-        }
-        Console.WriteLine($"[Startup] S3 endpoint={endpoint}, bucket={bucket}");
-        builder.Services.AddSingleton<IObjectStorage, S3ObjectStorage>();
-        break;
-    default:
-        if (builder.Environment.IsProduction())
-            throw new InvalidOperationException(
-                "Storage:Provider must be 's3' or 'r2' in Production. Local storage causes data loss on container restart.");
-        if (!isNonProd)
-            Console.WriteLine("[WARN] Using local storage in non-development environment. "
-                + "Uploaded files will be lost on container restart. Set Storage:Provider=r2 for persistence.");
-        builder.Services.AddSingleton<IObjectStorage, LocalObjectStorage>();
-        break;
-}
-
-// Email — choose provider based on config
-builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
-var emailProvider = builder.Configuration["Email:Provider"]?.ToLowerInvariant() ?? "console";
-switch (emailProvider)
-{
-    case "smtp":
-        builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
-        break;
-    case "resend":
-        builder.Services.AddHttpClient("Resend");
-        builder.Services.AddSingleton<IEmailService, ResendEmailService>();
-        break;
-    default:
-        if (builder.Environment.IsProduction())
-            throw new InvalidOperationException(
-                "Email:Provider must be 'smtp' or 'resend' in Production. Console email does not deliver messages to users.");
-        builder.Services.AddSingleton<IEmailService, ConsoleEmailService>();
-        break;
-}
+builder.AddStorageProvider();
+builder.AddEmailProvider();
 
 var app = builder.Build();
 
@@ -378,25 +193,20 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
-    context.Response.Headers["X-XSS-Protection"] = "0"; // deprecated — rely on CSP instead
+    context.Response.Headers["X-XSS-Protection"] = "0";
     if (!app.Environment.IsDevelopment())
         context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
     await next();
 });
 
-// HTTPS handled by Render/Vercel load balancers - no redirect needed from app
-// app.UseHttpsRedirection();
 app.UseCors();
 
-// Serve static files — block direct access to uploaded audio (tracks/)
-// but allow public access to cover art images (covers/).
-// Audio must go through authenticated StreamController / DownloadController.
+// Serve static files — block direct access to uploaded audio
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
         var path = ctx.File.PhysicalPath ?? "";
-        // Block uploaded audio tracks — covers are public
         if (path.Contains("uploads") && !path.Contains("covers"))
         {
             ctx.Context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -411,141 +221,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ── Auto-migrate database on startup ──
-// Production: skip auto-migration — apply migrations via a dedicated CI step with backups.
-// Non-production: auto-migrate for convenience (skip in-memory test DBs).
-if (app.Environment.EnvironmentName == "Testing")
-{
-    Console.WriteLine("[Startup] Skipping migrations (Testing environment uses in-memory DB)");
-}
-else if (app.Environment.IsProduction())
-{
-    using var migrateScope = app.Services.CreateScope();
-    var migrateDb = migrateScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-    var pending = (await migrateDb.Database.GetPendingMigrationsAsync()).ToList();
-    if (pending.Count > 0)
-    {
-        Console.WriteLine($"[Startup] WARNING: {pending.Count} pending migration(s) detected in Production:");
-        foreach (var m in pending)
-            Console.WriteLine($"  - {m}");
-        Console.WriteLine("[Startup] Auto-migration is disabled in Production. Apply migrations via a controlled CI/CD step.");
-    }
-    else
-    {
-        Console.WriteLine("[Startup] Database schema is up to date (no pending migrations)");
-    }
-}
-else
-{
-    try
-    {
-        using var migrateScope = app.Services.CreateScope();
-        var migrateDb = migrateScope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-        migrateDb.Database.Migrate();
-        Console.WriteLine("[Startup] Database migrations applied successfully");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[Startup] Migration error: {ex.Message}");
-    }
-}
-
-// ── Seed admin user from environment variables ──
-if (app.Environment.EnvironmentName != "Testing")
-{
-    var adminEmail = app.Configuration["Admin:Email"];
-    var adminPassword = app.Configuration["Admin:Password"];
-
-    Console.WriteLine($"[Seed] Admin config — email={adminEmail ?? "(null)"}, passwordLength={adminPassword?.Length ?? 0}");
-
-    if (!string.IsNullOrWhiteSpace(adminEmail) && !string.IsNullOrWhiteSpace(adminPassword))
-    {
-        try
-        {
-            using var adminScope = app.Services.CreateScope();
-            var userManager = adminScope.ServiceProvider
-                .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
-
-            var existing = await userManager.FindByEmailAsync(adminEmail);
-            Console.WriteLine($"[Seed] FindByEmailAsync result: {(existing is null ? "NOT FOUND" : $"FOUND id={existing.Id} role={existing.Role}")}");
-            if (existing is null)
-            {
-                var admin = new ApplicationUser
-                {
-                    Email = adminEmail,
-                    UserName = adminEmail,
-                    DisplayName = "Admin",
-                    Role = "Admin",
-                    Tier = "creator",
-                    EmailConfirmed = true
-                };
-                var result = await userManager.CreateAsync(admin, adminPassword);
-                if (result.Succeeded)
-                    Console.WriteLine($"[Seed] Admin account created: {adminEmail}");
-                else
-                    Console.WriteLine($"[Seed] Admin creation failed: {string.Join("; ", result.Errors.Select(e => e.Description))}");
-            }
-            else
-            {
-                var changed = false;
-                if (existing.Role != "Admin")
-                {
-                    existing.Role = "Admin";
-                    changed = true;
-                }
-                // Always ensure password matches the env var
-                var token = await userManager.GeneratePasswordResetTokenAsync(existing);
-                var pwResult = await userManager.ResetPasswordAsync(existing, token, adminPassword);
-                if (!pwResult.Succeeded)
-                    Console.WriteLine($"[Seed] Admin password sync failed: {string.Join("; ", pwResult.Errors.Select(e => e.Description))}");
-                else
-                    changed = true;
-
-                if (changed)
-                {
-                    await userManager.UpdateAsync(existing);
-                    Console.WriteLine($"[Seed] Admin account synced: {adminEmail} (role=Admin, password updated)");
-                }
-                else
-                {
-                    Console.WriteLine($"[Seed] Admin account already up to date: {adminEmail}");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Seed] Admin seed error: {ex.Message}");
-        }
-    }
-}
-
-// ── Audio file repair removed — production tracks are user-uploaded with real files ──
-
-// ── Seed demo tracks removed for production — tracks are user-uploaded only ──
-
-// ── Seed default feature flags ──
-if (app.Environment.EnvironmentName != "Testing")
-{
-    try
-    {
-        using var flagScope = app.Services.CreateScope();
-        var flagRepo = flagScope.ServiceProvider.GetRequiredService<IFeatureFlagRepository>();
-
-        // creator_storefront: OFF by default — enable via admin API when ready
-        var existing = await flagRepo.GetByNameAsync("creator_storefront");
-        if (existing is null)
-        {
-            await flagRepo.UpsertAsync("creator_storefront", enabled: false);
-            Console.WriteLine("[Seed] Feature flag 'creator_storefront' created (disabled)");
-        }
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[Seed] Feature flag seed error: {ex.Message}");
-    }
-}
-
-app.Run();
+await app.RunMigrationsAsync();
+await app.SeedDataAsync();
+await app.RunAsync();
 
 // Expose the implicit Program class for WebApplicationFactory<Program> in integration tests
-public partial class Program { }
+public partial class Program
+{
+    protected Program() { }
+}
