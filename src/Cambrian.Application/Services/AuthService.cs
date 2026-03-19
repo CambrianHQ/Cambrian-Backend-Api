@@ -47,6 +47,9 @@ public class AuthService : IAuthService
         if (!valid)
             throw new UnauthorizedAccessException("Invalid credentials");
 
+        var sub = await _subscriptions.GetActiveAsync(user.Id);
+        var resolvedTier = sub?.Plan ?? (user.CreatorTier == CreatorTier.Pro ? "pro" : "free");
+
         var token = GenerateJwt(user);
 
         return new AuthResponse
@@ -54,7 +57,7 @@ public class AuthService : IAuthService
             UserId = Guid.Parse(user.Id),
             Email = user.Email ?? "",
             Token = token,
-            Tier = (user.Tier ?? "free").ToLowerInvariant(),
+            Tier = resolvedTier.ToLowerInvariant(),
             Role = user.Role ?? "User"
         };
     }
@@ -67,7 +70,7 @@ public class AuthService : IAuthService
             Email = request.Email,
             UserName = request.Email,
             DisplayName = request.DisplayName ?? request.Email.Split('@')[0],
-            Tier = isCreator ? "creator" : "free",
+            Tier = "free",
             Role = isCreator ? "Creator" : "User",
             CreatorTier = CreatorTier.Free
         };
@@ -126,14 +129,20 @@ public class AuthService : IAuthService
     {
         var profile = await GetCurrentUserAsync(principal);
         var sub = await _subscriptions.GetActiveAsync(profile.UserId);
-        var tier = sub?.Plan ?? profile.Tier ?? "free";
+        var tier = sub?.Plan
+            ?? (string.Equals(profile.CreatorTier, "Pro", StringComparison.OrdinalIgnoreCase) ? "pro" : "free");
+
+        var user = await _users.FindByIdAsync(profile.UserId)
+                   ?? throw new UnauthorizedAccessException("User not found");
+        var token = GenerateJwt(user);
 
         return new AuthResponse
         {
             UserId = Guid.Parse(profile.UserId),
             Email = profile.Email,
-            Token = "",
-            Tier = tier.ToLowerInvariant()
+            Token = token,
+            Tier = tier.ToLowerInvariant(),
+            Role = profile.Role ?? "User"
         };
     }
 

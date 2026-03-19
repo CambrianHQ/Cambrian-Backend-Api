@@ -58,7 +58,8 @@ public class AuthController : BaseController
         var freshToken = await _auth.GenerateFreshTokenAsync(profile.UserId);
 
         var sub = await _subscriptions.GetActiveAsync(profile.UserId);
-        var tier = sub?.Plan ?? profile.Tier ?? "free";
+        var tier = sub?.Plan
+            ?? (string.Equals(profile.CreatorTier, "Pro", StringComparison.OrdinalIgnoreCase) ? "pro" : "free");
 
         _logger.LogInformation(
             "EVENT: MeResolved userId:{UserId} email:{Email} profileTier:{ProfileTier} subscriptionPlan:{SubPlan} resolvedTier:{ResolvedTier}",

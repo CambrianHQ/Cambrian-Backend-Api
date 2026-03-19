@@ -81,6 +81,7 @@ public class PaymentService : IPaymentService
         };
     }
 
+    [Obsolete("Legacy endpoint — use CheckoutService.ConfirmAsync or Stripe webhook fulfillment instead.")]
     public async Task ProcessAsync(PaymentProcessRequest request, string userId)
     {
         var purchase = await _purchases.GetByIdAsync(Guid.Parse(request.PurchaseId))
@@ -88,6 +89,14 @@ public class PaymentService : IPaymentService
 
         if (purchase.BuyerId != userId)
             throw new UnauthorizedAccessException("You do not own this purchase.");
+
+        // ── SECURITY: verify Stripe actually received payment before marking complete ──
+        if (string.IsNullOrEmpty(purchase.StripeSessionId))
+            throw new InvalidOperationException("Purchase has no associated Stripe session. Use /checkout flow instead.");
+
+        var session = await _gateway.GetCheckoutSessionAsync(purchase.StripeSessionId);
+        if (session is null || session.Status != "paid")
+            throw new InvalidOperationException("Stripe payment has not been confirmed for this purchase.");
 
         _logger.LogWarning(
             "[LEGACY-PATH] ProcessAsync only marks purchase status — library/license creation is handled by Stripe webhook or CheckoutService.ConfirmAsync. PurchaseId={PurchaseId} UserId={UserId}",

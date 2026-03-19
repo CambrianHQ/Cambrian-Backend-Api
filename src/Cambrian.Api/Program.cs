@@ -47,6 +47,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 // Validate secrets (JWT, Stripe, FrontendUrl)
 var (jwtKey, _) = builder.ValidateSecrets();
+Console.WriteLine("[Startup] Governance contract version: 2.1.0 — see policy/POLICY.md, contracts/API_CONTRACTS.md");
 
 // JWT Authentication
 builder.Services.AddAuthentication("Bearer")
@@ -169,6 +170,7 @@ builder.Services.AddScoped<ILicenseCertificateRepository, LicenseCertificateRepo
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
+builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 
 // Infrastructure
 builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
@@ -182,6 +184,18 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Stagi
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Normalize double-slash paths (e.g. //health → /health)
+// Prevents 404s when VITE_BACKEND_API has a trailing slash.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (path != null && path.Contains("//"))
+    {
+        context.Request.Path = path.Replace("//", "/");
+    }
+    await next();
+});
 
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();

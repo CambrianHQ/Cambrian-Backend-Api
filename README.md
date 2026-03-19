@@ -279,7 +279,7 @@ This project is driven by three non-negotiable pillars:
 Every endpoint is defined in the versioned OpenAPI specification located in [`contracts/openapi.v1.json`](contracts/openapi.v1.json) and the endpoint manifest at [`contracts/endpoint-manifest.v1.json`](contracts/endpoint-manifest.v1.json). No endpoint ships without a corresponding contract entry. Breaking changes require a contract version bump.
 
 ### 🛡️ Policy Compliance
-All routes that handle sensitive data are protected by authentication and authorization policies enforced at the framework level. Environment-specific secrets (database credentials, JWT secrets, Stripe keys, storage keys) are **never** committed to source control — see [`.env.example`](.env.example) for required variables. Secrets must be injected via environment variables or a secrets manager at runtime.
+All routes that handle sensitive data are protected by authentication and authorization policies enforced at the framework level. Environment-specific secrets (database credentials, JWT secrets, Stripe keys, storage keys) are **never** committed to source control — see [`.env.example`](config/.env.example) for required variables. Secrets must be injected via environment variables or a secrets manager at runtime.
 
 ### ✅ Test Compliance
 Every feature area has a corresponding test class. The CI pipeline will **block merges** when any test fails. The current test suites are:
@@ -331,7 +331,7 @@ git clone https://github.com/loganbryanx/Cambrian-Backend-Api.git
 cd Cambrian-Backend-Api
 
 # 2. Copy and configure environment variables
-cp .env.example .env
+cp config/.env.example .env
 # Edit .env with your local values
 
 # 3. Restore dependencies
@@ -350,7 +350,7 @@ The API will be available at `http://localhost:8080`. Swagger UI is served at `h
 
 ## 🔧 Environment Variables
 
-Copy [`.env.example`](.env.example) to `.env` and fill in the values. **Never commit `.env` to source control.**
+Copy [`.env.example`](config/.env.example) to `.env` and fill in the values. **Never commit `.env` to source control.**
 
 | Variable | Description |
 |---|---|

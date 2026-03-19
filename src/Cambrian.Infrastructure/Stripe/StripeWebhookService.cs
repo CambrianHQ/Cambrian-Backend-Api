@@ -44,6 +44,7 @@ public class StripeWebhookService : IWebhookService
         string? stripeSessionId = null;
         string? stripeSubscriptionId = null;
         string? stripeCustomerId = null;
+        string? stripePaymentIntentId = null;
 
         // ── Verified path: both secret and signature present ──
         if (!string.IsNullOrEmpty(_webhookSecret) && !string.IsNullOrEmpty(signature))
@@ -73,8 +74,18 @@ public class StripeWebhookService : IWebhookService
                 stripeSubscriptionId = invoice?.SubscriptionId;
                 stripeCustomerId = invoice?.CustomerId;
             }
+            else if (eventType == "charge.refunded")
+            {
+                var charge = stripeEvent.Data.Object as Charge;
+                stripePaymentIntentId = charge?.PaymentIntentId;
+            }
+            else if (eventType == "charge.dispute.created")
+            {
+                var dispute = stripeEvent.Data.Object as Dispute;
+                stripePaymentIntentId = dispute?.Charge?.PaymentIntentId ?? dispute?.PaymentIntentId;
+            }
 
-            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, payload);
+            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId, payload);
             _logger.LogInformation("Stripe webhook received (verified): {EventType}", eventType);
             return;
         }
@@ -116,7 +127,7 @@ public class StripeWebhookService : IWebhookService
             stripeCustomerId = dataObj.TryGetProperty("customer", out var cust) ? cust.GetString() : null;
         }
 
-        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, payload);
+        await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId, payload);
     }
 
     private async Task ProcessEventAsync(
@@ -126,6 +137,7 @@ public class StripeWebhookService : IWebhookService
         long? amountTotal,
         string? stripeCustomerId,
         string? stripeSessionId,
+        string? stripePaymentIntentId = null,
         string? payload = null)
     {
         if (string.IsNullOrWhiteSpace(eventId))
@@ -145,6 +157,14 @@ public class StripeWebhookService : IWebhookService
             else if (eventType == "invoice.payment_failed")
             {
                 await HandleInvoicePaymentFailed(stripeCustomerId);
+            }
+            else if (eventType == "charge.refunded")
+            {
+                await HandleChargeRefunded(stripePaymentIntentId);
+            }
+            else if (eventType == "charge.dispute.created")
+            {
+                await HandleChargeDisputeCreated(stripePaymentIntentId);
             }
 
             return;
@@ -187,6 +207,14 @@ public class StripeWebhookService : IWebhookService
             else if (eventType == "invoice.payment_failed")
             {
                 await HandleInvoicePaymentFailed(stripeCustomerId);
+            }
+            else if (eventType == "charge.refunded")
+            {
+                await HandleChargeRefunded(stripePaymentIntentId);
+            }
+            else if (eventType == "charge.dispute.created")
+            {
+                await HandleChargeDisputeCreated(stripePaymentIntentId);
             }
 
             await _db.SaveChangesAsync();
@@ -298,7 +326,7 @@ public class StripeWebhookService : IWebhookService
             }
         }
 
-        // ── Copyright buyout: mark track as transferred ──
+        // ── Copyright buyout: atomic check-and-set to prevent race conditions ──
         if (licenseType == "copyright_buyout")
         {
             if (track.ExclusiveSold || track.Status == "copyright_transferred")
@@ -307,12 +335,13 @@ public class StripeWebhookService : IWebhookService
                 return;
             }
 
-            track.ExclusiveSold = true;
-            track.Status = "copyright_transferred";
-            track.Visibility = "hidden";
-            track.OriginalCreatorId = track.CreatorId;
-            track.CopyrightOwnerId = userId;
-            track.CopyrightTransferredAt = DateTime.UtcNow;
+            var marked = await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE \"Tracks\" SET \"ExclusiveSold\" = true, \"Status\" = 'copyright_transferred', \"Visibility\" = 'hidden', \"OriginalCreatorId\" = \"CreatorId\", \"CopyrightOwnerId\" = {userId}, \"CopyrightTransferredAt\" = {DateTime.UtcNow} WHERE \"Id\" = {trackId} AND \"ExclusiveSold\" = false AND \"Status\" != 'copyright_transferred'");
+            if (marked == 0)
+            {
+                _logger.LogWarning("Copyright buyout race: Track {TrackId} was sold/transferred by another request — skipping for user {UserId}", trackId, userId);
+                return;
+            }
         }
 
         // Prevent duplicate purchases for the same track/user/license
@@ -501,6 +530,10 @@ public class StripeWebhookService : IWebhookService
         if (user is not null)
         {
             user.Tier = tier;
+            user.CreatorTier = string.Equals(tier, "pro", StringComparison.OrdinalIgnoreCase)
+                ? CreatorTier.Pro
+                : CreatorTier.Free;
+            user.SubscriptionStatus = "Active";
         }
 
         await _db.SaveChangesAsync();
@@ -541,8 +574,7 @@ public class StripeWebhookService : IWebhookService
         }
 
         var wasPro = user.Tier is "pro" or "paid";
-        var isCreator = user.Tier is "creator" or "pro";
-        user.Tier = isCreator ? "creator" : "free";
+        user.Tier = "free";
         user.CreatorTier = CreatorTier.Free;
         user.SubscriptionStatus = "Cancelled";
 
@@ -579,6 +611,108 @@ public class StripeWebhookService : IWebhookService
             _logger.LogWarning(
                 "invoice.payment_failed: could not match Stripe customer {CustomerId} to a local user.",
                 stripeCustomerId);
+        }
+    }
+
+    /// <summary>
+    /// Handle charge.refunded — revoke access for refunded purchases.
+    /// Looks up the purchase by StripeSessionId (via PaymentIntent → Session).
+    /// </summary>
+    private async Task HandleChargeRefunded(string? stripePaymentIntentId)
+    {
+        if (string.IsNullOrEmpty(stripePaymentIntentId))
+        {
+            _logger.LogWarning("charge.refunded received without payment_intent ID");
+            return;
+        }
+
+        // Look up the checkout session via the payment intent
+        try
+        {
+            var sessionService = new SessionService();
+            var sessions = await sessionService.ListAsync(new SessionListOptions
+            {
+                PaymentIntent = stripePaymentIntentId,
+                Limit = 1
+            });
+            var session = sessions.FirstOrDefault();
+            if (session is null)
+            {
+                _logger.LogWarning("charge.refunded: no checkout session found for PaymentIntent {PI}", stripePaymentIntentId);
+                return;
+            }
+
+            var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
+            if (purchase is null)
+            {
+                _logger.LogWarning("charge.refunded: no purchase found for session {SessionId}", session.Id);
+                return;
+            }
+
+            purchase.Status = "refunded";
+            purchase.UpdatedAt = DateTime.UtcNow;
+
+            // Remove library access
+            var libraryItem = await _db.Library
+                .FirstOrDefaultAsync(l => l.UserId == purchase.BuyerId && l.TrackId == purchase.TrackId);
+            if (libraryItem is not null)
+                _db.Library.Remove(libraryItem);
+
+            await _db.SaveChangesAsync();
+            _logger.LogInformation(
+                "Refund processed: PurchaseId={PurchaseId} UserId={UserId} TrackId={TrackId}",
+                purchase.Id, purchase.BuyerId, purchase.TrackId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process charge.refunded for PaymentIntent {PI}", stripePaymentIntentId);
+        }
+    }
+
+    /// <summary>
+    /// Handle charge.dispute.created — flag the purchase as disputed for review.
+    /// </summary>
+    private async Task HandleChargeDisputeCreated(string? stripePaymentIntentId)
+    {
+        if (string.IsNullOrEmpty(stripePaymentIntentId))
+        {
+            _logger.LogWarning("charge.dispute.created received without payment_intent ID");
+            return;
+        }
+
+        try
+        {
+            var sessionService = new SessionService();
+            var sessions = await sessionService.ListAsync(new SessionListOptions
+            {
+                PaymentIntent = stripePaymentIntentId,
+                Limit = 1
+            });
+            var session = sessions.FirstOrDefault();
+            if (session is null)
+            {
+                _logger.LogWarning("charge.dispute.created: no checkout session found for PaymentIntent {PI}", stripePaymentIntentId);
+                return;
+            }
+
+            var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
+            if (purchase is null)
+            {
+                _logger.LogWarning("charge.dispute.created: no purchase found for session {SessionId}", session.Id);
+                return;
+            }
+
+            purchase.Status = "disputed";
+            purchase.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            _logger.LogWarning(
+                "Dispute opened: PurchaseId={PurchaseId} UserId={UserId} TrackId={TrackId} PaymentIntent={PI}",
+                purchase.Id, purchase.BuyerId, purchase.TrackId, stripePaymentIntentId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process charge.dispute.created for PaymentIntent {PI}", stripePaymentIntentId);
         }
     }
 

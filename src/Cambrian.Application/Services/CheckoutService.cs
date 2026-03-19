@@ -17,6 +17,7 @@ public class CheckoutService : ICheckoutService
     private readonly ILibraryRepository _library;
     private readonly IWalletRepository _wallet;
     private readonly ILicenseService _licenseService;
+    private readonly ITransactionManager _transactions;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<CheckoutService> _logger;
     private readonly string _frontendUrl;
@@ -28,6 +29,7 @@ public class CheckoutService : ICheckoutService
         ILibraryRepository library,
         IWalletRepository wallet,
         ILicenseService licenseService,
+        ITransactionManager transactions,
         IConfiguration configuration,
         UserManager<ApplicationUser> users,
         ILogger<CheckoutService> logger)
@@ -38,6 +40,7 @@ public class CheckoutService : ICheckoutService
         _library = library;
         _wallet = wallet;
         _licenseService = licenseService;
+        _transactions = transactions;
         _users = users;
         _logger = logger;
         _frontendUrl = configuration["App:FrontendUrl"]
@@ -157,6 +160,38 @@ public class CheckoutService : ICheckoutService
             return new CheckoutConfirmResponse { Status = "failed", SessionId = sessionId };
         }
 
+        // ── PAY-C2 guard: check if webhook already fulfilled this session ──
+        var alreadyFulfilled = await _purchases.GetByStripeSessionIdAsync(sessionId);
+        if (alreadyFulfilled is not null)
+        {
+            // Ensure library row exists even on duplicate path
+            var existingLibSess = await _library.GetByUserAndTrackAsync(userId, trackId);
+            if (existingLibSess is null)
+            {
+                var backfillItem = new LibraryItem
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TrackId = trackId,
+                    PurchaseId = alreadyFulfilled.Id,
+                    Title = track.Title,
+                    Artist = track.Creator?.DisplayName ?? "",
+                    AudioUrl = track.AudioUrl,
+                    SavedAt = DateTime.UtcNow
+                };
+                await _library.AddAsync(backfillItem);
+            }
+
+            return new CheckoutConfirmResponse
+            {
+                Status = "paid",
+                TrackId = trackIdStr,
+                LicenseType = licenseType,
+                AddedToLibrary = true,
+                SessionId = sessionId
+            };
+        }
+
         // ── Idempotent: check for existing purchase ──
         var existingPurchases = await _purchases.GetByBuyerIdAsync(userId);
         var existingPurchase = existingPurchases
@@ -205,135 +240,157 @@ public class CheckoutService : ICheckoutService
             };
         }
 
-        // ── Create Purchase record ──
-        var purchase = new Purchase
-        {
-            Id = Guid.NewGuid(),
-            BuyerId = userId,
-            TrackId = trackId,
-            AmountCents = (int)(session.AmountTotal ?? 0),
-            PaymentMethod = "stripe",
-            LicenseType = licenseType,
-            UsageType = usageType,
-            Status = "completed",
-            StripeSessionId = sessionId,
-            CompletedAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow
-        };
-        await _purchases.AddAsync(purchase);
-
-        // ── Mark exclusive if applicable ──
-        if (licenseType == "exclusive" && !track.ExclusiveSold)
-        {
-            track.ExclusiveSold = true;
-            track.Status = "exclusive_sold";
-            await _tracks.UpdateAsync(track);
-        }
-
-        // ── Mark copyright_buyout if applicable ──
-        if (licenseType == "copyright_buyout")
-        {
-            track.ExclusiveSold = true;
-            track.Status = "copyright_transferred";
-            track.Visibility = "hidden";
-            track.OriginalCreatorId = track.CreatorId;
-            track.CopyrightOwnerId = userId;
-            track.CopyrightTransferredAt = DateTime.UtcNow;
-            await _tracks.UpdateAsync(track);
-        }
-
-        // ── Add to library (idempotent) ──
-        var existingLib = await _library.GetByUserAndTrackAsync(userId, trackId);
-        if (existingLib is null)
-        {
-            var libraryItem = new LibraryItem
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                TrackId = trackId,
-                PurchaseId = purchase.Id,
-                Title = track.Title,
-                Artist = track.Creator?.DisplayName ?? "",
-                AudioUrl = track.AudioUrl,
-                SavedAt = DateTime.UtcNow
-            };
-            await _library.AddAsync(libraryItem);
-        }
-        else if (existingLib.PurchaseId is null)
-        {
-            existingLib.PurchaseId = purchase.Id;
-            await _library.UpdateAsync(existingLib);
-        }
-
-        // ── Credit creator wallet (platform takes 15% fee) ──
-        if (!string.IsNullOrEmpty(track.CreatorId) && session.AmountTotal is > 0)
-        {
-            // Resolve the creator's actual tier-based fee rate
-            var creatorUser = await _users.FindByIdAsync(track.CreatorId);
-            var platformFeeRate = creatorUser is not null
-                ? TierManifest.For(creatorUser.CreatorTier).FeeRate
-                : TierManifest.Free.FeeRate;
-            var grossCents = session.AmountTotal.Value;
-            var creatorCents = (long)Math.Floor(grossCents * (1 - platformFeeRate));
-
-            if (creatorCents > 0)
-            {
-                var tx = new WalletTransaction
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = track.CreatorId,
-                    AmountCents = creatorCents,
-                    Type = "credit",
-                    Description = $"Sale: {track.Title} ({licenseType})",
-                    RelatedPurchaseId = purchase.Id,
-                    CreatedAt = DateTime.UtcNow
-                };
-                await _wallet.AddTransactionAsync(tx);
-                _logger.LogInformation(
-                    "Credited creator {CreatorId} with {AmountCents} cents for track {TrackId}",
-                    track.CreatorId, creatorCents, trackId);
-            }
-        }
-
-        // ── Issue license certificate ──
-        string? licenseId = null;
+        // ── Wrap fulfillment in a transaction (PAY-C4) ──
+        await using var txHandle = await _transactions.BeginTransactionAsync();
         try
         {
-            var cert = await _licenseService.IssueCertificateAsync(
-                purchase.Id,
-                track.CambrianTrackId ?? trackIdStr,
-                userId,
-                track.CreatorId,
-                licenseType,
-                usageType);
-            licenseId = cert.LicenseId;
-
-            // Link license back to purchase
-            if (Guid.TryParse(licenseId, out var licGuid))
+            // ── Mark exclusive if applicable (PAY-C5: atomic CAS) ──
+            if (licenseType == "exclusive")
             {
-                purchase.LicenseId = licGuid;
-                await _purchases.UpdateAsync(purchase);
+                var exclusiveMarked = await _tracks.TryMarkExclusiveSoldAsync(trackId);
+                if (!exclusiveMarked)
+                {
+                    _logger.LogWarning("Exclusive race in ConfirmAsync: Track {TrackId} was already sold exclusively — skipping for user {UserId}", trackId, userId);
+                    await _transactions.RollbackAsync();
+                    return new CheckoutConfirmResponse { Status = "failed", SessionId = sessionId };
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "[LICENSE-FAILED] Failed to issue license certificate for purchase {PurchaseId} — purchase and library created but license missing. Manual reconciliation required.",
-                purchase.Id);
-        }
 
-        _logger.LogInformation(
-            "Purchase confirmed: User={UserId} Track={TrackId} License={License} LicenseId={LicenseId}",
-            userId, trackId, licenseType, licenseId);
+            // ── Mark copyright_buyout if applicable ──
+            if (licenseType == "copyright_buyout")
+            {
+                // Re-check after potential race
+                var freshTrack = await _tracks.GetByIdAsync(trackId);
+                if (freshTrack is null || freshTrack.ExclusiveSold || freshTrack.Status == "copyright_transferred")
+                {
+                    _logger.LogWarning("Copyright buyout race in ConfirmAsync: Track {TrackId} already sold/transferred — skipping for user {UserId}", trackId, userId);
+                    await _transactions.RollbackAsync();
+                    return new CheckoutConfirmResponse { Status = "failed", SessionId = sessionId };
+                }
+                freshTrack.ExclusiveSold = true;
+                freshTrack.Status = "copyright_transferred";
+                freshTrack.Visibility = "hidden";
+                freshTrack.OriginalCreatorId = freshTrack.CreatorId;
+                freshTrack.CopyrightOwnerId = userId;
+                freshTrack.CopyrightTransferredAt = DateTime.UtcNow;
+                await _tracks.UpdateAsync(freshTrack);
+            }
 
-        return new CheckoutConfirmResponse
+            // ── Create Purchase record ──
+            var purchase = new Purchase
+            {
+                Id = Guid.NewGuid(),
+                BuyerId = userId,
+                TrackId = trackId,
+                AmountCents = (int)(session.AmountTotal ?? 0),
+                PaymentMethod = "stripe",
+                LicenseType = licenseType,
+                UsageType = usageType,
+                Status = "completed",
+                StripeSessionId = sessionId,
+                CompletedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+            await _purchases.AddAsync(purchase);
+
+            // ── Add to library (idempotent) ──
+            var existingLib = await _library.GetByUserAndTrackAsync(userId, trackId);
+            if (existingLib is null)
+            {
+                var libraryItem = new LibraryItem
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TrackId = trackId,
+                    PurchaseId = purchase.Id,
+                    Title = track.Title,
+                    Artist = track.Creator?.DisplayName ?? "",
+                    AudioUrl = track.AudioUrl,
+                    SavedAt = DateTime.UtcNow
+                };
+                await _library.AddAsync(libraryItem);
+            }
+            else if (existingLib.PurchaseId is null)
+            {
+                existingLib.PurchaseId = purchase.Id;
+                await _library.UpdateAsync(existingLib);
+            }
+
+            // ── Credit creator wallet ──
+            if (!string.IsNullOrEmpty(track.CreatorId) && session.AmountTotal is > 0)
+            {
+                var creatorUser = await _users.FindByIdAsync(track.CreatorId);
+                var platformFeeRate = creatorUser is not null
+                    ? TierManifest.For(creatorUser.CreatorTier).FeeRate
+                    : TierManifest.Free.FeeRate;
+                var grossCents = session.AmountTotal.Value;
+                var creatorCents = (long)Math.Floor(grossCents * (1 - platformFeeRate));
+
+                if (creatorCents > 0)
+                {
+                    var walletTx = new WalletTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = track.CreatorId,
+                        AmountCents = creatorCents,
+                        Type = "credit",
+                        Description = $"Sale: {track.Title} ({licenseType})",
+                        RelatedPurchaseId = purchase.Id,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    await _wallet.AddTransactionAsync(walletTx);
+                    _logger.LogInformation(
+                        "Credited creator {CreatorId} with {AmountCents} cents for track {TrackId}",
+                        track.CreatorId, creatorCents, trackId);
+                }
+            }
+
+            // ── Issue license certificate ──
+            string? licenseId = null;
+            try
+            {
+                var cert = await _licenseService.IssueCertificateAsync(
+                    purchase.Id,
+                    track.CambrianTrackId ?? trackIdStr,
+                    userId,
+                    track.CreatorId,
+                    licenseType,
+                    usageType);
+                licenseId = cert.LicenseId;
+
+                if (Guid.TryParse(licenseId, out var licGuid))
+                {
+                    purchase.LicenseId = licGuid;
+                    await _purchases.UpdateAsync(purchase);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "[LICENSE-FAILED] Failed to issue license certificate for purchase {PurchaseId} — purchase and library created but license missing. Manual reconciliation required.",
+                    purchase.Id);
+            }
+
+            await _transactions.CommitAsync();
+
+            _logger.LogInformation(
+                "Purchase confirmed: User={UserId} Track={TrackId} License={License} LicenseId={LicenseId}",
+                userId, trackId, licenseType, licenseId);
+
+            return new CheckoutConfirmResponse
+            {
+                Status = "paid",
+                TrackId = trackIdStr,
+                LicenseType = licenseType,
+                AddedToLibrary = true,
+                SessionId = sessionId,
+                LicenseId = licenseId
+            };
+        }
+        catch
         {
-            Status = "paid",
-            TrackId = trackIdStr,
-            LicenseType = licenseType,
-            AddedToLibrary = true,
-            SessionId = sessionId,
-            LicenseId = licenseId
-        };
+            await _transactions.RollbackAsync();
+            throw;
+        }
     }
 }
