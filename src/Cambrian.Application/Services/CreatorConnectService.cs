@@ -44,7 +44,8 @@ public class CreatorConnectService : ICreatorConnectService
                 accountId, userId);
         }
 
-        var frontendUrl = _config["App:FrontendUrl"] ?? "http://localhost:5173";
+        var frontendUrl = _config["App:FrontendUrl"]
+            ?? throw new InvalidOperationException("App:FrontendUrl must be configured. Stripe Connect onboarding requires a valid frontend URL.");
         var returnUrl = $"{frontendUrl}/payouts?stripe_connect=complete";
         var refreshUrl = $"{frontendUrl}/payouts?stripe_connect=refresh";
 
