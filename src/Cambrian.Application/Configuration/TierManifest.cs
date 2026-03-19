@@ -41,10 +41,9 @@ public static class TierManifest
         _ => Free
     };
 
-    /// <summary>Resolve config by slug string (case-insensitive). "creator" maps to Pro for backward compat.</summary>
+    /// <summary>Resolve config by slug string (case-insensitive). Only "pro" maps to Pro tier.</summary>
     public static TierConfig For(string slug) =>
-        slug.Equals("pro", StringComparison.OrdinalIgnoreCase) ||
-        slug.Equals("creator", StringComparison.OrdinalIgnoreCase)
+        slug.Equals("pro", StringComparison.OrdinalIgnoreCase)
             ? Pro
             : Free;
 
