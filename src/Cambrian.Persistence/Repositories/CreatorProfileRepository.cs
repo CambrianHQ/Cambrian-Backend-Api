@@ -28,7 +28,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     public async Task<CreatorProfileDto> UpsertAsync(string userId, string slug, string bio, string? niche,
         string? socialLinksJson, bool showEarnings, bool showDownloadStats,
-        string? bannerImageUrl, string? profileImageUrl)
+        string? bannerImageUrl = null, string? profileImageUrl = null)
     {
         var existing = await _db.CreatorProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId);

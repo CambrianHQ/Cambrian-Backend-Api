@@ -9,6 +9,9 @@ namespace Cambrian.Api.Controllers;
 [Authorize(Roles = "Admin")]
 public class AdminController : BaseController
 {
+    private const string MsgUserNotFound = "User not found.";
+    private const string MsgTrackNotFound = "Track not found.";
+
     private readonly IAdminService _admin;
     private readonly IMarketplaceIntegrityService _integrity;
     private readonly ILogger<AdminController> _logger;
@@ -134,7 +137,7 @@ public class AdminController : BaseController
         var role = body?.Role ?? "User";
         _logger.LogInformation("[Admin] SetUserRole id={UserId} role={Role}", id, role);
         var ok = await _admin.SetUserRoleAsync(id, role);
-        if (!ok) return NotFound(new { success = false, message = "User not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = $"Role updated to {role}." });
     }
 
@@ -143,7 +146,7 @@ public class AdminController : BaseController
     {
         _logger.LogInformation("[Admin] SuspendUser id={UserId} reason={Reason}", id, body?.Reason);
         var ok = await _admin.SuspendUserAsync(id, body?.Reason);
-        if (!ok) return NotFound(new { success = false, message = "User not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = "User suspended." });
     }
 
@@ -152,7 +155,7 @@ public class AdminController : BaseController
     {
         _logger.LogInformation("[Admin] ReactivateUser id={UserId}", id);
         var ok = await _admin.ReactivateUserAsync(id);
-        if (!ok) return NotFound(new { success = false, message = "User not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = "User reactivated." });
     }
 
@@ -161,7 +164,7 @@ public class AdminController : BaseController
     {
         _logger.LogInformation("[Admin] ResetUserPassword id={UserId}", id);
         var tempPassword = await _admin.ResetUserPasswordAsync(id);
-        if (tempPassword is null) return NotFound(new { success = false, message = "User not found or reset failed." });
+        if (tempPassword is null) return NotFound(new { success = false, message = MsgUserNotFound + " Or reset failed." });
         return OkResponse(new { success = true, temporaryPassword = tempPassword, message = "Password reset. Share the temporary password securely with the user." });
     }
 
@@ -170,7 +173,7 @@ public class AdminController : BaseController
     {
         _logger.LogInformation("[Admin] VerifyCreator id={UserId}", id);
         var ok = await _admin.VerifyCreatorAsync(id);
-        if (!ok) return NotFound(new { success = false, message = "User not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = "Creator verified." });
     }
 
@@ -193,7 +196,7 @@ public class AdminController : BaseController
     {
         _logger.LogInformation("[Admin] RemoveTrack id={TrackId}", id);
         var ok = await _admin.RemoveTrackAsync(id);
-        if (!ok) return NotFound(new { success = false, message = "Track not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track removed." });
     }
 
@@ -202,7 +205,7 @@ public class AdminController : BaseController
     {
         _logger.LogInformation("[Admin] RestoreTrack id={TrackId}", id);
         var ok = await _admin.RestoreTrackAsync(id);
-        if (!ok) return NotFound(new { success = false, message = "Track not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track restored." });
     }
 
@@ -211,7 +214,7 @@ public class AdminController : BaseController
     {
         _logger.LogInformation("[Admin] HideTrack id={TrackId}", id);
         var ok = await _admin.HideTrackAsync(id);
-        if (!ok) return NotFound(new { success = false, message = "Track not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track hidden." });
     }
 
@@ -220,7 +223,7 @@ public class AdminController : BaseController
     {
         _logger.LogInformation("[Admin] FlagTrack id={TrackId}", id);
         var ok = await _admin.FlagTrackAsync(id);
-        if (!ok) return NotFound(new { success = false, message = "Track not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track flagged." });
     }
 
@@ -243,7 +246,7 @@ public class AdminController : BaseController
     {
         var visibility = body?.Visibility ?? "public";
         var ok = await _admin.SetTrackVisibilityAsync(id, visibility);
-        if (!ok) return NotFound(new { success = false, message = "Track not found." });
+        if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track visibility updated." });
     }
 

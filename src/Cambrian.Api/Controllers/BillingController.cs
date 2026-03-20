@@ -40,7 +40,7 @@ public class BillingController : BaseController
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning("EVENT: BillingCheckoutFailed userId:{UserId} tier:{Tier} error:{Error}", userId, request.Tier, ex.Message);
+            _logger.LogWarning(ex, "EVENT: BillingCheckoutFailed userId:{UserId} tier:{Tier}", userId, request.Tier);
             return ErrorResponse(ex.Message);
         }
     }
