@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
@@ -14,13 +15,15 @@ public class AuthController : BaseController
     private readonly IAuthService _auth;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly ICreatorProfileRepository _profiles;
+    private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorProfileRepository profiles, ILogger<AuthController> logger)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorProfileRepository profiles, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
         _profiles = profiles;
+        _userManager = userManager;
         _logger = logger;
     }
 
@@ -156,14 +159,18 @@ public class AuthController : BaseController
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var profile = await _auth.GetCurrentUserAsync(User);
-        var creatorProfile = await _profiles.GetByUserIdAsync(userId);
+        // Read images from AspNetUsers — the source of truth written by PATCH /users/me.
+        // CreatorProfile.ProfileImageUrl is a separate creator storefront image.
+        var user = await _userManager.FindByIdAsync(userId);
         return OkResponse(new
         {
             displayName = profile.DisplayName,
             email = profile.Email,
             tier = profile.Tier,
             role = profile.Role,
-            profileImageUrl = creatorProfile?.ProfileImageUrl
+            bio = user?.Bio,
+            profileImageUrl = user?.ProfileImageUrl,
+            coverImageUrl = user?.CoverImageUrl
         });
     }
 
