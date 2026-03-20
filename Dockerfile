@@ -17,6 +17,12 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
+# Run as non-root user for container security
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --ingroup appgroup --no-create-home appuser && \
+    chown -R appuser:appgroup /app
+USER appuser
+
 # Render injects PORT=10000; locally defaults to 8080
 ENV PORT=8080
 EXPOSE 8080

@@ -28,7 +28,7 @@ public class SubscriptionsController : BaseController
     [HttpGet("current")]
     public async Task<IActionResult> Current()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var current = await _subscriptions.GetCurrentAsync(userId);
         return OkResponse(current);
     }
@@ -36,7 +36,7 @@ public class SubscriptionsController : BaseController
     [HttpPost("update")]
     public async Task<IActionResult> Update(UpdateSubscriptionRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
 
         // Paid plan upgrades must go through /billing/checkout → /billing/confirm
         // to ensure Stripe payment is verified before activation.
@@ -55,7 +55,7 @@ public class SubscriptionsController : BaseController
     [HttpPost("cancel")]
     public async Task<IActionResult> Cancel()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
 
         try
         {
@@ -71,7 +71,7 @@ public class SubscriptionsController : BaseController
     [HttpGet("history")]
     public async Task<IActionResult> History()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var history = await _subscriptions.GetHistoryAsync(userId);
         return OkResponse(history);
     }

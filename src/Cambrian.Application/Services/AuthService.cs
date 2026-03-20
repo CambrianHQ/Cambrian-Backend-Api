@@ -23,6 +23,8 @@ public class AuthService : IAuthService
     /// <summary>How long a password reset code is valid.</summary>
     private static readonly TimeSpan ResetCodeLifetime = TimeSpan.FromMinutes(15);
 
+    private const string InvalidOrExpiredCode = "Invalid or expired code.";
+
     public AuthService(
         UserManager<ApplicationUser> users,
         IConfiguration config,
@@ -175,18 +177,18 @@ public class AuthService : IAuthService
 
     public async Task VerifyCodeAsync(VerifyCodeRequest request)
     {
-        var user = await FindUserByContact(request.Email, request.PhoneNumber);
+        var user = await FindUserByContact(request.Email);
         if (user is null)
-            throw new InvalidOperationException("Invalid or expired code.");
+            throw new InvalidOperationException(InvalidOrExpiredCode);
 
         ValidateResetCode(user, request.Code);
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request)
     {
-        var user = await FindUserByContact(request.Email, request.PhoneNumber);
+        var user = await FindUserByContact(request.Email);
         if (user is null)
-            throw new InvalidOperationException("Invalid or expired code.");
+            throw new InvalidOperationException(InvalidOrExpiredCode);
 
         ValidateResetCode(user, request.Code);
 
@@ -276,12 +278,10 @@ public class AuthService : IAuthService
                ?? throw new UnauthorizedAccessException("User not found");
     }
 
-    private async Task<ApplicationUser?> FindUserByContact(string? email, string? phone)
+    private async Task<ApplicationUser?> FindUserByContact(string? email)
     {
         if (!string.IsNullOrWhiteSpace(email))
             return await _users.FindByEmailAsync(email);
-
-        // Phone-based lookup not yet implemented
         return null;
     }
 
@@ -291,12 +291,12 @@ public class AuthService : IAuthService
             || user.PasswordResetCodeExpiry is null
             || user.PasswordResetCodeExpiry < DateTime.UtcNow)
         {
-            throw new InvalidOperationException("Invalid or expired code.");
+            throw new InvalidOperationException(InvalidOrExpiredCode);
         }
 
         if (!string.Equals(user.PasswordResetCode, HashResetCode(code), StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("Invalid or expired code.");
+            throw new InvalidOperationException(InvalidOrExpiredCode);
         }
     }
 

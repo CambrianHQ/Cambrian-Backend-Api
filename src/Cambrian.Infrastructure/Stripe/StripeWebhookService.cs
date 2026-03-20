@@ -15,6 +15,11 @@ namespace Cambrian.Infrastructure.Stripe;
 
 public class StripeWebhookService : IWebhookService
 {
+    private const string EventSubscriptionDeleted = "customer.subscription.deleted";
+    private const string EventInvoicePaymentFailed = "invoice.payment_failed";
+    private const string EventChargeRefunded = "charge.refunded";
+    private const string EventChargeDisputeCreated = "charge.dispute.created";
+    private const string StatusCompleted = "completed";
     private readonly CambrianDbContext _db;
     private readonly ILicenseService _licenseService;
     private readonly string _webhookSecret;
@@ -42,7 +47,6 @@ public class StripeWebhookService : IWebhookService
         string? clientReferenceId;
         long? amountTotal;
         string? stripeSessionId = null;
-        string? stripeSubscriptionId = null;
         string? stripeCustomerId = null;
         string? stripePaymentIntentId = null;
 
@@ -62,24 +66,22 @@ public class StripeWebhookService : IWebhookService
                 amountTotal = session?.AmountTotal;
                 stripeSessionId = session?.Id;
             }
-            else if (eventType == "customer.subscription.deleted")
+            else if (eventType == EventSubscriptionDeleted)
             {
                 var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
-                stripeSubscriptionId = sub?.Id;
                 stripeCustomerId = sub?.CustomerId;
             }
-            else if (eventType == "invoice.payment_failed")
+            else if (eventType == EventInvoicePaymentFailed)
             {
                 var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
-                stripeSubscriptionId = invoice?.SubscriptionId;
                 stripeCustomerId = invoice?.CustomerId;
             }
-            else if (eventType == "charge.refunded")
+            else if (eventType == EventChargeRefunded)
             {
                 var charge = stripeEvent.Data.Object as Charge;
                 stripePaymentIntentId = charge?.PaymentIntentId;
             }
-            else if (eventType == "charge.dispute.created")
+            else if (eventType == EventChargeDisputeCreated)
             {
                 var dispute = stripeEvent.Data.Object as Dispute;
                 stripePaymentIntentId = dispute?.Charge?.PaymentIntentId ?? dispute?.PaymentIntentId;
@@ -121,7 +123,7 @@ public class StripeWebhookService : IWebhookService
             amountTotal = dataObj.TryGetProperty("amount_total", out var at) ? at.GetInt64() : null;
             stripeSessionId = dataObj.TryGetProperty("id", out var sid) ? sid.GetString() : null;
         }
-        else if (eventType is "customer.subscription.deleted" or "invoice.payment_failed")
+        else if (eventType is EventSubscriptionDeleted or EventInvoicePaymentFailed)
         {
             var dataObj = root.GetProperty("data").GetProperty("object");
             stripeCustomerId = dataObj.TryGetProperty("customer", out var cust) ? cust.GetString() : null;
@@ -150,19 +152,19 @@ public class StripeWebhookService : IWebhookService
             {
                 await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
             }
-            else if (eventType == "customer.subscription.deleted")
+            else if (eventType == EventSubscriptionDeleted)
             {
                 await HandleSubscriptionDeleted(stripeCustomerId);
             }
-            else if (eventType == "invoice.payment_failed")
+            else if (eventType == EventInvoicePaymentFailed)
             {
                 await HandleInvoicePaymentFailed(stripeCustomerId);
             }
-            else if (eventType == "charge.refunded")
+            else if (eventType == EventChargeRefunded)
             {
                 await HandleChargeRefunded(stripePaymentIntentId);
             }
-            else if (eventType == "charge.dispute.created")
+            else if (eventType == EventChargeDisputeCreated)
             {
                 await HandleChargeDisputeCreated(stripePaymentIntentId);
             }
@@ -200,19 +202,19 @@ public class StripeWebhookService : IWebhookService
             {
                 await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
             }
-            else if (eventType == "customer.subscription.deleted")
+            else if (eventType == EventSubscriptionDeleted)
             {
                 await HandleSubscriptionDeleted(stripeCustomerId);
             }
-            else if (eventType == "invoice.payment_failed")
+            else if (eventType == EventInvoicePaymentFailed)
             {
                 await HandleInvoicePaymentFailed(stripeCustomerId);
             }
-            else if (eventType == "charge.refunded")
+            else if (eventType == EventChargeRefunded)
             {
                 await HandleChargeRefunded(stripePaymentIntentId);
             }
-            else if (eventType == "charge.dispute.created")
+            else if (eventType == EventChargeDisputeCreated)
             {
                 await HandleChargeDisputeCreated(stripePaymentIntentId);
             }
@@ -272,7 +274,7 @@ public class StripeWebhookService : IWebhookService
             var purchase = await _db.Purchases.FindAsync(purchaseId);
             if (purchase is not null)
             {
-                purchase.Status = "completed";
+                purchase.Status = StatusCompleted;
                 purchase.UpdatedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync();
                 _logger.LogInformation("PURCHASE_TIMELINE: Purchase {PurchaseId} marked completed via legacy path", purchaseId);
@@ -351,9 +353,9 @@ public class StripeWebhookService : IWebhookService
         if (existingPurchase is not null)
         {
             _logger.LogInformation("Duplicate purchase skipped for user {UserId} track {TrackId}", userId, trackId);
-            if (existingPurchase.Status != "completed")
+            if (existingPurchase.Status != StatusCompleted)
             {
-                existingPurchase.Status = "completed";
+                existingPurchase.Status = StatusCompleted;
                 existingPurchase.CompletedAt = DateTime.UtcNow;
                 existingPurchase.UpdatedAt = DateTime.UtcNow;
                 existingPurchase.StripeSessionId ??= stripeSessionId;
@@ -398,7 +400,7 @@ public class StripeWebhookService : IWebhookService
             PaymentMethod = "stripe",
             LicenseType = licenseType,
             UsageType = usageType,
-            Status = "completed",
+            Status = StatusCompleted,
             StripeSessionId = stripeSessionId,
             CompletedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,

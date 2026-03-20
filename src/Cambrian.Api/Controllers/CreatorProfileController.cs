@@ -64,7 +64,7 @@ public class CreatorProfileController : BaseController
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var profile = await _profiles.GetByUserIdAsync(userId);
         if (profile is null)
             return OkResponse(new { exists = false });
@@ -78,7 +78,7 @@ public class CreatorProfileController : BaseController
     [HttpPut("me")]
     public async Task<IActionResult> UpsertProfile([FromBody] UpsertCreatorProfileRequest body)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
 
         var slug = body.Slug?.Trim().ToLowerInvariant() ?? "";
         if (string.IsNullOrWhiteSpace(slug))
@@ -112,7 +112,7 @@ public class CreatorProfileController : BaseController
         var url = await UploadImage(file, "banners");
         if (url is null) return ErrorResponse("Invalid image file.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var existing = await _profiles.GetByUserIdAsync(userId);
         if (existing is null) return NotFoundResponse("Create a profile first.");
 
@@ -130,7 +130,7 @@ public class CreatorProfileController : BaseController
         var url = await UploadImage(file, "avatars");
         if (url is null) return ErrorResponse("Invalid image file.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var existing = await _profiles.GetByUserIdAsync(userId);
         if (existing is null) return NotFoundResponse("Create a profile first.");
 
@@ -157,7 +157,7 @@ public class CreatorProfileController : BaseController
     [HttpPost("me/collections")]
     public async Task<IActionResult> CreateCollection([FromBody] UpsertCollectionRequest body)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         if (string.IsNullOrWhiteSpace(body.Title))
             return ErrorResponse("Title is required.");
 
@@ -173,7 +173,7 @@ public class CreatorProfileController : BaseController
     [HttpPut("me/collections/{collectionId}")]
     public async Task<IActionResult> UpdateCollection(Guid collectionId, [FromBody] UpsertCollectionRequest body)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var owner = await _profiles.GetCollectionOwnerAsync(collectionId);
         if (owner is null) return NotFoundResponse("Collection not found.");
         if (owner != userId) return ForbiddenResponse();
@@ -190,7 +190,7 @@ public class CreatorProfileController : BaseController
     [HttpDelete("me/collections/{collectionId}")]
     public async Task<IActionResult> DeleteCollection(Guid collectionId)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var owner = await _profiles.GetCollectionOwnerAsync(collectionId);
         if (owner is null) return NotFoundResponse("Collection not found.");
         if (owner != userId) return ForbiddenResponse();
@@ -206,7 +206,7 @@ public class CreatorProfileController : BaseController
     [HttpPut("me/pinned-tracks")]
     public async Task<IActionResult> UpdatePinnedTracks([FromBody] UpdatePinnedTracksRequest body)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var existing = await _profiles.GetByUserIdAsync(userId);
         if (existing is null) return NotFoundResponse("Create a profile first.");
 

@@ -24,7 +24,7 @@ public class CreatorController : BaseController
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 50;
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var tracks = await _creator.GetTracksAsync(userId, page, pageSize);
         return OkResponse(tracks);
     }
@@ -32,7 +32,7 @@ public class CreatorController : BaseController
     [HttpGet("revenue")]
     public async Task<IActionResult> Revenue()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var revenue = await _creator.GetRevenueAsync(userId);
         return OkResponse(revenue);
     }

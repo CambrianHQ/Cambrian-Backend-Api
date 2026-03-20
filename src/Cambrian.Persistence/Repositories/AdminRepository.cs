@@ -8,6 +8,8 @@ namespace Cambrian.Persistence.Repositories;
 
 public class AdminRepository : IAdminRepository
 {
+    private const string SystemActor = "system";
+
     private readonly CambrianDbContext _db;
     private readonly UserManager<ApplicationUser> _users;
 
@@ -22,9 +24,8 @@ public class AdminRepository : IAdminRepository
         var totalUsers = await _users.Users.CountAsync();
         var activeCreators = await _users.Users.CountAsync(u => u.Role == "Creator" || u.VerifiedCreator);
         var tracksUploaded = await _db.Tracks.CountAsync();
-        var completedPurchases = await _db.Purchases.Where(p => p.Status == "completed").ToListAsync();
-        var licensesSold = completedPurchases.Count;
-        var totalRevenue = completedPurchases.Sum(p => p.AmountCents) / 100.0;
+        var licensesSold = await _db.Purchases.CountAsync(p => p.Status == "completed");
+        var totalRevenue = await _db.Purchases.Where(p => p.Status == "completed").SumAsync(p => (double)p.AmountCents) / 100.0;
         var pendingPayouts = await _db.Payouts.Where(p => p.Status == "pending").SumAsync(p => p.AmountCents) / 100.0;
 
         return new AdminDashboardSummary
@@ -144,7 +145,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "suspend_user",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Suspended user {user.Email}. Reason: {reason ?? "N/A"}"
         });
         await _db.SaveChangesAsync();
@@ -161,7 +162,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "reactivate_user",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Reactivated user {user.Email}"
         });
         await _db.SaveChangesAsync();
@@ -179,7 +180,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "change_user_role",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Changed role for {user.Email} from {oldRole} to {role}"
         });
         await _db.SaveChangesAsync();
@@ -197,7 +198,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "verify_creator",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Verified creator {user.Email}"
         });
         await _db.SaveChangesAsync();
@@ -218,7 +219,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "remove_track",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Removed track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
@@ -235,7 +236,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "restore_track",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Restored track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
@@ -251,7 +252,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "hide_track",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Hidden track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
@@ -267,7 +268,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "flag_track",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Flagged track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
@@ -283,7 +284,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "set_track_visibility",
-            Admin = "system",
+            Admin = SystemActor,
             Details = $"Set visibility of '{track.Title}' to {visibility} (id={trackId})"
         });
         await _db.SaveChangesAsync();

@@ -23,7 +23,7 @@ public class BillingController : BaseController
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(BillingCheckoutRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var userEmail = User.FindFirstValue(ClaimTypes.Email)
                      ?? User.FindFirstValue("email");
 
@@ -51,7 +51,7 @@ public class BillingController : BaseController
     [HttpGet("status")]
     public async Task<IActionResult> Status()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var status = await _billing.GetStatusAsync(userId);
         _logger.LogInformation("EVENT: BillingStatusRetrieved userId:{UserId} tier:{Tier}", userId, status.Tier);
         return OkResponse(status);
@@ -63,7 +63,7 @@ public class BillingController : BaseController
         if (string.IsNullOrWhiteSpace(sessionId))
             return ErrorResponse("sessionId is required.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         _logger.LogInformation("EVENT: BillingSessionConfirmStarted userId:{UserId} sessionId:{SessionId}", userId, sessionId);
         var result = await _billing.ConfirmCheckoutAsync(sessionId, userId);
         _logger.LogInformation("EVENT: BillingSessionConfirmCompleted userId:{UserId} sessionId:{SessionId} status:{Status}", userId, sessionId, result.Status);

@@ -46,7 +46,7 @@ public class CheckoutController : BaseController
         if (string.IsNullOrWhiteSpace(sessionId))
             return ErrorResponse("sessionId is required.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         _logger.LogInformation("EVENT: CheckoutConfirmStarted userId:{UserId} sessionId:{SessionId}", userId, sessionId);
         var result = await _checkout.ConfirmAsync(sessionId, userId);
         _logger.LogInformation("EVENT: CheckoutConfirmCompleted userId:{UserId} sessionId:{SessionId} status:{Status}", userId, sessionId, result.Status);

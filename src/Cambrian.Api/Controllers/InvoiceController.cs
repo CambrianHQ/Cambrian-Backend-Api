@@ -19,7 +19,7 @@ public class InvoiceController : BaseController
     [HttpGet]
     public async Task<IActionResult> List()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var invoices = await _invoices.GetByUserAsync(userId);
         return OkResponse(invoices);
     }
@@ -30,7 +30,7 @@ public class InvoiceController : BaseController
         if (string.IsNullOrWhiteSpace(invoiceId))
             return ErrorResponse("invoiceId is required.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var invoice = await _invoices.GetByIdAsync(invoiceId, userId);
         if (invoice is null)
             return NotFoundResponse("Invoice not found.");
@@ -44,7 +44,7 @@ public class InvoiceController : BaseController
         if (string.IsNullOrWhiteSpace(invoiceId))
             return ErrorResponse("invoiceId is required.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var data = await _invoices.DownloadAsync(invoiceId, userId);
         if (data is null)
         {

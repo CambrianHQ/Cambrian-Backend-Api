@@ -172,7 +172,4 @@ public class SubscriptionService : ISubscriptionService
         };
     }
 
-    /// <summary>Returns true if the user has ever been a creator (tier is creator or pro).</summary>
-    private static bool IsCreator(ApplicationUser user) =>
-        user.Tier is "creator" or "pro";
 }
