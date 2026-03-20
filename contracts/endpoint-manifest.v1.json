@@ -276,7 +276,25 @@
                           "method":  "POST",
                           "path":  "/upload",
                           "requiresAuth":  true,
-                          "tag":  "Catalog"
+                          "tag":  "Upload"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/uploads/image",
+                          "requiresAuth":  true,
+                          "tag":  "Upload"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/users/{username}",
+                          "requiresAuth":  false,
+                          "tag":  "Users"
+                      },
+                      {
+                          "method":  "PATCH",
+                          "path":  "/users/me",
+                          "requiresAuth":  true,
+                          "tag":  "Users"
                       },
                       {
                           "method":  "POST",

@@ -2,7 +2,7 @@
 
 > Canonical source of truth for all API endpoint shapes.
 > Any change to request/response shapes MUST be reflected here FIRST.
-> Last updated: 2026-03-19 | Contract version: 2.1.0
+> Last updated: 2026-03-19 | Contract version: 2.2.0
 
 ---
 
@@ -218,6 +218,104 @@ Upload or replace a creator's profile photo from the settings area.
 ```json
 { "message": "Email updated." }
 ```
+
+---
+
+## User Profiles
+
+### `GET /users/:username` (Public)
+
+Fetch any user's public profile by their username, including their public track catalogue.
+
+**Response (200):**
+```json
+{
+  "username": "djexample",
+  "displayName": "DJ Example",
+  "profileImageUrl": "https://cdn.example.com/images/abc.jpg",
+  "coverImageUrl": "https://cdn.example.com/images/xyz.jpg",
+  "bio": "Producer from LA.",
+  "role": "Creator",
+  "verifiedCreator": true,
+  "tracks": [
+    {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "title": "Midnight Drive",
+      "genre": "Hip-Hop",
+      "coverArtUrl": "https://cdn.example.com/covers/t.jpg",
+      "nonExclusivePriceCents": 2999,
+      "exclusivePriceCents": 19900,
+      "copyrightBuyoutPriceCents": 49900,
+      "createdAt": "2026-01-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+| Status | Reason |
+|--------|--------|
+| 404 | Username not found |
+
+---
+
+### `PATCH /users/me` (Authorized)
+
+Update the authenticated user's own profile fields. All fields are optional — only provided fields are updated.
+
+**Request:**
+```json
+{
+  "profileImageUrl": "https://cdn.example.com/images/abc.jpg",
+  "coverImageUrl": "https://cdn.example.com/images/xyz.jpg",
+  "bio": "Producer from LA."
+}
+```
+
+**Response (200):**
+```json
+{
+  "username": "djexample",
+  "displayName": "DJ Example",
+  "profileImageUrl": "https://cdn.example.com/images/abc.jpg",
+  "coverImageUrl": "https://cdn.example.com/images/xyz.jpg",
+  "bio": "Producer from LA."
+}
+```
+
+**Validation:**
+- `bio`: max 500 characters
+- `profileImageUrl` / `coverImageUrl`: stored as-is; use `POST /uploads/image` to get a URL first
+
+**Errors:**
+| Status | Reason |
+|--------|--------|
+| 400 | Bio exceeds 500 characters |
+| 401 | Not authenticated |
+
+---
+
+### `POST /uploads/image` (Authorized)
+
+Upload an image to object storage and receive back its URL. Use the URL to update a profile via `PATCH /users/me`.
+
+**Recommended flow:** Upload → get URL → `PATCH /users/me` with URL
+
+**Request:** `multipart/form-data`
+| Field | Type | Notes |
+|-------|------|-------|
+| file | IFormFile | jpg, jpeg, png, webp — max 10 MB |
+
+**Response (200):**
+```json
+{ "url": "https://cdn.example.com/images/abc123.jpg" }
+```
+
+**Errors:**
+| Status | Reason |
+|--------|--------|
+| 400 | No file / wrong type / exceeds 10 MB |
+| 401 | Not authenticated |
 
 ---
 
