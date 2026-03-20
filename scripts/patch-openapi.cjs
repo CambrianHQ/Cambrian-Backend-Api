@@ -6,8 +6,8 @@
  *  - AdminUser updated with displayName, creatorTier, uploadCount, createdAt
  *  - AdminDashboardSummary count fields typed as integer
  */
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const contractPath = path.resolve(__dirname, "..", "contracts", "openapi.v1.json");
 const spec = JSON.parse(fs.readFileSync(contractPath, "utf8"));

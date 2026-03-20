@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Patches openapi.v1.json to add POST /settings/profile/avatar endpoint
 // and update the SettingsProfileResponse schema with profileImageUrl.
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const file = path.join(__dirname, '../contracts/openapi.v1.json');
 const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -10,7 +10,7 @@ const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
 // 1. Add profileImageUrl to SettingsProfileResponse schema (if it exists)
 if (spec.components?.schemas?.SettingsProfileResponse) {
   spec.components.schemas.SettingsProfileResponse.properties = {
-    ...(spec.components.schemas.SettingsProfileResponse.properties ?? {}),
+    ...spec.components.schemas.SettingsProfileResponse.properties,
     profileImageUrl: { type: 'string', nullable: true }
   };
 }
