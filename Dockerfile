@@ -18,8 +18,8 @@ WORKDIR /app
 COPY --from=build /app/publish .
 
 # Run as non-root user for container security
-RUN addgroup --system --gid 1001 appgroup && \
-    adduser --system --uid 1001 --ingroup appgroup --no-create-home appuser && \
+RUN addgroup --gid 1001 appgroup && \
+    adduser --uid 1001 --ingroup appgroup --no-create-home --disabled-password --gecos "" appuser && \
     chown -R appuser:appgroup /app
 USER appuser
 
