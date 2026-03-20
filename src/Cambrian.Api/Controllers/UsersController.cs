@@ -71,16 +71,20 @@ public class UsersController : BaseController
 
         if (body.Bio is not null)
         {
-            if (body.Bio.Length > 500)
+            // Empty string explicitly clears the field
+            var trimmed = body.Bio.Trim();
+            if (trimmed.Length > 500)
                 return ErrorResponse("Bio must be 500 characters or fewer.");
-            user.Bio = body.Bio.Trim();
+            user.Bio = trimmed.Length == 0 ? null : trimmed;
         }
 
         if (body.ProfileImageUrl is not null)
-            user.ProfileImageUrl = body.ProfileImageUrl;
+            // Empty string explicitly clears the field
+            user.ProfileImageUrl = body.ProfileImageUrl.Trim().Length == 0 ? null : body.ProfileImageUrl.Trim();
 
         if (body.CoverImageUrl is not null)
-            user.CoverImageUrl = body.CoverImageUrl;
+            // Empty string explicitly clears the field
+            user.CoverImageUrl = body.CoverImageUrl.Trim().Length == 0 ? null : body.CoverImageUrl.Trim();
 
         var result = await _users.UpdateAsync(user);
         if (!result.Succeeded)
