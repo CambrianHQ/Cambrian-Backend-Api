@@ -1,7 +1,7 @@
 # Cambrian Architecture
 
 > Single source of truth for system design. All teams must align to this document.
-> Last updated: 2026-03-19 | Contract version: 2.0.0
+> Last updated: 2026-03-20 | Contract version: 2.3.0
 
 ---
 
@@ -85,6 +85,9 @@ src/
 | `Id` (string) | Internal | ASP.NET Identity primary key, never exposed publicly |
 | `Email` | Private | Authentication only — NEVER used as public identity |
 | `DisplayName` | Public | Display label in UI (mutable) |
+| `ProfileImageUrl` | Public | User profile photo URL — stored on `AspNetUsers`, updated via `PATCH /users/me`. Read by `GET /users/:username` and `GET /settings/profile`. |
+| `CoverImageUrl` | Public | User cover/banner photo URL — stored on `AspNetUsers`, updated via `PATCH /users/me`. |
+| `Bio` | Public | Short user bio — stored on `AspNetUsers`, max 500 chars, updated via `PATCH /users/me`. |
 | `Slug` (CreatorProfile) | Public | URL-safe unique creator identifier (e.g., `/creator/studio-nova`) |
 | `CreatorTier` | Internal | Free or Pro — controls upload limits and fee rates |
 
