@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "generatedAt": "2026-03-19T00:00:00Z",
+  "generatedAt": "2026-03-19T12:00:00Z",
   "description": "Backend manifest — canonical inventory of endpoints, tables, env variables, and services.",
 
   "framework": "ASP.NET 8",
@@ -113,6 +113,9 @@
     { "method": "GET", "path": "/admin/audit", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "GET", "path": "/admin/integrity", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "GET", "path": "/admin/users", "auth": true, "role": "Admin", "tag": "Admin" },
+    { "method": "GET", "path": "/admin/tracks", "auth": true, "role": "Admin", "tag": "Admin" },
+    { "method": "GET", "path": "/admin/purchases", "auth": true, "role": "Admin", "tag": "Admin" },
+    { "method": "GET", "path": "/admin/payouts", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "GET", "path": "/admin/settings", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "POST", "path": "/admin/settings", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "GET", "path": "/admin/payouts/requests", "auth": true, "role": "Admin", "tag": "Admin" },
@@ -269,7 +272,7 @@
 
   "services": [
     { "name": "AuthService", "interface": "IAuthService", "description": "Authentication, JWT, password management" },
-    { "name": "AdminService", "interface": "IAdminService", "description": "Dashboard, user management, moderation" },
+    { "name": "AdminService", "interface": "IAdminService", "description": "Dashboard, user management, track moderation, payout management, list queries (tracks/purchases/payouts), password reset" },
     { "name": "BillingService", "interface": "IBillingService", "description": "Subscription tier checkout and confirmation" },
     { "name": "CatalogService", "interface": "ICatalogService", "description": "Track browsing, search, discovery" },
     { "name": "CheckoutService", "interface": "ICheckoutService", "description": "Purchase checkout flow and fulfillment" },

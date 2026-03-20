@@ -29,7 +29,7 @@ public static class TierManifest
         DisplayName = "Pro Creator",
         UploadLimit = null,  // unlimited
         FeeRate = 0.15m,
-        PriceCents = 1499,
+        PriceCents = 999,
         Features = ["Unlimited uploads", "Sell licenses", "Full analytics", "Featured placement", "Priority support"],
         AnalyticsAccess = AnalyticsAccess.Full
     };

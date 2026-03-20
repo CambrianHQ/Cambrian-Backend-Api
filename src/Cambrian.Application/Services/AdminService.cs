@@ -43,6 +43,15 @@ public class AdminService : IAdminService
         return await _admin.GetUsersAsync();
     }
 
+    public Task<IReadOnlyCollection<AdminTrack>> GetTracksAsync()
+        => _admin.GetTracksAsync();
+
+    public Task<IReadOnlyCollection<AdminPurchase>> GetPurchasesAsync()
+        => _admin.GetPurchasesAsync();
+
+    public Task<IReadOnlyCollection<AdminPayout>> GetPayoutsAsync()
+        => _admin.GetPayoutsAsync();
+
     public async Task<PurgeResult> PurgeTestDataAsync(string adminEmail)
     {
         return await _admin.PurgeTestDataAsync(adminEmail);
@@ -61,6 +70,17 @@ public class AdminService : IAdminService
 
     public Task<bool> VerifyCreatorAsync(string userId)
         => _admin.VerifyCreatorAsync(userId);
+
+    public Task<string?> ResetUserPasswordAsync(string userId)
+        => _admin.ResetUserPasswordAsync(userId);
+
+    // ── Payout management ──
+
+    public Task<bool> ApprovePayoutAsync(string payoutId)
+        => Guid.TryParse(payoutId, out var id) ? _admin.ApprovePayoutAsync(id) : Task.FromResult(false);
+
+    public Task<bool> RejectPayoutAsync(string payoutId)
+        => Guid.TryParse(payoutId, out var id) ? _admin.RejectPayoutAsync(id) : Task.FromResult(false);
 
     // ── Track moderation ──
 

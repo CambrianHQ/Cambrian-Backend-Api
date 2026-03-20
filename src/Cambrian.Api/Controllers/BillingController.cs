@@ -27,6 +27,9 @@ public class BillingController : BaseController
         var userEmail = User.FindFirstValue(ClaimTypes.Email)
                      ?? User.FindFirstValue("email");
 
+        if (User.IsInRole("Admin"))
+            return ErrorResponse("Admin accounts cannot purchase subscriptions.");
+
         _logger.LogInformation("EVENT: BillingCheckoutStarted userId:{UserId} tier:{Tier}", userId, request.Tier);
 
         try

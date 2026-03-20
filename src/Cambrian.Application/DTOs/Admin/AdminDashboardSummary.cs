@@ -2,13 +2,13 @@ namespace Cambrian.Application.DTOs.Admin;
 
 public class AdminDashboardSummary
 {
-    public double TotalUsers { get; set; }
+    public int TotalUsers { get; set; }
 
-    public double ActiveCreators { get; set; }
+    public int ActiveCreators { get; set; }
 
-    public double TracksUploaded { get; set; }
+    public int TracksUploaded { get; set; }
 
-    public double LicensesSold { get; set; }
+    public int LicensesSold { get; set; }
 
     public double TotalRevenue { get; set; }
 
