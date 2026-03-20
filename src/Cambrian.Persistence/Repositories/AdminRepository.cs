@@ -3,6 +3,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 namespace Cambrian.Persistence.Repositories;
 
@@ -67,10 +68,14 @@ public class AdminRepository : IAdminRepository
         {
             Id = u.Id,
             Email = u.Email ?? "",
+            DisplayName = u.DisplayName,
             Role = u.Role,
             Status = u.Status,
             Tier = u.Tier,
-            VerifiedCreator = u.VerifiedCreator
+            VerifiedCreator = u.VerifiedCreator,
+            CreatorTier = u.CreatorTier.ToString(),
+            UploadCount = u.UploadCount,
+            CreatedAt = u.CreatedAt
         }).ToList();
     }
 
@@ -200,6 +205,141 @@ public class AdminRepository : IAdminRepository
             Action = "verify_creator",
             Admin = SystemActor,
             Details = $"Verified creator {user.Email}"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<string?> ResetUserPasswordAsync(string userId)
+    {
+        var user = await _users.FindByIdAsync(userId);
+        if (user is null) return null;
+
+        // Generate a cryptographically random 12-char temp password
+        var tempPassword = Convert.ToBase64String(RandomNumberGenerator.GetBytes(9));
+        var token = await _users.GeneratePasswordResetTokenAsync(user);
+        var result = await _users.ResetPasswordAsync(user, token, tempPassword);
+        if (!result.Succeeded) return null;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "reset_user_password",
+            Admin = SystemActor,
+            Details = $"Admin reset password for {user.Email}"
+        });
+        await _db.SaveChangesAsync();
+        return tempPassword;
+    }
+
+    // ══════════════════════════════════════════════
+    // List queries
+    // ══════════════════════════════════════════════
+
+    public async Task<IReadOnlyCollection<AdminTrack>> GetTracksAsync(int take = 500)
+    {
+        var tracks = await _db.Tracks
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(take)
+            .ToListAsync();
+
+        var creatorIds = tracks.Select(t => t.CreatorId).Distinct().ToList();
+        var creators = await _users.Users
+            .Where(u => creatorIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToDictionaryAsync(u => u.Id, u => u.Email);
+
+        return tracks.Select(t => new AdminTrack
+        {
+            Id = t.Id.ToString(),
+            Title = t.Title,
+            Genre = t.Genre,
+            CreatorId = t.CreatorId,
+            CreatorEmail = creators.GetValueOrDefault(t.CreatorId),
+            Status = t.Status,
+            Visibility = t.Visibility,
+            NonExclusivePriceCents = t.NonExclusivePriceCents,
+            ExclusivePriceCents = t.ExclusivePriceCents,
+            CopyrightBuyoutPriceCents = t.CopyrightBuyoutPriceCents,
+            CreatedAt = t.CreatedAt
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyCollection<AdminPurchase>> GetPurchasesAsync(int take = 500)
+    {
+        var purchases = await _db.Purchases
+            .Include(p => p.Buyer)
+            .Include(p => p.Track)
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(take)
+            .ToListAsync();
+
+        return purchases.Select(p => new AdminPurchase
+        {
+            Id = p.Id.ToString(),
+            BuyerId = p.BuyerId,
+            BuyerEmail = p.Buyer?.Email,
+            TrackId = p.TrackId.ToString(),
+            TrackTitle = p.Track?.Title,
+            AmountCents = p.AmountCents,
+            LicenseType = p.LicenseType,
+            Status = p.Status,
+            CompletedAt = p.CompletedAt,
+            CreatedAt = p.CreatedAt
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyCollection<AdminPayout>> GetPayoutsAsync(int take = 500)
+    {
+        var payouts = await _db.Payouts
+            .Include(p => p.Creator)
+            .OrderByDescending(p => p.RequestedAt)
+            .Take(take)
+            .ToListAsync();
+
+        return payouts.Select(p => new AdminPayout
+        {
+            Id = p.Id.ToString(),
+            CreatorId = p.CreatorId,
+            CreatorEmail = p.Creator?.Email,
+            AmountCents = p.AmountCents,
+            Status = p.Status,
+            RequestedAt = p.RequestedAt,
+            CompletedAt = p.CompletedAt
+        }).ToList();
+    }
+
+    // ══════════════════════════════════════════════
+    // Payout management
+    // ══════════════════════════════════════════════
+
+    public async Task<bool> ApprovePayoutAsync(Guid payoutId)
+    {
+        var payout = await _db.Payouts.FindAsync(payoutId);
+        if (payout is null) return false;
+        payout.Status = "approved";
+        payout.CompletedAt = DateTime.UtcNow;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "approve_payout",
+            Admin = SystemActor,
+            Details = $"Approved payout {payoutId} (${payout.AmountCents / 100.0:F2})"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RejectPayoutAsync(Guid payoutId)
+    {
+        var payout = await _db.Payouts.FindAsync(payoutId);
+        if (payout is null) return false;
+        payout.Status = "rejected";
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "reject_payout",
+            Admin = SystemActor,
+            Details = $"Rejected payout {payoutId} (${payout.AmountCents / 100.0:F2})"
         });
         await _db.SaveChangesAsync();
         return true;

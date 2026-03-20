@@ -8,8 +8,8 @@ using Microsoft.AspNetCore.Mvc.Filters;
 namespace Cambrian.Api.Middleware;
 
 /// <summary>
-/// Action filter that verifies the authenticated user has Tier == "creator".
-/// Reads the "tier" claim from the JWT first (no DB call). Falls back to
+/// Action filter that verifies the authenticated user has Role == "Creator" (or "Admin").
+/// Reads the role claim from the JWT first (no DB call). Falls back to
 /// UserManager only for legacy tokens that lack the claim.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
@@ -24,12 +24,11 @@ public class RequireCreatorTierAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        // Fast path: read tier from JWT claim (set by AuthService.GenerateJwt)
-        var tier = context.HttpContext.User.FindFirstValue("tier");
+        // Fast path: read role from JWT claim
+        var role = context.HttpContext.User.FindFirstValue(ClaimTypes.Role);
 
-        // If the JWT claim is missing or is not a creator tier, fall back to DB
-        // to handle stale tokens after a tier upgrade.
-        if (tier != "creator" && tier != "pro")
+        // Fall back to DB for legacy tokens missing the role claim
+        if (string.IsNullOrEmpty(role))
         {
             var userManager = context.HttpContext.RequestServices
                 .GetRequiredService<UserManager<ApplicationUser>>();
@@ -39,12 +38,13 @@ public class RequireCreatorTierAttribute : Attribute, IAsyncActionFilter
                 context.Result = new UnauthorizedResult();
                 return;
             }
-            tier = (user.Tier ?? "free").ToLowerInvariant();
+            role = user.Role;
         }
 
-        if (tier != "creator" && tier != "pro")
+        if (!string.Equals(role, "Creator", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
         {
-            context.Result = new ObjectResult(ApiResponse.Fail("Creator tier required. If you recently upgraded, refresh your session via GET /auth/me."))
+            context.Result = new ObjectResult(ApiResponse.Fail("Creator account required to upload tracks."))
             {
                 StatusCode = 403
             };

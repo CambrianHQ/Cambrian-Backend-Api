@@ -10,6 +10,12 @@ public interface IAdminService
 
     Task<IReadOnlyCollection<AdminUser>> GetUsersAsync();
 
+    Task<IReadOnlyCollection<AdminTrack>> GetTracksAsync();
+
+    Task<IReadOnlyCollection<AdminPurchase>> GetPurchasesAsync();
+
+    Task<IReadOnlyCollection<AdminPayout>> GetPayoutsAsync();
+
     Task<PurgeResult> PurgeTestDataAsync(string adminEmail);
 
     // ── User management ──
@@ -17,6 +23,13 @@ public interface IAdminService
     Task<bool> ReactivateUserAsync(string userId);
     Task<bool> SetUserRoleAsync(string userId, string role);
     Task<bool> VerifyCreatorAsync(string userId);
+
+    /// <summary>Returns the generated temporary password, or null if user not found.</summary>
+    Task<string?> ResetUserPasswordAsync(string userId);
+
+    // ── Payout management ──
+    Task<bool> ApprovePayoutAsync(string payoutId);
+    Task<bool> RejectPayoutAsync(string payoutId);
 
     // ── Track moderation ──
     Task<bool> RemoveTrackAsync(string trackId);

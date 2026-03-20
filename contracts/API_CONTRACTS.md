@@ -2,7 +2,7 @@
 
 > Canonical source of truth for all API endpoint shapes.
 > Any change to request/response shapes MUST be reflected here FIRST.
-> Last updated: 2026-03-19 | Contract version: 2.0.0
+> Last updated: 2026-03-19 | Contract version: 2.1.0
 
 ---
 
@@ -1070,10 +1070,20 @@ Returns array of `AdminAuditLog`: id, action, admin, timestamp, details.
 Returns `IntegrityReport`: generatedAt, totalViolations, violations[], summary.
 
 ### `GET /admin/users`
-Returns array of `AdminUser`: id, email, role, status, tier, verifiedCreator.
+Returns array of `AdminUser`: id, email, displayName, role, status, tier, verifiedCreator, creatorTier, uploadCount, createdAt.
+
+### `GET /admin/tracks`
+Returns array of `AdminTrack`: id, title, genre, creatorId, creatorEmail, status, visibility, nonExclusivePriceCents, exclusivePriceCents, copyrightBuyoutPriceCents, createdAt.
+
+### `GET /admin/purchases`
+Returns array of `AdminPurchase`: id, buyerId, buyerEmail, trackId, trackTitle, amountCents, licenseType, status, completedAt, createdAt.
+
+### `GET /admin/payouts`
+Returns all payouts (all statuses) as `AdminPayout[]`: id, creatorId, creatorEmail, amountCents, status, requestedAt, completedAt.
 
 ### `GET /admin/settings` | `POST /admin/settings`
-Get/update system configuration (fees, tier prices, toggles).
+GET returns live values from `TierManifest` (freeTierFeePercent, proTierFeePercent, proTierPriceCents, freeTierUploadLimit, proTierUploadLimit, featureToggles).
+POST returns **501** — settings persistence not yet implemented.
 
 ### `GET /admin/payouts/requests`
 Returns pending payout requests.
@@ -1203,10 +1213,10 @@ AI track generation.
 `personal`, `youtube`, `ads`, `podcast`, `game`, `film`, `social`
 
 ### Creator Tiers
-| Tier | Upload Limit | Platform Fee |
-|------|-------------|--------------|
-| Free | 10 tracks | 35% |
-| Pro | Unlimited | 15% |
+| Tier | Upload Limit | Platform Fee | Price |
+|------|-------------|--------------|-------|
+| Free | 10 tracks | 35% | $0 |
+| Pro | Unlimited | 15% | $9.99/mo |
 
 ### Track Status
 `available`, `exclusive_sold`, `copyright_transferred`

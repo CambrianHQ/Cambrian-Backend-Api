@@ -1,3 +1,4 @@
+using Cambrian.Application.Configuration;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -49,42 +50,76 @@ public class AdminController : BaseController
         return OkResponse(users);
     }
 
+    [HttpGet("tracks")]
+    public async Task<IActionResult> Tracks()
+    {
+        var tracks = await _admin.GetTracksAsync();
+        return OkResponse(tracks);
+    }
+
+    [HttpGet("purchases")]
+    public async Task<IActionResult> Purchases()
+    {
+        var purchases = await _admin.GetPurchasesAsync();
+        return OkResponse(purchases);
+    }
+
     [HttpGet("settings")]
     public IActionResult GetSettings()
     {
+        var free = TierManifest.Free;
+        var pro = TierManifest.Pro;
         return OkResponse(new
         {
-            platformFeePercent = 20.0,
-            paidTierPrice = 9.99,
-            creatorTierPrice = 14.99,
-            featureToggles = new { payoutsEnabled = true, moderationEnabled = true, marketplaceEnabled = true },
-            marketplace = new { allowExclusiveListings = true, requireTrackReview = false }
+            freeTierFeePercent = (double)free.FeeRate,
+            proTierFeePercent = (double)pro.FeeRate,
+            proTierPriceCents = pro.PriceCents,
+            freeTierUploadLimit = free.UploadLimit,
+            proTierUploadLimit = pro.UploadLimit,
+            featureToggles = new { payoutsEnabled = true, moderationEnabled = true, marketplaceEnabled = true }
         });
     }
 
     [HttpPost("settings")]
     public IActionResult UpdateSettings()
     {
-        return OkResponse(new { success = true, message = "Settings updated." });
+        // Platform fee rates and tier limits are compile-time constants in TierManifest.
+        // Runtime settings persistence is not yet implemented.
+        return StatusCode(501, new { error = "Settings persistence is not yet implemented. Update TierManifest.cs to change fee rates." });
     }
 
     // --- Payout management ---
 
-    [HttpGet("payouts/requests")]
-    public IActionResult PayoutRequests()
+    [HttpGet("payouts")]
+    public async Task<IActionResult> Payouts()
     {
-        return OkResponse(Array.Empty<object>());
+        var payouts = await _admin.GetPayoutsAsync();
+        return OkResponse(payouts);
+    }
+
+    [HttpGet("payouts/requests")]
+    public async Task<IActionResult> PayoutRequests()
+    {
+        var all = await _admin.GetPayoutsAsync();
+        var pending = all.Where(p => p.Status == "pending").ToList();
+        return OkResponse(pending);
     }
 
     [HttpPost("payouts/{id}/approve")]
-    public IActionResult ApprovePayout(string id)
+    public async Task<IActionResult> ApprovePayout(string id)
     {
+        _logger.LogInformation("[Admin] ApprovePayout id={PayoutId}", id);
+        var ok = await _admin.ApprovePayoutAsync(id);
+        if (!ok) return NotFound(new { success = false, message = "Payout not found." });
         return OkResponse(new { success = true, message = $"Payout {id} approved." });
     }
 
     [HttpPost("payouts/{id}/reject")]
-    public IActionResult RejectPayout(string id)
+    public async Task<IActionResult> RejectPayout(string id)
     {
+        _logger.LogInformation("[Admin] RejectPayout id={PayoutId}", id);
+        var ok = await _admin.RejectPayoutAsync(id);
+        if (!ok) return NotFound(new { success = false, message = "Payout not found." });
         return OkResponse(new { success = true, message = $"Payout {id} rejected." });
     }
 
@@ -122,9 +157,12 @@ public class AdminController : BaseController
     }
 
     [HttpPost("users/{id}/reset-password")]
-    public IActionResult ResetUserPassword(string id)
+    public async Task<IActionResult> ResetUserPassword(string id)
     {
-        return OkResponse(new { success = true, message = "Password reset." });
+        _logger.LogInformation("[Admin] ResetUserPassword id={UserId}", id);
+        var tempPassword = await _admin.ResetUserPasswordAsync(id);
+        if (tempPassword is null) return NotFound(new { success = false, message = "User not found or reset failed." });
+        return OkResponse(new { success = true, temporaryPassword = tempPassword, message = "Password reset. Share the temporary password securely with the user." });
     }
 
     [HttpPost("users/{id}/verify-creator")]
@@ -189,13 +227,13 @@ public class AdminController : BaseController
     [HttpPost("tracks/{id}/feature")]
     public IActionResult FeatureTrack(string id)
     {
-        return OkResponse(new { success = true, message = "Track featured." });
+        return StatusCode(501, new { error = "Featured track placement is not yet implemented." });
     }
 
     [HttpPost("tracks/{id}/pin")]
     public IActionResult PinTrack(string id)
     {
-        return OkResponse(new { success = true, message = "Track pinned." });
+        return StatusCode(501, new { error = "Track pinning is not yet implemented." });
     }
 
     public record VisibilityRequest(string Visibility);
@@ -214,13 +252,13 @@ public class AdminController : BaseController
     [HttpPost("collections/curate")]
     public IActionResult CurateCollection()
     {
-        return OkResponse(new { success = true, message = "Collection curated." });
+        return StatusCode(501, new { error = "Collection curation is not yet implemented." });
     }
 
     [HttpPost("tags/manage")]
     public IActionResult ManageTags()
     {
-        return OkResponse(new { success = true, message = "Tags updated." });
+        return StatusCode(501, new { error = "Tag management is not yet implemented." });
     }
 
     /// <summary>
