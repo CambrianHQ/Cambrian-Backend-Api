@@ -22,6 +22,7 @@
     { "method": "POST", "path": "/auth/reset-password", "auth": false, "tag": "Auth" },
     { "method": "POST", "path": "/auth/recover-username", "auth": false, "tag": "Auth" },
     { "method": "GET", "path": "/settings/profile", "auth": true, "tag": "Settings" },
+    { "method": "POST", "path": "/settings/profile/avatar", "auth": true, "role": "Creator", "tag": "Settings" },
     { "method": "POST", "path": "/settings/password", "auth": true, "tag": "Settings" },
     { "method": "PUT", "path": "/settings/password", "auth": true, "tag": "Settings" },
     { "method": "POST", "path": "/settings/email", "auth": true, "tag": "Settings" },

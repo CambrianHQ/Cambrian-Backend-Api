@@ -72,7 +72,27 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
     {
         var existing = await _db.CreatorProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId);
-        if (existing is null) throw new KeyNotFoundException("Profile not found.");
+
+        if (existing is null)
+        {
+            // Auto-create a minimal profile so creators can set an avatar
+            // before completing full profile setup. Slug is a placeholder derived
+            // from the userId and can be updated later via PUT /creator-profile/me.
+            var placeholder = new CreatorProfile
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Slug = userId.Replace("-", "").ToLower()[..16],
+                Bio = "",
+                BannerImageUrl = bannerImageUrl,
+                ProfileImageUrl = profileImageUrl,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _db.CreatorProfiles.Add(placeholder);
+            await _db.SaveChangesAsync();
+            return MapToDto(placeholder);
+        }
 
         if (bannerImageUrl is not null) existing.BannerImageUrl = bannerImageUrl;
         if (profileImageUrl is not null) existing.ProfileImageUrl = profileImageUrl;

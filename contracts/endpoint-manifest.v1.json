@@ -526,6 +526,13 @@
                       },
                       {
                           "method":  "POST",
+                          "path":  "/settings/profile/avatar",
+                          "requiresAuth":  true,
+                          "requiresRole":  "Creator",
+                          "tag":  "Settings"
+                      },
+                      {
+                          "method":  "POST",
                           "path":  "/settings/password",
                           "requiresAuth":  true,
                           "tag":  "Settings"

@@ -125,15 +125,14 @@ public class CreatorProfileController : BaseController
     [Authorize]
     [RequireCreatorTier]
     [HttpPost("me/avatar")]
+    [HttpPost("/settings/profile/avatar")]
     public async Task<IActionResult> UploadAvatar(IFormFile file)
     {
         var url = await UploadImage(file, "avatars");
-        if (url is null) return ErrorResponse("Invalid image file.");
+        if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 10 MB).");
 
         var userId = GetRequiredUserId()!;
-        var existing = await _profiles.GetByUserIdAsync(userId);
-        if (existing is null) return NotFoundResponse("Create a profile first.");
-
+        // UpdateImageAsync auto-creates a minimal profile if one does not yet exist
         var updated = await _profiles.UpdateImageAsync(userId, null, url);
         return OkResponse(new { profileImageUrl = updated.ProfileImageUrl });
     }

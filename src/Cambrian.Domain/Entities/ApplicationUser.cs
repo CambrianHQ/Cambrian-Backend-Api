@@ -40,6 +40,15 @@ public class ApplicationUser : IdentityUser
     /// <summary>UTC expiry of the current password reset code.</summary>
     public DateTime? PasswordResetCodeExpiry { get; set; }
 
+    /// <summary>User's profile/avatar image URL (stored in object storage).</summary>
+    public string? ProfileImageUrl { get; set; }
+
+    /// <summary>User's cover/banner image URL (stored in object storage).</summary>
+    public string? CoverImageUrl { get; set; }
+
+    /// <summary>Short user bio / tagline. Max 500 characters.</summary>
+    public string? Bio { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();

@@ -13,12 +13,14 @@ public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly ICreatorProfileRepository _profiles;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ILogger<AuthController> logger)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorProfileRepository profiles, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
+        _profiles = profiles;
         _logger = logger;
     }
 
@@ -152,13 +154,16 @@ public class AuthController : BaseController
     [HttpGet("/settings/profile")]
     public async Task<IActionResult> GetProfile()
     {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var profile = await _auth.GetCurrentUserAsync(User);
+        var creatorProfile = await _profiles.GetByUserIdAsync(userId);
         return OkResponse(new
         {
             displayName = profile.DisplayName,
             email = profile.Email,
             tier = profile.Tier,
-            role = profile.Role
+            role = profile.Role,
+            profileImageUrl = creatorProfile?.ProfileImageUrl
         });
     }
 
