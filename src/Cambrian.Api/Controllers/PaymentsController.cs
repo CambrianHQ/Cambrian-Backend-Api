@@ -25,7 +25,7 @@ public class PaymentsController : BaseController
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(PaymentCheckoutRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var userEmail = User.FindFirstValue(ClaimTypes.Email)
                      ?? User.FindFirstValue("email");
         var result = await _payments.CreateCheckoutAsync(request, userId, userEmail);
@@ -48,7 +48,7 @@ public class PaymentsController : BaseController
     [HttpPost("process")]
     public async Task<IActionResult> Process(PaymentProcessRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         await _payments.ProcessAsync(request, userId);
         return MessageResponse("Payment processed.");
     }
@@ -58,7 +58,7 @@ public class PaymentsController : BaseController
     [HttpPost("/purchases")]
     public async Task<IActionResult> CreatePurchase(PurchaseCreateRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var result = await _purchaseService.CreateAsync(request, userId);
         return CreatedResponse(result, "Purchase completed.");
     }

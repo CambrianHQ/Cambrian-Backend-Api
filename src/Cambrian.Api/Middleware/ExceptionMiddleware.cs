@@ -41,6 +41,7 @@ public sealed class ExceptionMiddleware
             context.Response.ContentType = "application/json";
             context.Response.StatusCode = ex switch
             {
+                ForbiddenException          => (int)HttpStatusCode.Forbidden,
                 UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
                 KeyNotFoundException        => (int)HttpStatusCode.NotFound,
                 ArgumentException           => (int)HttpStatusCode.BadRequest,

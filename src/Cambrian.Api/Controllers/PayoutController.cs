@@ -24,7 +24,7 @@ public class PayoutController : BaseController
     [HttpPost("connect-stripe")]
     public async Task<IActionResult> ConnectStripe()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var result = await _connect.StartOnboardingAsync(userId);
         return OkResponse(result);
     }
@@ -32,7 +32,7 @@ public class PayoutController : BaseController
     [HttpGet("connect-status")]
     public async Task<IActionResult> ConnectStatus()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var status = await _connect.GetStatusAsync(userId);
         return OkResponse(status);
     }
@@ -40,7 +40,7 @@ public class PayoutController : BaseController
     [HttpGet("stripe-dashboard")]
     public async Task<IActionResult> StripeDashboard()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var url = await _connect.GetDashboardLinkAsync(userId);
         return OkResponse(new { url });
     }
@@ -48,7 +48,7 @@ public class PayoutController : BaseController
     [HttpGet("account")]
     public async Task<IActionResult> Account()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var status = await _connect.GetStatusAsync(userId);
         return OkResponse(new { accountId = status.AccountId, status = status.Status });
     }
@@ -56,7 +56,7 @@ public class PayoutController : BaseController
     [HttpPost("connect")]
     public async Task<IActionResult> Connect([FromBody] PayoutConnectRequest? request = null)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var result = await _connect.StartOnboardingAsync(userId);
         return OkResponse(result);
     }
@@ -72,23 +72,18 @@ public class PayoutController : BaseController
     [HttpDelete("disconnect")]
     public async Task<IActionResult> DisconnectDelete()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         await _connect.DisconnectAsync(userId);
         return MessageResponse("Stripe account disconnected.");
     }
 
     [HttpPost("disconnect")]
-    public async Task<IActionResult> DisconnectPost()
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        await _connect.DisconnectAsync(userId);
-        return MessageResponse("Stripe account disconnected.");
-    }
+    public Task<IActionResult> DisconnectPost() => DisconnectDelete();
 
     [HttpGet("earnings")]
     public async Task<IActionResult> PayoutsEarnings()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var earnings = await _payouts.GetEarningsAsync(userId);
         return OkResponse(earnings);
     }
@@ -96,7 +91,7 @@ public class PayoutController : BaseController
     [HttpPost("request")]
     public async Task<IActionResult> RequestPayout(PayoutRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var result = await _payouts.RequestAsync(request, userId);
         return OkResponse(result);
     }
@@ -104,7 +99,7 @@ public class PayoutController : BaseController
     [HttpGet("history")]
     public async Task<IActionResult> History([FromQuery] int take = 50)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var history = await _payouts.GetHistoryAsync(userId, take);
         return OkResponse(history);
     }
@@ -128,10 +123,5 @@ public class PayoutController : BaseController
     }
 
     [HttpGet("/earnings")]
-    public async Task<IActionResult> Earnings()
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var earnings = await _payouts.GetEarningsAsync(userId);
-        return OkResponse(earnings);
-    }
+    public Task<IActionResult> Earnings() => PayoutsEarnings();
 }

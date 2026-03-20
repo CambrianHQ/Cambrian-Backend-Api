@@ -1,5 +1,6 @@
 using Cambrian.Api.Common;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Cambrian.Api.Controllers;
 
@@ -32,6 +33,14 @@ public class BaseController : ControllerBase
     /// <summary>403 Forbidden with error envelope.</summary>
     protected IActionResult ForbiddenResponse(string error = "Access denied.") =>
         StatusCode(403, ApiResponse.Fail(error));
+
+    /// <summary>
+    /// Returns the authenticated user's ID from the JWT NameIdentifier claim.
+    /// All callers must be on [Authorize] endpoints; returns null only in pathological cases
+    /// where the middleware has been misconfigured.
+    /// </summary>
+    protected string? GetRequiredUserId() =>
+        User.FindFirstValue(ClaimTypes.NameIdentifier);
 
     /// <summary>409 Conflict with error envelope.</summary>
     protected IActionResult ConflictResponse(string error = "Resource already exists.") =>

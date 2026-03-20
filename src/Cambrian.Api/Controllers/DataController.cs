@@ -22,7 +22,7 @@ public class DataController : BaseController
     [HttpGet("account")]
     public async Task<IActionResult> GetAccount()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return NotFoundResponse("User not found.");
 

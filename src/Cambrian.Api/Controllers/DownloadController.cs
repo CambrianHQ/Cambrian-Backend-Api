@@ -38,7 +38,7 @@ public class DownloadController : BaseController
         if (!Guid.TryParse(trackId, out var id))
             return ErrorResponse("trackId must be a valid GUID.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
 
         var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
         if (libraryItem is null)
@@ -84,7 +84,7 @@ public class DownloadController : BaseController
         if (!Guid.TryParse(trackId, out var id))
             return ErrorResponse("trackId must be a valid GUID.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
 
         var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
         if (libraryItem is null)
@@ -117,7 +117,7 @@ public class DownloadController : BaseController
         if (!Guid.TryParse(trackId, out var id))
             return ErrorResponse("trackId must be a valid GUID.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
 
         var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
         if (libraryItem is null)

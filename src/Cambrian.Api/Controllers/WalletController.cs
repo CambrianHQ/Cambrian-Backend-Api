@@ -19,7 +19,7 @@ public class WalletController : BaseController
     [HttpGet]
     public async Task<IActionResult> Get()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var balance = await _wallet.GetBalanceAsync(userId);
         return OkResponse(balance);
     }
@@ -27,7 +27,7 @@ public class WalletController : BaseController
     [HttpPost("withdraw")]
     public async Task<IActionResult> Withdraw([FromBody] Application.DTOs.Wallet.WithdrawRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
 
         try
         {
@@ -50,7 +50,7 @@ public class WalletController : BaseController
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var history = await _wallet.GetHistoryAsync(userId, pageSize);
         return OkResponse(history);
     }
