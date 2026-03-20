@@ -2,7 +2,7 @@
 
 > Canonical source of truth for all API endpoint shapes.
 > Any change to request/response shapes MUST be reflected here FIRST.
-> Last updated: 2026-03-19 | Contract version: 2.2.0
+> Last updated: 2026-03-20 | Contract version: 2.3.0
 
 ---
 
@@ -161,11 +161,13 @@
   "email": "dj@example.com",
   "tier": "free",
   "role": "Creator",
-  "profileImageUrl": "https://cdn.example.com/avatars/abc123.jpg"
+  "profileImageUrl": "https://cdn.example.com/avatars/abc123.jpg",
+  "coverImageUrl": null,
+  "bio": "Producer from LA."
 }
 ```
 
-> `profileImageUrl` is `null` if no avatar has been uploaded yet.
+> `profileImageUrl`, `coverImageUrl`, and `bio` are `null` if not yet set. These fields are read from `AspNetUsers` and updated via `PATCH /users/me`.
 
 ### `POST /settings/profile/avatar` (Authorized — Creator role)
 
