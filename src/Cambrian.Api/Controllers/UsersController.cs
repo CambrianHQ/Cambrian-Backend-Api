@@ -12,18 +12,11 @@ public class UsersController : BaseController
 {
     private readonly UserManager<ApplicationUser> _users;
     private readonly ITrackRepository _tracks;
-    private readonly IObjectStorage _storage;
 
-    private static readonly HashSet<string> AllowedImageExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp" };
-
-    private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
-
-    public UsersController(UserManager<ApplicationUser> users, ITrackRepository tracks, IObjectStorage storage)
+    public UsersController(UserManager<ApplicationUser> users, ITrackRepository tracks)
     {
         _users = users;
         _tracks = tracks;
-        _storage = storage;
     }
 
     // ───── GET /users/:username — public profile ─────

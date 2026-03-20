@@ -14,15 +14,13 @@ public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
     private readonly ISubscriptionRepository _subscriptions;
-    private readonly ICreatorProfileRepository _profiles;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorProfileRepository profiles, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<AuthController> logger)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
-        _profiles = profiles;
         _userManager = userManager;
         _logger = logger;
     }
