@@ -228,6 +228,7 @@ internal static class StartupExtensions
             return;
 
         await SeedAdminAsync(app);
+        await SeedDemoUsersAsync(app);
         await SeedFeatureFlagsAsync(app);
     }
 
@@ -365,6 +366,59 @@ internal static class StartupExtensions
         else
         {
             Console.WriteLine($"[Seed] Admin account already up to date: {adminEmail}");
+        }
+    }
+
+    private static async Task SeedDemoUsersAsync(WebApplication app)
+    {
+        var demoUsers = new[]
+        {
+            ("aiden",    "Aiden Sharp"),
+            ("bellanova","Bella Nova"),
+            ("cassius",  "Cassius Reed"),
+            ("dahlia",   "Dahlia Moon"),
+            ("ezra",     "Ezra Voss"),
+            ("faye",     "Faye Lark"),
+            ("griffin",  "Griffin Cole"),
+            ("harper",   "Harper Wren"),
+            ("indigo",   "Indigo Sage"),
+            ("juniper",  "Juniper Kai"),
+        };
+        const string defaultPassword = "Cambrian2026!";
+
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
+
+            foreach (var (username, displayName) in demoUsers)
+            {
+                var email = $"{username}@cambrianmusic.com";
+                var existing = await userManager.FindByEmailAsync(email);
+                if (existing is not null)
+                    continue;
+
+                var user = new ApplicationUser
+                {
+                    UserName = username,
+                    Email = email,
+                    DisplayName = displayName,
+                    Role = "Creator",
+                    Tier = "creator",
+                    CreatorTier = Domain.Enums.CreatorTier.Free,
+                    EmailConfirmed = true
+                };
+                var result = await userManager.CreateAsync(user, defaultPassword);
+                if (result.Succeeded)
+                    Console.WriteLine($"[Seed] Demo user created: {email} ({displayName})");
+                else
+                    Console.WriteLine($"[Seed] Demo user failed: {email} — {string.Join("; ", result.Errors.Select(e => e.Description))}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Seed] Demo user seed error: {ex.Message}");
         }
     }
 
