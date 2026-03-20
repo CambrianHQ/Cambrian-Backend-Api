@@ -154,7 +154,40 @@
 
 ### `GET /settings/profile` (Authorized)
 
-**Response (200):** Same as `GET /auth/me` (`UserProfileResponse`).
+**Response (200):**
+```json
+{
+  "displayName": "DJ Example",
+  "email": "dj@example.com",
+  "tier": "free",
+  "role": "Creator",
+  "profileImageUrl": "https://cdn.example.com/avatars/abc123.jpg"
+}
+```
+
+> `profileImageUrl` is `null` if no avatar has been uploaded yet.
+
+### `POST /settings/profile/avatar` (Authorized — Creator role)
+
+Upload or replace a creator's profile photo from the settings area.
+
+**Request:** `multipart/form-data`
+| Field | Type | Notes |
+|-------|------|-------|
+| file | IFormFile | jpg, jpeg, png, webp — max 10 MB |
+
+**Response (200):**
+```json
+{ "profileImageUrl": "https://cdn.example.com/avatars/abc123.jpg" }
+```
+
+**Errors:**
+| Status | Reason |
+|--------|--------|
+| 400 | Invalid or missing file / wrong type / too large |
+| 403 | User is not a Creator |
+
+> Also accessible at `POST /creator-profile/me/avatar` — identical behaviour.
 
 ### `POST /settings/password` | `PUT /settings/password` (Authorized)
 

@@ -259,5 +259,12 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(tc => tc.CoverImageUrl).HasMaxLength(500);
             e.Property(tc => tc.TrackIds).HasMaxLength(5000);
         });
+
+        builder.Entity<ApplicationUser>(e =>
+        {
+            e.Property(u => u.ProfileImageUrl).HasMaxLength(500);
+            e.Property(u => u.CoverImageUrl).HasMaxLength(500);
+            e.Property(u => u.Bio).HasMaxLength(500);
+        });
     }
 }
