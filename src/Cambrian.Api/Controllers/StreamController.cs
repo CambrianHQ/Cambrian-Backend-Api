@@ -72,7 +72,7 @@ public class StreamController : BaseController
     /// Open to anonymous users — this is the marketplace discovery/preview model.
     /// Full-quality downloads require a verified purchase (see DownloadController).
     /// </summary>
-    [Authorize]
+    [AllowAnonymous]
     [HttpGet("{trackId}/audio")]
     public async Task<IActionResult> StreamAudio(string trackId)
     {
