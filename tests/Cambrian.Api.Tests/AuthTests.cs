@@ -73,14 +73,15 @@ public sealed class AuthTests
             Id = Guid.NewGuid().ToString(),
             Email = "pro@test.com",
             Tier = "creator",
-            Role = "User"
+            Role = "User",
+            CreatorTier = Domain.Enums.CreatorTier.Pro
         };
         _users.FindByEmailAsync("pro@test.com").Returns(user);
         _users.CheckPasswordAsync(user, "correct").Returns(true);
 
         var result = await _sut.LoginAsync(new LoginRequest { Email = "pro@test.com", Password = "correct" });
 
-        Assert.Equal("creator", result.Tier);
+        Assert.Equal("pro", result.Tier);
         Assert.Equal("pro@test.com", result.Email);
         Assert.NotEmpty(result.Token);
     }
@@ -106,15 +107,17 @@ public sealed class AuthTests
     [Fact]
     public async Task LoginAsync_NormalizesTierToLowerCase()
     {
+        var userId = Guid.NewGuid().ToString();
         var user = new ApplicationUser
         {
-            Id = Guid.NewGuid().ToString(),
+            Id = userId,
             Email = "user@test.com",
             Tier = "PAID",
             Role = "User"
         };
         _users.FindByEmailAsync("user@test.com").Returns(user);
         _users.CheckPasswordAsync(user, "pass").Returns(true);
+        _subscriptions.GetActiveAsync(userId).Returns(new Subscription { Plan = "PAID" });
 
         var result = await _sut.LoginAsync(new LoginRequest { Email = "user@test.com", Password = "pass" });
 

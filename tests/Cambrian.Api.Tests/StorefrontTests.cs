@@ -425,6 +425,7 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
             var user = await db.Users.FirstAsync(u => u.Email == email);
             user.Tier = "creator";
+            user.Role = "Creator";
             await db.SaveChangesAsync();
         }
 
