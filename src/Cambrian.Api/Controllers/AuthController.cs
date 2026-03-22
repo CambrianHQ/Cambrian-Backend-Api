@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -160,6 +162,11 @@ public class AuthController : BaseController
         // Read images from AspNetUsers — the source of truth written by PATCH /users/me.
         // CreatorProfile.ProfileImageUrl is a separate creator storefront image.
         var user = await _userManager.FindByIdAsync(userId);
+
+        var currentTierConfig = TierManifest.For(user?.CreatorTier ?? CreatorTier.Free);
+        var canUpgrade = currentTierConfig.Tier != CreatorTier.Pro;
+        var proTier = TierManifest.Pro;
+
         return OkResponse(new
         {
             displayName = profile.DisplayName,
@@ -168,7 +175,25 @@ public class AuthController : BaseController
             role = profile.Role,
             bio = user?.Bio,
             profileImageUrl = user?.ProfileImageUrl,
-            coverImageUrl = user?.CoverImageUrl
+            coverImageUrl = user?.CoverImageUrl,
+            subscription = new
+            {
+                creatorTier = currentTierConfig.DisplayName,
+                status = profile.SubscriptionStatus,
+                expiresAt = profile.SubscriptionEndDate,
+                uploadCount = profile.UploadCount,
+                uploadLimit = currentTierConfig.UploadLimit,
+                platformFeePercent = currentTierConfig.FeeRate,
+                canUpgrade,
+                upgrade = canUpgrade ? new
+                {
+                    tier = proTier.Slug,
+                    displayName = proTier.DisplayName,
+                    priceCents = proTier.PriceCents,
+                    features = proTier.Features,
+                    checkoutEndpoint = "/billing/checkout"
+                } : null
+            }
         });
     }
 
