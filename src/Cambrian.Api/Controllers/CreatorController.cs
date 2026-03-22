@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;

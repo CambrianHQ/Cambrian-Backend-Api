@@ -73,7 +73,7 @@ public class CatalogController : BaseController
     /// so existing clients are unaffected, and pagination metadata is added as
     /// sibling fields.
     /// </summary>
-    private static object ToPaginatedEnvelope<T>(Cambrian.Application.DTOs.Catalog.PagedResult<T> paged) => new
+    private static object ToPaginatedEnvelope<T>(PagedResult<T> paged) => new
     {
         success = true,
         data = paged.Items,
@@ -125,7 +125,7 @@ public class CatalogController : BaseController
         return OkResponse(items);
     }
 
-    private void ResolveTrackUrls(IEnumerable<Cambrian.Application.DTOs.Catalog.TrackResponse> tracks)
+    private void ResolveTrackUrls(IEnumerable<TrackResponse> tracks)
     {
         foreach (var t in tracks)
         {

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.CreatorProfile;
@@ -221,12 +220,7 @@ public class CreatorProfileController : BaseController
         if (file.Length > MaxImageSize) return null;
 
         var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant() ?? "";
-        var matched = false;
-        foreach (var allowed in AllowedImageExtensions)
-        {
-            if (allowed == ext) { matched = true; break; }
-        }
-        if (!matched) return null;
+        if (!AllowedImageExtensions.Contains(ext)) return null;
 
         var key = $"{folder}/{Guid.NewGuid()}{ext}";
         await using var stream = file.OpenReadStream();
