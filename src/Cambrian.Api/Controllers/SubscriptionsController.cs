@@ -1,4 +1,4 @@
-using System.Security.Claims;
+using Cambrian.Api.Common;
 using Cambrian.Application.DTOs.Subscriptions;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -45,7 +45,7 @@ public class SubscriptionsController : BaseController
             // Allow re-sync when user is already on this plan (e.g., tier mismatch fix)
             var current = await _subscriptions.GetCurrentAsync(userId);
             if (current.Plan != request.Plan)
-                return StatusCode(402, Common.ApiResponse.Fail("Paid plan upgrades require checkout. Use POST /billing/checkout."));
+                return StatusCode(402, ApiResponse.Fail("Paid plan upgrades require checkout. Use POST /billing/checkout."));
         }
 
         var result = await _subscriptions.UpdateAsync(request, userId);

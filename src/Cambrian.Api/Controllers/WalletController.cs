@@ -1,4 +1,4 @@
-using System.Security.Claims;
+using Cambrian.Application.DTOs.Wallet;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +25,7 @@ public class WalletController : BaseController
     }
 
     [HttpPost("withdraw")]
-    public async Task<IActionResult> Withdraw([FromBody] Application.DTOs.Wallet.WithdrawRequest request)
+    public async Task<IActionResult> Withdraw([FromBody] WithdrawRequest request)
     {
         var userId = GetRequiredUserId()!;
 
