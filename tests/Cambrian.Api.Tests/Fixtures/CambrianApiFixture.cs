@@ -32,7 +32,7 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Jwt:Key"] = "***REDACTED***",
+                ["Jwt:Key"] = "cambrian-test-secret-key-min-32-chars!!",
                 ["Jwt:Issuer"] = "cambrian",
                 ["Jwt:Audience"] = "cambrian",
             });

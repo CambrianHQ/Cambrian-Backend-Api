@@ -53,10 +53,9 @@ public sealed class WebhookControllerTests
 
         var result = await _controller.Stripe();
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(badRequest.Value);
-        Assert.False(envelope.Success);
-        Assert.Equal("Invalid webhook signature.", envelope.Error);
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(400, objectResult.StatusCode);
+        Assert.Equal("Invalid webhook signature.", objectResult.Value);
     }
 
     [Fact]
@@ -69,10 +68,9 @@ public sealed class WebhookControllerTests
 
         var result = await _controller.Stripe();
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(badRequest.Value);
-        Assert.False(envelope.Success);
-        Assert.Equal("Webhook signature verification failed.", envelope.Error);
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(400, objectResult.StatusCode);
+        Assert.Equal("Webhook signature verification failed.", objectResult.Value);
     }
 
     [Fact]
