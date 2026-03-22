@@ -89,7 +89,7 @@ internal static class StartupExtensions
             case "s3":
             case "r2":
                 var endpoint = builder.Configuration["Storage:Endpoint"] ?? "";
-                var bucket   = builder.Configuration["Storage:Bucket"] ?? "";
+                var bucket = builder.Configuration["Storage:Bucket"] ?? "";
                 var accessKey = builder.Configuration["Storage:AccessKey"] ?? "";
                 var secretKey = builder.Configuration["Storage:SecretKey"] ?? "";
                 if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(bucket)

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Cambrian.Api.Common;
 using Cambrian.Application.Interfaces;
 using Cambrian.Api.Tools;
 using Microsoft.AspNetCore.Authorization;
@@ -74,23 +75,10 @@ public class LicensesController : BaseController
         }
 
         var pdfBytes = LicensePdfGenerator.Generate(cert, trackTitle);
-        var safeTitle = SanitizeFilename(trackTitle ?? "track");
+        var safeTitle = FilenameHelper.SanitizeFilename(trackTitle ?? "track");
         var filename = $"license-{safeTitle}-{licenseId[..8]}.pdf";
 
         return File(pdfBytes, "application/pdf", filename);
     }
 
-    private static string SanitizeFilename(string raw)
-    {
-        var invalid = new HashSet<char>(Path.GetInvalidFileNameChars());
-        var result = new char[raw.Length];
-        var count = 0;
-        foreach (var c in raw)
-        {
-            if (!invalid.Contains(c))
-                result[count++] = c;
-        }
-        var sanitized = new string(result, 0, count);
-        return string.IsNullOrWhiteSpace(sanitized) ? "track" : sanitized;
-    }
 }

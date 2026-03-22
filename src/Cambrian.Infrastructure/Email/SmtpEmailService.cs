@@ -1,6 +1,5 @@
 using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Options;
-using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
