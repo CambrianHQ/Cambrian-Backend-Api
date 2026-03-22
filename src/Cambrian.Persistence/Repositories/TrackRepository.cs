@@ -88,6 +88,7 @@ public class TrackRepository : ITrackRepository
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
     }
+
     public async Task<List<Track>> GetStorefrontTracksAsync(string creatorId)
     {
         return await _db.Tracks
@@ -99,6 +100,7 @@ public class TrackRepository : ITrackRepository
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
     }
+
     public async Task<int> CountAsync(string? genre = null, string? search = null,
         string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null)
     {

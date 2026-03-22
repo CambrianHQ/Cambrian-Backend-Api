@@ -8,6 +8,11 @@ namespace Cambrian.Api.Controllers;
 [Route("analytics")]
 public class AnalyticsController : BaseController
 {
+    private static readonly HashSet<string> AllowedEventTypes = new(StringComparer.Ordinal)
+    {
+        "play", "download", "purchase", "search", "upload"
+    };
+
     private readonly IAnalyticsRepository _analytics;
 
     public AnalyticsController(IAnalyticsRepository analytics)
@@ -25,15 +30,9 @@ public class AnalyticsController : BaseController
         if (string.IsNullOrWhiteSpace(body.EventType))
             return ErrorResponse("eventType is required.");
 
-        var allowed = new[] { "play", "download", "purchase", "search", "upload" };
         var eventType = body.EventType.Trim().ToLowerInvariant();
-        var matched = false;
-        foreach (var a in allowed)
-        {
-            if (a == eventType) { matched = true; break; }
-        }
-        if (!matched)
-            return ErrorResponse($"eventType must be one of: {string.Join(", ", allowed)}");
+        if (!AllowedEventTypes.Contains(eventType))
+            return ErrorResponse($"eventType must be one of: {string.Join(", ", AllowedEventTypes)}");
 
         Guid? trackId = null;
         if (!string.IsNullOrWhiteSpace(body.TrackId) && Guid.TryParse(body.TrackId, out var parsed))

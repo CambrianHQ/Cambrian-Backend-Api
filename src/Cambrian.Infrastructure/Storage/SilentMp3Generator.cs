@@ -2,8 +2,8 @@ namespace Cambrian.Infrastructure.Storage;
 
 /// <summary>
 /// Generates a minimal valid MPEG-1 Layer 3 (MP3) file containing silence.
-/// The output is a single valid MPEG audio frame that any browser or player
-/// will accept as a legitimate MP3 file (~417 bytes, ~0.026 s of silence).
+/// The output is 38 identical MPEG audio frames (~15 846 bytes, ~1 s of silence)
+/// so that media players show a reasonable duration.
 /// Used as a placeholder for demo tracks that have no real audio uploaded.
 /// </summary>
 public static class SilentMp3Generator
