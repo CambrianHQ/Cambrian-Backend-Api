@@ -2,7 +2,7 @@
 
 > A **contract-driven**, **policy-compliant**, and **test-verified** REST API built with ASP.NET Core 8.
 
-[![CI](https://github.com/loganbryanx/Cambrian-Backend-Api/actions/workflows/ci.yml/badge.svg)](https://github.com/loganbryanx/Cambrian-Backend-Api/actions/workflows/ci.yml)
+[![CI](https://github.com/Cambrian-by-Kinetix-Interactive/Cambrian-Backend-Api/actions/workflows/ci.yml/badge.svg)](https://github.com/Cambrian-by-Kinetix-Interactive/Cambrian-Backend-Api/actions/workflows/ci.yml)
 
 ---
 
