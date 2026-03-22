@@ -18,6 +18,8 @@ public sealed class PaymentServiceTests
 
     public PaymentServiceTests()
     {
+        _gateway.GetCheckoutSessionAsync(Arg.Any<string>())
+            .Returns(new CheckoutSessionInfo { SessionId = "cs_test_session", Status = "paid" });
         _sut = new PaymentService(_gateway, _tracks, _purchases, _logger);
     }
 
@@ -203,7 +205,8 @@ public sealed class PaymentServiceTests
             Id = Guid.NewGuid(),
             TrackId = Guid.NewGuid(),
             BuyerId = "user-1",
-            Status = "pending"
+            Status = "pending",
+            StripeSessionId = "cs_test_session"
         };
         _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
 
@@ -226,7 +229,8 @@ public sealed class PaymentServiceTests
             Id = Guid.NewGuid(),
             TrackId = Guid.NewGuid(),
             BuyerId = "user-1",
-            Status = "pending"
+            Status = "pending",
+            StripeSessionId = "cs_test_session"
         };
         _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
 

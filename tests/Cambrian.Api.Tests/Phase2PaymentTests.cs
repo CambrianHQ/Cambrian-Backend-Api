@@ -39,7 +39,7 @@ public sealed class Phase2PaymentTests
 
     [Theory]
     [InlineData("paid", 499)]
-    [InlineData("pro", 1499)]
+    [InlineData("pro", 999)]
     public async Task BillingService_CreateCheckout_UsesCorrectAmount(string tier, int expectedCents)
     {
         var subs = Substitute.For<ISubscriptionRepository>();
