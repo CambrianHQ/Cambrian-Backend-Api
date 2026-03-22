@@ -177,8 +177,10 @@ public sealed class PaymentServiceTests
         var purchaseId = Guid.NewGuid();
         _purchases.GetByIdAsync(purchaseId).Returns((Purchase?)null);
 
+#pragma warning disable CS0618 // Testing legacy ProcessAsync intentionally
         await Assert.ThrowsAsync<KeyNotFoundException>(() =>
             _sut.ProcessAsync(new PaymentProcessRequest { PurchaseId = purchaseId.ToString() }, "user-1"));
+#pragma warning restore CS0618
     }
 
     [Fact]
@@ -193,8 +195,10 @@ public sealed class PaymentServiceTests
         };
         _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
 
+#pragma warning disable CS0618 // Testing legacy ProcessAsync intentionally
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             _sut.ProcessAsync(new PaymentProcessRequest { PurchaseId = purchase.Id.ToString() }, "user-999"));
+#pragma warning restore CS0618
     }
 
     [Fact]
@@ -210,11 +214,13 @@ public sealed class PaymentServiceTests
         };
         _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
 
+#pragma warning disable CS0618 // Testing legacy ProcessAsync intentionally
         await _sut.ProcessAsync(new PaymentProcessRequest
         {
             PurchaseId = purchase.Id.ToString(),
             PaymentMethodId = "pm_test"
         }, "user-1");
+#pragma warning restore CS0618
 
         Assert.Equal("completed", purchase.Status);
         Assert.Equal("pm_test", purchase.PaymentMethod);
@@ -234,11 +240,13 @@ public sealed class PaymentServiceTests
         };
         _purchases.GetByIdAsync(purchase.Id).Returns(purchase);
 
+#pragma warning disable CS0618 // Testing legacy ProcessAsync intentionally
         await _sut.ProcessAsync(new PaymentProcessRequest
         {
             PurchaseId = purchase.Id.ToString(),
             PaymentMethodId = null
         }, "user-1");
+#pragma warning restore CS0618
 
         Assert.Equal("stripe", purchase.PaymentMethod);
     }

@@ -113,7 +113,7 @@ public class AuthService : IAuthService
         {
             UserId = user.Id,
             Email = user.Email ?? "",
-            DisplayName = user.DisplayName,
+            DisplayName = user.DisplayName ?? string.Empty,
             Role = user.Role,
             Tier = user.Tier,
             VerifiedCreator = user.VerifiedCreator,
