@@ -221,6 +221,7 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
                 if (u.Email == email)
                 {
                     u.Tier = "creator";
+                    u.Role = "Creator";
                     break;
                 }
             }
