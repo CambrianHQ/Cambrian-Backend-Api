@@ -30,7 +30,7 @@ jobs:
             || echo "::warning::Deploy hook not configured — Render auto-deploys from main branch"
 
       - name: Post-deploy health check
-        if: secrets.PROD_API_URL != ''
+        if: ${{ secrets.PROD_API_URL != '' }}
         run: |
           echo "Waiting 60s for deployment to stabilize..."
           sleep 60
