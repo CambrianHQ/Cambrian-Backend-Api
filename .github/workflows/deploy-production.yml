@@ -5,22 +5,12 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - name: Restore
-        run: dotnet restore Cambrian.sln
-      - name: Build
-        run: dotnet build Cambrian.sln --no-restore --configuration Release
-      - name: Test
-        run: dotnet test Cambrian.sln --no-build --configuration Release
+  # Reuse CI pipeline — runs build + test + contract-validation + security
+  ci:
+    uses: ./.github/workflows/ci.yml
 
   deploy:
-    needs: test
+    needs: ci
     runs-on: ubuntu-latest
     environment: production  # Requires manual approval in GitHub settings
     steps:

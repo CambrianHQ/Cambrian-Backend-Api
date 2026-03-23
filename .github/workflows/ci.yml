@@ -3,8 +3,11 @@ name: Backend CI
 on:
   pull_request:
     branches: [staging, main]
+  # Allow deploy workflows to reuse these jobs
+  workflow_call:
 
 jobs:
+  # ── Backend: build + test (single run, no duplication) ──
   build-test:
     runs-on: ubuntu-latest
     steps:
@@ -19,14 +22,29 @@ jobs:
       - name: Test
         run: dotnet test Cambrian.sln --no-build --configuration Release
 
+  # ── Contract validation (runs independently) ──
   contract-validation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - name: Contract Validation
         run: node scripts/validate-contracts.cjs
+
+  # ── Security scanning (runs after tests pass) ──
+  security:
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Check NuGet vulnerabilities
+        run: dotnet restore Cambrian.sln && dotnet list Cambrian.sln package --vulnerable --include-transitive 2>&1 | tee /tmp/audit.txt && ! grep -qi 'has the following vulnerable packages' /tmp/audit.txt
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
