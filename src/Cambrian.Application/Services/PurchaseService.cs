@@ -51,16 +51,39 @@ public class PurchaseService : IPurchaseService
             throw new InvalidOperationException("Payment has not been completed. Please complete checkout first.");
         }
 
+        // ── SECURITY: Verify the Stripe session belongs to this user ──
+        if (!string.IsNullOrEmpty(session.ClientReferenceId))
+        {
+            var refParts = session.ClientReferenceId.Split(':');
+            if (refParts.Length >= 1 && refParts[0] != userId)
+            {
+                _logger.LogWarning(
+                    "Purchase rejected: session {SessionId} belongs to user {SessionOwner}, not {RequestingUser}",
+                    request.StripeSessionId, refParts[0], userId);
+                throw new InvalidOperationException("This payment session does not belong to you.");
+            }
+        }
+
+        // ── SECURITY: Prevent session replay — check if this Stripe session was already used ──
+        var allPurchases = await _purchases.GetByBuyerIdAsync(userId);
+        if (allPurchases.Any(p => p.StripeSessionId == request.StripeSessionId))
+        {
+            _logger.LogWarning(
+                "Purchase rejected: Stripe session {SessionId} already used for a purchase by user {UserId}",
+                request.StripeSessionId, userId);
+            throw new InvalidOperationException("This payment session has already been used.");
+        }
+
         var track = await _tracks.GetByIdAsync(trackId)
             ?? throw new KeyNotFoundException("Track not found.");
 
         if (track.ExclusiveSold)
             throw new InvalidOperationException("This track has already been sold under an exclusive license.");
 
-        // Duplicate check
+        // Duplicate check (by track + license type for upgrade paths)
         var existing = await _purchases.GetByBuyerIdAsync(userId);
-        if (existing.Any(p => p.TrackId == trackId))
-            throw new InvalidOperationException("You already own this track.");
+        if (existing.Any(p => p.TrackId == trackId && p.LicenseType == (request.LicenseType ?? "non-exclusive")))
+            throw new InvalidOperationException("You already own this track with this license type.");
 
         // Atomically mark exclusive BEFORE creating records to prevent race conditions.
         // If two concurrent exclusive requests arrive, only one will succeed here.
@@ -100,7 +123,7 @@ public class PurchaseService : IPurchaseService
             UserId = userId,
             TrackId = trackId,
             Title = track.Title,
-            Artist = track.Creator?.DisplayName ?? track.Creator?.Email,
+            Artist = track.Creator?.DisplayName ?? "Unknown",
             AudioUrl = track.AudioUrl,
             SavedAt = DateTime.UtcNow
         });

@@ -34,10 +34,14 @@ public class PayoutService : IPayoutService
         _logger = logger;
     }
 
-    private const decimal PlatformFeeRate = 0.15m;
-
     public async Task<object> GetEarningsAsync(string userId)
     {
+        // Resolve the creator's tier-based fee rate instead of using a hardcoded value
+        var user = await _users.FindByIdAsync(userId);
+        var platformFeeRate = user is not null
+            ? Configuration.TierManifest.For(user.CreatorTier).FeeRate
+            : Configuration.TierManifest.Free.FeeRate;
+
         // Compute real earnings from completed purchases on the creator's tracks
         var tracks = await _tracks.GetByCreatorIdAsync(userId);
         var allPurchases = new List<Purchase>();
@@ -49,8 +53,8 @@ public class PayoutService : IPayoutService
 
         var grossCents = allPurchases.Sum(p => p.AmountCents);
         var totalGross = grossCents / 100m;
-        var totalPlatformFee = Math.Round(totalGross * PlatformFeeRate, 2);
-        var totalEarned = Math.Round(totalGross * (1 - PlatformFeeRate), 2);
+        var totalPlatformFee = Math.Round(totalGross * platformFeeRate, 2);
+        var totalEarned = Math.Round(totalGross * (1 - platformFeeRate), 2);
 
         var payouts = await _payouts.GetByCreatorIdAsync(userId);
         var paidOut = payouts.Where(p => p.Status == "completed").Sum(p => p.AmountCents) / 100m;
@@ -64,7 +68,7 @@ public class PayoutService : IPayoutService
             totalEarned,
             totalGross,
             totalPlatformFee,
-            platformFeePercent = PlatformFeeRate,
+            platformFeePercent = platformFeeRate,
             totalWithdrawn = paidOut
         };
     }
@@ -93,11 +97,14 @@ public class PayoutService : IPayoutService
                 "Your Stripe account onboarding is incomplete. " +
                 "Please finish setting up your account before requesting a payout.");
 
-        // Verify available wallet balance covers the request
-        var balanceCents = await _wallet.GetBalanceAsync(creatorId);
+        // Atomically check balance and debit in a single serializable transaction
+        // to prevent race conditions from concurrent payout requests
         var requestCents = (long)Math.Round(request.Amount * 100, MidpointRounding.AwayFromZero);
 
-        if (requestCents > balanceCents)
+        var withdrawn = await _wallet.AtomicWithdrawAsync(
+            creatorId, requestCents, $"Payout ${request.Amount:F2}");
+
+        if (!withdrawn)
             throw new InvalidOperationException("Insufficient balance for this payout.");
 
         // Create pending payout record
@@ -110,16 +117,6 @@ public class PayoutService : IPayoutService
             RequestedAt = DateTime.UtcNow
         };
         await _payouts.AddAsync(payout);
-
-        // Debit the wallet
-        await _wallet.AddTransactionAsync(new WalletTransaction
-        {
-            Id = Guid.NewGuid(),
-            UserId = creatorId,
-            AmountCents = -requestCents,
-            Type = "withdrawal",
-            Description = $"Payout ${request.Amount:F2}"
-        });
 
         // Initiate Stripe transfer
         try
