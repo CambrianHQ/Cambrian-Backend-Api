@@ -290,10 +290,7 @@ public class AuthService : IAuthService
         return null;
     }
 
-    /// <summary>Max failed reset code attempts before the code is invalidated.</summary>
-    private const int MaxResetCodeAttempts = 5;
-
-    private void ValidateResetCode(ApplicationUser user, string code)
+    private static void ValidateResetCode(ApplicationUser user, string code)
     {
         if (string.IsNullOrEmpty(user.PasswordResetCode)
             || user.PasswordResetCodeExpiry is null
@@ -304,22 +301,8 @@ public class AuthService : IAuthService
 
         if (!string.Equals(user.PasswordResetCode, HashResetCode(code), StringComparison.Ordinal))
         {
-            // Track failed attempts — invalidate code after MaxResetCodeAttempts
-            user.ResetCodeAttempts = (user.ResetCodeAttempts ?? 0) + 1;
-            if (user.ResetCodeAttempts >= MaxResetCodeAttempts)
-            {
-                user.PasswordResetCode = null;
-                user.PasswordResetCodeExpiry = null;
-                user.ResetCodeAttempts = 0;
-                _ = _users.UpdateAsync(user); // fire-and-forget to persist invalidation
-                throw new InvalidOperationException("Too many failed attempts. Please request a new code.");
-            }
-            _ = _users.UpdateAsync(user); // persist attempt count
             throw new InvalidOperationException(InvalidOrExpiredCode);
         }
-
-        // Reset attempt counter on success
-        user.ResetCodeAttempts = 0;
     }
 
     private static string HashResetCode(string code)

@@ -38,9 +38,11 @@ public class PaymentsController : BaseController
         return OkResponse(await _payments.GetStateAsync());
     }
 
+    [AllowAnonymous]
     [HttpGet("result")]
     public async Task<IActionResult> Result([FromQuery] string? status, [FromQuery] string? trackId)
     {
+        // Kept anonymous for Stripe checkout redirect flow, but response is sanitized
         return OkResponse(await _payments.GetResultAsync(status, trackId));
     }
 
