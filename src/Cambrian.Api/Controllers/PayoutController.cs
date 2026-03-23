@@ -49,7 +49,7 @@ public class PayoutController : BaseController
     {
         var userId = GetRequiredUserId()!;
         var status = await _connect.GetStatusAsync(userId);
-        return OkResponse(new { accountId = status.AccountId, status = status.Status });
+        return OkResponse(new { connected = status.Connected, status = status.Status });
     }
 
     [HttpPost("connect")]
