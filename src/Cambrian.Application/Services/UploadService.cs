@@ -54,7 +54,8 @@ public class UploadService : IUploadService
         [".flac"] = ["fLaC"u8.ToArray()],
         [".ogg"] = ["OggS"u8.ToArray()],
         [".aac"] = [new byte[] { 0xFF, 0xF1 }, new byte[] { 0xFF, 0xF9 }],
-        [".m4a"] = [new byte[] { 0x00, 0x00, 0x00 }], // ftyp box (variable offset)
+        // M4A/MP4 containers: "ftyp" appears at byte offset 4 (first 4 bytes are box size)
+        [".m4a"] = [],
     };
 
     /// <summary>Magic byte signatures for image file validation.</summary>
@@ -78,9 +79,14 @@ public class UploadService : IUploadService
         if (bytesRead < 2)
             return false;
 
+        // M4A/MP4 special case: "ftyp" appears at offset 4 (first 4 bytes are box size)
+        if (extension is ".m4a" && bytesRead >= 8
+            && buffer.AsSpan(4, 4).SequenceEqual("ftyp"u8))
+            return true;
+
         foreach (var magic in expected)
         {
-            if (bytesRead >= magic.Length && buffer.AsSpan(0, magic.Length).SequenceEqual(magic))
+            if (magic.Length > 0 && bytesRead >= magic.Length && buffer.AsSpan(0, magic.Length).SequenceEqual(magic))
                 return true;
         }
 
