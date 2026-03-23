@@ -661,23 +661,30 @@ public class StripeWebhookService : IWebhookService
                 _db.Library.Remove(libraryItem);
 
             // SECURITY: Claw back creator wallet credit to prevent platform loss
-            var originalCredit = await _db.WalletTransactions
-                .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
-            if (originalCredit is not null)
+            // Guard against double-clawback if webhook fires twice
+            var alreadyClawedBack = await _db.WalletTransactions
+                .AnyAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "debit"
+                    && wt.Description != null && wt.Description.StartsWith("Refund clawback:"));
+            if (!alreadyClawedBack)
             {
-                _db.WalletTransactions.Add(new WalletTransaction
+                var originalCredit = await _db.WalletTransactions
+                    .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
+                if (originalCredit is not null)
                 {
-                    Id = Guid.NewGuid(),
-                    UserId = originalCredit.UserId,
-                    AmountCents = -originalCredit.AmountCents,
-                    Type = "debit",
-                    Description = $"Refund clawback: {purchase.Id}",
-                    RelatedPurchaseId = purchase.Id,
-                    CreatedAt = DateTime.UtcNow
-                });
-                _logger.LogInformation(
-                    "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for refunded purchase {PurchaseId}",
-                    originalCredit.AmountCents, originalCredit.UserId, purchase.Id);
+                    _db.WalletTransactions.Add(new WalletTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = originalCredit.UserId,
+                        AmountCents = -originalCredit.AmountCents,
+                        Type = "debit",
+                        Description = $"Refund clawback: {purchase.Id}",
+                        RelatedPurchaseId = purchase.Id,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                    _logger.LogInformation(
+                        "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for refunded purchase {PurchaseId}",
+                        originalCredit.AmountCents, originalCredit.UserId, purchase.Id);
+                }
             }
 
             await _db.SaveChangesAsync();
@@ -728,23 +735,30 @@ public class StripeWebhookService : IWebhookService
             purchase.UpdatedAt = DateTime.UtcNow;
 
             // SECURITY: Claw back creator wallet credit on dispute to prevent platform loss
-            var disputeCredit = await _db.WalletTransactions
-                .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
-            if (disputeCredit is not null)
+            // Guard against double-clawback if webhook fires twice
+            var alreadyClawedBack = await _db.WalletTransactions
+                .AnyAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "debit"
+                    && wt.Description != null && wt.Description.StartsWith("Dispute clawback:"));
+            if (!alreadyClawedBack)
             {
-                _db.WalletTransactions.Add(new WalletTransaction
+                var disputeCredit = await _db.WalletTransactions
+                    .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
+                if (disputeCredit is not null)
                 {
-                    Id = Guid.NewGuid(),
-                    UserId = disputeCredit.UserId,
-                    AmountCents = -disputeCredit.AmountCents,
-                    Type = "debit",
-                    Description = $"Dispute clawback: {purchase.Id}",
-                    RelatedPurchaseId = purchase.Id,
-                    CreatedAt = DateTime.UtcNow
-                });
-                _logger.LogInformation(
-                    "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for disputed purchase {PurchaseId}",
-                    disputeCredit.AmountCents, disputeCredit.UserId, purchase.Id);
+                    _db.WalletTransactions.Add(new WalletTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = disputeCredit.UserId,
+                        AmountCents = -disputeCredit.AmountCents,
+                        Type = "debit",
+                        Description = $"Dispute clawback: {purchase.Id}",
+                        RelatedPurchaseId = purchase.Id,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                    _logger.LogInformation(
+                        "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for disputed purchase {PurchaseId}",
+                        disputeCredit.AmountCents, disputeCredit.UserId, purchase.Id);
+                }
             }
 
             await _db.SaveChangesAsync();

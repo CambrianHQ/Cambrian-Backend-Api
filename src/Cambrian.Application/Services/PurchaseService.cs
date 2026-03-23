@@ -64,13 +64,13 @@ public class PurchaseService : IPurchaseService
             }
         }
 
-        // ── SECURITY: Prevent session replay — check if this Stripe session was already used ──
-        var allPurchases = await _purchases.GetByBuyerIdAsync(userId);
-        if (allPurchases.Any(p => p.StripeSessionId == request.StripeSessionId))
+        // ── SECURITY: Prevent session replay — check globally, not just for this user ──
+        var existingBySession = await _purchases.GetByStripeSessionIdAsync(request.StripeSessionId);
+        if (existingBySession is not null)
         {
             _logger.LogWarning(
-                "Purchase rejected: Stripe session {SessionId} already used for a purchase by user {UserId}",
-                request.StripeSessionId, userId);
+                "Purchase rejected: Stripe session {SessionId} already used (purchase {PurchaseId}, buyer {BuyerId})",
+                request.StripeSessionId, existingBySession.Id, existingBySession.BuyerId);
             throw new InvalidOperationException("This payment session has already been used.");
         }
 
@@ -112,6 +112,7 @@ public class PurchaseService : IPurchaseService
             PaymentMethod = request.PaymentMethod,
             UsageType = request.UsageType ?? "personal",
             Status = "completed",
+            StripeSessionId = request.StripeSessionId,
             CreatedAt = DateTime.UtcNow
         };
         await _purchases.AddAsync(purchase);
