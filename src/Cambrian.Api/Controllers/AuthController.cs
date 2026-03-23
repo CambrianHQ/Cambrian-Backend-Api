@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -29,9 +31,9 @@ public class AuthController : BaseController
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request)
     {
-        _logger.LogInformation("EVENT: RegisterStarted email:{Email}", request.Email);
+        _logger.LogInformation("EVENT: RegisterStarted");
         var result = await _auth.RegisterAsync(request);
-        _logger.LogInformation("EVENT: RegisterCompleted userId:{UserId} email:{Email} tier:{Tier}", result.UserId, result.Email, result.Tier);
+        _logger.LogInformation("EVENT: RegisterCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
         return CreatedResponse(ToSession(result));
     }
 
@@ -39,9 +41,9 @@ public class AuthController : BaseController
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
-        _logger.LogInformation("EVENT: LoginStarted email:{Email}", request.Email);
+        _logger.LogInformation("EVENT: LoginStarted");
         var result = await _auth.LoginAsync(request);
-        _logger.LogInformation("EVENT: LoginCompleted userId:{UserId} email:{Email} tier:{Tier}", result.UserId, result.Email, result.Tier);
+        _logger.LogInformation("EVENT: LoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
         return OkResponse(ToSession(result));
     }
 
@@ -65,8 +67,8 @@ public class AuthController : BaseController
             ?? (string.Equals(profile.CreatorTier, "Pro", StringComparison.OrdinalIgnoreCase) ? "pro" : "free");
 
         _logger.LogInformation(
-            "EVENT: MeResolved userId:{UserId} email:{Email} profileTier:{ProfileTier} subscriptionPlan:{SubPlan} resolvedTier:{ResolvedTier}",
-            profile.UserId, profile.Email, profile.Tier, sub?.Plan, tier.ToLowerInvariant());
+            "EVENT: MeResolved userId:{UserId} profileTier:{ProfileTier} subscriptionPlan:{SubPlan} resolvedTier:{ResolvedTier}",
+            profile.UserId, profile.Tier, sub?.Plan, tier.ToLowerInvariant());
 
         return OkResponse(new
         {
@@ -114,11 +116,8 @@ public class AuthController : BaseController
         return OkResponse(new { status = "ok", timestamp = DateTime.UtcNow });
     }
 
-    [HttpGet("csrf-token")]
-    public IActionResult GetCsrfToken()
-    {
-        return OkResponse(new { token = Guid.NewGuid() });
-    }
+    // REMOVED: csrf-token endpoint was returning unvalidated random GUIDs
+    // providing false security. JWT Bearer auth mitigates CSRF inherently.
 
     [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]
@@ -160,6 +159,11 @@ public class AuthController : BaseController
         // Read images from AspNetUsers — the source of truth written by PATCH /users/me.
         // CreatorProfile.ProfileImageUrl is a separate creator storefront image.
         var user = await _userManager.FindByIdAsync(userId);
+
+        var currentTierConfig = TierManifest.For(user?.CreatorTier ?? CreatorTier.Free);
+        var canUpgrade = currentTierConfig.Tier != CreatorTier.Pro;
+        var proTier = TierManifest.Pro;
+
         return OkResponse(new
         {
             displayName = profile.DisplayName,
@@ -168,7 +172,25 @@ public class AuthController : BaseController
             role = profile.Role,
             bio = user?.Bio,
             profileImageUrl = user?.ProfileImageUrl,
-            coverImageUrl = user?.CoverImageUrl
+            coverImageUrl = user?.CoverImageUrl,
+            subscription = new
+            {
+                creatorTier = currentTierConfig.DisplayName,
+                status = profile.SubscriptionStatus,
+                expiresAt = profile.SubscriptionEndDate,
+                uploadCount = profile.UploadCount,
+                uploadLimit = currentTierConfig.UploadLimit,
+                platformFeePercent = currentTierConfig.FeeRate,
+                canUpgrade,
+                upgrade = canUpgrade ? new
+                {
+                    tier = proTier.Slug,
+                    displayName = proTier.DisplayName,
+                    priceCents = proTier.PriceCents,
+                    features = proTier.Features,
+                    checkoutEndpoint = "/billing/checkout"
+                } : null
+            }
         });
     }
 

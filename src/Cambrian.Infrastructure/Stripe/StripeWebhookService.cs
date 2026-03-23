@@ -660,6 +660,26 @@ public class StripeWebhookService : IWebhookService
             if (libraryItem is not null)
                 _db.Library.Remove(libraryItem);
 
+            // SECURITY: Claw back creator wallet credit to prevent platform loss
+            var originalCredit = await _db.WalletTransactions
+                .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
+            if (originalCredit is not null)
+            {
+                _db.WalletTransactions.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = originalCredit.UserId,
+                    AmountCents = -originalCredit.AmountCents,
+                    Type = "debit",
+                    Description = $"Refund clawback: {purchase.Id}",
+                    RelatedPurchaseId = purchase.Id,
+                    CreatedAt = DateTime.UtcNow
+                });
+                _logger.LogInformation(
+                    "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for refunded purchase {PurchaseId}",
+                    originalCredit.AmountCents, originalCredit.UserId, purchase.Id);
+            }
+
             await _db.SaveChangesAsync();
             _logger.LogInformation(
                 "Refund processed: PurchaseId={PurchaseId} UserId={UserId} TrackId={TrackId}",
@@ -706,6 +726,27 @@ public class StripeWebhookService : IWebhookService
 
             purchase.Status = "disputed";
             purchase.UpdatedAt = DateTime.UtcNow;
+
+            // SECURITY: Claw back creator wallet credit on dispute to prevent platform loss
+            var disputeCredit = await _db.WalletTransactions
+                .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
+            if (disputeCredit is not null)
+            {
+                _db.WalletTransactions.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = disputeCredit.UserId,
+                    AmountCents = -disputeCredit.AmountCents,
+                    Type = "debit",
+                    Description = $"Dispute clawback: {purchase.Id}",
+                    RelatedPurchaseId = purchase.Id,
+                    CreatedAt = DateTime.UtcNow
+                });
+                _logger.LogInformation(
+                    "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for disputed purchase {PurchaseId}",
+                    disputeCredit.AmountCents, disputeCredit.UserId, purchase.Id);
+            }
+
             await _db.SaveChangesAsync();
 
             _logger.LogWarning(

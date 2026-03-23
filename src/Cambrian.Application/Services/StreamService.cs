@@ -22,7 +22,7 @@ public class StreamService : IStreamService
         {
             id = t.Id.ToString(),
             title = t.Title,
-            artist = t.Creator?.DisplayName ?? t.Creator?.Email ?? "Unknown",
+            artist = t.Creator?.DisplayName ?? "Unknown",
             genre = t.Genre,
             duration = t.Duration,
             audioUrl = t.AudioUrl

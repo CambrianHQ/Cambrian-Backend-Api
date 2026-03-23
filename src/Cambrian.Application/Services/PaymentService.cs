@@ -73,11 +73,10 @@ public class PaymentService : IPaymentService
         var purchases = await _purchases.GetByTrackIdAsync(Guid.Parse(trackId));
         var latest = purchases.FirstOrDefault();
 
+        // SECURITY: Only return status — no purchaseId or duplicate count on anonymous endpoint
         return new PaymentResultResponse
         {
             Status = latest?.Status ?? status ?? "pending",
-            PurchaseId = latest?.Id.ToString(),
-            Duplicate = purchases.Count > 1
         };
     }
 

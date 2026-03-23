@@ -136,7 +136,7 @@ public class CatalogService : ICatalogService
             CreatorId = t.CreatorId,
             CreatorSlug = creatorSlug,
             CreatorProfileImageUrl = creatorProfileImageUrl,
-            Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
+            Artist = t.Creator?.DisplayName ?? "Unknown",
             CreatedAt = t.CreatedAt,
         };
     }
