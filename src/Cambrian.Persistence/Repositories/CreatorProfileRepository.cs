@@ -16,14 +16,14 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
     {
         var p = await _db.CreatorProfiles.AsNoTracking()
             .FirstOrDefaultAsync(x => x.UserId == userId);
-        return p is null ? null : MapToDto(p);
+        return p is null ? null : await MapToDtoAsync(p);
     }
 
     public async Task<CreatorProfileDto?> GetBySlugAsync(string slug)
     {
         var p = await _db.CreatorProfiles.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Slug.ToLower() == slug.ToLower());
-        return p is null ? null : MapToDto(p);
+        return p is null ? null : await MapToDtoAsync(p);
     }
 
     public async Task<CreatorProfileDto> UpsertAsync(string userId, string slug, string bio, string? niche,
@@ -52,7 +52,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             };
             _db.CreatorProfiles.Add(profile);
             await _db.SaveChangesAsync();
-            return MapToDto(profile);
+            return await MapToDtoAsync(profile);
         }
 
         existing.Slug = slug;
@@ -65,7 +65,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         if (profileImageUrl is not null) existing.ProfileImageUrl = profileImageUrl;
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return MapToDto(existing);
+        return await MapToDtoAsync(existing);
     }
 
     public async Task<CreatorProfileDto> UpdateImageAsync(string userId, string? bannerImageUrl, string? profileImageUrl)
@@ -91,14 +91,14 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             };
             _db.CreatorProfiles.Add(placeholder);
             await _db.SaveChangesAsync();
-            return MapToDto(placeholder);
+            return await MapToDtoAsync(placeholder);
         }
 
         if (bannerImageUrl is not null) existing.BannerImageUrl = bannerImageUrl;
         if (profileImageUrl is not null) existing.ProfileImageUrl = profileImageUrl;
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return MapToDto(existing);
+        return await MapToDtoAsync(existing);
     }
 
     public async Task<CreatorProfileDto> UpdatePinnedTracksAsync(string userId, string pinnedTrackIds)
@@ -110,7 +110,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         existing.PinnedTrackIds = pinnedTrackIds;
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return MapToDto(existing);
+        return await MapToDtoAsync(existing);
     }
 
     public async Task<IReadOnlyList<TrackCollectionDto>> GetCollectionsAsync(string creatorId)
@@ -175,7 +175,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     // ───── Mapping helpers ─────
 
-    private static CreatorProfileDto MapToDto(CreatorProfile p)
+    private async Task<CreatorProfileDto> MapToDtoAsync(CreatorProfile p)
     {
         List<SocialLinkDto>? links = null;
         if (!string.IsNullOrEmpty(p.SocialLinks))
@@ -183,6 +183,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             try { links = JsonSerializer.Deserialize<List<SocialLinkDto>>(p.SocialLinks); }
             catch { /* ignore malformed JSON */ }
         }
+
+        var stats = await ComputeStatsAsync(p.UserId);
 
         return new CreatorProfileDto
         {
@@ -197,13 +199,27 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             ShowEarnings = p.ShowEarnings,
             ShowDownloadStats = p.ShowDownloadStats,
             PinnedTrackIds = p.PinnedTrackIds,
-            Stats = new CreatorStatsDto
-            {
-                TotalDownloads = 0,
-                TotalEarnings = 0,
-            },
+            Stats = stats,
             CreatedAt = p.CreatedAt,
             UpdatedAt = p.UpdatedAt,
+        };
+    }
+
+    private async Task<CreatorStatsDto> ComputeStatsAsync(string userId)
+    {
+        var trackCount = await _db.Tracks.CountAsync(t => t.CreatorId == userId);
+        var totalSales = await _db.Purchases
+            .CountAsync(p => _db.Tracks.Any(t => t.CreatorId == userId && t.Id == p.TrackId)
+                             && p.Status == "completed");
+        var totalEarningsCents = await _db.Purchases
+            .Where(p => _db.Tracks.Any(t => t.CreatorId == userId && t.Id == p.TrackId)
+                        && p.Status == "completed")
+            .SumAsync(p => (int?)p.AmountCents ?? 0);
+
+        return new CreatorStatsDto
+        {
+            TotalDownloads = totalSales,
+            TotalEarnings = totalEarningsCents / 100m,
         };
     }
 
@@ -213,7 +229,9 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         Title = c.Title,
         Description = c.Description,
         CoverImageUrl = c.CoverImageUrl,
-        TrackIds = c.TrackIds,
+        TrackIds = string.IsNullOrWhiteSpace(c.TrackIds)
+            ? Array.Empty<string>()
+            : c.TrackIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
         CreatedAt = c.CreatedAt,
         UpdatedAt = c.UpdatedAt,
     };

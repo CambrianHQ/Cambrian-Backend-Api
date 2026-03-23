@@ -13,6 +13,7 @@ public class UploadService : IUploadService
     private readonly ITrackRepository _tracks;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<UploadService> _logger;
+    private readonly ICreatorIdentityRepository _creators;
 
     /// <summary>Allowed audio file extensions (lowercase, with dot).</summary>
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -93,12 +94,13 @@ public class UploadService : IUploadService
         return false;
     }
 
-    public UploadService(IObjectStorage storage, ITrackRepository tracks, UserManager<ApplicationUser> users, ILogger<UploadService> logger)
+    public UploadService(IObjectStorage storage, ITrackRepository tracks, UserManager<ApplicationUser> users, ILogger<UploadService> logger, ICreatorIdentityRepository creators)
     {
         _storage = storage;
         _tracks = tracks;
         _users = users;
         _logger = logger;
+        _creators = creators;
     }
 
     public async Task<UploadTrackResponse> Upload(UploadTrackRequest request)
@@ -197,6 +199,9 @@ public class UploadService : IUploadService
             ? (int)Math.Round(request.Price.Value * 100, MidpointRounding.AwayFromZero)
             : 0;
 
+        // Resolve the Creator UUID for the uploading user
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(request.CreatorId!);
+
         var track = new Track
         {
             Id = Guid.NewGuid(),
@@ -218,6 +223,7 @@ public class UploadService : IUploadService
                 ? (int)Math.Round(request.CopyrightBuyoutPrice.Value * 100, MidpointRounding.AwayFromZero)
                 : 0,
             CreatorId = request.CreatorId,
+            CreatorUuid = creatorUuid,
             Tags = string.IsNullOrWhiteSpace(request.Tags)
                 ? new List<string>()
                 : request.Tags

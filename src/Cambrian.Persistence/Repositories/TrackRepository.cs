@@ -17,6 +17,7 @@ public class TrackRepository : ITrackRepository
     {
         return await _db.Tracks
             .Include(t => t.Creator)
+            .Include(t => t.CreatorEntity)
             .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public")
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
@@ -32,6 +33,7 @@ public class TrackRepository : ITrackRepository
     {
         var query = _db.Tracks
             .Include(t => t.Creator)
+            .Include(t => t.CreatorEntity)
             .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public");
 
         if (!string.IsNullOrWhiteSpace(genre))
@@ -71,6 +73,7 @@ public class TrackRepository : ITrackRepository
     {
         return await _db.Tracks
             .Include(t => t.Creator)
+            .Include(t => t.CreatorEntity)
             .FirstOrDefaultAsync(t => t.Id == id);
     }
 
@@ -78,12 +81,15 @@ public class TrackRepository : ITrackRepository
     {
         return await _db.Tracks
             .Include(t => t.Creator)
+            .Include(t => t.CreatorEntity)
             .FirstOrDefaultAsync(t => t.CambrianTrackId == cambrianTrackId);
     }
 
     public async Task<List<Track>> GetByCreatorIdAsync(string creatorId)
     {
         return await _db.Tracks
+            .Include(t => t.Creator)
+            .Include(t => t.CreatorEntity)
             .Where(t => t.CreatorId == creatorId)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
@@ -93,6 +99,7 @@ public class TrackRepository : ITrackRepository
     {
         return await _db.Tracks
             .Include(t => t.Creator)
+            .Include(t => t.CreatorEntity)
             .Where(t => t.CreatorId == creatorId
                 && t.Visibility == "public"
                 && t.Status != "copyright_transferred"

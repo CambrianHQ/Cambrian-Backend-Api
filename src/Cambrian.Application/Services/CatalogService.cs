@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
 
@@ -11,12 +12,14 @@ public class CatalogService : ICatalogService
     private readonly ITrackRepository _tracks;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ICreatorProfileRepository _profiles;
+    private readonly ILogger<CatalogService> _logger;
 
-    public CatalogService(ITrackRepository tracks, UserManager<ApplicationUser> users, ICreatorProfileRepository profiles)
+    public CatalogService(ITrackRepository tracks, UserManager<ApplicationUser> users, ICreatorProfileRepository profiles, ILogger<CatalogService> logger)
     {
         _tracks = tracks;
         _users = users;
         _profiles = profiles;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetCatalogAsync(int page = 1, int pageSize = 50, string? genre = null, string? search = null, string? sort = null)
@@ -28,6 +31,7 @@ public class CatalogService : ICatalogService
         string? mood, string? tempo, bool? instrumental, string? duration)
     {
         var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
+        _logger.LogInformation("Catalog query: page={Page} size={Size} genre={Genre} search={Search} results={Count}", page, pageSize, genre, search, tracks.Count);
         var result = new List<TrackResponse>(tracks.Count);
         foreach (var t in tracks)
             result.Add(await MapToResponseAsync(t));
@@ -136,7 +140,11 @@ public class CatalogService : ICatalogService
             CreatorId = t.CreatorId,
             CreatorSlug = creatorSlug,
             CreatorProfileImageUrl = creatorProfileImageUrl,
-            Artist = t.Creator?.DisplayName ?? "Unknown",
+            Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
+                ? t.CreatorEntity.DisplayName
+                : t.CreatorEntity?.Username
+                  ?? t.Creator?.DisplayName
+                  ?? "Unknown Artist",
             CreatedAt = t.CreatedAt,
         };
     }

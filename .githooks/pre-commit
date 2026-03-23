@@ -1,0 +1,23 @@
+#!/bin/sh
+# Pre-commit hook: fast feedback — build + lint only
+# Install: git config core.hooksPath .githooks
+
+set -e
+
+echo "[pre-commit] Building solution..."
+dotnet build --nologo -v q
+if [ $? -ne 0 ]; then
+  echo "[pre-commit] Build failed. Commit aborted."
+  exit 1
+fi
+
+echo "[pre-commit] Validating contracts..."
+if command -v node &> /dev/null; then
+  node scripts/validate-contracts.cjs
+  if [ $? -ne 0 ]; then
+    echo "[pre-commit] Contract validation failed. Commit aborted."
+    exit 1
+  fi
+fi
+
+echo "[pre-commit] All checks passed."

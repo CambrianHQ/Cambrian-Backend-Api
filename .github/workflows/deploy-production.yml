@@ -4,24 +4,18 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false  # Never cancel an in-progress production deploy
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - name: Restore
-        run: dotnet restore Cambrian.sln
-      - name: Build
-        run: dotnet build Cambrian.sln --no-restore --configuration Release
-      - name: Test
-        run: dotnet test Cambrian.sln --no-build --configuration Release
+  ci:
+    uses: ./.github/workflows/ci.yml
 
   deploy:
-    needs: test
+    needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: production  # Requires manual approval in GitHub settings
     steps:
       - name: Deploy to Render (production)
@@ -30,6 +24,7 @@ jobs:
             || echo "::warning::Deploy hook not configured — Render auto-deploys from main branch"
 
       - name: Post-deploy health check
+        timeout-minutes: 5
         env:
           PROD_API_URL: ${{ secrets.PROD_API_URL }}
         if: env.PROD_API_URL != ''

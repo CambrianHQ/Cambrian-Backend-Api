@@ -4,24 +4,18 @@ on:
   push:
     branches: [staging]
 
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - name: Restore
-        run: dotnet restore Cambrian.sln
-      - name: Build
-        run: dotnet build Cambrian.sln --no-restore --configuration Release
-      - name: Test
-        run: dotnet test Cambrian.sln --no-build --configuration Release
+  ci:
+    uses: ./.github/workflows/ci.yml
 
   deploy:
-    needs: test
+    needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Deploy to Render (staging)
         run: |

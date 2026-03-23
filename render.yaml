@@ -96,6 +96,9 @@ services:
         sync: false
       - key: Admin__Password
         sync: false
+      # Demo creators for local/staging verification (shared password, emails are deterministic in code)
+      - key: SeedDemoUsers__Password
+        sync: false
       # Frontend CORS
       - key: App__FrontendUrl
         value: https://staging.cambrianmusic.com
@@ -168,6 +171,9 @@ services:
       - key: Admin__Email
         sync: false
       - key: Admin__Password
+        sync: false
+      # Kept as a secret slot for parity, but production code skips demo-user seeding
+      - key: SeedDemoUsers__Password
         sync: false
       - key: RateLimiting__GlobalPermitLimit
         value: "100"

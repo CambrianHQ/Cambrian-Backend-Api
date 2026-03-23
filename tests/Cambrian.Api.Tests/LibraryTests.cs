@@ -4,6 +4,7 @@ using Cambrian.Application.DTOs.Library;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -15,6 +16,7 @@ namespace Cambrian.Api.Tests;
 ///   DELETE /library/{trackId} → remove a track
 ///   GET /library/purchased-track-ids → purchased id list
 /// </summary>
+[Trait("Category", "Critical")]
 public sealed class LibraryTests
 {
     private readonly ILibraryRepository _library = Substitute.For<ILibraryRepository>();
@@ -24,7 +26,8 @@ public sealed class LibraryTests
 
     public LibraryTests()
     {
-        _sut = new LibraryService(_library, _purchases, _tracks);
+        var logger = Substitute.For<ILogger<LibraryService>>();
+        _sut = new LibraryService(_library, _purchases, _tracks, logger);
 
         // Default: no purchases for any user (tests that need purchases override this)
         _purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());

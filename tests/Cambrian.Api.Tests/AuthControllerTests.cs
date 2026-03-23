@@ -16,6 +16,7 @@ namespace Cambrian.Api.Tests;
 /// /me, logout, and password recovery routes. Validates HTTP status codes,
 /// response shapes, and error handling at the controller boundary.
 /// </summary>
+[Trait("Category", "Critical")]
 public sealed class AuthControllerTests
 {
     private readonly IAuthService _auth = Substitute.For<IAuthService>();

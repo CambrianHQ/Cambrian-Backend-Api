@@ -8,7 +8,8 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Cambrian.Application.Services;
@@ -16,9 +17,10 @@ namespace Cambrian.Application.Services;
 public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _users;
-    private readonly IConfiguration _config;
+    private readonly JwtSettings _jwtSettings;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IEmailService _email;
+    private readonly ILogger<AuthService> _logger;
 
     /// <summary>How long a password reset code is valid.</summary>
     private static readonly TimeSpan ResetCodeLifetime = TimeSpan.FromMinutes(15);
@@ -27,14 +29,16 @@ public class AuthService : IAuthService
 
     public AuthService(
         UserManager<ApplicationUser> users,
-        IConfiguration config,
+        IOptions<JwtSettings> jwtOptions,
         ISubscriptionRepository subscriptions,
-        IEmailService email)
+        IEmailService email,
+        ILogger<AuthService> logger)
     {
         _users = users;
-        _config = config;
+        _jwtSettings = jwtOptions.Value;
         _subscriptions = subscriptions;
         _email = email;
+        _logger = logger;
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -42,17 +46,25 @@ public class AuthService : IAuthService
         var user = await _users.FindByEmailAsync(request.Email);
 
         if (user is null)
+        {
+            _logger.LogWarning("Login failed: no account for {Email}", request.Email);
             throw new UnauthorizedAccessException("Invalid credentials");
+        }
 
         var valid = await _users.CheckPasswordAsync(user, request.Password);
 
         if (!valid)
+        {
+            _logger.LogWarning("Login failed: bad password for {UserId}", user.Id);
             throw new UnauthorizedAccessException("Invalid credentials");
+        }
 
         var sub = await _subscriptions.GetActiveAsync(user.Id);
         var resolvedTier = sub?.Plan ?? (user.CreatorTier == CreatorTier.Pro ? "pro" : "free");
 
         var token = GenerateJwt(user);
+
+        _logger.LogInformation("Login success: User={UserId} Tier={Tier}", user.Id, resolvedTier);
 
         return new AuthResponse
         {
@@ -82,9 +94,11 @@ public class AuthService : IAuthService
         if (!result.Succeeded)
         {
             var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            _logger.LogWarning("Registration failed: {Email} — {Errors}", request.Email, errors);
             throw new InvalidOperationException($"Registration failed: {errors}");
         }
 
+        _logger.LogInformation("Registration success: User={UserId} Email={Email}", user.Id, user.Email);
         var token = GenerateJwt(user);
 
         return new AuthResponse
@@ -313,16 +327,19 @@ public class AuthService : IAuthService
 
     private string GenerateJwt(ApplicationUser user)
     {
-        var key = _config["Jwt:Key"]
-            ?? throw new InvalidOperationException("Jwt:Key is not configured. Ensure it is set in environment variables or appsettings.");
-        var issuer = _config["Jwt:Issuer"] ?? "cambrian-api";
-        var audience = _config["Jwt:Audience"] ?? "cambrian-client";
+        var key = _jwtSettings.Key;
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException("Jwt:Key is not configured. Ensure it is set in environment variables or appsettings.");
+
+        var issuer = _jwtSettings.Issuer;
+        var audience = _jwtSettings.Audience;
 
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id),
+            new(ClaimTypes.NameIdentifier, user.Id),
             new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-            new(ClaimTypes.Role, user.Role),
+            new(ClaimTypes.Role, user.Role ?? "User"),
             new("tier", (user.Tier ?? "free").ToLowerInvariant()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };

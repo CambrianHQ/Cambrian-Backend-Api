@@ -2,6 +2,7 @@ using Cambrian.Application.Services;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -16,7 +17,8 @@ public sealed class CatalogServiceTests
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         var profiles = Substitute.For<ICreatorProfileRepository>();
-        _sut = new CatalogService(_tracks, users, profiles);
+        var logger = Substitute.For<ILogger<CatalogService>>();
+        _sut = new CatalogService(_tracks, users, profiles, logger);
     }
 
     [Fact]
@@ -90,7 +92,7 @@ public sealed class CatalogServiceTests
 
         var result = await _sut.GetTrackAsync(id.ToString());
 
-        Assert.Equal("Unknown", result!.Artist);
+        Assert.Equal("Unknown Artist", result!.Artist);
     }
 
     [Fact]

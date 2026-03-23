@@ -1,13 +1,15 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -17,10 +19,11 @@ namespace Cambrian.Api.Tests;
 ///   Register → Login → /auth/me → Logout
 /// Ensures tier and role are returned correctly.
 /// </summary>
+[Trait("Category", "Critical")]
 public sealed class AuthTests
 {
     private readonly UserManager<ApplicationUser> _users;
-    private readonly IConfiguration _config;
+    private readonly IOptions<JwtSettings> _jwtOptions;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IEmailService _email;
     private readonly AuthService _sut;
@@ -31,18 +34,17 @@ public sealed class AuthTests
         _users = Substitute.For<UserManager<ApplicationUser>>(
             store, null, null, null, null, null, null, null, null);
 
-        _config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Key"] = "test-secret-key-that-is-long-enough-for-hmac256!",
-                ["Jwt:Issuer"] = "test-issuer",
-                ["Jwt:Audience"] = "test-audience"
-            })
-            .Build();
+        _jwtOptions = Options.Create(new JwtSettings
+        {
+            Key = "test-secret-key-that-is-long-enough-for-hmac256!",
+            Issuer = "test-issuer",
+            Audience = "test-audience"
+        });
 
         _subscriptions = Substitute.For<ISubscriptionRepository>();
         _email = Substitute.For<IEmailService>();
-        _sut = new AuthService(_users, _config, _subscriptions, _email);
+        var logger = Substitute.For<ILogger<AuthService>>();
+        _sut = new AuthService(_users, _jwtOptions, _subscriptions, _email, logger);
     }
 
     [Fact]

@@ -3,24 +3,36 @@ name: Backend CI
 on:
   pull_request:
     branches: [staging, main]
+  workflow_call:  # Allow deploy workflows to reuse this pipeline
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
       - name: Restore
         run: dotnet restore Cambrian.sln
       - name: Build
         run: dotnet build Cambrian.sln --no-restore --configuration Release
       - name: Test
-        run: dotnet test Cambrian.sln --no-build --configuration Release
+        run: dotnet test Cambrian.sln --no-build --configuration Release --logger "console;verbosity=minimal"
 
   contract-validation:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -30,3 +42,39 @@ jobs:
 
       - name: Contract Validation
         run: node scripts/validate-contracts.cjs
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  security:
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: NuGet vulnerability scan
+        run: |
+          dotnet restore Cambrian.sln
+          dotnet list Cambrian.sln package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+          if grep -qi "has the following vulnerable packages" vuln-report.txt; then
+            echo "::error::Vulnerable NuGet packages detected"
+            exit 1
+          fi

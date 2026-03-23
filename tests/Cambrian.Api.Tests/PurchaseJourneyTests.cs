@@ -19,6 +19,7 @@ namespace Cambrian.Api.Tests;
 /// through webhook processing, verifying that the purchase, library item, wallet
 /// credit, and license certificate are all created correctly.
 /// </summary>
+[Trait("Category", "Critical")]
 public sealed class PurchaseJourneyTests : IDisposable
 {
     private readonly CambrianDbContext _db;

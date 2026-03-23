@@ -1,6 +1,7 @@
 using Cambrian.Api.Common;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace Cambrian.Api.Controllers;
 
@@ -40,7 +41,8 @@ public class BaseController : ControllerBase
     /// where the middleware has been misconfigured.
     /// </summary>
     protected string? GetRequiredUserId() =>
-        User.FindFirstValue(ClaimTypes.NameIdentifier);
+        User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
 
     /// <summary>409 Conflict with error envelope.</summary>
     protected IActionResult ConflictResponse(string error = "Resource already exists.") =>
