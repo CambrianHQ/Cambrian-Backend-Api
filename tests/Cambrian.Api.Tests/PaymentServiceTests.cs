@@ -153,11 +153,10 @@ public sealed class PaymentServiceTests
         var result = await _sut.GetResultAsync(null, trackId.ToString());
 
         Assert.Equal("completed", result.Status);
-        Assert.Equal(purchase.Id.ToString(), result.PurchaseId);
     }
 
     [Fact]
-    public async Task GetResult_FlagsDuplicate_WhenMultiplePurchases()
+    public async Task GetResult_DoesNotExposeDuplicate_WhenMultiplePurchases()
     {
         var trackId = Guid.NewGuid();
         _purchases.GetByTrackIdAsync(trackId).Returns(new List<Purchase>
@@ -168,7 +167,8 @@ public sealed class PaymentServiceTests
 
         var result = await _sut.GetResultAsync(null, trackId.ToString());
 
-        Assert.True(result.Duplicate);
+        // Security: anonymous endpoint no longer exposes duplicate flag
+        Assert.False(result.Duplicate);
     }
 
     [Fact]

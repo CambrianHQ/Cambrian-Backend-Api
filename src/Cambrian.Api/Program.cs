@@ -170,6 +170,7 @@ builder.Services.AddScoped<ILicenseCertificateRepository, LicenseCertificateRepo
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
+builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
 builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 
 // Infrastructure

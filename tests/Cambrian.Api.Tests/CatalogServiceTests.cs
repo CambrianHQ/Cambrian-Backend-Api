@@ -75,7 +75,7 @@ public sealed class CatalogServiceTests
     }
 
     [Fact]
-    public async Task GetTrackAsync_UsesEmail_WhenDisplayNameIsNull()
+    public async Task GetTrackAsync_FallsBackToUnknown_WhenDisplayNameIsNull()
     {
         var id = Guid.NewGuid();
         var track = new Track
@@ -90,7 +90,7 @@ public sealed class CatalogServiceTests
 
         var result = await _sut.GetTrackAsync(id.ToString());
 
-        Assert.Equal("artist@test.com", result!.Artist);
+        Assert.Equal("Unknown", result!.Artist);
     }
 
     [Fact]

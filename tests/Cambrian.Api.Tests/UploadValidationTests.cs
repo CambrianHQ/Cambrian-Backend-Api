@@ -43,8 +43,24 @@ public sealed class UploadValidationTests
         file.FileName.Returns(fileName);
         file.ContentType.Returns(contentType);
         file.Length.Returns(sizeBytes);
-        file.OpenReadStream().Returns(new MemoryStream(new byte[Math.Min(sizeBytes, 1024)]));
+        var data = new byte[Math.Min(sizeBytes, 1024)];
+        WriteMagicBytes(data, Path.GetExtension(fileName).ToLowerInvariant());
+        file.OpenReadStream().Returns(new MemoryStream(data));
         return file;
+    }
+
+    private static void WriteMagicBytes(byte[] data, string ext)
+    {
+        if (data.Length < 2) return;
+        switch (ext)
+        {
+            case ".mp3": data[0] = 0xFF; data[1] = 0xFB; break;
+            case ".wav": "RIFF"u8.CopyTo(data); break;
+            case ".flac": "fLaC"u8.CopyTo(data); break;
+            case ".ogg": "OggS"u8.CopyTo(data); break;
+            case ".aac": data[0] = 0xFF; data[1] = 0xF1; break;
+            case ".m4a": if (data.Length >= 8) "ftyp"u8.CopyTo(data.AsSpan(4)); break;
+        }
     }
 
     private static UploadTrackRequest MakeRequest(IFormFile audio) => new()

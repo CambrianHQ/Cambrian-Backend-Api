@@ -70,7 +70,7 @@ public sealed class Phase1SecurityTests
 
         // Email should have been sent with the plaintext code (not the hash)
         await _email.Received(1).SendPasswordResetAsync("test@example.com",
-            Arg.Is<string>(c => c.Length == 6));
+            Arg.Is<string>(c => c.Length == 8));
     }
 
     [Fact]

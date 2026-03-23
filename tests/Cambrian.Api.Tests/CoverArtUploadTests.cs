@@ -43,7 +43,9 @@ public sealed class CoverArtUploadTests
         file.FileName.Returns(name);
         file.Length.Returns(length);
         file.ContentType.Returns("audio/mpeg");
-        file.OpenReadStream().Returns(new MemoryStream(new byte[Math.Min(length, 1024)]));
+        var data = new byte[Math.Min(length, 1024)];
+        WriteMagicBytes(data, Path.GetExtension(name).ToLowerInvariant());
+        file.OpenReadStream().Returns(new MemoryStream(data));
         return file;
     }
 
@@ -56,8 +58,35 @@ public sealed class CoverArtUploadTests
         file.FileName.Returns(name);
         file.Length.Returns(length);
         file.ContentType.Returns(contentType);
-        file.OpenReadStream().Returns(new MemoryStream(new byte[Math.Min(length, 1024)]));
+        var data = new byte[Math.Min(length, 1024)];
+        WriteImageMagicBytes(data, Path.GetExtension(name).ToLowerInvariant());
+        file.OpenReadStream().Returns(new MemoryStream(data));
         return file;
+    }
+
+    private static void WriteMagicBytes(byte[] data, string ext)
+    {
+        if (data.Length < 2) return;
+        switch (ext)
+        {
+            case ".mp3": data[0] = 0xFF; data[1] = 0xFB; break;
+            case ".wav": "RIFF"u8.CopyTo(data); break;
+            case ".flac": "fLaC"u8.CopyTo(data); break;
+            case ".ogg": "OggS"u8.CopyTo(data); break;
+            case ".aac": data[0] = 0xFF; data[1] = 0xF1; break;
+            case ".m4a": if (data.Length >= 8) "ftyp"u8.CopyTo(data.AsSpan(4)); break;
+        }
+    }
+
+    private static void WriteImageMagicBytes(byte[] data, string ext)
+    {
+        if (data.Length < 3) return;
+        switch (ext)
+        {
+            case ".jpg" or ".jpeg": data[0] = 0xFF; data[1] = 0xD8; data[2] = 0xFF; break;
+            case ".png": if (data.Length >= 4) { data[0] = 0x89; data[1] = 0x50; data[2] = 0x4E; data[3] = 0x47; } break;
+            case ".webp": "RIFF"u8.CopyTo(data); break;
+        }
     }
 
     private static UploadTrackRequest MakeRequest(IFormFile audio, IFormFile? coverArt = null) => new()

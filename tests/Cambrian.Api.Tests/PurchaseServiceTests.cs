@@ -77,9 +77,10 @@ public sealed class PurchaseServiceTests
         var trackId = Guid.NewGuid();
         var track = MakeTrack(trackId);
         _tracks.GetByIdAsync(trackId).Returns(track);
+        _purchases.GetByStripeSessionIdAsync("sess_test").Returns((Purchase?)null);
         _purchases.GetByBuyerIdAsync("user-1").Returns(new List<Purchase>
         {
-            new() { TrackId = trackId, BuyerId = "user-1", Status = "completed" }
+            new() { TrackId = trackId, BuyerId = "user-1", Status = "completed", LicenseType = "non-exclusive" }
         });
 
         var request = new PurchaseCreateRequest { TrackId = trackId.ToString(), StripeSessionId = "sess_test" };

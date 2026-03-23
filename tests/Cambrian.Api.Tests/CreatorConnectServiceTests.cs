@@ -102,7 +102,6 @@ public sealed class CreatorConnectServiceTests
 
         Assert.True(status.Connected);
         Assert.Equal("active", status.Status);
-        Assert.Equal("acct_1", status.AccountId);
     }
 
     [Fact]

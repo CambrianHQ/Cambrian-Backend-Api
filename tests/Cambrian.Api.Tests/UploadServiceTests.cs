@@ -31,8 +31,24 @@ public sealed class UploadServiceTests
         file.FileName.Returns(name);
         file.Length.Returns(length);
         file.ContentType.Returns("audio/mpeg");
-        file.OpenReadStream().Returns(new MemoryStream(new byte[length]));
+        var data = new byte[length];
+        WriteMagicBytes(data, Path.GetExtension(name).ToLowerInvariant());
+        file.OpenReadStream().Returns(new MemoryStream(data));
         return file;
+    }
+
+    private static void WriteMagicBytes(byte[] data, string ext)
+    {
+        if (data.Length < 2) return;
+        switch (ext)
+        {
+            case ".mp3": data[0] = 0xFF; data[1] = 0xFB; break;
+            case ".wav": "RIFF"u8.CopyTo(data); break;
+            case ".flac": "fLaC"u8.CopyTo(data); break;
+            case ".ogg": "OggS"u8.CopyTo(data); break;
+            case ".aac": data[0] = 0xFF; data[1] = 0xF1; break;
+            case ".m4a": if (data.Length >= 8) "ftyp"u8.CopyTo(data.AsSpan(4)); break;
+        }
     }
 
     [Fact]
