@@ -1,6 +1,11 @@
 # Gitleaks allowlist — fingerprints of verified false positives
 # Format: commit:file:rule:line
 
+# JWT tokens in deleted diagnostic file (file removed from repo)
+b3758eb18ec71a2a60755441d0460e93e7dbaf39:jwt-diagnostic-output.txt:jwt:522
+b3758eb18ec71a2a60755441d0460e93e7dbaf39:jwt-diagnostic-output.txt:jwt:523
+b3758eb18ec71a2a60755441d0460e93e7dbaf39:jwt-diagnostic-output.txt:jwt:551
+
 # Test-only JWT key in test fixture (not a real secret)
 b3758eb18ec71a2a60755441d0460e93e7dbaf39:tests/Cambrian.Api.Tests/Fixtures/CambrianApiFixture.cs:generic-api-key:24
 
