@@ -58,7 +58,7 @@ public sealed class PayoutServiceTests
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
-        _wallet.GetBalanceAsync("c1").Returns(100L); // 100 cents = $1.00
+        _wallet.AtomicWithdrawAsync("c1", 1L, Arg.Any<string>()).Returns(true);
         _gateway.CreateTransferAsync("acct_1", 1L, Arg.Any<string>())
             .Returns("tr_1");
 
@@ -92,7 +92,7 @@ public sealed class PayoutServiceTests
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
-        _wallet.GetBalanceAsync("c1").Returns(1000L); // $10.00
+        _wallet.AtomicWithdrawAsync("c1", 5000L, Arg.Any<string>()).Returns(false);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _sut.RequestAsync(new PayoutRequest { Amount = 50m }, "c1")); // $50
@@ -109,7 +109,7 @@ public sealed class PayoutServiceTests
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
-        _wallet.GetBalanceAsync("c1").Returns(10000L); // $100
+        _wallet.AtomicWithdrawAsync("c1", 5000L, Arg.Any<string>()).Returns(true);
         _gateway.CreateTransferAsync("acct_1", 5000L, Arg.Any<string>())
             .Returns("tr_123");
 
@@ -118,9 +118,8 @@ public sealed class PayoutServiceTests
         Assert.Equal("completed", result.Status);
         Assert.Equal(50m, result.Amount);
 
-        // Verify wallet was debited
-        await _wallet.Received(1).AddTransactionAsync(
-            Arg.Is<WalletTransaction>(t => t.AmountCents == -5000 && t.Type == "withdrawal"));
+        // Verify atomic withdraw was called
+        await _wallet.Received(1).AtomicWithdrawAsync("c1", 5000L, Arg.Any<string>());
 
         // Verify Stripe transfer was initiated
         await _gateway.Received(1).CreateTransferAsync("acct_1", 5000L, Arg.Any<string>());
@@ -135,7 +134,7 @@ public sealed class PayoutServiceTests
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
-        _wallet.GetBalanceAsync("c1").Returns(10000L);
+        _wallet.AtomicWithdrawAsync("c1", 5000L, Arg.Any<string>()).Returns(true);
         _gateway.CreateTransferAsync("acct_1", Arg.Any<long>(), Arg.Any<string>())
             .Throws(new Exception("Stripe transfer failed"));
 
@@ -144,8 +143,9 @@ public sealed class PayoutServiceTests
 
         Assert.Contains("transfer failed", ex.Message);
 
-        // Wallet should have been debited then refunded (2 transactions)
-        await _wallet.Received(2).AddTransactionAsync(Arg.Any<WalletTransaction>());
+        // Wallet should have been refunded (1 credit transaction after atomic withdraw)
+        await _wallet.Received(1).AddTransactionAsync(
+            Arg.Is<WalletTransaction>(t => t.Type == "credit"));
 
         // Payout record should be marked failed
         await _payouts.Received(1).UpdateAsync(

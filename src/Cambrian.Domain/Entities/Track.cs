@@ -58,7 +58,13 @@ public class Track
 
     public string CreatorId { get; set; } = "";
 
+    /// <summary>UUID FK to Creators table. The canonical creator relationship.</summary>
+    public Guid? CreatorUuid { get; set; }
+
     public ApplicationUser Creator { get; set; } = null!;
+
+    /// <summary>Navigation to the first-class Creator entity via CreatorUuid.</summary>
+    public Creator? CreatorEntity { get; set; }
 
     public ICollection<string> Tags { get; set; } = new List<string>();
 

@@ -830,6 +830,48 @@
                           "path":  "/tiers/config",
                           "requiresAuth":  false,
                           "tag":  "Tiers"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/api/creators/{creatorId}",
+                          "requiresAuth":  false,
+                          "tag":  "Creators"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/api/creators/by-username/{username}",
+                          "requiresAuth":  false,
+                          "tag":  "Creators"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/api/creators/resolve/{identifier}",
+                          "requiresAuth":  false,
+                          "tag":  "Creators"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/api/creators/{creatorId}/tracks",
+                          "requiresAuth":  false,
+                          "tag":  "Creators"
+                      },
+                      {
+                          "method":  "GET",
+                          "path":  "/api/creators/username-availability",
+                          "requiresAuth":  false,
+                          "tag":  "Creators"
+                      },
+                      {
+                          "method":  "PUT",
+                          "path":  "/api/creator/me",
+                          "requiresAuth":  true,
+                          "tag":  "Creators"
+                      },
+                      {
+                          "method":  "POST",
+                          "path":  "/api/uploads/creator-image-url",
+                          "requiresAuth":  true,
+                          "tag":  "Creators"
                       }
                   ],
     "source":  "contracts/openapi.v1.json"

@@ -14,6 +14,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Track> Tracks => Set<Track>();
 
+    public DbSet<Creator> Creators => Set<Creator>();
+
     public DbSet<Purchase> Purchases => Set<Purchase>();
 
     public DbSet<LibraryItem> Library => Set<LibraryItem>();
@@ -62,6 +64,11 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(u => u.Tracks)
                 .HasForeignKey(t => t.CreatorId)
                 .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(t => t.CreatorEntity)
+                .WithMany(c => c.Tracks)
+                .HasForeignKey(t => t.CreatorUuid)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(t => t.CreatorUuid);
             e.Property(t => t.Tags)
                 .HasConversion(
                     v => string.Join(',', v),
@@ -265,6 +272,25 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(u => u.ProfileImageUrl).HasMaxLength(500);
             e.Property(u => u.CoverImageUrl).HasMaxLength(500);
             e.Property(u => u.Bio).HasMaxLength(500);
+        });
+
+        // ── Creator identity table ──
+        builder.Entity<Creator>(e =>
+        {
+            e.HasKey(c => c.Id);
+            e.Property(c => c.UserId).HasMaxLength(450).IsRequired();
+            e.HasIndex(c => c.UserId).IsUnique();
+            e.Property(c => c.Username).HasMaxLength(40).IsRequired();
+            e.HasIndex(c => c.Username).IsUnique();
+            e.Property(c => c.DisplayName).HasMaxLength(100);
+            e.Property(c => c.Bio).HasMaxLength(2000);
+            e.Property(c => c.ProfileImageUrl).HasMaxLength(500);
+            e.Property(c => c.CoverImageUrl).HasMaxLength(500);
+            e.Property(c => c.SocialLinks).HasMaxLength(2000);
+            e.HasOne(c => c.User)
+                .WithOne()
+                .HasForeignKey<Creator>(c => c.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
