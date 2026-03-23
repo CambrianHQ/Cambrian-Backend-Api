@@ -192,6 +192,48 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         }
         await db.SaveChangesAsync();
     }
+
+    /// <summary>Seed a Creator entity and return its UUID.</summary>
+    public async Task<Guid> SeedCreatorAsync(string userId, string username, string? displayName = null)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var id = Guid.NewGuid();
+        db.Creators.Add(new Creator
+        {
+            Id = id,
+            UserId = userId,
+            Username = username.Trim().ToLowerInvariant(),
+            DisplayName = displayName,
+            Bio = "",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return id;
+    }
+
+    /// <summary>Seed a track with the UUID-based CreatorUuid FK set.</summary>
+    public async Task<Guid> SeedTrackWithCreatorUuidAsync(string creatorUserId, Guid creatorUuid, string title = "Test Beat")
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var trackId = Guid.NewGuid();
+        db.Tracks.Add(new Track
+        {
+            Id = trackId,
+            CambrianTrackId = $"CAMB-TRK-{trackId.ToString()[..8].ToUpper()}",
+            Title = title,
+            Price = 29.99m,
+            LicenseType = "standard",
+            AudioUrl = "tracks/test-beat.mp3",
+            CreatorId = creatorUserId,
+            CreatorUuid = creatorUuid,
+            Genre = "Hip-Hop",
+        });
+        await db.SaveChangesAsync();
+        return trackId;
+    }
 }
 
 // ---------- Fakes ----------

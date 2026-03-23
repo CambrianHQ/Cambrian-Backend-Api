@@ -217,11 +217,11 @@ public class AuthService : IAuthService
         if (user is null)
             return; // silent
 
-        // Send the username (display name or email) via email
+        // Send the display name via email — never echo email as a "username"
         await _email.SendAsync(
             user.Email!,
             "Cambrian - Your Username",
-            $"<p>Your username is: <strong>{user.DisplayName ?? user.Email}</strong></p>");
+            $"<p>Your display name is: <strong>{user.DisplayName ?? "(not set)"}</strong></p>");
     }
 
     public async Task ChangePasswordAsync(ClaimsPrincipal principal, ChangePasswordRequest request)

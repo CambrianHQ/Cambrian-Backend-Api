@@ -100,7 +100,7 @@ public class PurchaseService : IPurchaseService
             UserId = userId,
             TrackId = trackId,
             Title = track.Title,
-            Artist = track.Creator?.DisplayName ?? track.Creator?.Email,
+            Artist = track.Creator?.DisplayName,
             AudioUrl = track.AudioUrl,
             SavedAt = DateTime.UtcNow
         });
