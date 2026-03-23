@@ -121,6 +121,14 @@ uploads/
 /storage/
 
 ################################################
+# Diagnostic / debug output
+################################################
+
+jwt-diagnostic-output.txt
+test-output.txt
+*-diagnostic-output.txt
+
+################################################
 # Temporary files
 ################################################
 
