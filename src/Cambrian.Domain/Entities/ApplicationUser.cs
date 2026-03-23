@@ -40,9 +40,6 @@ public class ApplicationUser : IdentityUser
     /// <summary>UTC expiry of the current password reset code.</summary>
     public DateTime? PasswordResetCodeExpiry { get; set; }
 
-    /// <summary>Number of failed reset code verification attempts (reset on success or code regeneration).</summary>
-    public int? ResetCodeAttempts { get; set; }
-
     /// <summary>User's profile/avatar image URL (stored in object storage).</summary>
     public string? ProfileImageUrl { get; set; }
 
