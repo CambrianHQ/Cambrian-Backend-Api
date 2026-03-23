@@ -31,7 +31,7 @@ public sealed class ResendEmailService : IEmailService
 
     public async Task SendAsync(string to, string subject, string htmlBody)
     {
-        _logger.LogInformation("[Email:Resend] Sending to {To} subject=\"{Subject}\"", to, subject);
+        _logger.LogDebug("[Email:Resend] Sending email subject=\"{Subject}\"", subject);
 
         var payload = new
         {
@@ -57,7 +57,7 @@ public sealed class ResendEmailService : IEmailService
                 throw new InvalidOperationException($"Resend API error {(int)response.StatusCode}: {body}");
             }
 
-            _logger.LogInformation("[Email:Resend] Sent successfully to {To} — {Body}", to, body);
+            _logger.LogInformation("[Email:Resend] Sent successfully");
         }
         catch (OperationCanceledException)
         {

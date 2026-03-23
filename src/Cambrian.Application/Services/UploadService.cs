@@ -46,6 +46,47 @@ public class UploadService : IUploadService
     /// <summary>Maximum cover art size in bytes (10 MB).</summary>
     private const long MaxCoverArtSizeBytes = 10 * 1024 * 1024;
 
+    /// <summary>Magic byte signatures for audio file validation.</summary>
+    private static readonly Dictionary<string, byte[][]> AudioMagicBytes = new()
+    {
+        [".mp3"] = [new byte[] { 0xFF, 0xFB }, new byte[] { 0xFF, 0xF3 }, new byte[] { 0xFF, 0xF2 }, "ID3"u8.ToArray()],
+        [".wav"] = ["RIFF"u8.ToArray()],
+        [".flac"] = ["fLaC"u8.ToArray()],
+        [".ogg"] = ["OggS"u8.ToArray()],
+        [".aac"] = [new byte[] { 0xFF, 0xF1 }, new byte[] { 0xFF, 0xF9 }],
+        [".m4a"] = [new byte[] { 0x00, 0x00, 0x00 }], // ftyp box (variable offset)
+    };
+
+    /// <summary>Magic byte signatures for image file validation.</summary>
+    private static readonly Dictionary<string, byte[][]> ImageMagicBytes = new()
+    {
+        [".jpg"] = [new byte[] { 0xFF, 0xD8, 0xFF }],
+        [".jpeg"] = [new byte[] { 0xFF, 0xD8, 0xFF }],
+        [".png"] = [new byte[] { 0x89, 0x50, 0x4E, 0x47 }],
+        [".webp"] = ["RIFF"u8.ToArray()],
+    };
+
+    private static bool ValidateMagicBytes(Stream stream, string extension, Dictionary<string, byte[][]> signatures)
+    {
+        if (!signatures.TryGetValue(extension, out var expected))
+            return false;
+
+        var buffer = new byte[12];
+        var bytesRead = stream.Read(buffer, 0, buffer.Length);
+        stream.Position = 0; // reset for upload
+
+        if (bytesRead < 2)
+            return false;
+
+        foreach (var magic in expected)
+        {
+            if (bytesRead >= magic.Length && buffer.AsSpan(0, magic.Length).SequenceEqual(magic))
+                return true;
+        }
+
+        return false;
+    }
+
     public UploadService(IObjectStorage storage, ITrackRepository tracks, UserManager<ApplicationUser> users, ILogger<UploadService> logger)
     {
         _storage = storage;
@@ -82,8 +123,9 @@ public class UploadService : IUploadService
             throw new ArgumentException(
                 $"File type '{extension}' is not allowed. Accepted: {string.Join(", ", AllowedExtensions)}");
 
+        // SECURITY: Require Content-Type to be present AND in the allowed set (no empty bypass)
         var contentType = request.Audio.ContentType?.ToLowerInvariant() ?? "";
-        if (!string.IsNullOrEmpty(contentType) && !AllowedMimeTypes.Contains(contentType))
+        if (string.IsNullOrEmpty(contentType) || !AllowedMimeTypes.Contains(contentType))
             throw new ArgumentException(
                 $"MIME type '{contentType}' is not allowed for audio uploads.");
 
@@ -100,6 +142,11 @@ public class UploadService : IUploadService
         var key = $"tracks/{request.CreatorId}/{Guid.NewGuid()}{extension}";
 
         await using var stream = request.Audio.OpenReadStream();
+
+        // SECURITY: Validate magic bytes to prevent disguised file uploads
+        if (!ValidateMagicBytes(stream, extension, AudioMagicBytes))
+            throw new ArgumentException(
+                $"File content does not match expected format for '{extension}'. The file may be corrupted or disguised.");
         var audioUrl = await _storage.UploadAsync(
             stream,
             key,
@@ -118,13 +165,19 @@ public class UploadService : IUploadService
                 throw new ArgumentException(
                     $"Cover art type '{imgExt}' is not allowed. Accepted: {string.Join(", ", AllowedImageExtensions)}");
 
+            // SECURITY: Require Content-Type for images (no empty bypass)
             var imgMime = request.CoverArt.ContentType?.ToLowerInvariant() ?? "";
-            if (!string.IsNullOrEmpty(imgMime) && !AllowedImageMimeTypes.Contains(imgMime))
+            if (string.IsNullOrEmpty(imgMime) || !AllowedImageMimeTypes.Contains(imgMime))
                 throw new ArgumentException(
                     $"Cover art MIME type '{imgMime}' is not allowed.");
 
             var coverKey = $"covers/{request.CreatorId}/{Guid.NewGuid()}{imgExt}";
             await using var coverStream = request.CoverArt.OpenReadStream();
+
+            // SECURITY: Validate image magic bytes
+            if (!ValidateMagicBytes(coverStream, imgExt, ImageMagicBytes))
+                throw new ArgumentException(
+                    $"Cover art content does not match expected format for '{imgExt}'. The file may be corrupted or disguised.");
             coverArtUrl = await _storage.UploadAsync(
                 coverStream,
                 coverKey,
