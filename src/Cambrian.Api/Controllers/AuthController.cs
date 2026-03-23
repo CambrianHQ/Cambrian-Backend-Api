@@ -31,9 +31,9 @@ public class AuthController : BaseController
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest request)
     {
-        _logger.LogInformation("EVENT: RegisterStarted email:{Email}", request.Email);
+        _logger.LogInformation("EVENT: RegisterStarted");
         var result = await _auth.RegisterAsync(request);
-        _logger.LogInformation("EVENT: RegisterCompleted userId:{UserId} email:{Email} tier:{Tier}", result.UserId, result.Email, result.Tier);
+        _logger.LogInformation("EVENT: RegisterCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
         return CreatedResponse(ToSession(result));
     }
 
@@ -41,9 +41,9 @@ public class AuthController : BaseController
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)
     {
-        _logger.LogInformation("EVENT: LoginStarted email:{Email}", request.Email);
+        _logger.LogInformation("EVENT: LoginStarted");
         var result = await _auth.LoginAsync(request);
-        _logger.LogInformation("EVENT: LoginCompleted userId:{UserId} email:{Email} tier:{Tier}", result.UserId, result.Email, result.Tier);
+        _logger.LogInformation("EVENT: LoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
         return OkResponse(ToSession(result));
     }
 
@@ -67,8 +67,8 @@ public class AuthController : BaseController
             ?? (string.Equals(profile.CreatorTier, "Pro", StringComparison.OrdinalIgnoreCase) ? "pro" : "free");
 
         _logger.LogInformation(
-            "EVENT: MeResolved userId:{UserId} email:{Email} profileTier:{ProfileTier} subscriptionPlan:{SubPlan} resolvedTier:{ResolvedTier}",
-            profile.UserId, profile.Email, profile.Tier, sub?.Plan, tier.ToLowerInvariant());
+            "EVENT: MeResolved userId:{UserId} profileTier:{ProfileTier} subscriptionPlan:{SubPlan} resolvedTier:{ResolvedTier}",
+            profile.UserId, profile.Tier, sub?.Plan, tier.ToLowerInvariant());
 
         return OkResponse(new
         {
@@ -116,11 +116,8 @@ public class AuthController : BaseController
         return OkResponse(new { status = "ok", timestamp = DateTime.UtcNow });
     }
 
-    [HttpGet("csrf-token")]
-    public IActionResult GetCsrfToken()
-    {
-        return OkResponse(new { token = Guid.NewGuid() });
-    }
+    // REMOVED: csrf-token endpoint was returning unvalidated random GUIDs
+    // providing false security. JWT Bearer auth mitigates CSRF inherently.
 
     [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]

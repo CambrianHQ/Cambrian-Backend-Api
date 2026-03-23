@@ -24,8 +24,8 @@ public sealed class SmtpEmailService : IEmailService
 
     public async Task SendAsync(string to, string subject, string htmlBody)
     {
-        _logger.LogInformation("[Email] Sending to {To} via {Host}:{Port} from {From} (user={User})",
-            to, _options.SmtpHost, _options.SmtpPort, _options.FromAddress, _options.SmtpUser);
+        _logger.LogDebug("[Email] Sending via {Host}:{Port}",
+            _options.SmtpHost, _options.SmtpPort);
 
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(_options.FromName, _options.FromAddress));
@@ -49,7 +49,7 @@ public sealed class SmtpEmailService : IEmailService
             await client.SendAsync(message, cts.Token);
             await client.DisconnectAsync(true, cts.Token);
 
-            _logger.LogInformation("[Email] Sent successfully to {To}", to);
+            _logger.LogInformation("[Email] Sent successfully");
         }
         catch (OperationCanceledException)
         {
