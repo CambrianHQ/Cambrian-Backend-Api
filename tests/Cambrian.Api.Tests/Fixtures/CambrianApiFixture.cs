@@ -21,6 +21,10 @@ namespace Cambrian.Api.Tests.Fixtures;
 /// </summary>
 public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private const string TestJwtKey = "cambrian-test-key-1234567890-abcdef";
+    private const string TestJwtIssuer = "cambrian-test-issuer";
+    private const string TestJwtAudience = "cambrian-test-audience";
+
     private SqliteConnection _connection = null!;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -32,9 +36,9 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Jwt:Key"] = "cambrian-test-secret-key-min-32-chars!!",
-                ["Jwt:Issuer"] = "cambrian",
-                ["Jwt:Audience"] = "cambrian",
+                ["Jwt:Key"] = TestJwtKey,
+                ["Jwt:Issuer"] = TestJwtIssuer,
+                ["Jwt:Audience"] = TestJwtAudience,
             });
         });
 

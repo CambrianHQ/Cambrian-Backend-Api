@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Cambrian.Application.DTOs.Library;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
 
@@ -11,18 +12,21 @@ public class LibraryService : ILibraryService
     private readonly ILibraryRepository _library;
     private readonly IPurchaseRepository _purchases;
     private readonly ITrackRepository _tracks;
+    private readonly ILogger<LibraryService> _logger;
 
-    public LibraryService(ILibraryRepository library, IPurchaseRepository purchases, ITrackRepository tracks)
+    public LibraryService(ILibraryRepository library, IPurchaseRepository purchases, ITrackRepository tracks, ILogger<LibraryService> logger)
     {
         _library = library;
         _purchases = purchases;
         _tracks = tracks;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyCollection<LibraryItemResponse>> GetLibraryAsync(ClaimsPrincipal user)
     {
         var userId = GetUserId(user);
         var items = await _library.GetByUserIdAsync(userId);
+        _logger.LogInformation("Library loaded: User={UserId} items={Count}", userId, items.Count);
 
         // Cross-reference with purchases to mark purchased items
         var purchases = await _purchases.GetByBuyerIdAsync(userId);

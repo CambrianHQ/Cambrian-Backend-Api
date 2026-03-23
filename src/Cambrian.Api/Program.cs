@@ -1,8 +1,10 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
 using Cambrian.Api;
 using Cambrian.Api.Common;
 using Cambrian.Api.Middleware;
+using Cambrian.Application.Configuration;
 using Microsoft.AspNetCore.Mvc;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
@@ -12,6 +14,7 @@ using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,22 +49,42 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
         Microsoft.AspNetCore.Identity.TokenOptions.DefaultProvider);
 
 // Validate secrets (JWT, Stripe, FrontendUrl)
-var (jwtKey, _) = builder.ValidateSecrets();
+builder.ValidateSecrets();
+builder.Services
+    .AddOptions<JwtSettings>()
+    .Bind(builder.Configuration.GetSection("Jwt"))
+    .PostConfigure(settings =>
+    {
+        if (string.IsNullOrWhiteSpace(settings.Key) || settings.Key.Length < 32)
+            throw new InvalidOperationException("JWT Key must be at least 32 characters.");
+
+        if (string.IsNullOrWhiteSpace(settings.Issuer))
+            throw new InvalidOperationException("JWT Issuer is required.");
+
+        if (string.IsNullOrWhiteSpace(settings.Audience))
+            throw new InvalidOperationException("JWT Audience is required.");
+    })
+    .ValidateOnStart();
 Console.WriteLine("[Startup] Governance contract version: 2.1.0 — see policy/POLICY.md, contracts/API_CONTRACTS.md");
 
 // JWT Authentication
-builder.Services.AddAuthentication("Bearer")
-    .AddJwtBearer("Bearer", options =>
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
+
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtSettings>>((options, jwtOptions) =>
     {
+        var jwt = jwtOptions.Value;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "cambrian-api",
-            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "cambrian-client",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            ValidIssuer = jwt.Issuer,
+            ValidAudience = jwt.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
+            ClockSkew = TimeSpan.FromMinutes(2)
         };
     });
 
@@ -179,6 +202,18 @@ builder.AddStorageProvider();
 builder.AddEmailProvider();
 
 var app = builder.Build();
+
+{
+    var jwt = app.Services.GetRequiredService<IOptions<JwtSettings>>().Value;
+    var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Cambrian.Api.Jwt");
+    var keyHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(jwt.Key)));
+
+    logger.LogInformation(
+        "JWT Config Loaded | Issuer: {Issuer} | Audience: {Audience} | KeyHash: {KeyHash}",
+        jwt.Issuer,
+        jwt.Audience,
+        keyHash[..8]);
+}
 
 if (app.Environment.IsDevelopment())
 {

@@ -32,7 +32,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         if (creator is null) return null;
 
         var stats = await GetStatsAsync(creatorId);
-        return MapToDto(creator, stats);
+        var tracks = await GetTracksByCreatorIdAsync(creatorId, 1, 50);
+        return MapToDto(creator, stats, tracks);
     }
 
     public async Task<PublicCreatorDto?> GetByUsernameAsync(string username)
@@ -46,7 +47,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         if (creator is null) return null;
 
         var stats = await GetStatsAsync(creator.Id);
-        return MapToDto(creator, stats);
+        var tracks = await GetTracksByCreatorIdAsync(creator.Id, 1, 50);
+        return MapToDto(creator, stats, tracks);
     }
 
     public async Task<PublicCreatorDto?> GetByUserIdAsync(string userId)
@@ -58,7 +60,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         if (creator is null) return null;
 
         var stats = await GetStatsAsync(creator.Id);
-        return MapToDto(creator, stats);
+        var tracks = await GetTracksByCreatorIdAsync(creator.Id, 1, 50);
+        return MapToDto(creator, stats, tracks);
     }
 
     /// <summary>
@@ -153,6 +156,9 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
 
         if (existing is null)
         {
+            if (string.IsNullOrWhiteSpace(request.Username))
+                throw new ArgumentException("Username is required when creating a creator profile.");
+
             var creator = new Creator
             {
                 Id = Guid.NewGuid(),
@@ -200,7 +206,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         {
             TrackCount = trackCount,
             TotalSales = totalSales,
-            TotalDownloads = 0,
+            TotalDownloads = totalSales,
             AverageRating = 0,
             FollowerCount = 0,
         };
@@ -247,6 +253,21 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         return null;
     }
 
+    public async Task<bool> UpdateImageUrlAsync(string userId, string imageType, string imageUrl)
+    {
+        var creator = await _db.Creators.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (creator is null) return false;
+
+        if (imageType == "cover")
+            creator.CoverImageUrl = imageUrl;
+        else
+            creator.ProfileImageUrl = imageUrl;
+
+        creator.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     // ── Helpers ──
 
     /// <summary>
@@ -255,7 +276,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
     internal static string NormalizeUsername(string raw)
         => raw.Trim().ToLowerInvariant();
 
-    private static PublicCreatorDto MapToDto(Creator c, CreatorStatsResponseDto stats)
+    private static PublicCreatorDto MapToDto(Creator c, CreatorStatsResponseDto stats, List<TrackResponse>? tracks = null)
     {
         List<SocialLinkItemDto>? links = null;
         if (!string.IsNullOrEmpty(c.SocialLinks))
@@ -274,6 +295,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             CoverImageUrl = c.CoverImageUrl,
             SocialLinks = links,
             Stats = stats,
+            Tracks = tracks ?? new(),
             CreatedAt = c.CreatedAt,
             UpdatedAt = c.UpdatedAt,
         };

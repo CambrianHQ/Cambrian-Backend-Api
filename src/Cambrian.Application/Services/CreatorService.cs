@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
 
@@ -12,18 +13,21 @@ public class CreatorService : ICreatorService
     private readonly IPurchaseRepository _purchases;
     private readonly IPayoutRepository _payouts;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly ILogger<CreatorService> _logger;
 
-    public CreatorService(ITrackRepository tracks, IPurchaseRepository purchases, IPayoutRepository payouts, UserManager<ApplicationUser> users)
+    public CreatorService(ITrackRepository tracks, IPurchaseRepository purchases, IPayoutRepository payouts, UserManager<ApplicationUser> users, ILogger<CreatorService> logger)
     {
         _tracks = tracks;
         _purchases = purchases;
         _payouts = payouts;
         _users = users;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetTracksAsync(string userId, int page, int pageSize)
     {
         var tracks = await _tracks.GetByCreatorIdAsync(userId);
+        _logger.LogInformation("Creator dashboard: User={UserId} tracks={Count}", userId, tracks.Count);
 
         // Resolve creator's actual fee rate from TierManifest
         var creator = await _users.FindByIdAsync(userId);
@@ -53,7 +57,12 @@ public class CreatorService : ICreatorService
                     ExclusivePlatformFee = Math.Round(exPrice * feeRate, 2),
                     ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - feeRate), 2),
                     AudioUrl = t.AudioUrl ?? "",
-                    CoverArtUrl = t.CoverArtUrl
+                    CoverArtUrl = t.CoverArtUrl,
+                    Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
+                        ? t.CreatorEntity.DisplayName
+                        : t.CreatorEntity?.Username
+                          ?? t.Creator?.DisplayName
+                          ?? "Unknown Artist",
                 };
             })
             .ToList();

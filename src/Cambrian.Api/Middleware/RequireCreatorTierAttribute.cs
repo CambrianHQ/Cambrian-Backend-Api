@@ -4,6 +4,7 @@ using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace Cambrian.Api.Middleware;
 
@@ -17,7 +18,8 @@ public class RequireCreatorTierAttribute : Attribute, IAsyncActionFilter
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var userId = context.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = context.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                     ?? context.HttpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub);
         if (userId is null)
         {
             context.Result = new UnauthorizedResult();

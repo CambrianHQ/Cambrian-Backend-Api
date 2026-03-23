@@ -230,6 +230,7 @@ internal static class StartupExtensions
         await SeedAdminAsync(app);
         await SeedDemoUsersAsync(app);
         await SeedFeatureFlagsAsync(app);
+        await SeedStagingDataAsync(app);
     }
 
     private static bool IsOriginAllowed(string origin, HashSet<string> originSet, string vercelSlug, string cfSlug)
@@ -382,20 +383,26 @@ internal static class StartupExtensions
             return;
         }
 
+        var demoPassword = app.Configuration["SeedDemoUsers:Password"];
+        if (string.IsNullOrWhiteSpace(demoPassword))
+        {
+            Console.WriteLine("[Seed] Skipping demo user seeding (SeedDemoUsers:Password not configured)");
+            return;
+        }
+
         var demoUsers = new[]
         {
-            ("aiden",    "Aiden Sharp"),
-            ("bellanova","Bella Nova"),
-            ("cassius",  "Cassius Reed"),
-            ("dahlia",   "Dahlia Moon"),
-            ("ezra",     "Ezra Voss"),
-            ("faye",     "Faye Lark"),
-            ("griffin",  "Griffin Cole"),
-            ("harper",   "Harper Wren"),
-            ("indigo",   "Indigo Sage"),
-            ("juniper",  "Juniper Kai"),
+            ("aiden",     "Aiden Sharp",  Domain.Enums.CreatorTier.Free),
+            ("bellanova", "Bella Nova",   Domain.Enums.CreatorTier.Free),
+            ("cassius",   "Cassius Reed", Domain.Enums.CreatorTier.Free),
+            ("dahlia",    "Dahlia Moon",  Domain.Enums.CreatorTier.Free),
+            ("ezra",      "Ezra Voss",    Domain.Enums.CreatorTier.Free),
+            ("faye",      "Faye Lark",    Domain.Enums.CreatorTier.Pro),
+            ("griffin",   "Griffin Cole", Domain.Enums.CreatorTier.Pro),
+            ("harper",    "Harper Wren",  Domain.Enums.CreatorTier.Pro),
+            ("indigo",    "Indigo Sage",  Domain.Enums.CreatorTier.Pro),
+            ("juniper",   "Juniper Kai",  Domain.Enums.CreatorTier.Pro),
         };
-        const string defaultPassword = "Cambrian2026!";
 
         try
         {
@@ -403,28 +410,96 @@ internal static class StartupExtensions
             var userManager = scope.ServiceProvider
                 .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
 
-            foreach (var (username, displayName) in demoUsers)
+            foreach (var (username, displayName, creatorTier) in demoUsers)
             {
                 var email = $"{username}@cambrianmusic.com";
                 var existing = await userManager.FindByEmailAsync(email);
-                if (existing is not null)
-                    continue;
 
-                var user = new ApplicationUser
+                if (existing is null)
                 {
-                    UserName = username,
-                    Email = email,
-                    DisplayName = displayName,
-                    Role = "Creator",
-                    Tier = "creator",
-                    CreatorTier = Domain.Enums.CreatorTier.Free,
-                    EmailConfirmed = true
-                };
-                var result = await userManager.CreateAsync(user, defaultPassword);
-                if (result.Succeeded)
-                    Console.WriteLine($"[Seed] Demo user created: {email} ({displayName})");
+                    var user = new ApplicationUser
+                    {
+                        UserName = username,
+                        Email = email,
+                        DisplayName = displayName,
+                        Role = "Creator",
+                        Tier = "creator",
+                        CreatorTier = creatorTier,
+                        EmailConfirmed = true,
+                        SubscriptionStatus = creatorTier == Domain.Enums.CreatorTier.Pro ? "Active" : "Inactive"
+                    };
+                    var createResult = await userManager.CreateAsync(user, demoPassword);
+                    if (createResult.Succeeded)
+                    {
+                        Console.WriteLine($"[Seed] Demo user created: {email} ({creatorTier})");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[Seed] Demo user failed: {email} — {string.Join("; ", createResult.Errors.Select(e => e.Description))}");
+                    }
+
+                    continue;
+                }
+
+                var changed = false;
+                if (!string.Equals(existing.UserName, username, StringComparison.Ordinal))
+                {
+                    existing.UserName = username;
+                    changed = true;
+                }
+                if (!string.Equals(existing.DisplayName, displayName, StringComparison.Ordinal))
+                {
+                    existing.DisplayName = displayName;
+                    changed = true;
+                }
+                if (!string.Equals(existing.Role, "Creator", StringComparison.OrdinalIgnoreCase))
+                {
+                    existing.Role = "Creator";
+                    changed = true;
+                }
+                if (!string.Equals(existing.Tier, "creator", StringComparison.OrdinalIgnoreCase))
+                {
+                    existing.Tier = "creator";
+                    changed = true;
+                }
+                if (existing.CreatorTier != creatorTier)
+                {
+                    existing.CreatorTier = creatorTier;
+                    changed = true;
+                }
+
+                var expectedSubscriptionStatus = creatorTier == Domain.Enums.CreatorTier.Pro ? "Active" : "Inactive";
+                if (!string.Equals(existing.SubscriptionStatus, expectedSubscriptionStatus, StringComparison.OrdinalIgnoreCase))
+                {
+                    existing.SubscriptionStatus = expectedSubscriptionStatus;
+                    changed = true;
+                }
+
+                if (!existing.EmailConfirmed)
+                {
+                    existing.EmailConfirmed = true;
+                    changed = true;
+                }
+
+                var passwordResetToken = await userManager.GeneratePasswordResetTokenAsync(existing);
+                var passwordResult = await userManager.ResetPasswordAsync(existing, passwordResetToken, demoPassword);
+                if (!passwordResult.Succeeded)
+                {
+                    Console.WriteLine($"[Seed] Demo user password sync failed: {email} — {string.Join("; ", passwordResult.Errors.Select(e => e.Description))}");
+                }
                 else
-                    Console.WriteLine($"[Seed] Demo user failed: {email} — {string.Join("; ", result.Errors.Select(e => e.Description))}");
+                {
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    var updateResult = await userManager.UpdateAsync(existing);
+                    if (updateResult.Succeeded)
+                        Console.WriteLine($"[Seed] Demo user synced: {email} ({creatorTier})");
+                    else
+                        Console.WriteLine($"[Seed] Demo user update failed: {email} — {string.Join("; ", updateResult.Errors.Select(e => e.Description))}");
+                }
             }
         }
         catch (Exception ex)
@@ -450,5 +525,396 @@ internal static class StartupExtensions
         {
             Console.WriteLine($"[Seed] Feature flag seed error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Seed realistic staging data: non-creator users, creator profiles, tracks,
+    /// purchases, library items, wallet transactions, subscriptions, and edge cases.
+    /// Only runs in Development or Staging when SeedStagingData config is true.
+    /// Idempotent — checks for existing data before inserting.
+    /// </summary>
+    private static async Task SeedStagingDataAsync(WebApplication app)
+    {
+        if (app.Environment.IsProduction())
+            return;
+
+        if (!app.Configuration.GetValue("SeedStagingData", false))
+        {
+            Console.WriteLine("[Seed] Staging data seeding disabled (set SeedStagingData=true to enable)");
+            return;
+        }
+
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<ApplicationUser>>();
+
+            // Skip if already seeded (check for sentinel track)
+            if (await db.Tracks.AnyAsync(t => t.CambrianTrackId == "CAMB-TRK-SEED0001"))
+            {
+                Console.WriteLine("[Seed] Staging data already present — skipping");
+                return;
+            }
+
+            var demoPassword = app.Configuration["SeedDemoUsers:Password"] ?? "Cambrian!Staging1";
+
+            // ── 1. Non-creator users (free listener + paid listener) ──
+            var freeListener = await GetOrCreateUserAsync(userManager, new ApplicationUser
+            {
+                UserName = "listener-free",
+                Email = "listener-free@cambrianmusic.com",
+                DisplayName = "Free Listener",
+                Role = "User",
+                Tier = "free",
+                CreatorTier = Domain.Enums.CreatorTier.Free,
+                EmailConfirmed = true,
+                SubscriptionStatus = "Inactive"
+            }, demoPassword);
+
+            var paidListener = await GetOrCreateUserAsync(userManager, new ApplicationUser
+            {
+                UserName = "listener-paid",
+                Email = "listener-paid@cambrianmusic.com",
+                DisplayName = "Paid Listener",
+                Role = "User",
+                Tier = "paid",
+                CreatorTier = Domain.Enums.CreatorTier.Free,
+                EmailConfirmed = true,
+                SubscriptionStatus = "Active"
+            }, demoPassword);
+
+            // Heavy library user (edge case)
+            var heavyUser = await GetOrCreateUserAsync(userManager, new ApplicationUser
+            {
+                UserName = "listener-heavy",
+                Email = "listener-heavy@cambrianmusic.com",
+                DisplayName = "Heavy Library User",
+                Role = "User",
+                Tier = "paid",
+                CreatorTier = Domain.Enums.CreatorTier.Free,
+                EmailConfirmed = true,
+                SubscriptionStatus = "Active"
+            }, demoPassword);
+
+            // User with no creator profile (edge case — has creator tier but never set up profile)
+            var orphanCreator = await GetOrCreateUserAsync(userManager, new ApplicationUser
+            {
+                UserName = "creator-noprofile",
+                Email = "creator-noprofile@cambrianmusic.com",
+                DisplayName = "No Profile Creator",
+                Role = "Creator",
+                Tier = "creator",
+                CreatorTier = Domain.Enums.CreatorTier.Free,
+                EmailConfirmed = true,
+                SubscriptionStatus = "Inactive"
+            }, demoPassword);
+
+            // ── 2. Look up demo creators (seeded by SeedDemoUsersAsync) ──
+            var aiden = await userManager.FindByEmailAsync("aiden@cambrianmusic.com");
+            var bellanova = await userManager.FindByEmailAsync("bellanova@cambrianmusic.com");
+            var cassius = await userManager.FindByEmailAsync("cassius@cambrianmusic.com");
+            var faye = await userManager.FindByEmailAsync("faye@cambrianmusic.com");
+            var griffin = await userManager.FindByEmailAsync("griffin@cambrianmusic.com");
+            var juniper = await userManager.FindByEmailAsync("juniper@cambrianmusic.com");
+
+            if (aiden is null || bellanova is null || cassius is null || faye is null)
+            {
+                Console.WriteLine("[Seed] Demo creator users not found — run SeedDemoUsers first. Skipping staging data.");
+                return;
+            }
+
+            // ── 3. Creator identity records (Creator entity) ──
+            var creatorRecords = new (ApplicationUser User, string Username, string? Bio, string? Niche)[]
+            {
+                (aiden!, "aiden", "AI cinematic composer. Dark atmospheres and emotional soundscapes.", "cinematic"),
+                (bellanova!, "bellanova", "Dreamy electronic producer blending synthwave with ambient textures.", "electronic"),
+                (cassius!, "cassius", "Hard-hitting trap and hip-hop beats for the modern era.", "hip-hop"),
+                (faye!, "faye", "Lo-fi and chill beats for studying, coding, and relaxing.", "lo-fi"),
+                (griffin!, "griffin", "Epic orchestral arrangements for games and film.", "orchestral"),
+                // juniper = creator with no tracks (edge case)
+                (juniper!, "juniper", "Experimental sound designer. Coming soon.", "experimental"),
+            };
+
+            foreach (var (user, username, bio, niche) in creatorRecords)
+            {
+                if (!await db.Creators.AnyAsync(c => c.UserId == user.Id))
+                {
+                    db.Creators.Add(new Creator
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = user.Id,
+                        Username = username,
+                        DisplayName = user.DisplayName,
+                        Bio = bio ?? "",
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                }
+
+                if (!await db.CreatorProfiles.AnyAsync(cp => cp.UserId == user.Id))
+                {
+                    db.CreatorProfiles.Add(new CreatorProfile
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = user.Id,
+                        Slug = username,
+                        Bio = bio ?? "",
+                        Niche = niche,
+                        ShowEarnings = false,
+                        ShowDownloadStats = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+            await db.SaveChangesAsync();
+            Console.WriteLine($"[Seed] Creator profiles created for {creatorRecords.Length} creators");
+
+            // ── 4. Tracks (18 tracks across 5 creators, juniper has none) ──
+            var now = DateTime.UtcNow;
+            var tracks = new List<Track>();
+
+            // Aiden — cinematic (4 tracks, 1 exclusive sold)
+            var aidenCreator = await db.Creators.FirstAsync(c => c.UserId == aiden!.Id);
+            tracks.AddRange(new[]
+            {
+                MakeTrack("CAMB-TRK-SEED0001", "Obsidian Dawn", "cinematic", "dark", aiden!.Id, aidenCreator.Id, 499, 2499, 9999, now.AddDays(-30)),
+                MakeTrack("CAMB-TRK-SEED0002", "Neon Cathedral", "cinematic", "energetic", aiden!.Id, aidenCreator.Id, 599, 2999, 14999, now.AddDays(-25)),
+                MakeTrack("CAMB-TRK-SEED0003", "Frozen Empire", "cinematic", "dark", aiden!.Id, aidenCreator.Id, 399, 1999, 7999, now.AddDays(-20)),
+                MakeTrack("CAMB-TRK-SEED0004", "Starfall", "cinematic", "chill", aiden!.Id, aidenCreator.Id, 449, 2199, 8999, now.AddDays(-10), exclusiveSold: true),
+            });
+
+            // Bellanova — electronic (4 tracks)
+            var bellaCreator = await db.Creators.FirstAsync(c => c.UserId == bellanova!.Id);
+            tracks.AddRange(new[]
+            {
+                MakeTrack("CAMB-TRK-SEED0005", "Velvet Horizon", "electronic", "chill", bellanova!.Id, bellaCreator.Id, 349, 1799, 6999, now.AddDays(-28)),
+                MakeTrack("CAMB-TRK-SEED0006", "Chrome Pulse", "electronic", "energetic", bellanova!.Id, bellaCreator.Id, 399, 1999, 7999, now.AddDays(-22)),
+                MakeTrack("CAMB-TRK-SEED0007", "Midnight Signal", "electronic", "dark", bellanova!.Id, bellaCreator.Id, 449, 2199, 8999, now.AddDays(-15)),
+                MakeTrack("CAMB-TRK-SEED0008", "Aurora Loop", "electronic", "happy", bellanova!.Id, bellaCreator.Id, 299, 1499, 5999, now.AddDays(-5)),
+            });
+
+            // Cassius — hip-hop (3 tracks)
+            var cassCreator = await db.Creators.FirstAsync(c => c.UserId == cassius!.Id);
+            tracks.AddRange(new[]
+            {
+                MakeTrack("CAMB-TRK-SEED0009", "Concrete Kingdom", "hip-hop", "energetic", cassius!.Id, cassCreator.Id, 599, 2999, 11999, now.AddDays(-26)),
+                MakeTrack("CAMB-TRK-SEED0010", "Shadow Flex", "hip-hop", "dark", cassius!.Id, cassCreator.Id, 499, 2499, 9999, now.AddDays(-18)),
+                MakeTrack("CAMB-TRK-SEED0011", "Gold Standard", "hip-hop", "happy", cassius!.Id, cassCreator.Id, 549, 2699, 10999, now.AddDays(-8)),
+            });
+
+            // Faye — lo-fi (4 tracks, one with zero sales — edge case)
+            var fayeCreator = await db.Creators.FirstAsync(c => c.UserId == faye!.Id);
+            tracks.AddRange(new[]
+            {
+                MakeTrack("CAMB-TRK-SEED0012", "Rainy Window", "lo-fi", "chill", faye!.Id, fayeCreator.Id, 199, 999, 3999, now.AddDays(-27)),
+                MakeTrack("CAMB-TRK-SEED0013", "Paper Lantern", "lo-fi", "happy", faye!.Id, fayeCreator.Id, 249, 1299, 4999, now.AddDays(-21)),
+                MakeTrack("CAMB-TRK-SEED0014", "Dusty Vinyl", "lo-fi", "chill", faye!.Id, fayeCreator.Id, 199, 999, 3999, now.AddDays(-14)),
+                MakeTrack("CAMB-TRK-SEED0015", "Empty Café", "lo-fi", "chill", faye!.Id, fayeCreator.Id, 149, 799, 2999, now.AddDays(-2)), // zero sales
+            });
+
+            // Griffin — orchestral (3 tracks)
+            var griffCreator = await db.Creators.FirstAsync(c => c.UserId == griffin!.Id);
+            tracks.AddRange(new[]
+            {
+                MakeTrack("CAMB-TRK-SEED0016", "Throne of Light", "orchestral", "energetic", griffin!.Id, griffCreator.Id, 699, 3499, 14999, now.AddDays(-24)),
+                MakeTrack("CAMB-TRK-SEED0017", "Echoes of War", "orchestral", "dark", griffin!.Id, griffCreator.Id, 749, 3799, 15999, now.AddDays(-16)),
+                MakeTrack("CAMB-TRK-SEED0018", "Fields of Grace", "orchestral", "happy", griffin!.Id, griffCreator.Id, 599, 2999, 11999, now.AddDays(-6)),
+            });
+
+            db.Tracks.AddRange(tracks);
+            await db.SaveChangesAsync();
+
+            // Update upload counts
+            foreach (var creator in new[] { aiden, bellanova, cassius, faye, griffin })
+            {
+                var count = tracks.Count(t => t.CreatorId == creator!.Id);
+                creator!.UploadCount = count;
+                await userManager.UpdateAsync(creator);
+            }
+            Console.WriteLine($"[Seed] {tracks.Count} tracks created across 5 creators");
+
+            // ── 5. Purchases + library items (realistic flows) ──
+            var purchaseData = new List<(ApplicationUser Buyer, Track Track, string LicenseType, string UsageType, int AmountCents, string Status)>
+            {
+                // Free listener buys a non-exclusive track
+                (freeListener!, tracks[0], "non-exclusive", "personal", tracks[0].NonExclusivePriceCents, "completed"),
+                // Paid listener buys multiple tracks (various license types)
+                (paidListener!, tracks[4], "non-exclusive", "youtube", tracks[4].NonExclusivePriceCents, "completed"),
+                (paidListener!, tracks[8], "non-exclusive", "podcast", tracks[8].NonExclusivePriceCents, "completed"),
+                (paidListener!, tracks[11], "non-exclusive", "personal", tracks[11].NonExclusivePriceCents, "completed"),
+                // Heavy user — buys many tracks
+                (heavyUser!, tracks[1], "non-exclusive", "youtube", tracks[1].NonExclusivePriceCents, "completed"),
+                (heavyUser!, tracks[5], "non-exclusive", "ads", tracks[5].NonExclusivePriceCents, "completed"),
+                (heavyUser!, tracks[9], "non-exclusive", "game", tracks[9].NonExclusivePriceCents, "completed"),
+                (heavyUser!, tracks[12], "non-exclusive", "social", tracks[12].NonExclusivePriceCents, "completed"),
+                (heavyUser!, tracks[15], "non-exclusive", "film", tracks[15].NonExclusivePriceCents, "completed"),
+                (heavyUser!, tracks[17], "non-exclusive", "personal", tracks[17].NonExclusivePriceCents, "completed"),
+                // Exclusive purchase (Starfall was exclusive-sold)
+                (paidListener!, tracks[3], "exclusive", "film", tracks[3].ExclusivePriceCents, "completed"),
+            };
+
+            var purchases = new List<Purchase>();
+            var libraryItems = new List<LibraryItem>();
+            var walletTxns = new List<WalletTransaction>();
+
+            foreach (var (buyer, track, licenseType, usageType, amountCents, status) in purchaseData)
+            {
+                var purchaseId = Guid.NewGuid();
+                var completedAt = track.CreatedAt.AddHours(2);
+
+                purchases.Add(new Purchase
+                {
+                    Id = purchaseId,
+                    BuyerId = buyer.Id,
+                    TrackId = track.Id,
+                    AmountCents = amountCents,
+                    LicenseType = licenseType,
+                    UsageType = usageType,
+                    Status = status,
+                    StripeSessionId = $"cs_test_seed_{purchaseId:N}",
+                    CompletedAt = completedAt,
+                    CreatedAt = track.CreatedAt.AddHours(1),
+                    UpdatedAt = completedAt
+                });
+
+                libraryItems.Add(new LibraryItem
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = buyer.Id,
+                    TrackId = track.Id,
+                    PurchaseId = purchaseId,
+                    Title = track.Title,
+                    Artist = track.CreatorId, // will map to creator display name in UI
+                    SavedAt = completedAt
+                });
+
+                // Creator wallet credit (platform takes 35% free / 15% pro)
+                var creatorUser = tracks.First(t => t.Id == track.Id);
+                walletTxns.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = track.CreatorId,
+                    AmountCents = (long)(amountCents * 0.65), // ~65% to creator (free tier default)
+                    Type = "credit",
+                    Description = $"Sale: {track.Title} ({licenseType})",
+                    RelatedPurchaseId = purchaseId,
+                    CreatedAt = completedAt
+                });
+            }
+
+            db.Purchases.AddRange(purchases);
+            db.Library.AddRange(libraryItems);
+            db.WalletTransactions.AddRange(walletTxns);
+            await db.SaveChangesAsync();
+            Console.WriteLine($"[Seed] {purchases.Count} purchases, {libraryItems.Count} library items, {walletTxns.Count} wallet txns created");
+
+            // ── 6. Subscriptions ──
+            var subscriptions = new List<Subscription>
+            {
+                new() { Id = Guid.NewGuid(), UserId = paidListener!.Id, Plan = "paid", Status = "active", StartedAt = now.AddMonths(-3) },
+                new() { Id = Guid.NewGuid(), UserId = heavyUser!.Id, Plan = "paid", Status = "active", StartedAt = now.AddMonths(-6) },
+                new() { Id = Guid.NewGuid(), UserId = faye!.Id, Plan = "creator", Status = "active", StartedAt = now.AddMonths(-4) },
+                new() { Id = Guid.NewGuid(), UserId = griffin!.Id, Plan = "creator", Status = "active", StartedAt = now.AddMonths(-2) },
+                // Cancelled subscription (edge case)
+                new() { Id = Guid.NewGuid(), UserId = freeListener!.Id, Plan = "paid", Status = "cancelled", StartedAt = now.AddMonths(-5), ExpiresAt = now.AddDays(-15) },
+            };
+            db.Subscriptions.AddRange(subscriptions);
+
+            // ── 7. Stripe test-mode linkage (test customer IDs) ──
+            paidListener!.StripeAccountId = "cus_test_paidlistener";
+            heavyUser!.StripeAccountId = "cus_test_heavyuser";
+            aiden!.StripeAccountId = "acct_test_aiden";
+            faye!.StripeAccountId = "acct_test_faye";
+            griffin!.StripeAccountId = "acct_test_griffin";
+            await userManager.UpdateAsync(paidListener);
+            await userManager.UpdateAsync(heavyUser);
+            await userManager.UpdateAsync(aiden);
+            await userManager.UpdateAsync(faye);
+            await userManager.UpdateAsync(griffin);
+
+            // ── 8. Analytics events (sample data) ──
+            var analyticsEvents = new List<AnalyticsEvent>
+            {
+                new() { Id = Guid.NewGuid(), EventType = "play", UserId = paidListener.Id, TrackId = tracks[0].Id, CreatedAt = now.AddDays(-3) },
+                new() { Id = Guid.NewGuid(), EventType = "play", UserId = heavyUser.Id, TrackId = tracks[1].Id, CreatedAt = now.AddDays(-2) },
+                new() { Id = Guid.NewGuid(), EventType = "download", UserId = paidListener.Id, TrackId = tracks[4].Id, CreatedAt = now.AddDays(-2) },
+                new() { Id = Guid.NewGuid(), EventType = "search", UserId = freeListener.Id, Metadata = "{\"query\":\"lo-fi chill\"}", CreatedAt = now.AddDays(-1) },
+                new() { Id = Guid.NewGuid(), EventType = "upload", UserId = aiden.Id, TrackId = tracks[0].Id, CreatedAt = now.AddDays(-30) },
+                new() { Id = Guid.NewGuid(), EventType = "purchase", UserId = heavyUser.Id, TrackId = tracks[15].Id, CreatedAt = now.AddDays(-1) },
+            };
+            db.AnalyticsEvents.AddRange(analyticsEvents);
+
+            // ── 9. Feature flags ──
+            var flagRepo = scope.ServiceProvider.GetRequiredService<IFeatureFlagRepository>();
+            if (await flagRepo.GetByNameAsync("staging_banner") is null)
+                await flagRepo.UpsertAsync("staging_banner", enabled: true);
+
+            await db.SaveChangesAsync();
+
+            Console.WriteLine("[Seed] ── Staging data summary ──");
+            Console.WriteLine($"  Users: {await db.Users.CountAsync()} (free={1}, paid={2}, creator={creatorRecords.Length + 1}, admin=config)");
+            Console.WriteLine($"  Creators: {await db.Creators.CountAsync()} profiles");
+            Console.WriteLine($"  Tracks: {await db.Tracks.CountAsync()} ({tracks.Count} seeded)");
+            Console.WriteLine($"  Purchases: {await db.Purchases.CountAsync()}");
+            Console.WriteLine($"  Library items: {await db.Library.CountAsync()}");
+            Console.WriteLine($"  Wallet txns: {await db.WalletTransactions.CountAsync()}");
+            Console.WriteLine($"  Subscriptions: {await db.Subscriptions.CountAsync()}");
+            Console.WriteLine("[Seed] Staging data seeding complete ✓");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Seed] Staging data error: {ex.Message}");
+            if (ex.InnerException is not null)
+                Console.WriteLine($"[Seed]   Inner: {ex.InnerException.Message}");
+        }
+    }
+
+    private static async Task<ApplicationUser> GetOrCreateUserAsync(
+        Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
+        ApplicationUser template, string password)
+    {
+        var existing = await userManager.FindByEmailAsync(template.Email!);
+        if (existing is not null)
+            return existing;
+
+        var result = await userManager.CreateAsync(template, password);
+        if (result.Succeeded)
+            Console.WriteLine($"[Seed] User created: {template.Email} (role={template.Role}, tier={template.Tier})");
+        else
+            Console.WriteLine($"[Seed] User creation failed: {template.Email} — {string.Join("; ", result.Errors.Select(e => e.Description))}");
+
+        return template;
+    }
+
+    private static Track MakeTrack(
+        string cambrianId, string title, string genre, string mood,
+        string creatorId, Guid creatorUuid,
+        int nonExcPriceCents, int excPriceCents, int buyoutPriceCents,
+        DateTime createdAt, bool exclusiveSold = false)
+    {
+        return new Track
+        {
+            Id = Guid.NewGuid(),
+            CambrianTrackId = cambrianId,
+            Title = title,
+            Genre = genre,
+            Mood = mood,
+            Instrumental = true,
+            Price = nonExcPriceCents / 100.0m,
+            NonExclusivePriceCents = nonExcPriceCents,
+            ExclusivePriceCents = excPriceCents,
+            CopyrightBuyoutPriceCents = buyoutPriceCents,
+            ExclusiveSold = exclusiveSold,
+            Status = exclusiveSold ? "exclusive_sold" : "available",
+            Visibility = "public",
+            Duration = "3:24",
+            LicenseType = "non-exclusive",
+            CreatorId = creatorId,
+            CreatorUuid = creatorUuid,
+            CreatedAt = createdAt
+        };
     }
 }

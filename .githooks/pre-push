@@ -1,0 +1,23 @@
+#!/bin/sh
+# Pre-push hook: run critical tests before pushing
+# Install: git config core.hooksPath .githooks
+
+set -e
+
+echo "[pre-push] Running Gitleaks secret scan..."
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --no-banner
+  echo "[pre-push] Gitleaks scan passed."
+else
+  echo "[pre-push] WARNING: gitleaks not installed — skipping secret scan."
+  echo "  Install: https://github.com/gitleaks/gitleaks#installing"
+fi
+
+echo "[pre-push] Running critical tests..."
+dotnet test --nologo -v q --filter Category=Critical
+if [ $? -ne 0 ]; then
+  echo "[pre-push] Critical tests failed. Push aborted."
+  exit 1
+fi
+
+echo "[pre-push] All critical tests passed."

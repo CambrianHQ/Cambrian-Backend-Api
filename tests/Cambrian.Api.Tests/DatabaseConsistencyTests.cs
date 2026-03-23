@@ -10,6 +10,7 @@ namespace Cambrian.Api.Tests;
 /// and the atomic nature of purchase + library + invoice creation via the
 /// Stripe webhook flow.
 /// </summary>
+[Trait("Category", "Critical")]
 public sealed class DatabaseConsistencyTests : IDisposable
 {
     private readonly CambrianDbContext _db;

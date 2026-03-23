@@ -13,6 +13,7 @@ namespace Cambrian.Api.Tests;
 /// Ensures the API response shape matches the agreed-upon DTO contract
 /// so frontend and backend never drift.
 /// </summary>
+[Trait("Category", "Critical")]
 public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixture>
 {
     private readonly CambrianApiFixture _fixture;

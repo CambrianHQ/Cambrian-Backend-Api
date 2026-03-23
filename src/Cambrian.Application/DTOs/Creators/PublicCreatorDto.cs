@@ -1,5 +1,7 @@
 namespace Cambrian.Application.DTOs.Creators;
 
+using Cambrian.Application.DTOs.Catalog;
+
 /// <summary>
 /// Public creator response shape. Never includes email.
 /// </summary>
@@ -13,6 +15,7 @@ public class PublicCreatorDto
     public string? CoverImageUrl { get; set; }
     public List<SocialLinkItemDto>? SocialLinks { get; set; }
     public CreatorStatsResponseDto Stats { get; set; } = new();
+    public List<TrackResponse> Tracks { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

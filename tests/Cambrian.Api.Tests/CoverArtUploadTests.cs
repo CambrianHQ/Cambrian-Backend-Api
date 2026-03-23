@@ -34,7 +34,8 @@ public sealed class CoverArtUploadTests
         });
         users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
         var logger = Substitute.For<ILogger<UploadService>>();
-        _sut = new UploadService(_storage, _tracks, users, logger);
+        var creators = Substitute.For<ICreatorIdentityRepository>();
+        _sut = new UploadService(_storage, _tracks, users, logger, creators);
     }
 
     private static IFormFile MakeAudioFile(string name = "beat.mp3", long length = 1024)

@@ -9,6 +9,9 @@ public class TrackResponse
 
     public string Title { get; set; } = string.Empty;
 
+    /// <summary>Alias for Title — backward compatibility with frontends expecting 'name'.</summary>
+    public string Name => Title;
+
     public string? Description { get; set; }
 
     public string Genre { get; set; } = string.Empty;

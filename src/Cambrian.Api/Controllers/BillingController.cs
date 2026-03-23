@@ -36,7 +36,7 @@ public class BillingController : BaseController
         {
             var result = await _billing.CreateCheckoutAsync(request, userId, userEmail);
             _logger.LogInformation("EVENT: BillingCheckoutCreated userId:{UserId} tier:{Tier}", userId, request.Tier);
-            return OkResponse(new { url = result.CheckoutUrl });
+            return OkResponse(new { url = result.CheckoutUrl, checkoutUrl = result.CheckoutUrl });
         }
         catch (ArgumentException ex)
         {

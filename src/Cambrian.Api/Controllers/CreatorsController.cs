@@ -186,8 +186,8 @@ public class CreatorsController : BaseController
 
         // Update the creator record
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var creator = await _creators.GetByUserIdAsync(userId);
-        if (creator is null) return NotFoundResponse("Create a profile first.");
+        var updated = await _creators.UpdateImageUrlAsync(userId, type, publicUrl);
+        if (!updated) return NotFoundResponse("Create a profile first.");
 
         return OkResponse(new CreatorImageUploadResponse
         {
