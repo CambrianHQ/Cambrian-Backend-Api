@@ -30,12 +30,14 @@ jobs:
             || echo "::warning::Deploy hook not configured — Render auto-deploys from main branch"
 
       - name: Post-deploy health check
-        if: secrets.PROD_API_URL != ''
+        env:
+          PROD_API_URL: ${{ secrets.PROD_API_URL }}
+        if: env.PROD_API_URL != ''
         run: |
           echo "Waiting 60s for deployment to stabilize..."
           sleep 60
           for i in 1 2 3 4 5; do
-            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${{ secrets.PROD_API_URL }}/health" || true)
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${PROD_API_URL}/health" || true)
             if [ "$STATUS" = "200" ]; then
               echo "Health check passed (attempt $i)"
               exit 0

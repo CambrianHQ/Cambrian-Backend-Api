@@ -157,8 +157,13 @@ public class AuthService : IAuthService
         if (user is null)
             return; // silent
 
-        // Generate a cryptographically random 6-digit code
-        var code = RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
+        // Generate a cryptographically random 8-character alphanumeric code
+        // (36^8 = ~2.8 trillion combinations vs 900K for 6-digit numeric)
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // excludes ambiguous chars: 0/O, 1/I
+        var codeChars = new char[8];
+        for (var i = 0; i < codeChars.Length; i++)
+            codeChars[i] = chars[RandomNumberGenerator.GetInt32(chars.Length)];
+        var code = new string(codeChars);
 
         user.PasswordResetCode = HashResetCode(code);
         user.PasswordResetCodeExpiry = DateTime.UtcNow.Add(ResetCodeLifetime);
@@ -329,7 +334,7 @@ public class AuthService : IAuthService
             issuer: issuer,
             audience: audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(24),
+            expires: DateTime.UtcNow.AddHours(2),
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

@@ -69,7 +69,6 @@ public class CreatorConnectService : ICreatorConnectService
             return new CreatorConnectStatusResponse
             {
                 Connected = false,
-                AccountId = null,
                 Status = "not_connected"
             };
         }
@@ -80,7 +79,6 @@ public class CreatorConnectService : ICreatorConnectService
             return new CreatorConnectStatusResponse
             {
                 Connected = status.Status == "active",
-                AccountId = user.StripeAccountId,
                 Status = status.Status
             };
         }
@@ -93,7 +91,6 @@ public class CreatorConnectService : ICreatorConnectService
             return new CreatorConnectStatusResponse
             {
                 Connected = false,
-                AccountId = user.StripeAccountId,
                 Status = "pending"
             };
         }

@@ -36,7 +36,7 @@ public sealed class CreatorConnectResult
 public sealed class CreatorConnectStatusResponse
 {
     public bool Connected { get; init; }
-    public string? AccountId { get; init; }
+    // SECURITY: AccountId (Stripe acct_xxx) removed — internal identifier should not be exposed to client
     /// <summary>"not_connected" | "pending" | "active"</summary>
     public string Status { get; init; } = "not_connected";
 }
