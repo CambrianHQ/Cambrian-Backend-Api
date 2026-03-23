@@ -36,11 +36,13 @@ public class CreatorsController : BaseController
 
     // ───── GET /api/creators/{creatorId} ─────
 
-    /// <summary>Get public creator profile by UUID. No email in response.</summary>
+    /// <summary>Get public creator profile by UUID. Falls back to ApplicationUser.Id lookup.</summary>
     [HttpGet("{creatorId:guid}")]
     public async Task<IActionResult> GetCreatorById(Guid creatorId)
     {
         var creator = await _creators.GetByIdAsync(creatorId);
+        // Fallback: the caller may have passed an ApplicationUser.Id instead of creator UUID
+        creator ??= await _creators.GetByUserIdAsync(creatorId.ToString());
         if (creator is null)
         {
             _logger.LogWarning("CreatorLookup: UUID={CreatorId} not found", creatorId);
@@ -105,9 +107,12 @@ public class CreatorsController : BaseController
         if (pageSize is < 1 or > 100) pageSize = 20;
 
         var creator = await _creators.GetByIdAsync(creatorId);
+        // Fallback: caller may have passed ApplicationUser.Id
+        creator ??= await _creators.GetByUserIdAsync(creatorId.ToString());
         if (creator is null) return NotFoundResponse("Creator not found.");
 
-        var tracks = await _creators.GetTracksByCreatorIdAsync(creatorId, page, pageSize);
+        var actualCreatorId = Guid.Parse(creator.Id);
+        var tracks = await _creators.GetTracksByCreatorIdAsync(actualCreatorId, page, pageSize);
         ResolveTrackUrls(tracks);
         return OkResponse(tracks);
     }
@@ -128,6 +133,19 @@ public class CreatorsController : BaseController
 
         var taken = await _creators.IsUsernameTakenAsync(normalized);
         return OkResponse(new UsernameAvailabilityResponse { Username = normalized, Available = !taken });
+    }
+
+    // ───── GET /api/creator/me ─────
+
+    [Authorize]
+    [RequireCreatorTier]
+    [HttpGet("/api/creator/me")]
+    public async Task<IActionResult> GetMyCreatorProfile()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var creator = await _creators.GetByUserIdAsync(userId);
+        if (creator is null) return NotFoundResponse("Creator profile not found.");
+        return OkResponse(creator);
     }
 
     // ───── PUT /api/creator/me ─────
