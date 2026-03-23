@@ -157,8 +157,13 @@ public class AuthService : IAuthService
         if (user is null)
             return; // silent
 
-        // Generate a cryptographically random 6-digit code
-        var code = RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString();
+        // Generate a cryptographically random 8-character alphanumeric code
+        // (36^8 = ~2.8 trillion combinations vs 900K for 6-digit numeric)
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // excludes ambiguous chars: 0/O, 1/I
+        var codeChars = new char[8];
+        for (var i = 0; i < codeChars.Length; i++)
+            codeChars[i] = chars[RandomNumberGenerator.GetInt32(chars.Length)];
+        var code = new string(codeChars);
 
         user.PasswordResetCode = HashResetCode(code);
         user.PasswordResetCodeExpiry = DateTime.UtcNow.Add(ResetCodeLifetime);
@@ -285,7 +290,10 @@ public class AuthService : IAuthService
         return null;
     }
 
-    private static void ValidateResetCode(ApplicationUser user, string code)
+    /// <summary>Max failed reset code attempts before the code is invalidated.</summary>
+    private const int MaxResetCodeAttempts = 5;
+
+    private void ValidateResetCode(ApplicationUser user, string code)
     {
         if (string.IsNullOrEmpty(user.PasswordResetCode)
             || user.PasswordResetCodeExpiry is null
@@ -296,8 +304,22 @@ public class AuthService : IAuthService
 
         if (!string.Equals(user.PasswordResetCode, HashResetCode(code), StringComparison.Ordinal))
         {
+            // Track failed attempts — invalidate code after MaxResetCodeAttempts
+            user.ResetCodeAttempts = (user.ResetCodeAttempts ?? 0) + 1;
+            if (user.ResetCodeAttempts >= MaxResetCodeAttempts)
+            {
+                user.PasswordResetCode = null;
+                user.PasswordResetCodeExpiry = null;
+                user.ResetCodeAttempts = 0;
+                _ = _users.UpdateAsync(user); // fire-and-forget to persist invalidation
+                throw new InvalidOperationException("Too many failed attempts. Please request a new code.");
+            }
+            _ = _users.UpdateAsync(user); // persist attempt count
             throw new InvalidOperationException(InvalidOrExpiredCode);
         }
+
+        // Reset attempt counter on success
+        user.ResetCodeAttempts = 0;
     }
 
     private static string HashResetCode(string code)
@@ -329,7 +351,7 @@ public class AuthService : IAuthService
             issuer: issuer,
             audience: audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(24),
+            expires: DateTime.UtcNow.AddHours(2),
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

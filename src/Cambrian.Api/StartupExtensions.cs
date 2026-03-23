@@ -237,16 +237,20 @@ internal static class StartupExtensions
         if (originSet.Contains(origin))
             return true;
 
+        // SECURITY: Use strict prefix matching to prevent attacker-created subdomains
+        // (e.g., "evil-cambrian-app.vercel.app") from passing the CORS check
         if (!string.IsNullOrEmpty(vercelSlug)
             && Uri.TryCreate(origin, UriKind.Absolute, out var uri)
             && uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase)
-            && uri.Host.Contains(vercelSlug, StringComparison.OrdinalIgnoreCase))
+            && (uri.Host.StartsWith(vercelSlug + "-", StringComparison.OrdinalIgnoreCase)
+                || uri.Host.Equals(vercelSlug + ".vercel.app", StringComparison.OrdinalIgnoreCase)))
             return true;
 
         if (!string.IsNullOrEmpty(cfSlug)
             && Uri.TryCreate(origin, UriKind.Absolute, out var cfUri)
             && cfUri.Host.EndsWith(".pages.dev", StringComparison.OrdinalIgnoreCase)
-            && cfUri.Host.Contains(cfSlug, StringComparison.OrdinalIgnoreCase))
+            && (cfUri.Host.StartsWith(cfSlug + "-", StringComparison.OrdinalIgnoreCase)
+                || cfUri.Host.Equals(cfSlug + ".pages.dev", StringComparison.OrdinalIgnoreCase)))
             return true;
 
         return false;
@@ -371,6 +375,13 @@ internal static class StartupExtensions
 
     private static async Task SeedDemoUsersAsync(WebApplication app)
     {
+        // SECURITY: Never seed demo users with known passwords in production
+        if (app.Environment.IsProduction())
+        {
+            Console.WriteLine("[Seed] Skipping demo user seeding (Production environment)");
+            return;
+        }
+
         var demoUsers = new[]
         {
             ("aiden",    "Aiden Sharp"),

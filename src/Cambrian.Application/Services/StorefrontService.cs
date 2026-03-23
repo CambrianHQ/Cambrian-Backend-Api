@@ -132,7 +132,7 @@ public sealed class StorefrontService : IStorefrontService
             AudioUrl = t.AudioUrl,
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
-            Artist = t.Creator?.DisplayName ?? t.Creator?.Email,
+            Artist = t.Creator?.DisplayName ?? "Unknown",
             CreatedAt = t.CreatedAt,
         };
     }

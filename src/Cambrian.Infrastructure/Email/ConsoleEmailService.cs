@@ -25,13 +25,14 @@ public sealed class ConsoleEmailService : IEmailService
 
     public Task SendPasswordResetAsync(string to, string code)
     {
-        _logger.LogInformation("[Email] Password reset code for {To}: {Code}", to, code);
+        // SECURITY: Only log that a code was sent, never the code itself
+        _logger.LogInformation("[Email] Password reset code sent to {To}", to);
         return Task.CompletedTask;
     }
 
     public Task SendVerificationCodeAsync(string to, string code)
     {
-        _logger.LogInformation("[Email] Verification code for {To}: {Code}", to, code);
+        _logger.LogInformation("[Email] Verification code sent to {To}", to);
         return Task.CompletedTask;
     }
 
