@@ -1,0 +1,11 @@
+# Gitleaks allowlist — fingerprints of verified false positives
+# Format: commit:file:rule:line
+
+# Test-only JWT key in test fixture (not a real secret)
+b3758eb18ec71a2a60755441d0460e93e7dbaf39:tests/Cambrian.Api.Tests/Fixtures/CambrianApiFixture.cs:generic-api-key:24
+
+# Stripe placeholder values in .env.example files (never contained real keys)
+de5a5eecf422386b40ce422f4382429a0711072d:config/.env.example:stripe-access-token:37
+2a1e745766ffe2599b7cdd686de5fb5ec3643052:.env.example:stripe-access-token:21
+b83c414fd3bfcd655dfccf0e17b4d4217d7f6309:.env.example:stripe-access-token:8
+21de570cab693dcb710c97355fb6c07d35a06e3a:.env.example:stripe-access-token:6
