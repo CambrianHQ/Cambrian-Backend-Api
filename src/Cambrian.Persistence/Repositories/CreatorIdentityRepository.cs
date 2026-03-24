@@ -159,12 +159,13 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             if (string.IsNullOrWhiteSpace(request.Username))
                 throw new ArgumentException("Username is required when creating a creator profile.");
 
+            var normalizedUsername = NormalizeUsername(request.Username ?? "");
             var creator = new Creator
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
-                Username = NormalizeUsername(request.Username ?? ""),
-                DisplayName = request.DisplayName?.Trim(),
+                Username = normalizedUsername,
+                DisplayName = normalizedUsername,
                 Bio = request.Bio?.Trim() ?? "",
                 SocialLinks = request.SocialLinks is not null
                     ? JsonSerializer.Serialize(request.SocialLinks)
@@ -180,9 +181,11 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         }
 
         if (request.Username is not null)
-            existing.Username = NormalizeUsername(request.Username);
-        if (request.DisplayName is not null)
-            existing.DisplayName = request.DisplayName.Trim();
+        {
+            var normalized = NormalizeUsername(request.Username);
+            existing.Username = normalized;
+            existing.DisplayName = normalized;
+        }
         if (request.Bio is not null)
             existing.Bio = request.Bio.Trim();
         if (request.SocialLinks is not null)

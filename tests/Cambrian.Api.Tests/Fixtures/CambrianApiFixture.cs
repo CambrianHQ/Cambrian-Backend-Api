@@ -203,12 +203,13 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
         var id = Guid.NewGuid();
+        var normalized = username.Trim().ToLowerInvariant();
         db.Creators.Add(new Creator
         {
             Id = id,
             UserId = userId,
-            Username = username.Trim().ToLowerInvariant(),
-            DisplayName = displayName,
+            Username = normalized,
+            DisplayName = normalized,
             Bio = "",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,

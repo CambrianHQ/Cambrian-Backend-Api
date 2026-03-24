@@ -239,7 +239,6 @@ public sealed class CreatorIdentityTests : IClassFixture<CambrianApiFixture>
         var res = await client.PutAsJsonAsync("/api/creator/me", new
         {
             username,
-            displayName = "My Display",
             bio = "Test bio",
         });
         res.EnsureSuccessStatusCode();
@@ -247,7 +246,7 @@ public sealed class CreatorIdentityTests : IClassFixture<CambrianApiFixture>
         var json = await res.Content.ReadFromJsonAsync<JsonElement>();
         var data = json.GetProperty("data");
         Assert.Equal(username.ToLowerInvariant(), data.GetProperty("username").GetString());
-        Assert.Equal("My Display", data.GetProperty("displayName").GetString());
+        Assert.Equal(username.ToLowerInvariant(), data.GetProperty("displayName").GetString());
 
         // Email must not appear anywhere in the response
         var rawJson = data.GetRawText();
@@ -285,7 +284,6 @@ public sealed class CreatorIdentityTests : IClassFixture<CambrianApiFixture>
         {
             username,
             email = "hacker@evil.com",  // should be ignored by the DTO
-            displayName = "Clean",
         });
         res.EnsureSuccessStatusCode();
 
