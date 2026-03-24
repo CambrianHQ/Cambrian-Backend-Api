@@ -7,6 +7,7 @@ using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Domain.Enums;
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -18,6 +19,7 @@ public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _users;
     private readonly JwtSettings _jwtSettings;
+    private readonly GoogleSettings _googleSettings;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IEmailService _email;
     private readonly ILogger<AuthService> _logger;
@@ -30,12 +32,14 @@ public class AuthService : IAuthService
     public AuthService(
         UserManager<ApplicationUser> users,
         IOptions<JwtSettings> jwtOptions,
+        IOptions<GoogleSettings> googleOptions,
         ISubscriptionRepository subscriptions,
         IEmailService email,
         ILogger<AuthService> logger)
     {
         _users = users;
         _jwtSettings = jwtOptions.Value;
+        _googleSettings = googleOptions.Value;
         _subscriptions = subscriptions;
         _email = email;
         _logger = logger;
@@ -362,5 +366,65 @@ public class AuthService : IAuthService
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return null;
         return GenerateJwt(user);
+    }
+
+    public async Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request)
+    {
+        var payload = await GoogleJsonWebSignature.ValidateAsync(
+            request.IdToken,
+            new GoogleJsonWebSignature.ValidationSettings
+            {
+                Audience = new[] { _googleSettings.ClientId }
+            });
+
+        if (payload.EmailVerified is false)
+            throw new UnauthorizedAccessException("Email not verified");
+
+        var email = payload.Email.ToLowerInvariant();
+        var name = payload.Name ?? email.Split('@')[0];
+
+        _logger.LogInformation("Google login attempt for {Email}", email);
+
+        var user = await _users.FindByEmailAsync(email);
+
+        if (user is null)
+        {
+            user = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                DisplayName = name,
+                EmailConfirmed = true,
+                Tier = "free",
+                Role = "User",
+                CreatorTier = CreatorTier.Free
+            };
+
+            var result = await _users.CreateAsync(user);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+                _logger.LogWarning("Google registration failed: {Email} — {Errors}", email, errors);
+                throw new InvalidOperationException($"Registration failed: {errors}");
+            }
+
+            _logger.LogInformation("Google registration success: User={UserId} Email={Email}", user.Id, user.Email);
+        }
+
+        var sub = await _subscriptions.GetActiveAsync(user.Id);
+        var resolvedTier = sub?.Plan ?? (user.CreatorTier == CreatorTier.Pro ? "pro" : "free");
+
+        var token = GenerateJwt(user);
+
+        _logger.LogInformation("Google login success: User={UserId} Tier={Tier}", user.Id, resolvedTier);
+
+        return new AuthResponse
+        {
+            UserId = Guid.Parse(user.Id),
+            Email = user.Email ?? "",
+            Token = token,
+            Tier = resolvedTier.ToLowerInvariant(),
+            Role = user.Role ?? "User"
+        };
     }
 }

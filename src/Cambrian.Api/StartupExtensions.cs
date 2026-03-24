@@ -646,7 +646,7 @@ internal static class StartupExtensions
                         Id = Guid.NewGuid(),
                         UserId = user.Id,
                         Username = username,
-                        DisplayName = username,
+                        DisplayName = user.DisplayName,
                         Bio = bio ?? "",
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
