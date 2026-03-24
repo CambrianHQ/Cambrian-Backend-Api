@@ -99,6 +99,9 @@ services:
       # Demo creators for local/staging verification (shared password, emails are deterministic in code)
       - key: SeedDemoUsers__Password
         sync: false
+      # Google OAuth
+      - key: Google__ClientId
+        sync: false
       # Frontend CORS
       - key: App__FrontendUrl
         value: https://staging.cambrianmusic.com
@@ -174,6 +177,9 @@ services:
         sync: false
       # Kept as a secret slot for parity, but production code skips demo-user seeding
       - key: SeedDemoUsers__Password
+        sync: false
+      # Google OAuth
+      - key: Google__ClientId
         sync: false
       - key: RateLimiting__GlobalPermitLimit
         value: "100"

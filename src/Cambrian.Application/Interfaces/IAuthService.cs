@@ -29,4 +29,7 @@ public interface IAuthService
 
     /// <summary>Generate a fresh JWT for the given userId (includes updated tier/role claims).</summary>
     Task<string?> GenerateFreshTokenAsync(string userId);
+
+    /// <summary>Authenticate via Google ID token (creates account if needed).</summary>
+    Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request);
 }

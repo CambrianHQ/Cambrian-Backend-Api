@@ -47,6 +47,22 @@ public class AuthController : BaseController
         return OkResponse(ToSession(result));
     }
 
+    [EnableRateLimiting("auth")]
+    [HttpPost("google")]
+    public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
+    {
+        try
+        {
+            var result = await _auth.GoogleLoginAsync(request);
+            _logger.LogInformation("EVENT: GoogleLoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
+            return OkResponse(ToSession(result));
+        }
+        catch (Google.Apis.Auth.InvalidJwtException)
+        {
+            return Unauthorized();
+        }
+    }
+
     [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> Me()

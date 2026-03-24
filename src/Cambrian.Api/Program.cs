@@ -65,6 +65,11 @@ builder.Services
             throw new InvalidOperationException("JWT Audience is required.");
     })
     .ValidateOnStart();
+
+builder.Services
+    .AddOptions<GoogleSettings>()
+    .Bind(builder.Configuration.GetSection("Google"));
+
 Console.WriteLine("[Startup] Governance contract version: 2.1.0 — see policy/POLICY.md, contracts/API_CONTRACTS.md");
 
 // JWT Authentication
