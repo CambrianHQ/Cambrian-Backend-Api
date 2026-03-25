@@ -35,7 +35,6 @@ public class WebhookController : BaseController
         catch (Stripe.StripeException ex)
         {
             _logger.LogError(ex, "EVENT: StripeWebhookFailed — invalid signature");
-            // Return 400 for signature failures — Stripe should not retry these
             return StatusCode(400, "Invalid webhook signature.");
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("signature verification"))
@@ -45,10 +44,11 @@ public class WebhookController : BaseController
         }
         catch (Exception ex)
         {
-            // Return 200 OK even on processing errors to prevent Stripe retry storms.
-            // The error is logged for investigation but Stripe won't keep retrying for 72h.
-            _logger.LogError(ex, "EVENT: StripeWebhookProcessingError — returning 200 to stop retries");
-            return MessageResponse("Received (processing error logged).");
+            // Return 500 so Stripe retries — the event is persisted as "failed"
+            // in the database for investigation. Idempotency checks prevent
+            // duplicate processing on successful retry.
+            _logger.LogError(ex, "EVENT: StripeWebhookProcessingError — returning 500 for Stripe retry");
+            return StatusCode(500, "Webhook processing failed.");
         }
     }
 }

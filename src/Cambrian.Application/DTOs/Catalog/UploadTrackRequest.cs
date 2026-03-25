@@ -23,8 +23,10 @@ public class UploadTrackRequest
 
     public decimal? Price { get; set; }
 
+    [MaxLength(200)]
     public string? LicenseType { get; set; }
 
+    [MaxLength(500)]
     public string? Tags { get; set; }
 
     public decimal? NonExclusivePrice { get; set; }

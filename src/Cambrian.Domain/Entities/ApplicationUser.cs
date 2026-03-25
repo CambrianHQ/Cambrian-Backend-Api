@@ -34,7 +34,7 @@ public class ApplicationUser : IdentityUser
 
     public long WalletBalanceCents { get; set; }
 
-    /// <summary>Hashed 6-digit code for password reset (null = no pending reset).</summary>
+    /// <summary>Hashed 8-character alphanumeric code for password reset (null = no pending reset).</summary>
     public string? PasswordResetCode { get; set; }
 
     /// <summary>UTC expiry of the current password reset code.</summary>

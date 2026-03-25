@@ -9,7 +9,7 @@ public class ResetPasswordRequest
     public string? PhoneNumber { get; set; }
 
     [Required]
-    [StringLength(6, MinimumLength = 6)]
+    [StringLength(8, MinimumLength = 8)]
     public string Code { get; set; } = string.Empty;
 
     [Required]

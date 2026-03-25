@@ -11,4 +11,10 @@ public class AuthResponse
     public string Tier { get; set; } = "free";
 
     public string Role { get; set; } = "User";
+
+    /// <summary>The user's chosen username (null/email-prefix if not yet set).</summary>
+    public string? Username { get; set; }
+
+    /// <summary>True when the user has not yet set a custom username (username still equals email).</summary>
+    public bool IsNewUser { get; set; }
 }

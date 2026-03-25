@@ -65,6 +65,12 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
 
             services.RemoveAll<IObjectStorage>();
             services.AddSingleton<IObjectStorage, FakeObjectStorage>();
+
+            // ---------- Replace webhook service with test version ----------
+            // Bypasses Stripe signature verification while preserving all
+            // business logic via StripeWebhookService.ProcessEventAsync.
+            services.RemoveAll<IWebhookService>();
+            services.AddScoped<IWebhookService, TestWebhookService>();
         });
     }
 

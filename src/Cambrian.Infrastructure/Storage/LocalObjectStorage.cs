@@ -25,9 +25,22 @@ public sealed class LocalObjectStorage : IObjectStorage
         Console.WriteLine($"[LocalObjectStorage] basePath = {_basePath}  (exists={Directory.Exists(_basePath)})");
     }
 
+    /// <summary>
+    /// Resolves a user-supplied key to an absolute path under <see cref="_basePath"/>,
+    /// preventing path-traversal attacks (e.g. keys containing "../").
+    /// </summary>
+    private string SafeResolvePath(string key)
+    {
+        var combined = Path.Combine(_basePath, key.Replace('/', Path.DirectorySeparatorChar));
+        var full = Path.GetFullPath(combined);
+        if (!full.StartsWith(_basePath, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException($"Path traversal denied for key: {key}");
+        return full;
+    }
+
     public async Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
     {
-        var filePath = Path.Combine(_basePath, key.Replace('/', Path.DirectorySeparatorChar));
+        var filePath = SafeResolvePath(key);
         var dir = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
@@ -68,29 +81,30 @@ public sealed class LocalObjectStorage : IObjectStorage
         else if (normalised.StartsWith("/", StringComparison.Ordinal))
             normalised = normalised[1..]; // strip leading slash
 
-        var filePath = Path.Combine(_basePath, normalised.Replace('/', Path.DirectorySeparatorChar));
+        var filePath = SafeResolvePath(normalised);
 
         // Fallback: try CWD-relative path if the absolute path doesn't exist
         // (handles cases where files were deployed alongside the app)
         if (!File.Exists(filePath))
         {
-            var cwdFallback = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", normalised.Replace('/', Path.DirectorySeparatorChar));
-            if (File.Exists(cwdFallback))
+            var cwdBase = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads"));
+            var cwdFallback = Path.GetFullPath(Path.Combine(cwdBase, normalised.Replace('/', Path.DirectorySeparatorChar)));
+            if (cwdFallback.StartsWith(cwdBase, StringComparison.OrdinalIgnoreCase) && File.Exists(cwdFallback))
                 filePath = cwdFallback;
             else
             {
-                // Also try wwwroot directly (e.g. for /audio/demo1.mp3 served as wwwroot/audio/...)
-                var wwwrootDirect = Path.Combine(AppContext.BaseDirectory, "wwwroot", normalised.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(wwwrootDirect))
+                var wwwBase = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
+                var wwwrootDirect = Path.GetFullPath(Path.Combine(wwwBase, normalised.Replace('/', Path.DirectorySeparatorChar)));
+                if (wwwrootDirect.StartsWith(wwwBase, StringComparison.OrdinalIgnoreCase) && File.Exists(wwwrootDirect))
                     filePath = wwwrootDirect;
                 else
                 {
-                    var cwdWwwroot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", normalised.Replace('/', Path.DirectorySeparatorChar));
-                    if (File.Exists(cwdWwwroot))
+                    var cwdWwwroot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", normalised.Replace('/', Path.DirectorySeparatorChar)));
+                    if (cwdWwwroot.StartsWith(cwdBase, StringComparison.OrdinalIgnoreCase) && File.Exists(cwdWwwroot))
                         filePath = cwdWwwroot;
                     else
                     {
-                        Console.WriteLine($"[LocalObjectStorage] File not found: key={key}, tried: {filePath}, {cwdFallback}, {wwwrootDirect}, {cwdWwwroot}");
+                        Console.WriteLine($"[LocalObjectStorage] File not found: key={key}, tried primary and fallback paths");
                         return Task.FromResult<StorageFile?>(null);
                     }
                 }
@@ -123,7 +137,7 @@ public sealed class LocalObjectStorage : IObjectStorage
 
     public Task DeleteAsync(string key)
     {
-        var filePath = Path.Combine(_basePath, key.Replace('/', Path.DirectorySeparatorChar));
+        var filePath = SafeResolvePath(key);
         if (File.Exists(filePath))
             File.Delete(filePath);
         return Task.CompletedTask;

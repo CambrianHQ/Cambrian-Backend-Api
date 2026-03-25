@@ -27,25 +27,27 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private StripeWebhookService CreateService(
-        string webhookSecret = "",
-        bool isDevelopment = false)
+    private StripeWebhookService CreateService(string webhookSecret = "whsec_test")
     {
         var config = Substitute.For<IConfiguration>();
         config["Stripe:WebhookSecret"].Returns(webhookSecret);
 
         var env = Substitute.For<IHostEnvironment>();
-        env.EnvironmentName.Returns(isDevelopment ? "Development" : "Production");
+        env.EnvironmentName.Returns("Production");
 
         return new StripeWebhookService(_db, _licenseService, config, _logger, env);
     }
 
-    // ── Security gate: non-Development rejection ──
+    private static string UniqueEventId() => $"evt_{Guid.NewGuid():N}";
+
+    // ════════════════════════════════════════════════════════════════
+    // C4: Signature verification — always required, no dev bypass
+    // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task HandleStripeAsync_NonDev_ThrowsWhenSecretAndSignatureBothEmpty()
+    public async Task HandleStripeAsync_ThrowsWhenWebhookSecretMissing()
     {
-        var svc = CreateService(webhookSecret: "", isDevelopment: false);
+        var svc = CreateService(webhookSecret: "");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.HandleStripeAsync("{}", ""));
@@ -54,9 +56,9 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task HandleStripeAsync_NonDev_ThrowsWhenSecretPresentButSignatureEmpty()
+    public async Task HandleStripeAsync_ThrowsWhenSignatureMissing()
     {
-        var svc = CreateService(webhookSecret: "whsec_test", isDevelopment: false);
+        var svc = CreateService(webhookSecret: "whsec_test");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.HandleStripeAsync("{}", ""));
@@ -65,9 +67,9 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task HandleStripeAsync_NonDev_ThrowsWhenSignaturePresentButSecretEmpty()
+    public async Task HandleStripeAsync_ThrowsWhenSecretMissingButSignaturePresent()
     {
-        var svc = CreateService(webhookSecret: "", isDevelopment: false);
+        var svc = CreateService(webhookSecret: "");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.HandleStripeAsync("{}", "sig_123"));
@@ -75,40 +77,97 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Contains("signature verification", ex.Message);
     }
 
-    // ── Development fallback: JSON parsing without signature ──
+    [Fact]
+    public async Task HandleStripeAsync_DevMode_StillRequiresSignatureVerification()
+    {
+        // C4: Development mode no longer bypasses signature verification
+        var config = Substitute.For<IConfiguration>();
+        config["Stripe:WebhookSecret"].Returns("");
+
+        var env = Substitute.For<IHostEnvironment>();
+        env.EnvironmentName.Returns("Development");
+
+        var svc = new StripeWebhookService(_db, _licenseService, config, _logger, env);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.HandleStripeAsync("{}", ""));
+
+        Assert.Contains("signature verification", ex.Message);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // H4: Persist-first pattern verification
+    // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_ParsesJsonWithoutSignature()
+    public async Task ProcessEventAsync_CompletedEvent_HasCorrectStatusAndFlags()
     {
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = """{"type":"payment_intent.succeeded","data":{"object":{}}}""";
+        var svc = CreateService();
+        var eventId = UniqueEventId();
 
-        await svc.HandleStripeAsync(payload, "");
-        // No exception = dev fallback worked for non-checkout event
+        await svc.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
+
+        var evt = await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == eventId);
+        Assert.NotNull(evt);
+        Assert.Equal("completed", evt.Status);
+        Assert.True(evt.Processed);
+        Assert.Null(evt.ErrorMessage);
     }
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_ProcessesCheckoutSession()
+    public async Task ProcessEventAsync_FailedEvent_RecordsErrorMessage()
+    {
+        // Exclusive purchase on InMemory DB triggers InvalidOperationException
+        // because ExecuteSqlInterpolatedAsync is not supported.
+        var trackId = Guid.NewGuid();
+        _db.Tracks.Add(new Track { Id = trackId, Title = "Fail Beat", CreatorId = "c1" });
+        await _db.SaveChangesAsync();
+
+        var svc = CreateService();
+        var eventId = UniqueEventId();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await svc.ProcessEventAsync(
+                eventId: eventId,
+                eventType: "checkout.session.completed",
+                clientReferenceId: $"user1:{trackId}:exclusive",
+                amountTotal: 5000,
+                stripeCustomerId: null,
+                stripeSessionId: null));
+
+        var evt = await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == eventId);
+        Assert.NotNull(evt);
+        Assert.Equal("failed", evt.Status);
+        Assert.False(evt.Processed);
+        Assert.NotNull(evt.ErrorMessage);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // checkout.session.completed — track purchases
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task ProcessEventAsync_CheckoutCompleted_CreatesPurchaseAndLibraryItem()
     {
         var trackId = Guid.NewGuid();
         var userId = "user-1";
         _db.Tracks.Add(new Track { Id = trackId, Title = "Test Beat", CreatorId = "creator-1" });
         await _db.SaveChangesAsync();
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 2999
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
+            amountTotal: 2999,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == userId);
         Assert.NotNull(purchase);
@@ -123,39 +182,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_SubscriptionCheckout_UpgradesTier()
-    {
-        var userId = "user-sub";
-        _db.Users.Add(new ApplicationUser { Id = userId, UserName = userId, Tier = "free" });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:subscription:creator"
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
-
-        var user = await _db.Users.FindAsync(userId);
-        Assert.Equal("creator", user!.Tier);
-
-        var sub = await _db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == userId);
-        Assert.NotNull(sub);
-        Assert.Equal("active", sub.Status);
-        Assert.Equal("creator", sub.Plan);
-    }
-
-    // ── HandleCheckoutCompleted routing: legacy GUID path ──
-
-    [Fact]
-    public async Task HandleStripeAsync_Dev_LegacyPurchaseGuid_MarksCompleted()
+    public async Task ProcessEventAsync_LegacyPurchaseGuid_MarksCompleted()
     {
         var purchaseId = Guid.NewGuid();
         var trackId = Guid.NewGuid();
@@ -169,45 +196,37 @@ public sealed class StripeWebhookServiceTests : IDisposable
         });
         await _db.SaveChangesAsync();
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{purchaseId}}"
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: purchaseId.ToString(),
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         var purchase = await _db.Purchases.FindAsync(purchaseId);
         Assert.Equal("completed", purchase!.Status);
     }
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_NullClientReferenceId_DoesNotThrow()
+    public async Task ProcessEventAsync_NullClientReferenceId_DoesNotThrow()
     {
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = """
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {}
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
         // No exception = handled gracefully when clientReferenceId is null
     }
 
     // ── Duplicate purchase prevention ──
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_DuplicatePurchase_DoesNotCreateSecondRecord()
+    public async Task ProcessEventAsync_DuplicatePurchase_DoesNotCreateSecondRecord()
     {
         var trackId = Guid.NewGuid();
         var userId = "user-dup";
@@ -223,20 +242,14 @@ public sealed class StripeWebhookServiceTests : IDisposable
         });
         await _db.SaveChangesAsync();
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 1000
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
+            amountTotal: 1000,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         var purchases = await _db.Purchases
             .Where(p => p.BuyerId == userId && p.TrackId == trackId)
@@ -246,29 +259,32 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_ReplayedEventId_DoesNotReprocessTrackPurchase()
+    public async Task ProcessEventAsync_ReplayedEventId_DoesNotReprocessTrackPurchase()
     {
         var trackId = Guid.NewGuid();
         var userId = "user-replay";
         _db.Tracks.Add(new Track { Id = trackId, Title = "Replay Beat", CreatorId = "creator-1" });
         await _db.SaveChangesAsync();
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "id": "evt_replay_purchase",
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 2500
-                }
-            }
-        }
-        """;
+        var svc = CreateService();
+        var eventId = "evt_replay_purchase";
 
-        await svc.HandleStripeAsync(payload, "");
-        await svc.HandleStripeAsync(payload, "");
+        await svc.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
+            amountTotal: 2500,
+            stripeCustomerId: null,
+            stripeSessionId: null);
+
+        // Second call with same eventId should be idempotent
+        await svc.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
+            amountTotal: 2500,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         var purchases = await _db.Purchases
             .Where(p => p.BuyerId == userId && p.TrackId == trackId)
@@ -283,10 +299,72 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
     }
 
-    // ── Subscription upgrade cancels existing subscription ──
+    // ── Dead-letter logging for invalid references ──
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_SubscriptionUpgrade_CancelsExisting()
+    public async Task ProcessEventAsync_InvalidTrackId_DoesNotThrow()
+    {
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: "user1:not-a-guid:non-exclusive",
+            amountTotal: 999,
+            stripeCustomerId: null,
+            stripeSessionId: null);
+
+        var purchases = await _db.Purchases.ToListAsync();
+        Assert.Empty(purchases);
+    }
+
+    [Fact]
+    public async Task ProcessEventAsync_MissingTrack_DoesNotThrow()
+    {
+        var missingTrackId = Guid.NewGuid();
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"user1:{missingTrackId}:non-exclusive",
+            amountTotal: 999,
+            stripeCustomerId: null,
+            stripeSessionId: null);
+
+        var purchases = await _db.Purchases.ToListAsync();
+        Assert.Empty(purchases);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // checkout.session.completed — subscription upgrades
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task ProcessEventAsync_SubscriptionCheckout_UpgradesTier()
+    {
+        var userId = "user-sub";
+        _db.Users.Add(new ApplicationUser { Id = userId, UserName = userId, Tier = "free" });
+        await _db.SaveChangesAsync();
+
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:subscription:creator",
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
+
+        var user = await _db.Users.FindAsync(userId);
+        Assert.Equal("creator", user!.Tier);
+
+        var sub = await _db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == userId);
+        Assert.NotNull(sub);
+        Assert.Equal("active", sub.Status);
+        Assert.Equal("creator", sub.Plan);
+    }
+
+    [Fact]
+    public async Task ProcessEventAsync_SubscriptionUpgrade_CancelsExisting()
     {
         var userId = "user-upgrade";
         _db.Users.Add(new ApplicationUser { Id = userId, UserName = userId, Tier = "paid" });
@@ -300,19 +378,14 @@ public sealed class StripeWebhookServiceTests : IDisposable
         });
         await _db.SaveChangesAsync();
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:subscription:creator"
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:subscription:creator",
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         var subs = await _db.Subscriptions
             .Where(s => s.UserId == userId)
@@ -328,27 +401,31 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_ReplayedEventId_DoesNotCreateSecondSubscription()
+    public async Task ProcessEventAsync_ReplayedEventId_DoesNotCreateSecondSubscription()
     {
         var userId = "user-replay-sub";
         _db.Users.Add(new ApplicationUser { Id = userId, UserName = userId, Tier = "free" });
         await _db.SaveChangesAsync();
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "id": "evt_replay_subscription",
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:subscription:creator"
-                }
-            }
-        }
-        """;
+        var svc = CreateService();
+        var eventId = "evt_replay_subscription";
 
-        await svc.HandleStripeAsync(payload, "");
-        await svc.HandleStripeAsync(payload, "");
+        await svc.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:subscription:creator",
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
+
+        // Second call with same eventId
+        await svc.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:subscription:creator",
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         var subscriptions = await _db.Subscriptions
             .Where(s => s.UserId == userId)
@@ -360,84 +437,73 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Equal("creator", subscriptions[0].Plan);
         Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
     }
-    // ── Subscription lifecycle webhooks ──
+
+    // ════════════════════════════════════════════════════════════════
+    // Subscription lifecycle webhooks
+    // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_SubscriptionDeleted_LogsWarning()
+    public async Task ProcessEventAsync_SubscriptionDeleted_HandlesGracefully()
     {
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = """
-        {
-            "type": "customer.subscription.deleted",
-            "data": {
-                "object": {
-                    "customer": "cus_test_123"
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "customer.subscription.deleted",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: "cus_test_123",
+            stripeSessionId: null);
         // No exception = handled gracefully; logs warning about manual review
     }
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_SubscriptionDeleted_NoCustomerId_DoesNotThrow()
+    public async Task ProcessEventAsync_SubscriptionDeleted_NoCustomerId_DoesNotThrow()
     {
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = """
-        {
-            "type": "customer.subscription.deleted",
-            "data": {
-                "object": {}
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "customer.subscription.deleted",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
         // No exception = handles missing customer ID gracefully
     }
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_InvoicePaymentFailed_LogsWarning()
+    public async Task ProcessEventAsync_InvoicePaymentFailed_HandlesGracefully()
     {
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = """
-        {
-            "type": "invoice.payment_failed",
-            "data": {
-                "object": {
-                    "customer": "cus_test_456"
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "invoice.payment_failed",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: "cus_test_456",
+            stripeSessionId: null);
         // No exception = handled gracefully; logs warning about retry
     }
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_InvoicePaymentFailed_NoCustomerId_DoesNotThrow()
+    public async Task ProcessEventAsync_InvoicePaymentFailed_NoCustomerId_DoesNotThrow()
     {
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = """
-        {
-            "type": "invoice.payment_failed",
-            "data": {
-                "object": {}
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "invoice.payment_failed",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: null);
         // No exception = handles missing customer ID gracefully
     }
 
-    // ── License certificate creation ──
+    // ════════════════════════════════════════════════════════════════
+    // License certificate creation
+    // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_CheckoutCompleted_IssuesLicenseCertificate()
+    public async Task ProcessEventAsync_CheckoutCompleted_IssuesLicenseCertificate()
     {
         var trackId = Guid.NewGuid();
         var userId = "user-license";
@@ -458,20 +524,14 @@ public sealed class StripeWebhookServiceTests : IDisposable
                 IssuedAt = DateTime.UtcNow
             });
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive:personal",
-                    "amount_total": 1999
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:{trackId}:non-exclusive:personal",
+            amountTotal: 1999,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId);
         Assert.NotNull(purchase);
@@ -489,7 +549,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
     // ── Duplicate purchase ensures library exists ──
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_DuplicatePurchase_BackfillsLibraryItem()
+    public async Task ProcessEventAsync_DuplicatePurchase_BackfillsLibraryItem()
     {
         var trackId = Guid.NewGuid();
         var userId = "user-dup-lib";
@@ -507,20 +567,14 @@ public sealed class StripeWebhookServiceTests : IDisposable
         // Intentionally NO library item — simulating a gap
         await _db.SaveChangesAsync();
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 1500
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
+            amountTotal: 1500,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         // Purchase should still be single
         var purchases = await _db.Purchases
@@ -535,59 +589,10 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Equal(purchaseId, lib.PurchaseId);
     }
 
-    // ── Dead-letter logging for invalid references ──
-
-    [Fact]
-    public async Task HandleStripeAsync_Dev_InvalidTrackId_DoesNotThrow()
-    {
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = """
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "user1:not-a-guid:non-exclusive",
-                    "amount_total": 999
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
-
-        // No purchase created for invalid track ID
-        var purchases = await _db.Purchases.ToListAsync();
-        Assert.Empty(purchases);
-    }
-
-    [Fact]
-    public async Task HandleStripeAsync_Dev_MissingTrack_DoesNotThrow()
-    {
-        var missingTrackId = Guid.NewGuid();
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "user1:{{missingTrackId}}:non-exclusive",
-                    "amount_total": 999
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
-
-        // No purchase created for missing track
-        var purchases = await _db.Purchases.ToListAsync();
-        Assert.Empty(purchases);
-    }
-
     // ── License failure does not block purchase+library ──
 
     [Fact]
-    public async Task HandleStripeAsync_Dev_LicenseFailure_StillCreatesPurchaseAndLibrary()
+    public async Task ProcessEventAsync_LicenseFailure_StillCreatesPurchaseAndLibrary()
     {
         var trackId = Guid.NewGuid();
         var userId = "user-lic-fail";
@@ -599,20 +604,14 @@ public sealed class StripeWebhookServiceTests : IDisposable
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
             .ThrowsAsync(new Exception("License service unavailable"));
 
-        var svc = CreateService(webhookSecret: "", isDevelopment: true);
-        var payload = $$"""
-        {
-            "type": "checkout.session.completed",
-            "data": {
-                "object": {
-                    "client_reference_id": "{{userId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 2000
-                }
-            }
-        }
-        """;
-
-        await svc.HandleStripeAsync(payload, "");
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
+            amountTotal: 2000,
+            stripeCustomerId: null,
+            stripeSessionId: null);
 
         // Purchase should still be created
         var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId);

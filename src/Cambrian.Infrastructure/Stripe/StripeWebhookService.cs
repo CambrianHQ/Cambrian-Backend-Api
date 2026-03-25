@@ -24,7 +24,6 @@ public class StripeWebhookService : IWebhookService
     private readonly ILicenseService _licenseService;
     private readonly string _webhookSecret;
     private readonly ILogger<StripeWebhookService> _logger;
-    private readonly bool _isDevelopment;
 
     public StripeWebhookService(
         CambrianDbContext db,
@@ -37,7 +36,6 @@ public class StripeWebhookService : IWebhookService
         _licenseService = licenseService;
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "";
         _logger = logger;
-        _isDevelopment = env.IsDevelopment() || env.EnvironmentName == "Testing";
     }
 
     public async Task HandleStripeAsync(string payload, string signature)
@@ -50,89 +48,67 @@ public class StripeWebhookService : IWebhookService
         string? stripeCustomerId = null;
         string? stripePaymentIntentId = null;
 
-        // ── Verified path: both secret and signature present ──
-        if (!string.IsNullOrEmpty(_webhookSecret) && !string.IsNullOrEmpty(signature))
-        {
-            var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
-            eventType = stripeEvent.Type;
-            eventId = stripeEvent.Id;
-            clientReferenceId = null;
-            amountTotal = null;
-
-            if (eventType == EventTypes.CheckoutSessionCompleted)
-            {
-                var session = stripeEvent.Data.Object as Session;
-                clientReferenceId = session?.ClientReferenceId;
-                amountTotal = session?.AmountTotal;
-                stripeSessionId = session?.Id;
-            }
-            else if (eventType == EventSubscriptionDeleted)
-            {
-                var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
-                stripeCustomerId = sub?.CustomerId;
-            }
-            else if (eventType == EventInvoicePaymentFailed)
-            {
-                var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
-                stripeCustomerId = invoice?.CustomerId;
-            }
-            else if (eventType == EventChargeRefunded)
-            {
-                var charge = stripeEvent.Data.Object as Charge;
-                stripePaymentIntentId = charge?.PaymentIntentId;
-            }
-            else if (eventType == EventChargeDisputeCreated)
-            {
-                var dispute = stripeEvent.Data.Object as Dispute;
-                stripePaymentIntentId = dispute?.Charge?.PaymentIntentId ?? dispute?.PaymentIntentId;
-            }
-
-            await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId, payload);
-            _logger.LogInformation("Stripe webhook received (verified): {EventType}", eventType);
-            return;
-        }
-
-        // ── Non-Development: REJECT unverified webhooks ──
-        if (!_isDevelopment)
+        // ── Step 1: Verify signature — ALWAYS required ──
+        if (string.IsNullOrEmpty(_webhookSecret))
         {
             _logger.LogError(
-                "Stripe webhook rejected: signature verification failed. "
-                + "WebhookSecret configured={SecretPresent}, Stripe-Signature header present={SigPresent}",
-                !string.IsNullOrEmpty(_webhookSecret),
-                !string.IsNullOrEmpty(signature));
+                "Stripe webhook rejected: Stripe:WebhookSecret is not configured. "
+                + "Set the STRIPE_WEBHOOK_SECRET environment variable or Stripe:WebhookSecret in config. "
+                + "For local development, use 'stripe listen --forward-to localhost:PORT/webhook/stripe' and set the signing secret it provides.");
             throw new InvalidOperationException(
                 "Stripe webhook signature verification failed. "
-                + "Ensure Stripe:WebhookSecret is configured and the request includes a valid Stripe-Signature header.");
+                + "Stripe:WebhookSecret is not configured. Cannot process webhooks without signature verification.");
         }
 
-        // ── Development-only fallback: parse JSON without signature ──
-        _logger.LogWarning("Processing webhook WITHOUT signature verification (Development only)");
-        using var doc = JsonDocument.Parse(payload);
-        var root = doc.RootElement;
+        if (string.IsNullOrEmpty(signature))
+        {
+            _logger.LogError(
+                "Stripe webhook rejected: Stripe-Signature header is missing. "
+                + "Ensure requests are coming from Stripe (not a manual HTTP client without signing).");
+            throw new InvalidOperationException(
+                "Stripe webhook signature verification failed. "
+                + "Stripe-Signature header is missing. All webhook requests must be signed.");
+        }
 
-        eventType = root.GetProperty("type").GetString() ?? "";
-        eventId = root.TryGetProperty("id", out var eventIdElement) ? eventIdElement.GetString() : null;
+        var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
+        eventType = stripeEvent.Type;
+        eventId = stripeEvent.Id;
         clientReferenceId = null;
         amountTotal = null;
-        _logger.LogInformation("Stripe webhook received (dev): {EventType}", eventType);
 
-        if (eventType == "checkout.session.completed")
+        if (eventType == EventTypes.CheckoutSessionCompleted)
         {
-            var dataObj = root.GetProperty("data").GetProperty("object");
-            clientReferenceId = dataObj.TryGetProperty("client_reference_id", out var cri) ? cri.GetString() : null;
-            amountTotal = dataObj.TryGetProperty("amount_total", out var at) ? at.GetInt64() : null;
-            stripeSessionId = dataObj.TryGetProperty("id", out var sid) ? sid.GetString() : null;
+            var session = stripeEvent.Data.Object as Session;
+            clientReferenceId = session?.ClientReferenceId;
+            amountTotal = session?.AmountTotal;
+            stripeSessionId = session?.Id;
         }
-        else if (eventType is EventSubscriptionDeleted or EventInvoicePaymentFailed)
+        else if (eventType == EventSubscriptionDeleted)
         {
-            var dataObj = root.GetProperty("data").GetProperty("object");
-            stripeCustomerId = dataObj.TryGetProperty("customer", out var cust) ? cust.GetString() : null;
+            var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
+            stripeCustomerId = sub?.CustomerId;
+        }
+        else if (eventType == EventInvoicePaymentFailed)
+        {
+            var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
+            stripeCustomerId = invoice?.CustomerId;
+        }
+        else if (eventType == EventChargeRefunded)
+        {
+            var charge = stripeEvent.Data.Object as Charge;
+            stripePaymentIntentId = charge?.PaymentIntentId;
+        }
+        else if (eventType == EventChargeDisputeCreated)
+        {
+            var dispute = stripeEvent.Data.Object as Dispute;
+            stripePaymentIntentId = dispute?.Charge?.PaymentIntentId ?? dispute?.PaymentIntentId;
         }
 
+        _logger.LogInformation("Stripe webhook verified: {EventType} {EventId}", eventType, eventId);
         await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId, payload);
     }
 
-    private async Task ProcessEventAsync(
+    internal async Task ProcessEventAsync(
         string? eventId,
         string eventType,
         string? clientReferenceId,
@@ -142,45 +118,44 @@ public class StripeWebhookService : IWebhookService
         string? stripePaymentIntentId = null,
         string? payload = null)
     {
-        if (string.IsNullOrWhiteSpace(eventId))
+        // ── Step 2: Idempotency — check for duplicate event ──
+        if (!string.IsNullOrWhiteSpace(eventId))
+        {
+            var existing = await _db.StripeWebhookEvents
+                .FirstOrDefaultAsync(e => e.EventId == eventId);
+
+            if (existing is not null)
+            {
+                _logger.LogInformation("Skipping duplicate Stripe webhook event {EventId} (status={Status})", eventId, existing.Status);
+                return;
+            }
+        }
+        else
         {
             _logger.LogWarning(
                 "Stripe webhook received without an event ID; idempotency unavailable for {EventType}",
                 eventType);
-
-            if (eventType == EventTypes.CheckoutSessionCompleted)
-            {
-                await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
-            }
-            else if (eventType == EventSubscriptionDeleted)
-            {
-                await HandleSubscriptionDeleted(stripeCustomerId);
-            }
-            else if (eventType == EventInvoicePaymentFailed)
-            {
-                await HandleInvoicePaymentFailed(stripeCustomerId);
-            }
-            else if (eventType == EventChargeRefunded)
-            {
-                await HandleChargeRefunded(stripePaymentIntentId);
-            }
-            else if (eventType == EventChargeDisputeCreated)
-            {
-                await HandleChargeDisputeCreated(stripePaymentIntentId);
-            }
-
-            return;
         }
 
-        var alreadyProcessed = await _db.StripeWebhookEvents
-            .AsNoTracking()
-            .AnyAsync(e => e.EventId == eventId);
-
-        if (alreadyProcessed)
+        // ── Step 3: Persist event as "received" BEFORE processing ──
+        var webhookEvent = new StripeWebhookEvent
         {
-            _logger.LogInformation("Skipping duplicate Stripe webhook event {EventId}", eventId);
-            return;
-        }
+            Id = Guid.NewGuid(),
+            EventId = eventId ?? $"no-id-{Guid.NewGuid():N}",
+            EventType = eventType,
+            Payload = payload,
+            Status = "received",
+            Processed = false,
+            ReceivedAt = DateTime.UtcNow,
+            ProcessedAt = DateTime.UtcNow
+        };
+        _db.StripeWebhookEvents.Add(webhookEvent);
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("Stripe event persisted: {EventId} {EventType} status=received", webhookEvent.EventId, eventType);
+
+        // ── Step 4: Process inside transaction, update status on success/failure ──
+        webhookEvent.Status = "processing";
+        await _db.SaveChangesAsync();
 
         var transaction = _db.Database.IsRelational()
             ? await _db.Database.BeginTransactionAsync()
@@ -188,16 +163,6 @@ public class StripeWebhookService : IWebhookService
 
         try
         {
-            _db.StripeWebhookEvents.Add(new StripeWebhookEvent
-            {
-                Id = Guid.NewGuid(),
-                EventId = eventId,
-                EventType = eventType,
-                Payload = payload,
-                Processed = true,
-                ProcessedAt = DateTime.UtcNow
-            });
-
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
                 await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
@@ -219,18 +184,38 @@ public class StripeWebhookService : IWebhookService
                 await HandleChargeDisputeCreated(stripePaymentIntentId);
             }
 
+            webhookEvent.Status = "completed";
+            webhookEvent.Processed = true;
+            webhookEvent.ProcessedAt = DateTime.UtcNow;
+
             await _db.SaveChangesAsync();
 
             if (transaction is not null)
             {
                 await transaction.CommitAsync();
             }
+
+            _logger.LogInformation("Stripe event completed: {EventId} {EventType}", webhookEvent.EventId, eventType);
         }
-        catch
+        catch (Exception ex)
         {
             if (transaction is not null)
             {
                 await transaction.RollbackAsync();
+            }
+
+            // Mark event as failed (outside the rolled-back transaction)
+            try
+            {
+                webhookEvent.Status = "failed";
+                webhookEvent.ErrorMessage = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                webhookEvent.Processed = false;
+                await _db.SaveChangesAsync();
+                _logger.LogError(ex, "Stripe event FAILED: {EventId} {EventType} — marked as failed for retry/investigation", webhookEvent.EventId, eventType);
+            }
+            catch (Exception saveEx)
+            {
+                _logger.LogError(saveEx, "Failed to update webhook event status to 'failed' for {EventId}", webhookEvent.EventId);
             }
 
             throw;

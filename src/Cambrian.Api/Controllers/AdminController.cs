@@ -165,7 +165,9 @@ public class AdminController : BaseController
         _logger.LogInformation("[Admin] ResetUserPassword id={UserId}", id);
         var tempPassword = await _admin.ResetUserPasswordAsync(id);
         if (tempPassword is null) return NotFound(new { success = false, message = MsgUserNotFound + " Or reset failed." });
-        return OkResponse(new { success = true, temporaryPassword = tempPassword, message = "Password reset. Share the temporary password securely with the user." });
+        // SECURITY: Never return the temporary password in the API response.
+        // It is sent to the user's email by the service layer.
+        return OkResponse(new { success = true, message = "Password has been reset. A temporary password was sent to the user's email." });
     }
 
     [HttpPost("users/{id}/verify-creator")]

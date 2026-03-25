@@ -116,14 +116,14 @@ public class AdminRepository : IAdminRepository
             // Clean up Identity join tables for non-admin users
             foreach (var uid in nonAdminIds)
             {
-                await _db.Database.ExecuteSqlRawAsync(
-                    "DELETE FROM \"AspNetUserRoles\" WHERE \"UserId\" = {0}", uid);
-                await _db.Database.ExecuteSqlRawAsync(
-                    "DELETE FROM \"AspNetUserClaims\" WHERE \"UserId\" = {0}", uid);
-                await _db.Database.ExecuteSqlRawAsync(
-                    "DELETE FROM \"AspNetUserTokens\" WHERE \"UserId\" = {0}", uid);
-                await _db.Database.ExecuteSqlRawAsync(
-                    "DELETE FROM \"AspNetUserLogins\" WHERE \"UserId\" = {0}", uid);
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"AspNetUserRoles\" WHERE \"UserId\" = {uid}");
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"AspNetUserClaims\" WHERE \"UserId\" = {uid}");
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"AspNetUserTokens\" WHERE \"UserId\" = {uid}");
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"AspNetUserLogins\" WHERE \"UserId\" = {uid}");
             }
 
             // Now delete the user rows from AspNetUsers / Users

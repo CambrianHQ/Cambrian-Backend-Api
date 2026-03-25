@@ -46,6 +46,8 @@ public class LibraryService : ILibraryService
                 Artist = i.Track?.Creator?.DisplayName ?? i.Artist ?? "",
                 Purchased = purchase is not null,
                 PurchasedOn = purchase?.CreatedAt.ToString("o"),
+                LicenseType = purchase?.LicenseType,
+                UsageType = purchase?.UsageType,
                 AudioUrl = i.Track?.AudioUrl ?? i.AudioUrl,
                 Genre = i.Track?.Genre
             };
