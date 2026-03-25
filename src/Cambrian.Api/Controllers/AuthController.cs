@@ -47,6 +47,22 @@ public class AuthController : BaseController
         return OkResponse(ToSession(result));
     }
 
+    [HttpGet("google/status")]
+    public IActionResult GoogleStatus()
+    {
+        var clientId = _auth.GetGoogleClientId();
+        var configured = !string.IsNullOrWhiteSpace(clientId);
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                configured,
+                clientIdPrefix = configured ? clientId[..8] + "..." : null
+            }
+        });
+    }
+
     [EnableRateLimiting("auth")]
     [HttpPost("google")]
     public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
@@ -58,15 +74,20 @@ public class AuthController : BaseController
             _logger.LogInformation("EVENT: GoogleLoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
             return OkResponse(ToSession(result));
         }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not configured"))
+        {
+            _logger.LogError("EVENT: GoogleLoginFailed — {Message}", ex.Message);
+            return StatusCode(503, new { success = false, error = "Google login is not available. Server misconfiguration." });
+        }
         catch (Google.Apis.Auth.InvalidJwtException ex)
         {
             _logger.LogWarning("EVENT: GoogleLoginFailed — invalid token: {Message}", ex.Message);
-            return Unauthorized();
+            return Unauthorized(new { success = false, error = "Invalid Google token." });
         }
         catch (UnauthorizedAccessException ex)
         {
             _logger.LogWarning("EVENT: GoogleLoginFailed — {Message}", ex.Message);
-            return Unauthorized();
+            return Unauthorized(new { success = false, error = ex.Message });
         }
     }
 
