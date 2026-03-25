@@ -103,7 +103,11 @@ public class AuthController : BaseController
 
         var result = await _userManager.AddPasswordAsync(user, request.Password);
         if (!result.Succeeded)
-            return ErrorResponse(string.Join("; ", result.Errors.Select(e => e.Description)));
+        {
+            var msgs = new List<string>();
+            foreach (var e in result.Errors) msgs.Add(e.Description);
+            return ErrorResponse(string.Join("; ", msgs));
+        }
 
         user.AuthProvider = "Local";
         await _userManager.UpdateAsync(user);
@@ -271,7 +275,9 @@ public class AuthController : BaseController
         var result = await _userManager.UpdateAsync(user);
         if (!result.Succeeded)
         {
-            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            var msgs = new List<string>();
+            foreach (var e in result.Errors) msgs.Add(e.Description);
+            var errors = string.Join("; ", msgs);
             _logger.LogWarning("EVENT: SetUsernameFailed userId:{UserId} errors:{Errors}", userId, errors);
             return ErrorResponse(errors);
         }

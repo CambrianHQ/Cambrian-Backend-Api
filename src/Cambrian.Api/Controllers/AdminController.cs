@@ -104,7 +104,11 @@ public class AdminController : BaseController
     public async Task<IActionResult> PayoutRequests()
     {
         var all = await _admin.GetPayoutsAsync();
-        var pending = all.Where(p => p.Status == "pending").ToList();
+        var pending = new List<object>();
+        foreach (var p in all)
+        {
+            if (p.Status == "pending") pending.Add(p);
+        }
         return OkResponse(pending);
     }
 
