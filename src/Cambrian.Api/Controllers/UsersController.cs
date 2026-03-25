@@ -1,5 +1,4 @@
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -9,10 +8,10 @@ namespace Cambrian.Api.Controllers;
 [Route("users")]
 public class UsersController : BaseController
 {
-    private readonly UserManager<ApplicationUser> _users;
+    private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _users;
     private readonly ITrackRepository _tracks;
 
-    public UsersController(UserManager<ApplicationUser> users, ITrackRepository tracks)
+    public UsersController(UserManager<Cambrian.Domain.Entities.ApplicationUser> users, ITrackRepository tracks)
     {
         _users = users;
         _tracks = tracks;
@@ -28,16 +27,10 @@ public class UsersController : BaseController
 
         var userTracks = await _tracks.GetStorefrontTracksAsync(user.Id);
 
-        return OkResponse(new
+        var trackList = new List<object>();
+        foreach (var t in userTracks)
         {
-            username = user.UserName,
-            displayName = user.DisplayName,
-            profileImageUrl = user.ProfileImageUrl,
-            coverImageUrl = user.CoverImageUrl,
-            bio = user.Bio,
-            role = user.Role,
-            verifiedCreator = user.VerifiedCreator,
-            tracks = userTracks.Select(t => new
+            trackList.Add(new
             {
                 id = t.Id,
                 title = t.Title,
@@ -47,7 +40,19 @@ public class UsersController : BaseController
                 exclusivePriceCents = t.ExclusivePriceCents,
                 copyrightBuyoutPriceCents = t.CopyrightBuyoutPriceCents,
                 createdAt = t.CreatedAt
-            })
+            });
+        }
+
+        return OkResponse(new
+        {
+            username = user.UserName,
+            displayName = user.DisplayName,
+            profileImageUrl = user.ProfileImageUrl,
+            coverImageUrl = user.CoverImageUrl,
+            bio = user.Bio,
+            role = user.Role,
+            verifiedCreator = user.VerifiedCreator,
+            tracks = trackList
         });
     }
 
@@ -80,7 +85,11 @@ public class UsersController : BaseController
 
         var result = await _users.UpdateAsync(user);
         if (!result.Succeeded)
-            return ErrorResponse(string.Join("; ", result.Errors.Select(e => e.Description)));
+        {
+            var msgs = new List<string>();
+            foreach (var e in result.Errors) msgs.Add(e.Description);
+            return ErrorResponse(string.Join("; ", msgs));
+        }
 
         return OkResponse(new
         {
