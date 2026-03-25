@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Cambrian.Application.DTOs.Creators;
 
@@ -19,7 +21,64 @@ public class UpdateCreatorProfileRequest
     [StringLength(2000)]
     public string? Bio { get; set; }
 
+    [StringLength(500)]
+    public string? ProfileImageUrl { get; set; }
+
+    [StringLength(500)]
+    public string? CoverImageUrl { get; set; }
+
+    public List<string>? Genres { get; set; }
+
+    /// <summary>
+    /// Accepts either an array of {platform,url} objects OR a {platform:url} dictionary.
+    /// The frontend sends a dictionary; the backend stores as array.
+    /// </summary>
+    [JsonConverter(typeof(FlexibleSocialLinksConverter))]
     public List<SocialLinkItemDto>? SocialLinks { get; set; }
+}
+
+/// <summary>
+/// Deserializes social links from either [{platform,url}] array or {platform:url} dictionary.
+/// </summary>
+public class FlexibleSocialLinksConverter : JsonConverter<List<SocialLinkItemDto>?>
+{
+    public override List<SocialLinkItemDto>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null) return null;
+
+        if (reader.TokenType == JsonTokenType.StartArray)
+        {
+            // Standard array format: [{platform, url}]
+            var list = new List<SocialLinkItemDto>();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                if (reader.TokenType == JsonTokenType.StartObject)
+                {
+                    var item = JsonSerializer.Deserialize<SocialLinkItemDto>(ref reader, options);
+                    if (item is not null) list.Add(item);
+                }
+            }
+            return list;
+        }
+
+        if (reader.TokenType == JsonTokenType.StartObject)
+        {
+            // Dictionary format: { "spotify": "url", ... }
+            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(ref reader, options);
+            if (dict is null) return null;
+            return dict
+                .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+                .Select(kv => new SocialLinkItemDto { Platform = kv.Key, Url = kv.Value })
+                .ToList();
+        }
+
+        return null;
+    }
+
+    public override void Write(Utf8JsonWriter writer, List<SocialLinkItemDto>? value, JsonSerializerOptions options)
+    {
+        JsonSerializer.Serialize(writer, value, options);
+    }
 }
 
 /// <summary>
@@ -38,4 +97,14 @@ public class CreatorImageUploadResponse
 {
     public string UploadUrl { get; set; } = "";
     public string PublicUrl { get; set; } = "";
+}
+
+/// <summary>
+/// Request body for POST /api/uploads/creator-image-url (JSON presigned URL flow).
+/// </summary>
+public class CreateImageUploadRequest
+{
+    public string? Type { get; set; }
+    public string? ContentType { get; set; }
+    public string? FileName { get; set; }
 }

@@ -49,6 +49,12 @@ public class ApplicationUser : IdentityUser
     /// <summary>Short user bio / tagline. Max 500 characters.</summary>
     public string? Bio { get; set; }
 
+    /// <summary>Google OAuth subject identifier (links Google account to this user).</summary>
+    public string? GoogleId { get; set; }
+
+    /// <summary>Primary auth provider: "Local", "Google", etc.</summary>
+    public string? AuthProvider { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();
