@@ -373,6 +373,14 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request)
     {
+        if (string.IsNullOrWhiteSpace(_googleSettings.ClientId))
+        {
+            _logger.LogError("Google login attempted but Google__ClientId is not configured");
+            throw new InvalidOperationException("Google login is not configured on this server.");
+        }
+
+        _logger.LogInformation("Validating Google token with ClientId length={Length}", _googleSettings.ClientId.Length);
+
         var payload = await GoogleJsonWebSignature.ValidateAsync(
             request.IdToken,
             new GoogleJsonWebSignature.ValidationSettings
