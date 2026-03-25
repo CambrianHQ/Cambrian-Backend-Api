@@ -53,9 +53,72 @@ public class AuthController : BaseController
     {
         try
         {
+            _logger.LogInformation("EVENT: GoogleLoginStarted");
             var result = await _auth.GoogleLoginAsync(request);
             _logger.LogInformation("EVENT: GoogleLoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
             return OkResponse(ToSession(result));
+        }
+        catch (Google.Apis.Auth.InvalidJwtException ex)
+        {
+            _logger.LogWarning("EVENT: GoogleLoginFailed — invalid token: {Message}", ex.Message);
+            return Unauthorized();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning("EVENT: GoogleLoginFailed — {Message}", ex.Message);
+            return Unauthorized();
+        }
+    }
+
+    [Authorize]
+    [HttpPost("set-password")]
+    public async Task<IActionResult> SetPassword([FromBody] SetPasswordRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+
+        var hasPassword = await _userManager.HasPasswordAsync(user);
+        if (hasPassword) return ErrorResponse("Password already set.");
+
+        var result = await _userManager.AddPasswordAsync(user, request.Password);
+        if (!result.Succeeded)
+            return ErrorResponse(string.Join("; ", result.Errors.Select(e => e.Description)));
+
+        user.AuthProvider = "Local";
+        await _userManager.UpdateAsync(user);
+
+        _logger.LogInformation("EVENT: SetPassword userId:{UserId}", user.Id);
+        return MessageResponse("Password set successfully.");
+    }
+
+    [Authorize]
+    [HttpPost("link-google")]
+    public async Task<IActionResult> LinkGoogle([FromBody] GoogleLoginRequest request)
+    {
+        try
+        {
+            var payload = await Google.Apis.Auth.GoogleJsonWebSignature.ValidateAsync(
+                request.IdToken,
+                new Google.Apis.Auth.GoogleJsonWebSignature.ValidationSettings
+                {
+                    Audience = new[] { _auth.GetGoogleClientId() }
+                });
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user is null) return Unauthorized();
+
+            if (!string.IsNullOrEmpty(user.GoogleId))
+                return ErrorResponse("Google account already linked.");
+
+            // Verify the Google email matches the user's email
+            if (!string.Equals(user.Email, payload.Email, StringComparison.OrdinalIgnoreCase))
+                return ErrorResponse("Google account email does not match your account email.");
+
+            user.GoogleId = payload.Subject;
+            await _userManager.UpdateAsync(user);
+
+            _logger.LogInformation("EVENT: LinkGoogle userId:{UserId}", user.Id);
+            return MessageResponse("Google account linked successfully.");
         }
         catch (Google.Apis.Auth.InvalidJwtException)
         {

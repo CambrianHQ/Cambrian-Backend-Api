@@ -17,6 +17,12 @@ public interface IObjectStorage
     string GenerateDownloadUrl(string key, string filename) => GenerateSignedUrl(key);
 
     /// <summary>
+    /// Generate a pre-signed PUT URL for direct client uploads.
+    /// Returns null when direct uploads aren't supported (e.g. local storage).
+    /// </summary>
+    string? GenerateUploadUrl(string key, string contentType) => null;
+
+    /// <summary>
     /// Get a public (unsigned) URL for browsable assets like cover art.
     /// </summary>
     string GetPublicUrl(string key);

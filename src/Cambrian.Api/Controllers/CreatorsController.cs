@@ -178,9 +178,58 @@ public class CreatorsController : BaseController
 
     // ───── POST /api/uploads/creator-image-url ─────
 
+    // ───── POST /api/uploads/creator-image-url (JSON — presigned URL flow) ─────
+
     [Authorize]
     [RequireCreatorTier]
     [HttpPost("/api/uploads/creator-image-url")]
+    public IActionResult CreateCreatorImageUploadUrl([FromBody] CreateImageUploadRequest body)
+    {
+        var type = (body.Type ?? "profile").Replace("-image", "");
+        var ext = Path.GetExtension(body.FileName ?? ".jpg");
+        if (!AllowedImageExtensions.Contains(ext.ToLowerInvariant()))
+            return ErrorResponse("Only .jpg, .jpeg, .png, .webp images are allowed.");
+
+        var folder = type == "cover" ? "creator-covers" : "creator-profiles";
+        var key = $"{folder}/{Guid.NewGuid()}{ext}";
+        var contentType = body.ContentType ?? "application/octet-stream";
+        var publicUrl = _storage.GetPublicUrl(key);
+
+        // Try presigned PUT URL (S3/R2); for local storage returns null
+        var uploadUrl = _storage.GenerateUploadUrl(key, contentType);
+
+        if (uploadUrl is null)
+        {
+            // Local storage: use proxy endpoint
+            uploadUrl = $"{Request.Scheme}://{Request.Host}/api/uploads/creator-image/{key}";
+        }
+
+        return OkResponse(new CreatorImageUploadResponse
+        {
+            UploadUrl = uploadUrl,
+            PublicUrl = publicUrl,
+        });
+    }
+
+    // ───── PUT /api/uploads/creator-image/{**key} (local storage proxy) ─────
+
+    [Authorize]
+    [HttpPut("/api/uploads/creator-image/{**key}")]
+    public async Task<IActionResult> ProxyCreatorImageUpload(string key)
+    {
+        if (Request.ContentLength is > MaxImageSize)
+            return ErrorResponse("Image must be under 10 MB.");
+
+        var contentType = Request.ContentType ?? "application/octet-stream";
+        await _storage.UploadAsync(Request.Body, key, contentType);
+        return Ok();
+    }
+
+    // ───── POST /api/uploads/creator-image (multipart fallback) ─────
+
+    [Authorize]
+    [RequireCreatorTier]
+    [HttpPost("/api/uploads/creator-image")]
     public async Task<IActionResult> UploadCreatorImage(IFormFile file,
         [FromQuery] string type = "profile")
     {

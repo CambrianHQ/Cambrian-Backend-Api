@@ -32,4 +32,7 @@ public interface IAuthService
 
     /// <summary>Authenticate via Google ID token (creates account if needed).</summary>
     Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request);
+
+    /// <summary>Get the configured Google OAuth Client ID.</summary>
+    string GetGoogleClientId();
 }

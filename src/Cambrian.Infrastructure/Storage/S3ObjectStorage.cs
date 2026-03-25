@@ -102,6 +102,20 @@ public sealed class S3ObjectStorage : IObjectStorage
         return GenerateSignedUrl(normalised);
     }
 
+    public string? GenerateUploadUrl(string key, string contentType)
+    {
+        var normalised = NormaliseKey(key);
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = _options.Bucket,
+            Key = normalised,
+            Expires = DateTime.UtcNow.AddMinutes(15),
+            Verb = HttpVerb.PUT,
+            ContentType = contentType,
+        };
+        return _client.GetPreSignedURL(request);
+    }
+
     public async Task<StorageFile?> OpenReadAsync(string key)
     {
         try

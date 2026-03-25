@@ -43,6 +43,9 @@ public class AuthService : IAuthService
         _subscriptions = subscriptions;
         _email = email;
         _logger = logger;
+
+        var hasClientId = !string.IsNullOrWhiteSpace(_googleSettings.ClientId);
+        _logger.LogInformation("Google OAuth configured: {Configured}", hasClientId);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -397,7 +400,9 @@ public class AuthService : IAuthService
                 EmailConfirmed = true,
                 Tier = "free",
                 Role = "User",
-                CreatorTier = CreatorTier.Free
+                CreatorTier = CreatorTier.Free,
+                GoogleId = payload.Subject,
+                AuthProvider = "Google"
             };
 
             var result = await _users.CreateAsync(user);
@@ -409,6 +414,17 @@ public class AuthService : IAuthService
             }
 
             _logger.LogInformation("Google registration success: User={UserId} Email={Email}", user.Id, user.Email);
+        }
+        else
+        {
+            // Link Google identity if not already linked
+            if (string.IsNullOrEmpty(user.GoogleId))
+            {
+                user.GoogleId = payload.Subject;
+                user.AuthProvider ??= "Google";
+                await _users.UpdateAsync(user);
+                _logger.LogInformation("Google identity linked: User={UserId}", user.Id);
+            }
         }
 
         var sub = await _subscriptions.GetActiveAsync(user.Id);
@@ -427,4 +443,6 @@ public class AuthService : IAuthService
             Role = user.Role ?? "User"
         };
     }
+
+    public string GetGoogleClientId() => _googleSettings.ClientId;
 }

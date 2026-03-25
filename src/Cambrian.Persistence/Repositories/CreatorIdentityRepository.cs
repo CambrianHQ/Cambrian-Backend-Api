@@ -167,6 +167,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 Username = normalizedUsername,
                 DisplayName = normalizedUsername,
                 Bio = request.Bio?.Trim() ?? "",
+                ProfileImageUrl = request.ProfileImageUrl,
+                CoverImageUrl = request.CoverImageUrl,
                 SocialLinks = request.SocialLinks is not null
                     ? JsonSerializer.Serialize(request.SocialLinks)
                     : null,
@@ -188,6 +190,10 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         }
         if (request.Bio is not null)
             existing.Bio = request.Bio.Trim();
+        if (request.ProfileImageUrl is not null)
+            existing.ProfileImageUrl = request.ProfileImageUrl.Trim().Length == 0 ? null : request.ProfileImageUrl.Trim();
+        if (request.CoverImageUrl is not null)
+            existing.CoverImageUrl = request.CoverImageUrl.Trim().Length == 0 ? null : request.CoverImageUrl.Trim();
         if (request.SocialLinks is not null)
             existing.SocialLinks = JsonSerializer.Serialize(request.SocialLinks);
 
