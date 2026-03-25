@@ -2,6 +2,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Email;
 using Cambrian.Infrastructure.Options;
+using Cambrian.Infrastructure.Sms;
 using Cambrian.Infrastructure.Storage;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -37,7 +38,7 @@ internal static class StartupExtensions
             var uri = new Uri(connectionString);
             var userInfo = uri.UserInfo.Split(':');
             var port = uri.Port > 0 ? uri.Port : 5432;
-            connectionString = $"Host={uri.Host};Port={port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+            connectionString = $"Host={uri.Host};Port={port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=false";
             Console.WriteLine($"[Startup] Parsed DB URI → Host={uri.Host}, Port={port}, DB={uri.AbsolutePath.TrimStart('/')}");
         }
 
@@ -134,6 +135,23 @@ internal static class StartupExtensions
                     throw new InvalidOperationException(
                         "Email:Provider must be 'smtp' or 'resend' in Production. Console email does not deliver messages to users.");
                 builder.Services.AddSingleton<IEmailService, ConsoleEmailService>();
+                break;
+        }
+    }
+
+    /// <summary>Register SMS provider (twilio or console).</summary>
+    public static void AddSmsProvider(this WebApplicationBuilder builder)
+    {
+        builder.Services.Configure<SmsOptions>(builder.Configuration.GetSection("Sms"));
+        var smsProvider = builder.Configuration["Sms:Provider"]?.ToLowerInvariant() ?? "console";
+        switch (smsProvider)
+        {
+            // Twilio provider can be added here when needed:
+            // case "twilio":
+            //     builder.Services.AddSingleton<ISmsService, TwilioSmsService>();
+            //     break;
+            default:
+                builder.Services.AddSingleton<ISmsService, ConsoleSmsService>();
                 break;
         }
     }

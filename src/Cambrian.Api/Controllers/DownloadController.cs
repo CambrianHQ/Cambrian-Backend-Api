@@ -47,7 +47,7 @@ public class DownloadController : BaseController
         if (track?.AudioUrl is null)
             return NotFoundResponse("Track audio not found.");
 
-        _logger.LogInformation("Download requested: trackId={TrackId}, audioUrl={AudioUrl}", trackId, track.AudioUrl);
+        _logger.LogInformation("Download requested: trackId={TrackId}", trackId);
 
         // Build a user-friendly filename from the track title
         var ext = Path.GetExtension(track.AudioUrl);

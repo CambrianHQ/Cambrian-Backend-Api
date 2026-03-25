@@ -170,15 +170,26 @@ public class AuthController : BaseController
             "EVENT: MeResolved userId:{UserId} profileTier:{ProfileTier} subscriptionPlan:{SubPlan} resolvedTier:{ResolvedTier}",
             profile.UserId, profile.Tier, sub?.Plan, tier.ToLowerInvariant());
 
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var user = await _userManager.FindByIdAsync(userId);
+        var isNewUser = user is null
+            || string.IsNullOrWhiteSpace(user.UserName)
+            || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+        var username = isNewUser ? null : user!.UserName;
+
         return OkResponse(new
         {
             token = freshToken ?? Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
+            isNewUser,
             user = new
             {
                 id = profile.UserId,
                 email = profile.Email,
                 tier = tier.ToLowerInvariant(),
                 role = profile.Role ?? "User",
+                username,
+                displayName = profile.DisplayName,
+                isNewUser,
                 creatorTier = profile.CreatorTier,
                 uploadCount = profile.UploadCount,
                 uploadLimit = profile.UploadLimit,
@@ -194,12 +205,15 @@ public class AuthController : BaseController
     {
         token = auth.Token,
         tier = auth.Tier,
+        isNewUser = auth.IsNewUser,
         user = new
         {
             id = auth.UserId.ToString(),
             email = auth.Email,
             tier = (auth.Tier ?? "free").ToLowerInvariant(),
-            role = auth.Role ?? "User"
+            role = auth.Role ?? "User",
+            username = auth.Username,
+            isNewUser = auth.IsNewUser
         }
     };
 
@@ -210,14 +224,119 @@ public class AuthController : BaseController
         return MessageResponse("Logged out successfully.");
     }
 
+    /// <summary>
+    /// Set or update the current user's username during onboarding.
+    /// Does not require Creator tier — available to any authenticated user.
+    /// </summary>
+    [Authorize]
+    [HttpPost("set-username")]
+    public async Task<IActionResult> SetUsername([FromBody] SetUsernameRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Username))
+            return ErrorResponse("Username is required.");
+
+        var normalized = request.Username.Trim().ToLowerInvariant();
+
+        if (normalized.Length < 3 || normalized.Length > 40)
+            return ErrorResponse("Username must be between 3 and 40 characters.");
+
+        // Only allow alphanumeric, hyphens, underscores
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^[a-z0-9_-]+$"))
+            return ErrorResponse("Username may only contain letters, numbers, hyphens, and underscores.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return NotFoundResponse("User not found.");
+
+        // Check uniqueness via Identity UserName
+        var existingByName = await _userManager.FindByNameAsync(normalized);
+        if (existingByName is not null && existingByName.Id != userId)
+            return ConflictResponse("That username is already taken.");
+
+        user.UserName = normalized;
+        user.NormalizedUserName = normalized.ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(user.DisplayName))
+            user.DisplayName = request.Username.Trim(); // preserve original casing for display
+
+        // Promote to Creator role on username set — this is the onboarding completion step.
+        // Users who set a username are entering the creator flow and need access to
+        // creator-profile, payout, and upload endpoints.
+        if (string.Equals(user.Role, "User", StringComparison.OrdinalIgnoreCase))
+        {
+            user.Role = "Creator";
+            _logger.LogInformation("EVENT: RolePromoted userId:{UserId} from=User to=Creator (username onboarding)", userId);
+        }
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            _logger.LogWarning("EVENT: SetUsernameFailed userId:{UserId} errors:{Errors}", userId, errors);
+            return ErrorResponse(errors);
+        }
+
+        _logger.LogInformation("EVENT: UsernameSet userId:{UserId} username:{Username}", userId, normalized);
+
+        // Return a fresh JWT with updated role/username claims
+        var freshToken = await _auth.GenerateFreshTokenAsync(userId);
+
+        return OkResponse(new
+        {
+            username = normalized,
+            displayName = user.DisplayName,
+            role = user.Role,
+            token = freshToken
+        });
+    }
+
     [HttpGet("health")]
     public IActionResult Health()
     {
         return OkResponse(new { status = "ok", timestamp = DateTime.UtcNow });
     }
 
-    // REMOVED: csrf-token endpoint was returning unvalidated random GUIDs
-    // providing false security. JWT Bearer auth mitigates CSRF inherently.
+    /// <summary>
+    /// Check username availability during onboarding. Public — no auth required.
+    /// Mirrors /api/creators/username-availability but accessible at the /auth path
+    /// so the onboarding flow does not depend on the creator routes.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpGet("username-availability")]
+    public async Task<IActionResult> CheckUsernameAvailability([FromQuery] string? username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            return ErrorResponse("Username is required.");
+
+        var normalized = username.Trim().ToLowerInvariant();
+
+        if (normalized.Length < 3 || normalized.Length > 40)
+            return OkResponse(new { username = normalized, available = false, reason = "Username must be between 3 and 40 characters." });
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^[a-z0-9_-]+$"))
+            return OkResponse(new { username = normalized, available = false, reason = "Username may only contain letters, numbers, hyphens, and underscores." });
+
+        var existing = await _userManager.FindByNameAsync(normalized);
+        var available = existing is null;
+
+        return OkResponse(new { username = normalized, available });
+    }
+
+    /// <summary>
+    /// CSRF token endpoint — intentionally retired.
+    /// JWT Bearer auth is used for all mutating requests; CSRF tokens are unnecessary.
+    /// Returns 410 Gone so the frontend can distinguish "retired" from "missing".
+    /// </summary>
+    [HttpGet("csrf-token")]
+    public IActionResult CsrfToken()
+    {
+        return StatusCode(410, new
+        {
+            success = false,
+            error = "CSRF tokens are not used. This API uses JWT Bearer authentication which is not vulnerable to CSRF attacks.",
+            retired = true
+        });
+    }
 
     [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]
@@ -243,6 +362,7 @@ public class AuthController : BaseController
         return MessageResponse("Password reset successfully.");
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("recover-username")]
     public async Task<IActionResult> RecoverUsername(RecoverUsernameRequest request)
     {

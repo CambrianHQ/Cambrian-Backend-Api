@@ -205,6 +205,7 @@ builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
 builder.AddStorageProvider();
 builder.AddEmailProvider();
+builder.AddSmsProvider();
 
 var app = builder.Build();
 

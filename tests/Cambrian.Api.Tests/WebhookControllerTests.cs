@@ -84,4 +84,18 @@ public sealed class WebhookControllerTests
         Assert.IsType<OkObjectResult>(result);
         await _webhookService.Received(1).HandleStripeAsync(Arg.Any<string>(), "");
     }
+
+    [Fact]
+    public async Task Stripe_Returns500_WhenProcessingErrorOccurs()
+    {
+        SetupRequest("{}", "sig_test");
+        _webhookService.HandleStripeAsync(Arg.Any<string>(), Arg.Any<string>())
+            .ThrowsAsync(new Exception("Processing failed"));
+
+        var result = await _controller.Stripe();
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(500, objectResult.StatusCode);
+        Assert.Equal("Webhook processing failed.", objectResult.Value);
+    }
 }

@@ -4,6 +4,7 @@ using Cambrian.Application.DTOs.Creators;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
@@ -120,7 +121,9 @@ public class CreatorsController : BaseController
     // ───── GET /api/creators/username-availability?username=... ─────
 
     /// <summary>Check if a username is available. Normalizes input.</summary>
+    [EnableRateLimiting("auth")]
     [HttpGet("username-availability")]
+    [HttpGet("/creator/username-availability")]
     public async Task<IActionResult> CheckUsernameAvailability([FromQuery] string? username)
     {
         if (string.IsNullOrWhiteSpace(username))

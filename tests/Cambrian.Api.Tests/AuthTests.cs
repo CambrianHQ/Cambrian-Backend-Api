@@ -43,9 +43,10 @@ public sealed class AuthTests
 
         _subscriptions = Substitute.For<ISubscriptionRepository>();
         _email = Substitute.For<IEmailService>();
+        var sms = Substitute.For<ISmsService>();
         var googleOptions = Options.Create(new GoogleSettings { ClientId = "test-google-client-id" });
         var logger = Substitute.For<ILogger<AuthService>>();
-        _sut = new AuthService(_users, _jwtOptions, googleOptions, _subscriptions, _email, logger);
+        _sut = new AuthService(_users, _jwtOptions, googleOptions, _subscriptions, _email, sms, logger);
     }
 
     [Fact]

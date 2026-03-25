@@ -112,22 +112,20 @@ public sealed class PurchaseJourneyTests : IDisposable
     public async Task FullPurchaseJourney_CreatesAllExpectedRecords()
     {
         // ── Step 1: Simulate webhook checkout.session.completed ──
-        // This is the main path: Stripe calls our webhook after payment.
+        // Call ProcessEventAsync directly (C4: HandleStripeAsync now requires Stripe signatures).
         var clientReferenceId = $"{UserId}:{TrackId}:standard:personal";
         var stripeSessionId = "cs_test_journey_" + Guid.NewGuid().ToString("N")[..10];
-        var webhookPayload = $@"{{
-            ""id"": ""evt_journey_{Guid.NewGuid():N}"",
-            ""type"": ""checkout.session.completed"",
-            ""data"": {{
-                ""object"": {{
-                    ""id"": ""{stripeSessionId}"",
-                    ""client_reference_id"": ""{clientReferenceId}"",
-                    ""amount_total"": 999
-                }}
-            }}
-        }}";
+        var eventId = $"evt_journey_{Guid.NewGuid():N}";
+        var webhookPayload = $@"{{""type"":""checkout.session.completed"",""id"":""{eventId}""}}";
 
-        await _webhookService.HandleStripeAsync(webhookPayload, "");
+        await _webhookService.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: clientReferenceId,
+            amountTotal: 999,
+            stripeCustomerId: null,
+            stripeSessionId: stripeSessionId,
+            payload: webhookPayload);
 
         // ── Step 2: Verify purchase was created ──
         var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == UserId && p.TrackId == TrackId);
@@ -163,9 +161,15 @@ public sealed class PurchaseJourneyTests : IDisposable
         Assert.True(webhookEvent.Processed);
         Assert.NotNull(webhookEvent.Payload);
 
-        // ── Step 7: Verify idempotency — replaying the same webhook should not duplicate ──
+        // ── Step 7: Verify idempotency — replaying the same event should not duplicate ──
         var purchaseCountBefore = await _db.Purchases.CountAsync();
-        await _webhookService.HandleStripeAsync(webhookPayload, "");
+        await _webhookService.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: clientReferenceId,
+            amountTotal: 999,
+            stripeCustomerId: null,
+            stripeSessionId: stripeSessionId);
         var purchaseCountAfter = await _db.Purchases.CountAsync();
         Assert.Equal(purchaseCountBefore, purchaseCountAfter);
     }
@@ -182,20 +186,15 @@ public sealed class PurchaseJourneyTests : IDisposable
         // Pre-set ExclusiveSold = false is already the default, but the atomic SQL
         // won't work. We test that the purchase record is created correctly.
         var clientReferenceId = $"{UserId}:{TrackId}:exclusive:commercial";
-        var webhookPayload = $@"{{
-            ""id"": ""evt_exclusive_{Guid.NewGuid():N}"",
-            ""type"": ""checkout.session.completed"",
-            ""data"": {{
-                ""object"": {{
-                    ""id"": ""cs_test_exclusive_{Guid.NewGuid():N}"",
-                    ""client_reference_id"": ""{clientReferenceId}"",
-                    ""amount_total"": 4999
-                }}
-            }}
-        }}";
 
         // InMemory DB doesn't support relational SQL — expect this to throw
-        var ex = await Record.ExceptionAsync(() => _webhookService.HandleStripeAsync(webhookPayload, ""));
+        var ex = await Record.ExceptionAsync(() => _webhookService.ProcessEventAsync(
+            eventId: $"evt_exclusive_{Guid.NewGuid():N}",
+            eventType: "checkout.session.completed",
+            clientReferenceId: clientReferenceId,
+            amountTotal: 4999,
+            stripeCustomerId: null,
+            stripeSessionId: $"cs_test_exclusive_{Guid.NewGuid():N}"));
 
         // With InMemory, the exclusive atomic check will throw InvalidOperationException.
         // This is expected behavior — the real DB uses ExecuteSqlInterpolatedAsync.
@@ -216,21 +215,16 @@ public sealed class PurchaseJourneyTests : IDisposable
     [Fact]
     public async Task LibraryConsistency_PurchaseAlwaysHasLibraryItem()
     {
-        // Create a purchase via webhook
+        // Create a purchase via ProcessEventAsync
         var clientReferenceId = $"{UserId}:{TrackId}:standard:personal";
-        var webhookPayload = $@"{{
-            ""id"": ""evt_consistency_{Guid.NewGuid():N}"",
-            ""type"": ""checkout.session.completed"",
-            ""data"": {{
-                ""object"": {{
-                    ""id"": ""cs_test_consistency_{Guid.NewGuid():N}"",
-                    ""client_reference_id"": ""{clientReferenceId}"",
-                    ""amount_total"": 999
-                }}
-            }}
-        }}";
 
-        await _webhookService.HandleStripeAsync(webhookPayload, "");
+        await _webhookService.ProcessEventAsync(
+            eventId: $"evt_consistency_{Guid.NewGuid():N}",
+            eventType: "checkout.session.completed",
+            clientReferenceId: clientReferenceId,
+            amountTotal: 999,
+            stripeCustomerId: null,
+            stripeSessionId: $"cs_test_consistency_{Guid.NewGuid():N}");
 
         // Verify consistency: every completed purchase has a matching library item
         var completedPurchases = await _db.Purchases

@@ -17,6 +17,12 @@ public class LibraryItemResponse
     /// <summary>ISO-8601 timestamp of when the purchase was completed (null if not purchased).</summary>
     public string? PurchasedOn { get; set; }
 
+    /// <summary>License type of the completed purchase (e.g. "non-exclusive", "exclusive", "copyright_buyout"). Null if not purchased.</summary>
+    public string? LicenseType { get; set; }
+
+    /// <summary>Usage type of the completed purchase (e.g. "personal", "youtube", "ads"). Null if not purchased.</summary>
+    public string? UsageType { get; set; }
+
     /// <summary>Audio URL for streaming/download (if entitled).</summary>
     public string? AudioUrl { get; set; }
 

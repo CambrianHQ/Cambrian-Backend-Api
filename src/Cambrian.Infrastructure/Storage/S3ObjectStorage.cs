@@ -3,6 +3,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Cambrian.Infrastructure.Storage;
@@ -14,10 +15,12 @@ public sealed class S3ObjectStorage : IObjectStorage
 {
     private readonly StorageOptions _options;
     private readonly AmazonS3Client _client;
+    private readonly ILogger<S3ObjectStorage> _logger;
 
-    public S3ObjectStorage(IOptions<StorageOptions> options)
+    public S3ObjectStorage(IOptions<StorageOptions> options, ILogger<S3ObjectStorage> logger)
     {
         _options = options.Value;
+        _logger = logger;
 
         // R2 and modern S3 require Signature Version 4
         AWSConfigsS3.UseSignatureVersion4 = true;
@@ -39,7 +42,7 @@ public sealed class S3ObjectStorage : IObjectStorage
     public async Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
     {
         var normalised = NormaliseKey(key);
-        Console.WriteLine($"[S3] Uploading: bucket={_options.Bucket}, key={normalised}, contentType={contentType}, size={file.Length}");
+        _logger.LogDebug("S3 upload: key={Key}, contentType={ContentType}", normalised, contentType);
         var request = new PutObjectRequest
         {
             BucketName = _options.Bucket,
@@ -52,7 +55,7 @@ public sealed class S3ObjectStorage : IObjectStorage
             DisablePayloadSigning = true,
         };
         await _client.PutObjectAsync(request);
-        Console.WriteLine($"[S3] Upload complete: {normalised}");
+        _logger.LogDebug("S3 upload complete: key={Key}", normalised);
 
         // Return just the key — callers use GetPublicUrl / GenerateSignedUrl to build URLs.
         return normalised;
@@ -121,7 +124,7 @@ public sealed class S3ObjectStorage : IObjectStorage
         try
         {
             var normalised = NormaliseKey(key);
-            Console.WriteLine($"[S3] OpenRead: bucket={_options.Bucket}, key={normalised} (raw={key})");
+            _logger.LogDebug("S3 OpenRead: key={Key}", normalised);
             var response = await _client.GetObjectAsync(_options.Bucket, normalised);
             return new StorageFile
             {
@@ -132,12 +135,12 @@ public sealed class S3ObjectStorage : IObjectStorage
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            Console.WriteLine($"[S3] Not found: bucket={_options.Bucket}, key={NormaliseKey(key)}");
+            _logger.LogDebug("S3 not found: key={Key}", NormaliseKey(key));
             return null;
         }
         catch (AmazonS3Exception ex)
         {
-            Console.WriteLine($"[S3] ERROR: {ex.StatusCode} {ex.ErrorCode} — bucket={_options.Bucket}, key={NormaliseKey(key)}, message={ex.Message}");
+            _logger.LogError(ex, "S3 error: {StatusCode} {ErrorCode} key={Key}", ex.StatusCode, ex.ErrorCode, NormaliseKey(key));
             throw;
         }
     }

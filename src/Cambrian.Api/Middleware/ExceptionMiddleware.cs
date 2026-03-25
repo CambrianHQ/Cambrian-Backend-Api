@@ -49,8 +49,16 @@ public sealed class ExceptionMiddleware
                 _                           => (int)HttpStatusCode.InternalServerError
             };
 
-            var message = context.Response.StatusCode == 500 && _isProduction
-                ? "An unexpected error occurred."
+            var message = _isProduction
+                ? context.Response.StatusCode switch
+                {
+                    500 => "An unexpected error occurred.",
+                    400 => "The request was invalid.",
+                    401 => "Authentication is required.",
+                    403 => "Access denied.",
+                    404 => "The requested resource was not found.",
+                    _   => "An error occurred."
+                }
                 : ex.Message;
 
             await context.Response.WriteAsync(

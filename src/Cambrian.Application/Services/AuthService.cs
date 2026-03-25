@@ -9,6 +9,7 @@ using Cambrian.Domain.Entities;
 using Cambrian.Domain.Enums;
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -22,6 +23,7 @@ public class AuthService : IAuthService
     private readonly GoogleSettings _googleSettings;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IEmailService _email;
+    private readonly ISmsService _sms;
     private readonly ILogger<AuthService> _logger;
 
     /// <summary>How long a password reset code is valid.</summary>
@@ -35,6 +37,7 @@ public class AuthService : IAuthService
         IOptions<GoogleSettings> googleOptions,
         ISubscriptionRepository subscriptions,
         IEmailService email,
+        ISmsService sms,
         ILogger<AuthService> logger)
     {
         _users = users;
@@ -42,6 +45,7 @@ public class AuthService : IAuthService
         _googleSettings = googleOptions.Value;
         _subscriptions = subscriptions;
         _email = email;
+        _sms = sms;
         _logger = logger;
 
         var hasClientId = !string.IsNullOrWhiteSpace(_googleSettings.ClientId);
@@ -71,7 +75,11 @@ public class AuthService : IAuthService
 
         var token = GenerateJwt(user);
 
-        _logger.LogInformation("Login success: User={UserId} Tier={Tier}", user.Id, resolvedTier);
+        // A user is "new" if their UserName is still their email (never set a custom username)
+        var isNewUser = string.IsNullOrWhiteSpace(user.UserName)
+                     || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+
+        _logger.LogInformation("Login success: User={UserId} Tier={Tier} IsNew={IsNew}", user.Id, resolvedTier, isNewUser);
 
         return new AuthResponse
         {
@@ -79,7 +87,9 @@ public class AuthService : IAuthService
             Email = user.Email ?? "",
             Token = token,
             Tier = resolvedTier.ToLowerInvariant(),
-            Role = user.Role ?? "User"
+            Role = user.Role ?? "User",
+            Username = isNewUser ? null : user.UserName,
+            IsNewUser = isNewUser
         };
     }
 
@@ -114,7 +124,9 @@ public class AuthService : IAuthService
             Email = user.Email ?? "",
             Token = token,
             Tier = user.Tier,
-            Role = user.Role
+            Role = user.Role,
+            Username = null,
+            IsNewUser = true  // just registered, no custom username yet
         };
     }
 
@@ -171,15 +183,21 @@ public class AuthService : IAuthService
 
     public async Task ForgotPasswordAsync(ForgotPasswordRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Email))
-            return; // silent - do not reveal whether the email exists
+        var usePhone = !string.IsNullOrWhiteSpace(request.PhoneNumber);
+        var useEmail = !string.IsNullOrWhiteSpace(request.Email);
 
-        var user = await _users.FindByEmailAsync(request.Email);
+        if (!useEmail && !usePhone)
+            return; // silent - do not reveal whether the contact exists
+
+        var user = useEmail
+            ? await _users.FindByEmailAsync(request.Email!)
+            : await _users.Users.FirstOrDefaultAsync(u => u.PhoneNumber == request.PhoneNumber);
+
         if (user is null)
             return; // silent
 
         // Generate a cryptographically random 8-character alphanumeric code
-        // (36^8 = ~2.8 trillion combinations vs 900K for 6-digit numeric)
+        // (32^8 = ~1.1 trillion combinations vs 900K for 6-digit numeric)
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // excludes ambiguous chars: 0/O, 1/I
         var codeChars = new char[8];
         for (var i = 0; i < codeChars.Length; i++)
@@ -192,18 +210,20 @@ public class AuthService : IAuthService
 
         try
         {
-            await _email.SendPasswordResetAsync(user.Email!, code);
+            if (usePhone)
+                await _sms.SendPasswordResetAsync(request.PhoneNumber!, code);
+            else
+                await _email.SendPasswordResetAsync(user.Email!, code);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Log internally but don't crash the endpoint —
-            // the code is saved, user can retry, and we don't reveal email status.
+            _logger.LogError(ex, "Failed to send password reset to user {UserId}", user.Id);
         }
     }
 
     public async Task VerifyCodeAsync(VerifyCodeRequest request)
     {
-        var user = await FindUserByContact(request.Email);
+        var user = await FindUserByContact(request.Email, request.PhoneNumber);
         if (user is null)
             throw new InvalidOperationException(InvalidOrExpiredCode);
 
@@ -212,7 +232,7 @@ public class AuthService : IAuthService
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request)
     {
-        var user = await FindUserByContact(request.Email);
+        var user = await FindUserByContact(request.Email, request.PhoneNumber);
         if (user is null)
             throw new InvalidOperationException(InvalidOrExpiredCode);
 
@@ -236,18 +256,32 @@ public class AuthService : IAuthService
 
     public async Task RecoverUsernameAsync(RecoverUsernameRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Email))
-            return; // silent - do not reveal whether the email exists
+        var usePhone = !string.IsNullOrWhiteSpace(request.PhoneNumber);
+        var useEmail = !string.IsNullOrWhiteSpace(request.Email);
 
-        var user = await _users.FindByEmailAsync(request.Email);
+        if (!useEmail && !usePhone)
+            return; // silent - do not reveal whether the contact exists
+
+        var user = useEmail
+            ? await _users.FindByEmailAsync(request.Email!)
+            : await _users.Users.FirstOrDefaultAsync(u => u.PhoneNumber == request.PhoneNumber);
+
         if (user is null)
             return; // silent
 
-        // Send the display name via email — never echo email as a "username"
-        await _email.SendAsync(
-            user.Email!,
-            "Cambrian - Your Username",
-            $"<p>Your display name is: <strong>{user.DisplayName ?? "(not set)"}</strong></p>");
+        var displayName = user.DisplayName ?? "(not set)";
+
+        if (usePhone)
+        {
+            await _sms.SendAsync(request.PhoneNumber!, $"Your Cambrian display name is: {displayName}");
+        }
+        else
+        {
+            await _email.SendAsync(
+                user.Email!,
+                "Cambrian - Your Username",
+                $"<p>Your display name is: <strong>{displayName}</strong></p>");
+        }
     }
 
     public async Task ChangePasswordAsync(ClaimsPrincipal principal, ChangePasswordRequest request)
@@ -304,10 +338,12 @@ public class AuthService : IAuthService
                ?? throw new UnauthorizedAccessException("User not found");
     }
 
-    private async Task<ApplicationUser?> FindUserByContact(string? email)
+    private async Task<ApplicationUser?> FindUserByContact(string? email, string? phoneNumber = null)
     {
         if (!string.IsNullOrWhiteSpace(email))
             return await _users.FindByEmailAsync(email);
+        if (!string.IsNullOrWhiteSpace(phoneNumber))
+            return await _users.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phoneNumber);
         return null;
     }
 
@@ -440,7 +476,10 @@ public class AuthService : IAuthService
 
         var token = GenerateJwt(user);
 
-        _logger.LogInformation("Google login success: User={UserId} Tier={Tier}", user.Id, resolvedTier);
+        var isNewGoogleUser = string.IsNullOrWhiteSpace(user.UserName)
+                            || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+
+        _logger.LogInformation("Google login success: User={UserId} Tier={Tier} IsNew={IsNew}", user.Id, resolvedTier, isNewGoogleUser);
 
         return new AuthResponse
         {
@@ -448,7 +487,9 @@ public class AuthService : IAuthService
             Email = user.Email ?? "",
             Token = token,
             Tier = resolvedTier.ToLowerInvariant(),
-            Role = user.Role ?? "User"
+            Role = user.Role ?? "User",
+            Username = isNewGoogleUser ? null : user.UserName,
+            IsNewUser = isNewGoogleUser
         };
     }
 
