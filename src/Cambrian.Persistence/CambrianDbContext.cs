@@ -49,6 +49,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<TrackCollection> TrackCollections => Set<TrackCollection>();
 
+    public DbSet<CreatorFollow> CreatorFollows => Set<CreatorFollow>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -299,6 +301,19 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithOne()
                 .HasForeignKey<Creator>(c => c.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Creator follows ──
+        builder.Entity<CreatorFollow>(e =>
+        {
+            e.HasKey(f => f.Id);
+            e.Property(f => f.FollowerId).HasMaxLength(450).IsRequired();
+            e.HasIndex(f => new { f.FollowerId, f.CreatorId }).IsUnique();
+            e.HasIndex(f => f.CreatorId);
+            e.HasOne(f => f.Creator)
+                .WithMany()
+                .HasForeignKey(f => f.CreatorId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Activity items (backfill-safe display layer) ──

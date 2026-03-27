@@ -16,7 +16,10 @@ public sealed class CatalogServiceTests
     {
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        users.Users.Returns(new List<ApplicationUser>().AsQueryable());
         var profiles = Substitute.For<ICreatorProfileRepository>();
+        profiles.GetSlugsByUserIdsAsync(Arg.Any<List<string>>())
+            .Returns(new Dictionary<string, (string? Slug, string? ProfileImageUrl)>());
         var logger = Substitute.For<ILogger<CatalogService>>();
         _sut = new CatalogService(_tracks, users, profiles, logger);
     }

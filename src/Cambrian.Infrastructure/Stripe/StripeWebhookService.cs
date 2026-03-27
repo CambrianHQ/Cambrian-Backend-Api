@@ -469,6 +469,30 @@ public class StripeWebhookService : IWebhookService
 
         await _db.SaveChangesAsync();
 
+        // ── Issue invoice ──
+        try
+        {
+            _db.Invoices.Add(new Cambrian.Domain.Entities.Invoice
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                PurchaseId = purchase.Id,
+                AmountCents = purchase.AmountCents,
+                Currency = "usd",
+                Status = "paid",
+                IssuedAt = DateTime.UtcNow,
+                PaidAt = DateTime.UtcNow,
+            });
+            await _db.SaveChangesAsync();
+            _logger.LogInformation(
+                "Invoice issued: PurchaseId={PurchaseId} UserId={UserId} AmountCents={AmountCents}",
+                purchase.Id, userId, purchase.AmountCents);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to create invoice for purchase {PurchaseId} — non-critical", purchase.Id);
+        }
+
         // ── Append sale activity (display layer — never blocks purchase) ──
         try
         {

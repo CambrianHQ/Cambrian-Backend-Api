@@ -58,8 +58,10 @@ public class StreamController : BaseController
             return ErrorResponse("trackId must be a valid GUID.");
 
         var track = await _tracks.GetByIdAsync(id);
-        if (track?.AudioUrl is null)
+        if (track is null)
             return NotFoundResponse("Track not found.");
+        if (string.IsNullOrEmpty(track.AudioUrl))
+            return ErrorResponse("Track has no audio file configured.");
 
         var streamUrl = _storage.GenerateSignedUrl(track.AudioUrl);
         return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl) });
@@ -80,8 +82,10 @@ public class StreamController : BaseController
             return ErrorResponse("trackId must be a valid GUID.");
 
         var track = await _tracks.GetByIdAsync(id);
-        if (track?.AudioUrl is null)
+        if (track is null)
             return NotFoundResponse("Track not found.");
+        if (string.IsNullOrEmpty(track.AudioUrl))
+            return ErrorResponse("Track has no audio file configured.");
 
         _logger.LogInformation("StreamAudio: redirecting trackId={TrackId} to signed storage URL", trackId);
 
@@ -99,8 +103,10 @@ public class StreamController : BaseController
             return ErrorResponse("trackId must be a valid GUID.");
 
         var track = await _tracks.GetByIdAsync(parsedTrackId);
-        if (track?.AudioUrl is null)
+        if (track is null)
             return NotFoundResponse("Track not found.");
+        if (string.IsNullOrEmpty(track.AudioUrl))
+            return ErrorResponse("Track has no audio file configured.");
 
         var session = await _streams.StartAsync(parsedTrackId, userId);
         return OkResponse(new { streamId = session.Id.ToString(), status = "started" });

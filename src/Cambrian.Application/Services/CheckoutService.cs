@@ -108,7 +108,9 @@ public class CheckoutService : ICheckoutService
         return new CheckoutResponse
         {
             CheckoutUrl = url,
-            Status = "created"
+            Status = "created",
+            DisplayPrice = $"${amountCents / 100m:F2}",
+            Currency = "usd"
         };
     }
 

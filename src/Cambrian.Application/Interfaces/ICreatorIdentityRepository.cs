@@ -51,4 +51,16 @@ public interface ICreatorIdentityRepository
     /// <param name="imageUrl">Public URL of the uploaded image.</param>
     /// <returns>True if the creator was found and updated.</returns>
     Task<bool> UpdateImageUrlAsync(string userId, string imageType, string imageUrl);
+
+    /// <summary>Follow a creator. Idempotent — no-op if already following.</summary>
+    Task FollowAsync(string followerUserId, Guid creatorId);
+
+    /// <summary>Unfollow a creator. Idempotent — no-op if not following.</summary>
+    Task UnfollowAsync(string followerUserId, Guid creatorId);
+
+    /// <summary>Check whether a user is following a creator.</summary>
+    Task<bool> IsFollowingAsync(string followerUserId, Guid creatorId);
+
+    /// <summary>Get the follower count for a creator.</summary>
+    Task<int> GetFollowerCountAsync(Guid creatorId);
 }

@@ -3,7 +3,6 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
@@ -92,9 +91,10 @@ public class CatalogService : ICatalogService
             .ToList();
 
         // Single query: load all creators for this page
-        var creators = await _users.Users
+        var creatorList = _users.Users
             .Where(u => creatorIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u);
+            .ToList();
+        var creators = creatorList.ToDictionary(u => u.Id, u => u);
 
         // Single query: load all profile slugs/images for this page
         var profileMap = await _profiles.GetSlugsByUserIdsAsync(creatorIds);

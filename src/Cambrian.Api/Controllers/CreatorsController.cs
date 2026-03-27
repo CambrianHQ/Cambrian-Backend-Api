@@ -2,7 +2,9 @@ using System.Security.Claims;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Creators;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
@@ -19,6 +21,7 @@ public class CreatorsController : BaseController
 {
     private readonly ICreatorIdentityRepository _creators;
     private readonly IObjectStorage _storage;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<CreatorsController> _logger;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -28,10 +31,11 @@ public class CreatorsController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorsController(ICreatorIdentityRepository creators, IObjectStorage storage, ILogger<CreatorsController> logger)
+    public CreatorsController(ICreatorIdentityRepository creators, IObjectStorage storage, UserManager<ApplicationUser> userManager, ILogger<CreatorsController> logger)
     {
         _creators = creators;
         _storage = storage;
+        _userManager = userManager;
         _logger = logger;
     }
 
@@ -59,6 +63,7 @@ public class CreatorsController : BaseController
     /// Normalizes username before lookup.
     /// </summary>
     [HttpGet("by-username/{username}")]
+    [HttpGet("/creator/username/{username}")]
     public async Task<IActionResult> GetCreatorByUsername(string username)
     {
         if (string.IsNullOrWhiteSpace(username))
@@ -118,6 +123,40 @@ public class CreatorsController : BaseController
         return OkResponse(tracks);
     }
 
+    // ───── GET /creator/tracks/{slug} ─────
+
+    /// <summary>
+    /// Get tracks by creator slug (username) or creator GUID.
+    /// Accepts both a username string and a UUID; resolves to the canonical creator, then returns tracks.
+    /// </summary>
+    [HttpGet("/creator/tracks/{slug}")]
+    public async Task<IActionResult> GetCreatorTracksBySlug(string slug,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        if (string.IsNullOrWhiteSpace(slug))
+            return ErrorResponse("Creator slug is required.");
+
+        if (page < 1) page = 1;
+        if (pageSize is < 1 or > 100) pageSize = 20;
+
+        // If the slug looks like a GUID, resolve by ID (or ApplicationUser.Id fallback)
+        PublicCreatorDto? creator = null;
+        if (Guid.TryParse(slug, out var parsedId))
+        {
+            creator = await _creators.GetByIdAsync(parsedId);
+            creator ??= await _creators.GetByUserIdAsync(slug);
+        }
+
+        // Fallback: resolve by username
+        creator ??= await _creators.GetByUsernameAsync(slug);
+        if (creator is null) return NotFoundResponse("Creator not found.");
+
+        var creatorId = Guid.Parse(creator.Id);
+        var tracks = await _creators.GetTracksByCreatorIdAsync(creatorId, page, pageSize);
+        ResolveTrackUrls(tracks);
+        return OkResponse(tracks);
+    }
+
     // ───── GET /api/creators/username-availability?username=... ─────
 
     /// <summary>Check if a username is available. Normalizes input.</summary>
@@ -134,7 +173,10 @@ public class CreatorsController : BaseController
         if (normalized.Length < 3 || normalized.Length > 40)
             return OkResponse(new UsernameAvailabilityResponse { Username = normalized, Available = false });
 
-        var taken = await _creators.IsUsernameTakenAsync(normalized);
+        var takenInCreators = await _creators.IsUsernameTakenAsync(normalized);
+        // Also check Identity table — username must be globally unique
+        var existingInIdentity = await _userManager.FindByNameAsync(normalized);
+        var taken = takenInCreators || existingInIdentity is not null;
         return OkResponse(new UsernameAvailabilityResponse { Username = normalized, Available = !taken });
     }
 
@@ -160,6 +202,19 @@ public class CreatorsController : BaseController
     public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateCreatorProfileRequest body)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        // If no username provided, auto-populate from ApplicationUser.UserName
+        // so users who already set it via POST /auth/set-username don't have to repeat it.
+        if (string.IsNullOrWhiteSpace(body.Username))
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user?.UserName is not null
+                && !user.UserName.Contains('@')          // skip if still set to email
+                && user.UserName.Length >= 3)
+            {
+                body.Username = user.UserName;
+            }
+        }
 
         // Validate username if provided
         if (body.Username is not null)
@@ -264,6 +319,53 @@ public class CreatorsController : BaseController
             UploadUrl = publicUrl,
             PublicUrl = publicUrl,
         });
+    }
+
+    // ───── POST /api/creators/{creatorId}/follow ─────
+
+    /// <summary>Follow a creator. Idempotent.</summary>
+    [Authorize]
+    [HttpPost("{creatorId:guid}/follow")]
+    public async Task<IActionResult> Follow(Guid creatorId)
+    {
+        var creator = await _creators.GetByIdAsync(creatorId);
+        if (creator is null) return NotFoundResponse("Creator not found.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await _creators.FollowAsync(userId, creatorId);
+
+        var followerCount = await _creators.GetFollowerCountAsync(creatorId);
+        return OkResponse(new { following = true, followerCount });
+    }
+
+    // ───── DELETE /api/creators/{creatorId}/follow ─────
+
+    /// <summary>Unfollow a creator. Idempotent.</summary>
+    [Authorize]
+    [HttpDelete("{creatorId:guid}/follow")]
+    public async Task<IActionResult> Unfollow(Guid creatorId)
+    {
+        var creator = await _creators.GetByIdAsync(creatorId);
+        if (creator is null) return NotFoundResponse("Creator not found.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await _creators.UnfollowAsync(userId, creatorId);
+
+        var followerCount = await _creators.GetFollowerCountAsync(creatorId);
+        return OkResponse(new { following = false, followerCount });
+    }
+
+    // ───── GET /api/creators/{creatorId}/follow ─────
+
+    /// <summary>Check if the authenticated user is following a creator.</summary>
+    [Authorize]
+    [HttpGet("{creatorId:guid}/follow")]
+    public async Task<IActionResult> GetFollowStatus(Guid creatorId)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var following = await _creators.IsFollowingAsync(userId, creatorId);
+        var followerCount = await _creators.GetFollowerCountAsync(creatorId);
+        return OkResponse(new { following, followerCount });
     }
 
     // ───── URL resolution helpers ─────

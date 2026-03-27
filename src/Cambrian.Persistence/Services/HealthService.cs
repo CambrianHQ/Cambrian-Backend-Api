@@ -107,4 +107,48 @@ public class HealthService : IHealthService
             tracks = results,
         };
     }
+
+    public async Task<object> AuditAudioKeysAsync()
+    {
+        var tracks = await _db.Tracks
+            .AsNoTracking()
+            .OrderBy(t => t.CreatedAt)
+            .Select(t => new { t.Id, t.Title, t.AudioUrl })
+            .ToListAsync();
+
+        var missing = new List<object>();
+        var checkedCount = 0;
+
+        foreach (var t in tracks)
+        {
+            checkedCount++;
+            if (string.IsNullOrWhiteSpace(t.AudioUrl))
+            {
+                missing.Add(new { trackId = t.Id, title = t.Title, audioUrl = t.AudioUrl, reason = "no_key" });
+                continue;
+            }
+
+            try
+            {
+                var file = await _storage.OpenReadAsync(t.AudioUrl);
+                if (file is null)
+                    missing.Add(new { trackId = t.Id, title = t.Title, audioUrl = t.AudioUrl, reason = "not_found" });
+                else
+                    file.Dispose();
+            }
+            catch (Exception ex)
+            {
+                missing.Add(new { trackId = t.Id, title = t.Title, audioUrl = t.AudioUrl, reason = ex.Message });
+            }
+        }
+
+        return new
+        {
+            storageType = _storage.GetType().Name,
+            totalTracks = checkedCount,
+            missingCount = missing.Count,
+            okCount = checkedCount - missing.Count,
+            missing,
+        };
+    }
 }

@@ -15,6 +15,9 @@ public class AuthResponse
     /// <summary>The user's chosen username (null/email-prefix if not yet set).</summary>
     public string? Username { get; set; }
 
+    /// <summary>Phone number for account recovery.</summary>
+    public string? PhoneNumber { get; set; }
+
     /// <summary>True when the user has not yet set a custom username (username still equals email).</summary>
     public bool IsNewUser { get; set; }
 }

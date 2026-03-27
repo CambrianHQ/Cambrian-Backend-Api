@@ -16,13 +16,15 @@ public class AuthController : BaseController
 {
     private readonly IAuthService _auth;
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly ICreatorIdentityRepository _creators;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<AuthController> logger)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
+        _creators = creators;
         _userManager = userManager;
         _logger = logger;
     }
@@ -184,40 +186,36 @@ public class AuthController : BaseController
         return OkResponse(new
         {
             token = freshToken ?? Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
+            id = profile.UserId,
+            email = profile.Email,
+            tier = tier.ToLowerInvariant(),
+            role = profile.Role ?? "User",
+            username,
+            displayName = profile.DisplayName,
+            phoneNumber = user?.PhoneNumber,
             isNewUser,
-            user = new
-            {
-                id = profile.UserId,
-                email = profile.Email,
-                tier = tier.ToLowerInvariant(),
-                role = profile.Role ?? "User",
-                username,
-                displayName = profile.DisplayName,
-                isNewUser,
-                creatorTier = profile.CreatorTier,
-                uploadCount = profile.UploadCount,
-                uploadLimit = profile.UploadLimit,
-                subscriptionStatus = profile.SubscriptionStatus,
-                subscriptionEndDate = profile.SubscriptionEndDate,
-                platformFeePercent = profile.PlatformFeePercent,
-                contractVersion = profile.ContractVersion
-            }
+            creatorTier = profile.CreatorTier,
+            uploadCount = profile.UploadCount,
+            uploadLimit = profile.UploadLimit,
+            subscriptionStatus = profile.SubscriptionStatus,
+            subscriptionEndDate = profile.SubscriptionEndDate,
+            platformFeePercent = profile.PlatformFeePercent,
+            contractVersion = profile.ContractVersion
         });
     }
 
     private static object ToSession(AuthResponse auth) => new
     {
         token = auth.Token,
-        tier = auth.Tier,
+        tier = (auth.Tier ?? "free").ToLowerInvariant(),
+        role = auth.Role ?? "User",
         isNewUser = auth.IsNewUser,
         user = new
         {
             id = auth.UserId.ToString(),
             email = auth.Email,
-            tier = (auth.Tier ?? "free").ToLowerInvariant(),
-            role = auth.Role ?? "User",
             username = auth.Username,
-            isNewUser = auth.IsNewUser
+            phoneNumber = auth.PhoneNumber,
         }
     };
 
@@ -226,6 +224,26 @@ public class AuthController : BaseController
     public IActionResult Logout()
     {
         return MessageResponse("Logged out successfully.");
+    }
+
+    /// <summary>
+    /// Refresh the JWT token. Requires a valid (non-expired or within clock-skew) token.
+    /// Returns a fresh token with updated claims (role, tier, etc.).
+    /// </summary>
+    [Authorize]
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized(new { success = false, error = "Invalid token." });
+
+        var freshToken = await _auth.GenerateFreshTokenAsync(userId);
+        if (freshToken is null)
+            return NotFoundResponse("User not found.");
+
+        _logger.LogInformation("EVENT: TokenRefreshed userId:{UserId}", userId);
+        return OkResponse(new { token = freshToken });
     }
 
     /// <summary>
@@ -258,6 +276,11 @@ public class AuthController : BaseController
         if (existingByName is not null && existingByName.Id != userId)
             return ConflictResponse("That username is already taken.");
 
+        // Also check Creators table — username must be globally unique
+        var takenInCreators = await _creators.IsUsernameTakenAsync(normalized);
+        if (takenInCreators)
+            return ConflictResponse("That username is already taken.");
+
         user.UserName = normalized;
         user.NormalizedUserName = normalized.ToUpperInvariant();
         if (string.IsNullOrWhiteSpace(user.DisplayName))
@@ -283,6 +306,17 @@ public class AuthController : BaseController
         }
 
         _logger.LogInformation("EVENT: UsernameSet userId:{UserId} username:{Username}", userId, normalized);
+
+        // Sync to Creator table — create if it doesn't exist, update if it does
+        try
+        {
+            await _creators.UpsertAsync(userId, new Cambrian.Application.DTOs.Creators.UpdateCreatorProfileRequest { Username = normalized });
+            _logger.LogInformation("EVENT: CreatorUsernameSynced userId:{UserId} username:{Username}", userId, normalized);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to sync Creator username for userId:{UserId} — non-critical", userId);
+        }
 
         // Return a fresh JWT with updated role/username claims
         var freshToken = await _auth.GenerateFreshTokenAsync(userId);
@@ -323,24 +357,25 @@ public class AuthController : BaseController
             return OkResponse(new { username = normalized, available = false, reason = "Username may only contain letters, numbers, hyphens, and underscores." });
 
         var existing = await _userManager.FindByNameAsync(normalized);
-        var available = existing is null;
+        // Also check Creators table — username must be globally unique
+        var takenInCreators = await _creators.IsUsernameTakenAsync(normalized);
+        var available = existing is null && !takenInCreators;
 
         return OkResponse(new { username = normalized, available });
     }
 
     /// <summary>
-    /// CSRF token endpoint — intentionally retired.
+    /// CSRF token endpoint — returns a no-op token for backward compatibility.
     /// JWT Bearer auth is used for all mutating requests; CSRF tokens are unnecessary.
-    /// Returns 410 Gone so the frontend can distinguish "retired" from "missing".
+    /// The frontend may call this on startup — return 200 so it doesn't block auth flows.
     /// </summary>
     [HttpGet("csrf-token")]
     public IActionResult CsrfToken()
     {
-        return StatusCode(410, new
+        return OkResponse(new
         {
-            success = false,
-            error = "CSRF tokens are not used. This API uses JWT Bearer authentication which is not vulnerable to CSRF attacks.",
-            retired = true
+            token = "jwt-bearer-no-csrf-needed",
+            note = "This API uses JWT Bearer authentication. CSRF tokens are not required."
         });
     }
 
@@ -443,4 +478,34 @@ public class AuthController : BaseController
     [Authorize]
     [HttpPut("/settings/email")]
     public Task<IActionResult> UpdateEmail([FromBody] ChangeEmailRequest request) => ChangeEmail(request);
+
+    /// <summary>
+    /// Update the current user's display name.
+    /// </summary>
+    [Authorize]
+    [HttpPut("display-name")]
+    [HttpPut("/settings/display-name")]
+    public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateDisplayNameRequest request)
+    {
+        var trimmed = request.DisplayName.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return ErrorResponse("Display name is required.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return NotFoundResponse("User not found.");
+
+        user.DisplayName = trimmed;
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            var msgs = new List<string>();
+            foreach (var e in result.Errors) msgs.Add(e.Description);
+            return ErrorResponse(string.Join("; ", msgs));
+        }
+
+        _logger.LogInformation("EVENT: DisplayNameUpdated userId:{UserId}", userId);
+        return OkResponse(new { displayName = trimmed });
+    }
 }

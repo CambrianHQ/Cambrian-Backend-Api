@@ -10,4 +10,10 @@ public interface IHealthService
 
     /// <summary>Checks storage state for a sample of tracks.</summary>
     Task<object> GetStorageDiagAsync();
+
+    /// <summary>
+    /// Audits ALL tracks for missing audio files in storage.
+    /// Returns a summary with counts and a list of track IDs whose audio is missing.
+    /// </summary>
+    Task<object> AuditAudioKeysAsync();
 }
