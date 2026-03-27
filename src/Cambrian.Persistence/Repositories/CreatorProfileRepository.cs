@@ -29,7 +29,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             .Where(p => ids.Contains(p.UserId))
             .ToDictionaryAsync(
                 p => p.UserId,
-                p => (p.Slug, p.ProfileImageUrl));
+                p => ((string?)p.Slug, p.ProfileImageUrl));
     }
 
     public async Task<CreatorProfileDto?> GetBySlugAsync(string slug)
