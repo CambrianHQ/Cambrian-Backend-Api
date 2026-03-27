@@ -67,12 +67,23 @@ public sealed class ApiContractTests
 
                 foreach (var attr in httpAttrs)
                 {
-                    var template = attr.Template?.Trim('/') ?? "";
-                    var fullPath = string.IsNullOrEmpty(routePrefix)
-                        ? template
-                        : string.IsNullOrEmpty(template)
-                            ? routePrefix
-                            : $"{routePrefix}/{template}";
+                    var rawTemplate = attr.Template ?? "";
+                    // In ASP.NET Core, a template starting with "/" is absolute
+                    // and overrides the controller-level [Route] prefix.
+                    string fullPath;
+                    if (rawTemplate.StartsWith("/"))
+                    {
+                        fullPath = rawTemplate.Trim('/');
+                    }
+                    else
+                    {
+                        var template = rawTemplate.Trim('/');
+                        fullPath = string.IsNullOrEmpty(routePrefix)
+                            ? template
+                            : string.IsNullOrEmpty(template)
+                                ? routePrefix
+                                : $"{routePrefix}/{template}";
+                    }
 
                     var normalizedPath = NormalizePath("/" + fullPath);
 

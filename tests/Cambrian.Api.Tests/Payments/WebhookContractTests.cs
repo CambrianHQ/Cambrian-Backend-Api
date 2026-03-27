@@ -45,7 +45,7 @@ public sealed class WebhookContractTests : IClassFixture<CambrianApiFixture>
             "data": {
                 "object": {
                     "id": "{{sessionId}}",
-                    "client_reference_id": "{{buyerId}}",
+                    "client_reference_id": "{{buyerId}}:{{trackId}}:non-exclusive",
                     "amount_total": 2999,
                     "metadata": {
                         "trackId": "{{trackId}}",
@@ -99,7 +99,7 @@ public sealed class WebhookContractTests : IClassFixture<CambrianApiFixture>
             "data": {
                 "object": {
                     "id": "{{sessionId}}",
-                    "client_reference_id": "{{buyerId}}",
+                    "client_reference_id": "{{buyerId}}:{{trackId}}:non-exclusive",
                     "amount_total": 2999,
                     "metadata": {
                         "trackId": "{{trackId}}",
