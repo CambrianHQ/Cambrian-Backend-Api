@@ -105,7 +105,7 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
-    [HttpPost("me/banner")]
+    [HttpPost("me/cover-image-upload")]
     public async Task<IActionResult> UploadBanner(IFormFile file)
     {
         var url = await UploadImage(file, "banners");
@@ -123,7 +123,7 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
-    [HttpPost("me/avatar")]
+    [HttpPost("me/profile-image-upload")]
     [HttpPost("/settings/profile/avatar")]
     public async Task<IActionResult> UploadAvatar(IFormFile file)
     {

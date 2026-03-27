@@ -18,11 +18,12 @@ public sealed class CatalogControllerTests
     private readonly ICatalogService _catalog = Substitute.For<ICatalogService>();
     private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IActivityService _activity = Substitute.For<IActivityService>();
     private readonly CatalogController _controller;
 
     public CatalogControllerTests()
     {
-        _controller = new CatalogController(_catalog, _storage, _cache);
+        _controller = new CatalogController(_catalog, _storage, _cache, _activity);
     }
 
     // ── Discover ──

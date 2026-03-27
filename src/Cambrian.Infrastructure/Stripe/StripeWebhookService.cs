@@ -469,6 +469,31 @@ public class StripeWebhookService : IWebhookService
 
         await _db.SaveChangesAsync();
 
+        // ── Append sale activity (display layer — never blocks purchase) ──
+        try
+        {
+            var existingActivity = await _db.ActivityItems
+                .AnyAsync(a => a.SourceId == purchase.Id && a.Type == "sale");
+            if (!existingActivity)
+            {
+                _db.ActivityItems.Add(new ActivityItem
+                {
+                    Id = Guid.NewGuid(),
+                    Type = "sale",
+                    TrackId = purchase.TrackId,
+                    UserId = purchase.BuyerId,
+                    SourceId = purchase.Id,
+                    IsSimulated = false,
+                    CreatedAtUtc = purchase.CreatedAt
+                });
+                await _db.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex2)
+        {
+            _logger.LogWarning(ex2, "Failed to create sale activity for purchase {PurchaseId} — non-critical", purchase.Id);
+        }
+
         _logger.LogInformation(
             "PURCHASE_TIMELINE: Purchase complete & library granted: User={UserId} Track={TrackId} License={License} PurchaseId={PurchaseId}",
             userId, trackId, licenseType, purchase.Id);
