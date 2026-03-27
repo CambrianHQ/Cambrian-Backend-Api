@@ -65,8 +65,8 @@ public class TrackResponse
     /// <summary>Track availability status: available, exclusive_sold, copyright_transferred.</summary>
     public string Status { get; set; } = "available";
 
-    /// <summary>Current copyright owner user ID (null means creator owns copyright).</summary>
-    public string? CopyrightOwnerId { get; set; }
+    /// <summary>Whether the copyright has been transferred via buyout (true = no longer available).</summary>
+    public bool IsCopyrightTransferred { get; set; }
 
     public string? LicenseType { get; set; }
 

@@ -106,7 +106,7 @@ services:
       - key: App__FrontendUrl
         value: https://staging.cambrianmusic.com
       - key: App__CorsOrigins
-        value: "https://staging.cambrianmusic.com,http://localhost:5173"
+        value: "https://staging.cambrianmusic.com"
       # Vercel preview deployment CORS wildcard
       - key: App__VercelProjectSlug
         value: cambrian

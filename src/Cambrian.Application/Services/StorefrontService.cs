@@ -126,7 +126,7 @@ public sealed class StorefrontService : IStorefrontService
             CopyrightBuyoutCreatorEarnings = Math.Round(buyoutPrice * (1 - feeRate), 2),
             ExclusiveSold = t.ExclusiveSold,
             Status = t.Status ?? "available",
-            CopyrightOwnerId = t.CopyrightOwnerId,
+            IsCopyrightTransferred = t.CopyrightOwnerId != null,
             LicenseType = t.LicenseType,
             Duration = t.Duration,
             AudioUrl = t.AudioUrl,

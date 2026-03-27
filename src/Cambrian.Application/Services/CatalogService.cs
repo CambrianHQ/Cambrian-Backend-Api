@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
@@ -32,10 +33,7 @@ public class CatalogService : ICatalogService
     {
         var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
         _logger.LogInformation("Catalog query: page={Page} size={Size} genre={Genre} search={Search} results={Count}", page, pageSize, genre, search, tracks.Count);
-        var result = new List<TrackResponse>(tracks.Count);
-        foreach (var t in tracks)
-            result.Add(await MapToResponseAsync(t));
-        return result;
+        return await MapBatchAsync(tracks);
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetDiscoverAsync(int page = 1, int pageSize = 20, string? genre = null, string? search = null)
@@ -54,9 +52,7 @@ public class CatalogService : ICatalogService
     {
         var totalCount = await _tracks.CountAsync(genre, search, mood, tempo, instrumental, duration);
         var tracks = await _tracks.BrowseAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
-        var items = new List<TrackResponse>(tracks.Count);
-        foreach (var t in tracks)
-            items.Add(await MapToResponseAsync(t));
+        var items = await MapBatchAsync(tracks);
 
         return new PagedResult<TrackResponse>
         {
@@ -83,10 +79,45 @@ public class CatalogService : ICatalogService
         return track is null ? null : await MapToResponseAsync(track);
     }
 
+    /// <summary>Batch-map a page of tracks — 2 queries total instead of 2×N.</summary>
+    private async Task<List<TrackResponse>> MapBatchAsync(List<Track> tracks)
+    {
+        if (tracks.Count == 0)
+            return new List<TrackResponse>();
+
+        var creatorIds = tracks
+            .Where(t => !string.IsNullOrEmpty(t.CreatorId))
+            .Select(t => t.CreatorId)
+            .Distinct()
+            .ToList();
+
+        // Single query: load all creators for this page
+        var creators = await _users.Users
+            .Where(u => creatorIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u);
+
+        // Single query: load all profile slugs/images for this page
+        var profileMap = await _profiles.GetSlugsByUserIdsAsync(creatorIds);
+
+        var result = new List<TrackResponse>(tracks.Count);
+        foreach (var t in tracks)
+        {
+            creators.TryGetValue(t.CreatorId, out var creator);
+            profileMap.TryGetValue(t.CreatorId, out var profileInfo);
+
+            var feeRate = creator is not null
+                ? TierManifest.For(creator.CreatorTier).FeeRate
+                : TierManifest.Free.FeeRate;
+
+            result.Add(BuildTrackResponse(t, feeRate, profileInfo.Slug, profileInfo.ProfileImageUrl));
+        }
+        return result;
+    }
+
+    /// <summary>Map a single track (used by GetTrackAsync — acceptable since it's one item).</summary>
     private async Task<TrackResponse> MapToResponseAsync(Track t)
     {
-        // Resolve the creator's tier to get the correct fee rate
-        decimal feeRate = TierManifest.Free.FeeRate; // default
+        decimal feeRate = TierManifest.Free.FeeRate;
         string? creatorSlug = null;
         string? creatorProfileImageUrl = null;
         if (!string.IsNullOrEmpty(t.CreatorId))
@@ -103,6 +134,11 @@ public class CatalogService : ICatalogService
             }
         }
 
+        return BuildTrackResponse(t, feeRate, creatorSlug, creatorProfileImageUrl);
+    }
+
+    private static TrackResponse BuildTrackResponse(Track t, decimal feeRate, string? creatorSlug, string? creatorProfileImageUrl)
+    {
         var nonExPrice = t.NonExclusivePriceCents / 100m;
         var exPrice = t.ExclusivePriceCents / 100m;
         var buyoutPrice = t.CopyrightBuyoutPriceCents / 100m;
@@ -132,7 +168,7 @@ public class CatalogService : ICatalogService
             CopyrightBuyoutCreatorEarnings = Math.Round(buyoutPrice * (1 - feeRate), 2),
             ExclusiveSold = t.ExclusiveSold,
             Status = t.Status ?? "available",
-            CopyrightOwnerId = t.CopyrightOwnerId,
+            IsCopyrightTransferred = t.CopyrightOwnerId != null,
             LicenseType = t.LicenseType,
             Duration = t.Duration,
             AudioUrl = t.AudioUrl,
