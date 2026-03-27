@@ -19,6 +19,19 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return p is null ? null : await MapToDtoAsync(p);
     }
 
+    public async Task<Dictionary<string, (string? Slug, string? ProfileImageUrl)>> GetSlugsByUserIdsAsync(IEnumerable<string> userIds)
+    {
+        var ids = userIds.ToList();
+        if (ids.Count == 0)
+            return new Dictionary<string, (string? Slug, string? ProfileImageUrl)>();
+
+        return await _db.CreatorProfiles.AsNoTracking()
+            .Where(p => ids.Contains(p.UserId))
+            .ToDictionaryAsync(
+                p => p.UserId,
+                p => (p.Slug, p.ProfileImageUrl));
+    }
+
     public async Task<CreatorProfileDto?> GetBySlugAsync(string slug)
     {
         var p = await _db.CreatorProfiles.AsNoTracking()
