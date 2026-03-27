@@ -20,6 +20,7 @@ public class TrackRepository : ITrackRepository
             .Include(t => t.CreatorEntity)
             .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public")
             .OrderByDescending(t => t.CreatedAt)
+            .Take(200)
             .ToListAsync();
     }
 

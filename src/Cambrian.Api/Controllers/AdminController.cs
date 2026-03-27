@@ -135,10 +135,14 @@ public class AdminController : BaseController
     public record SetRoleRequest(string Role);
     public record SuspendRequest(string? Reason);
 
+    private static readonly HashSet<string> AllowedRoles = new(StringComparer.OrdinalIgnoreCase) { "User", "Creator", "Admin" };
+
     [HttpPost("users/{id}/role")]
     public async Task<IActionResult> SetUserRole(string id, [FromBody] SetRoleRequest? body)
     {
         var role = body?.Role ?? "User";
+        if (!AllowedRoles.Contains(role))
+            return BadRequest(new { success = false, message = $"Invalid role '{role}'. Allowed: User, Creator, Admin." });
         _logger.LogInformation("[Admin] SetUserRole id={UserId} role={Role}", id, role);
         var ok = await _admin.SetUserRoleAsync(id, role);
         if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
