@@ -120,7 +120,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents / 100m,
             ExclusiveSold = t.ExclusiveSold,
             Status = t.Status ?? "available",
-            CopyrightOwnerId = t.CopyrightOwnerId,
+            IsCopyrightTransferred = t.CopyrightOwnerId != null,
             LicenseType = t.LicenseType,
             Duration = t.Duration,
             AudioUrl = t.AudioUrl,
