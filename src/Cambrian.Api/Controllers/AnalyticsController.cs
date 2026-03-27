@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,10 +15,12 @@ public class AnalyticsController : BaseController
     };
 
     private readonly IAnalyticsRepository _analytics;
+    private readonly IAnalyticsService _analyticsService;
 
-    public AnalyticsController(IAnalyticsRepository analytics)
+    public AnalyticsController(IAnalyticsRepository analytics, IAnalyticsService analyticsService)
     {
         _analytics = analytics;
+        _analyticsService = analyticsService;
     }
 
     /// <summary>
@@ -89,5 +92,25 @@ public class AnalyticsController : BaseController
         public string EventType { get; set; } = "";
         public string? TrackId { get; set; }
         public string? Metadata { get; set; }
+    }
+
+    /// <summary>
+    /// Record a contract-backed analytics event (track_view, track_click, checkout_started, purchase_completed).
+    /// Telemetry only — never blocks checkout or core flows.
+    /// </summary>
+    [HttpPost("events")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> PostEvent([FromBody] AnalyticsEventRequest request, CancellationToken ct)
+    {
+        try
+        {
+            await _analyticsService.RecordEventAsync(request, User, ct);
+            return Accepted();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, error = ex.Message });
+        }
     }
 }

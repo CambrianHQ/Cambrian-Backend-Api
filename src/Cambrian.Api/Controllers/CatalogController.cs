@@ -14,11 +14,14 @@ public class CatalogController : BaseController
     private readonly IMemoryCache _cache;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
-    public CatalogController(ICatalogService catalog, IObjectStorage storage, IMemoryCache cache)
+    private readonly IActivityService _activity;
+
+    public CatalogController(ICatalogService catalog, IObjectStorage storage, IMemoryCache cache, IActivityService activity)
     {
         _catalog = catalog;
         _storage = storage;
         _cache = cache;
+        _activity = activity;
     }
 
     [HttpGet("discover")]
@@ -122,6 +125,15 @@ public class CatalogController : BaseController
     {
         var items = await _catalog.GetCatalogAsync();
         ResolveTrackUrls(items);
+        return OkResponse(items);
+    }
+
+    [HttpGet("tracks/trending")]
+    public async Task<IActionResult> TracksTrending([FromQuery] int limit = 12, CancellationToken ct = default)
+    {
+        var items = await _activity.GetTrendingAsync(ct);
+        if (items.Count > limit)
+            items = items.Take(limit).ToList();
         return OkResponse(items);
     }
 

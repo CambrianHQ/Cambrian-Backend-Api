@@ -71,4 +71,10 @@ public class Track
     public ICollection<Purchase> Purchases { get; set; } = new List<Purchase>();
 
     public ICollection<LibraryItem> LibraryItems { get; set; } = new List<LibraryItem>();
+
+    /// <summary>Optional use-case tag for discovery (e.g. "vlog", "podcast", "gaming").</summary>
+    public string? UseCase { get; set; }
+
+    /// <summary>Computed trending score; default 0; never required for existing tracks.</summary>
+    public decimal TrendingScore { get; set; }
 }

@@ -1,4 +1,5 @@
 using Cambrian.Domain.Entities;
+using Cambrian.Persistence.Configurations;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -41,6 +42,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
 
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
+
+    public DbSet<ActivityItem> ActivityItems => Set<ActivityItem>();
 
     public DbSet<CreatorProfile> CreatorProfiles => Set<CreatorProfile>();
 
@@ -231,10 +234,13 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<AnalyticsEvent>(e =>
         {
             e.HasKey(a => a.Id);
-            e.Property(a => a.EventType).HasMaxLength(50).IsRequired();
+            e.Property(a => a.EventType).HasMaxLength(64).IsRequired();
             e.Property(a => a.Metadata).HasMaxLength(500);
+            e.Property(a => a.IsSimulated).HasDefaultValue(false);
             e.HasIndex(a => a.EventType);
             e.HasIndex(a => a.CreatedAt);
+            e.HasIndex(a => new { a.TrackId, a.EventType, a.CreatedAt })
+                .HasDatabaseName("ix_analytics_events_track_type_created");
         });
 
         builder.Entity<FeatureFlag>(e =>
@@ -293,6 +299,16 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithOne()
                 .HasForeignKey<Creator>(c => c.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Activity items (backfill-safe display layer) ──
+        builder.ApplyConfiguration(new ActivityItemConfiguration());
+
+        // ── Track extensions (additive, nullable / defaulted) ──
+        builder.Entity<Track>(e =>
+        {
+            e.Property(t => t.UseCase).HasMaxLength(100);
+            e.Property(t => t.TrendingScore).HasDefaultValue(0m);
         });
     }
 }

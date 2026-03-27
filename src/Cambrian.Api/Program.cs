@@ -184,6 +184,14 @@ builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Se
 builder.Services.AddScoped<IDebugService, Cambrian.Persistence.Services.DebugService>();
 builder.Services.AddScoped<IHealthService, Cambrian.Persistence.Services.HealthService>();
 
+// Growth features
+builder.Services.Configure<Cambrian.Infrastructure.Options.GrowthFeaturesOptions>(
+    builder.Configuration.GetSection("GrowthFeatures"));
+builder.Services.AddScoped<IFeatureFlagService, Cambrian.Infrastructure.FeatureFlags.ConfigurationFeatureFlagService>();
+builder.Services.AddScoped<IActivityService, Cambrian.Persistence.Services.ActivityService>();
+builder.Services.AddScoped<IAnalyticsService, Cambrian.Persistence.Services.AnalyticsService>();
+builder.Services.AddScoped<IActivityBackfillService, Cambrian.Persistence.Services.ActivityBackfillService>();
+
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
 builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
@@ -273,12 +281,26 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.UseRateLimiter();
+app.UseMiddleware<DevAuthMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
 await app.RunMigrationsAsync();
 await app.SeedDataAsync();
+
+// ── Activity backfill (idempotent — safe on every startup) ──
+try
+{
+    using var scope = app.Services.CreateScope();
+    var backfill = scope.ServiceProvider.GetRequiredService<IActivityBackfillService>();
+    await backfill.BackfillAsync(CancellationToken.None);
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Activity backfill skipped (table may not exist yet).");
+}
+
 await app.RunAsync();
 
 // Expose the implicit Program class for WebApplicationFactory<Program> in integration tests
