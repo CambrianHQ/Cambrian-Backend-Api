@@ -296,9 +296,13 @@ try
     var backfill = scope.ServiceProvider.GetRequiredService<IActivityBackfillService>();
     await backfill.BackfillAsync(CancellationToken.None);
 }
-catch (Exception ex)
+catch (Exception ex) when (ex.GetType().Name.Contains("Postgres") || ex is InvalidOperationException)
 {
     app.Logger.LogWarning(ex, "Activity backfill skipped (table may not exist yet).");
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Activity backfill failed unexpectedly.");
 }
 
 await app.RunAsync();

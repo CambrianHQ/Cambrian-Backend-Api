@@ -17,9 +17,11 @@ public sealed class LocalObjectStorage : IObjectStorage
 
         // Resolve to an absolute path — on Render the CWD may differ from
         // where the published app files live (e.g. /opt/render/project/src/...).
-        _basePath = Path.IsPathRooted(configured)
+        // GetFullPath normalises all separators so StartsWith checks work
+        // consistently across platforms (forward-slash vs backslash).
+        _basePath = Path.GetFullPath(Path.IsPathRooted(configured)
             ? configured
-            : Path.Combine(AppContext.BaseDirectory, configured);
+            : Path.Combine(AppContext.BaseDirectory, configured));
 
         Directory.CreateDirectory(_basePath);
         Console.WriteLine($"[LocalObjectStorage] basePath = {_basePath}  (exists={Directory.Exists(_basePath)})");

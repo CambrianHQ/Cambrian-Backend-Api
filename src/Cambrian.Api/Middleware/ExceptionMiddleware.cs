@@ -28,8 +28,11 @@ public sealed class ExceptionMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception for {Method} {Path}",
-                context.Request.Method, context.Request.Path);
+            var logMessage = _isProduction
+                ? $"{ex.GetType().Name}: {(ex.Message.Length > 200 ? ex.Message[..200] + "…" : ex.Message)}"
+                : ex.ToString();
+            _logger.LogError("Unhandled exception for {Method} {Path}: {Error}",
+                context.Request.Method, context.Request.Path, logMessage);
 
             if (context.Response.HasStarted)
             {

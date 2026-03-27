@@ -26,7 +26,10 @@ public sealed class RequestLoggingMiddleware
         await _next(context);
         sw.Stop();
 
-        var userId = context.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anon";
+        var rawUserId = context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = rawUserId is not null && rawUserId.Length > 8
+            ? rawUserId[..8] + "…"
+            : rawUserId ?? "anon";
         _logger.LogInformation(
             "HTTP {Method} {Path} → {StatusCode} in {ElapsedMs}ms [rid:{RequestId} uid:{UserId}]",
             context.Request.Method,

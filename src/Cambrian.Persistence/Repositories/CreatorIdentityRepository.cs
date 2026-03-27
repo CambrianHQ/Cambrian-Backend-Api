@@ -277,6 +277,37 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         return true;
     }
 
+    public async Task FollowAsync(string followerUserId, Guid creatorId)
+    {
+        var exists = await _db.CreatorFollows
+            .AnyAsync(f => f.FollowerId == followerUserId && f.CreatorId == creatorId);
+        if (exists) return;
+
+        _db.CreatorFollows.Add(new CreatorFollow
+        {
+            FollowerId = followerUserId,
+            CreatorId = creatorId,
+        });
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task UnfollowAsync(string followerUserId, Guid creatorId)
+    {
+        var follow = await _db.CreatorFollows
+            .FirstOrDefaultAsync(f => f.FollowerId == followerUserId && f.CreatorId == creatorId);
+        if (follow is null) return;
+
+        _db.CreatorFollows.Remove(follow);
+        await _db.SaveChangesAsync();
+    }
+
+    public Task<bool> IsFollowingAsync(string followerUserId, Guid creatorId)
+        => _db.CreatorFollows
+            .AnyAsync(f => f.FollowerId == followerUserId && f.CreatorId == creatorId);
+
+    public Task<int> GetFollowerCountAsync(Guid creatorId)
+        => _db.CreatorFollows.CountAsync(f => f.CreatorId == creatorId);
+
     // ── Helpers ──
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Cambrian.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
@@ -29,6 +30,18 @@ public class HealthController : ControllerBase
     public async Task<IActionResult> StorageDiag()
     {
         var result = await _health.GetStorageDiagAsync();
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Admin-only: audit ALL tracks for missing audio files in R2/S3.
+    /// Returns track IDs and keys where the file cannot be found in storage.
+    /// </summary>
+    [Authorize(Roles = "Admin")]
+    [HttpGet("audio-audit")]
+    public async Task<IActionResult> AudioAudit()
+    {
+        var result = await _health.AuditAudioKeysAsync();
         return Ok(result);
     }
 }

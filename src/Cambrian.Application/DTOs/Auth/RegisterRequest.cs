@@ -20,4 +20,8 @@ public class RegisterRequest
     /// <summary>Optional role: "creator" to register as a free creator. Defaults to consumer.</summary>
     [RegularExpression("^(user|creator)$", ErrorMessage = "Role must be 'user' or 'creator'.")]
     public string? Role { get; set; }
+
+    /// <summary>Optional phone number for account recovery and notifications.</summary>
+    [Phone]
+    public string? PhoneNumber { get; set; }
 }

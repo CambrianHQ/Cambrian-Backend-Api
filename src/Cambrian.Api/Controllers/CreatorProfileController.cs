@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.CreatorProfile;
@@ -17,6 +18,7 @@ public class CreatorProfileController : BaseController
     private readonly IObjectStorage _storage;
     private readonly IStorefrontService _storefront;
     private readonly IFeatureFlagRepository _flags;
+    private readonly ICreatorIdentityRepository _creators;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -25,12 +27,13 @@ public class CreatorProfileController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags)
+    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators)
     {
         _profiles = profiles;
         _storage = storage;
         _storefront = storefront;
         _flags = flags;
+        _creators = creators;
     }
 
     // ───── Public: view a creator profile by slug ─────
@@ -212,7 +215,63 @@ public class CreatorProfileController : BaseController
         return OkResponse(new { pinnedTrackIds = updated.PinnedTrackIds });
     }
 
+    // ───── Follow a creator by slug ─────
+
+    [Authorize]
+    [HttpPost("{slug}/follow")]
+    public async Task<IActionResult> Follow(string slug)
+    {
+        var creator = await _creators.GetByUsernameAsync(slug);
+        if (creator is null) return NotFoundResponse("Creator not found.");
+        if (!Guid.TryParse(creator.Id, out var creatorGuid)) return ErrorResponse("Invalid creator ID.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await _creators.FollowAsync(userId, creatorGuid);
+
+        var followerCount = await _creators.GetFollowerCountAsync(creatorGuid);
+        return OkResponse(new { following = true, followerCount });
+    }
+
+    [Authorize]
+    [HttpDelete("{slug}/follow")]
+    public async Task<IActionResult> Unfollow(string slug)
+    {
+        var creator = await _creators.GetByUsernameAsync(slug);
+        if (creator is null) return NotFoundResponse("Creator not found.");
+        if (!Guid.TryParse(creator.Id, out var creatorGuid)) return ErrorResponse("Invalid creator ID.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        await _creators.UnfollowAsync(userId, creatorGuid);
+
+        var followerCount = await _creators.GetFollowerCountAsync(creatorGuid);
+        return OkResponse(new { following = false, followerCount });
+    }
+
+    [Authorize]
+    [HttpGet("{slug}/follow")]
+    public async Task<IActionResult> GetFollowStatus(string slug)
+    {
+        var creator = await _creators.GetByUsernameAsync(slug);
+        if (creator is null) return NotFoundResponse("Creator not found.");
+        if (!Guid.TryParse(creator.Id, out var creatorGuid)) return ErrorResponse("Invalid creator ID.");
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var following = await _creators.IsFollowingAsync(userId, creatorGuid);
+        var followerCount = await _creators.GetFollowerCountAsync(creatorGuid);
+        return OkResponse(new { following, followerCount });
+    }
+
     // ───── Helpers ─────
+
+    // ───── Magic byte signatures for image validation ─────
+
+    private static readonly Dictionary<string, byte[][]> ImageMagicBytes = new()
+    {
+        [".jpg"] = [new byte[] { 0xFF, 0xD8, 0xFF }],
+        [".jpeg"] = [new byte[] { 0xFF, 0xD8, 0xFF }],
+        [".png"] = [new byte[] { 0x89, 0x50, 0x4E, 0x47 }],
+        [".webp"] = [System.Text.Encoding.ASCII.GetBytes("RIFF")],
+    };
 
     private async Task<string?> UploadImage(IFormFile? file, string folder)
     {
@@ -224,6 +283,23 @@ public class CreatorProfileController : BaseController
 
         var key = $"{folder}/{Guid.NewGuid()}{ext}";
         await using var stream = file.OpenReadStream();
+
+        // Validate magic bytes to prevent disguised file uploads
+        if (ImageMagicBytes.TryGetValue(ext, out var signatures))
+        {
+            var header = new byte[12];
+            var bytesRead = await stream.ReadAsync(header.AsMemory(0, 12));
+            stream.Position = 0;
+            if (bytesRead < 3) return null;
+            var matched = false;
+            foreach (var magic in signatures)
+            {
+                if (bytesRead >= magic.Length && header.AsSpan(0, magic.Length).SequenceEqual(magic))
+                { matched = true; break; }
+            }
+            if (!matched) return null;
+        }
+
         var contentType = ext switch
         {
             ".jpg" or ".jpeg" => "image/jpeg",

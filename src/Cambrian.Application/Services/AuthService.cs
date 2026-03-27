@@ -89,6 +89,7 @@ public class AuthService : IAuthService
             Tier = resolvedTier.ToLowerInvariant(),
             Role = user.Role ?? "User",
             Username = isNewUser ? null : user.UserName,
+            PhoneNumber = user.PhoneNumber,
             IsNewUser = isNewUser
         };
     }
@@ -103,7 +104,8 @@ public class AuthService : IAuthService
             DisplayName = request.DisplayName ?? request.Email.Split('@')[0],
             Tier = "free",
             Role = isCreator ? "Creator" : "User",
-            CreatorTier = CreatorTier.Free
+            CreatorTier = CreatorTier.Free,
+            PhoneNumber = request.PhoneNumber
         };
 
         var result = await _users.CreateAsync(user, request.Password);
@@ -126,6 +128,7 @@ public class AuthService : IAuthService
             Tier = user.Tier,
             Role = user.Role,
             Username = null,
+            PhoneNumber = user.PhoneNumber,
             IsNewUser = true  // just registered, no custom username yet
         };
     }
@@ -177,7 +180,8 @@ public class AuthService : IAuthService
             Email = profile.Email,
             Token = token,
             Tier = tier.ToLowerInvariant(),
-            Role = profile.Role ?? "User"
+            Role = profile.Role ?? "User",
+            PhoneNumber = user.PhoneNumber
         };
     }
 
@@ -394,7 +398,7 @@ public class AuthService : IAuthService
             issuer: issuer,
             audience: audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(2),
+            expires: DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationMinutes),
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
@@ -489,6 +493,7 @@ public class AuthService : IAuthService
             Tier = resolvedTier.ToLowerInvariant(),
             Role = user.Role ?? "User",
             Username = isNewGoogleUser ? null : user.UserName,
+            PhoneNumber = user.PhoneNumber,
             IsNewUser = isNewGoogleUser
         };
     }

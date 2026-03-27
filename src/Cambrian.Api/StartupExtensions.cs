@@ -42,6 +42,14 @@ internal static class StartupExtensions
             Console.WriteLine($"[Startup] Parsed DB URI → Host={uri.Host}, Port={port}, DB={uri.AbsolutePath.TrimStart('/')}");
         }
 
+        // Ensure a pool size is configured — Npgsql defaults to 100 which may exhaust
+        // limited-connection Render databases (free = 97, basic-256 = 97).
+        if (!connectionString.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
+            && !connectionString.Contains("MaxPoolSize", StringComparison.OrdinalIgnoreCase))
+        {
+            connectionString += ";Maximum Pool Size=20";
+        }
+
         return connectionString;
     }
 
@@ -329,7 +337,7 @@ internal static class StartupExtensions
 
             if (existing is null)
             {
-                await CreateAdminAsync(userManager, adminEmail);
+                await CreateAdminAsync(userManager, adminEmail, adminPassword);
             }
             else
             {
@@ -344,7 +352,7 @@ internal static class StartupExtensions
 
     private static async Task CreateAdminAsync(
         Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
-        string email)
+        string email, string password)
     {
         var admin = new ApplicationUser
         {
@@ -355,13 +363,12 @@ internal static class StartupExtensions
             Tier = "creator",
             EmailConfirmed = true
         };
-        var password = Environment.GetEnvironmentVariable("Admin__Password")
-            ?? throw new InvalidOperationException("Admin password not available");
         var result = await userManager.CreateAsync(admin, password);
-        if (result.Succeeded)
-            Console.WriteLine($"[Seed] Admin account created: {email}");
-        else
-            Console.WriteLine($"[Seed] Admin creation failed: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+        if (!result.Succeeded)
+            throw new InvalidOperationException(
+                $"Admin account creation failed: {string.Join("; ", result.Errors.Select(e => e.Description))}");
+
+        Console.WriteLine($"[Seed] Admin account created: {email}");
     }
 
     private static async Task SyncAdminAsync(
@@ -377,9 +384,10 @@ internal static class StartupExtensions
         var token = await userManager.GeneratePasswordResetTokenAsync(existing);
         var pwResult = await userManager.ResetPasswordAsync(existing, token, adminPassword);
         if (!pwResult.Succeeded)
-            Console.WriteLine($"[Seed] Admin password sync failed: {string.Join("; ", pwResult.Errors.Select(e => e.Description))}");
-        else
-            changed = true;
+            throw new InvalidOperationException(
+                $"Admin password reset failed: {string.Join("; ", pwResult.Errors.Select(e => e.Description))}");
+
+        changed = true;
 
         if (changed)
         {
@@ -754,6 +762,9 @@ internal static class StartupExtensions
             }
             Console.WriteLine($"[Seed] {tracks.Count} tracks created across 5 creators");
 
+            // Write placeholder cover art images for local dev
+            EnsureSeedCoverArt(app, tracks);
+
             // ── 5. Purchases + library items (realistic flows) ──
             var purchaseData = new List<(ApplicationUser Buyer, Track Track, string LicenseType, string UsageType, int AmountCents, string Status)>
             {
@@ -913,6 +924,9 @@ internal static class StartupExtensions
         int nonExcPriceCents, int excPriceCents, int buyoutPriceCents,
         DateTime createdAt, bool exclusiveSold = false)
     {
+        // Derive a deterministic audio key from the CambrianTrackId so
+        // the path is predictable for R2/S3 uploads: tracks/<slug>.mp3
+        var slug = cambrianId.Replace("CAMB-TRK-", "").ToLowerInvariant();
         return new Track
         {
             Id = Guid.NewGuid(),
@@ -932,7 +946,43 @@ internal static class StartupExtensions
             LicenseType = "non-exclusive",
             CreatorId = creatorId,
             CreatorUuid = creatorUuid,
+            AudioUrl = $"tracks/demo-{slug}.mp3",
+            CoverArtUrl = $"covers/demo-{slug}.jpg",
             CreatedAt = createdAt
         };
+    }
+
+    /// <summary>
+    /// Write small placeholder cover-art images to the local uploads directory
+    /// so that seed tracks have visible artwork during development.
+    /// Only runs when using "local" storage provider.
+    /// </summary>
+    private static void EnsureSeedCoverArt(WebApplication app, IEnumerable<Track> tracks)
+    {
+        var storageProvider = app.Configuration["Storage:Provider"] ?? "local";
+        if (!string.Equals(storageProvider, "local", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var basePath = app.Configuration["Storage:LocalPath"] ?? "wwwroot/uploads";
+        var coversDir = Path.Combine(app.Environment.ContentRootPath, basePath, "covers");
+        Directory.CreateDirectory(coversDir);
+
+        // Minimal valid 1×1 white-pixel JPEG (107 bytes)
+        var placeholder = Convert.FromBase64String(
+            "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////"
+            + "2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB"
+            + "/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/a"
+            + "AAwDAQACEQMRAD8AKwA//9k=");
+
+        foreach (var track in tracks)
+        {
+            if (string.IsNullOrWhiteSpace(track.CoverArtUrl)) continue;
+            var fileName = Path.GetFileName(track.CoverArtUrl);
+            var filePath = Path.Combine(coversDir, fileName);
+            if (!File.Exists(filePath))
+                File.WriteAllBytes(filePath, placeholder);
+        }
+
+        Console.WriteLine($"[Seed] Placeholder cover art written to {coversDir}");
     }
 }
