@@ -62,7 +62,6 @@ public class CreatorProfileController : BaseController
     // ───── Authenticated creator: get own profile ─────
 
     [Authorize]
-    [RequireCreatorTier]
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
@@ -76,7 +75,6 @@ public class CreatorProfileController : BaseController
     // ───── Upsert profile (bio, niche, social links, stats toggles) ─────
 
     [Authorize]
-    [RequireCreatorTier]
     [HttpPut("me")]
     public async Task<IActionResult> UpsertProfile([FromBody] UpsertCreatorProfileRequest body)
     {
@@ -107,7 +105,6 @@ public class CreatorProfileController : BaseController
     // ───── Upload banner image ─────
 
     [Authorize]
-    [RequireCreatorTier]
     [HttpPost("me/cover-image-upload")]
     [HttpPost("me/banner")]
     public async Task<IActionResult> UploadBanner(IFormFile file)
@@ -126,7 +123,6 @@ public class CreatorProfileController : BaseController
     // ───── Upload profile image ─────
 
     [Authorize]
-    [RequireCreatorTier]
     [HttpPost("me/profile-image-upload")]
     [HttpPost("me/avatar")]
     [HttpPost("/settings/profile/avatar")]
