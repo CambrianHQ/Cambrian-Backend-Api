@@ -1000,7 +1000,7 @@ internal static class StartupExtensions
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
             // ── One-time guard: skip if already run ──
-            const string flagName = "creator_images_seeded";
+            const string flagName = "creator_images_seeded_v2";
             var flag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Name == flagName);
             if (flag is { Enabled: true })
             {
