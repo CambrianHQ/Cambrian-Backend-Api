@@ -314,6 +314,6 @@ public class CreatorProfileController : BaseController
             _ => "application/octet-stream"
         };
         await _storage.UploadAsync(stream, key, contentType);
-        return _storage.GenerateSignedUrl(key);
+        return _storage.GetPublicUrl(key);
     }
 }
