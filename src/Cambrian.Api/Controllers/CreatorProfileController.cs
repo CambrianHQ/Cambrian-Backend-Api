@@ -117,6 +117,10 @@ public class CreatorProfileController : BaseController
         if (existing is null) return NotFoundResponse("Create a profile first.");
 
         var updated = await _profiles.UpdateImageAsync(userId, url, null);
+
+        // Sync Creator table
+        await _creators.UpdateImageUrlAsync(userId, "cover", url);
+
         return OkResponse(new { bannerImageUrl = updated.BannerImageUrl });
     }
 
@@ -134,6 +138,10 @@ public class CreatorProfileController : BaseController
         var userId = GetRequiredUserId()!;
         // UpdateImageAsync auto-creates a minimal profile if one does not yet exist
         var updated = await _profiles.UpdateImageAsync(userId, null, url);
+
+        // Sync Creator table
+        await _creators.UpdateImageUrlAsync(userId, "profile", url);
+
         return OkResponse(new { profileImageUrl = updated.ProfileImageUrl });
     }
 
