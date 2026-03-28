@@ -20,6 +20,7 @@ namespace Cambrian.Api.Controllers;
 public class CreatorsController : BaseController
 {
     private readonly ICreatorIdentityRepository _creators;
+    private readonly ICreatorProfileRepository _profiles;
     private readonly IObjectStorage _storage;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<CreatorsController> _logger;
@@ -31,9 +32,10 @@ public class CreatorsController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorsController(ICreatorIdentityRepository creators, IObjectStorage storage, UserManager<ApplicationUser> userManager, ILogger<CreatorsController> logger)
+    public CreatorsController(ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, IObjectStorage storage, UserManager<ApplicationUser> userManager, ILogger<CreatorsController> logger)
     {
         _creators = creators;
+        _profiles = profiles;
         _storage = storage;
         _userManager = userManager;
         _logger = logger;
@@ -309,10 +311,16 @@ public class CreatorsController : BaseController
         await _storage.UploadAsync(stream, key, contentType);
         var publicUrl = _storage.GetPublicUrl(key);
 
-        // Update the creator record
+        // Update Creator table
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var updated = await _creators.UpdateImageUrlAsync(userId, type, publicUrl);
         if (!updated) return NotFoundResponse("Create a profile first.");
+
+        // Sync CreatorProfile table so marketplace displays the image
+        if (type == "cover")
+            await _profiles.UpdateImageAsync(userId, publicUrl, null);
+        else
+            await _profiles.UpdateImageAsync(userId, null, publicUrl);
 
         return OkResponse(new CreatorImageUploadResponse
         {
