@@ -257,6 +257,7 @@ internal static class StartupExtensions
         await SeedDemoUsersAsync(app);
         await SeedFeatureFlagsAsync(app);
         await SeedStagingDataAsync(app);
+        await SeedCreatorImagesAsync(app);
     }
 
     private static bool IsOriginAllowed(string origin, HashSet<string> originSet, string vercelSlug, string cfSlug)
@@ -984,5 +985,101 @@ internal static class StartupExtensions
         }
 
         Console.WriteLine($"[Seed] Placeholder cover art written to {coversDir}");
+    }
+
+    /// <summary>
+    /// One-time backfill: assign unique profile and banner images to existing creators
+    /// that currently have no images. New users are unaffected — they upload their own.
+    /// Idempotent: only fills NULL/empty image URLs.
+    /// </summary>
+    private static async Task SeedCreatorImagesAsync(WebApplication app)
+    {
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+
+            // ── Palette of unique banner photos (landscape, music/studio themed) ──
+            // Using picsum.photos with deterministic seeds for stable, unique images.
+            var bannerSeeds = new[]
+            {
+                "studio-neon", "vinyl-sunset", "soundwave-blue", "concert-red",
+                "headphones-purple", "guitar-amber", "piano-mono", "synth-teal",
+                "drums-fire", "mic-gold", "bass-ocean", "dj-night",
+                "stage-lights", "mixing-desk", "vinyl-warm", "keys-cool",
+                "speakers-glow", "amp-vintage", "strings-dawn", "beats-dusk"
+            };
+
+            // ── Palette of unique avatar styles (DiceBear "initials" + distinct backgrounds) ──
+            var avatarColors = new[]
+            {
+                "c0392b", "2980b9", "27ae60", "8e44ad", "d35400",
+                "16a085", "2c3e50", "f39c12", "1abc9c", "e74c3c",
+                "3498db", "9b59b6", "e67e22", "1e8449", "6c3483",
+                "cb4335", "2e86c1", "229954", "a569bd", "dc7633"
+            };
+
+            var idx = 0;
+
+            // ── Update Creator table ──
+            var creators = await db.Creators
+                .Where(c => c.ProfileImageUrl == null || c.ProfileImageUrl == ""
+                         || c.CoverImageUrl == null || c.CoverImageUrl == "")
+                .ToListAsync();
+
+            foreach (var creator in creators)
+            {
+                var seed = idx % bannerSeeds.Length;
+                var color = avatarColors[idx % avatarColors.Length];
+                var name = Uri.EscapeDataString(creator.DisplayName ?? creator.Username);
+
+                if (string.IsNullOrEmpty(creator.ProfileImageUrl))
+                    creator.ProfileImageUrl = $"https://api.dicebear.com/9.x/initials/svg?seed={name}&backgroundColor={color}";
+
+                if (string.IsNullOrEmpty(creator.CoverImageUrl))
+                    creator.CoverImageUrl = $"https://picsum.photos/seed/{bannerSeeds[seed]}/1500/500";
+
+                creator.UpdatedAt = DateTime.UtcNow;
+                idx++;
+            }
+
+            // ── Update CreatorProfile table ──
+            var profiles = await db.CreatorProfiles
+                .Where(p => p.ProfileImageUrl == null || p.ProfileImageUrl == ""
+                         || p.BannerImageUrl == null || p.BannerImageUrl == "")
+                .ToListAsync();
+
+            foreach (var profile in profiles)
+            {
+                // Try to match the same index as the Creator record for consistency
+                var matchingCreator = creators.FirstOrDefault(c => c.UserId == profile.UserId);
+                var profileIdx = matchingCreator != null ? creators.IndexOf(matchingCreator) : idx++;
+                var seed = profileIdx % bannerSeeds.Length;
+                var color = avatarColors[profileIdx % avatarColors.Length];
+                var name = Uri.EscapeDataString(profile.Slug);
+
+                if (string.IsNullOrEmpty(profile.ProfileImageUrl))
+                    profile.ProfileImageUrl = $"https://api.dicebear.com/9.x/initials/svg?seed={name}&backgroundColor={color}";
+
+                if (string.IsNullOrEmpty(profile.BannerImageUrl))
+                    profile.BannerImageUrl = $"https://picsum.photos/seed/{bannerSeeds[seed]}/1500/500";
+
+                profile.UpdatedAt = DateTime.UtcNow;
+            }
+
+            if (creators.Count > 0 || profiles.Count > 0)
+            {
+                await db.SaveChangesAsync();
+                Console.WriteLine($"[Seed] Creator images backfilled: {creators.Count} creator(s), {profiles.Count} profile(s)");
+            }
+            else
+            {
+                Console.WriteLine("[Seed] Creator images: all creators already have images — nothing to backfill");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Seed] Creator image backfill skipped: {ex.Message}");
+        }
     }
 }
