@@ -999,6 +999,15 @@ internal static class StartupExtensions
             using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
+            // ── One-time guard: skip if already run ──
+            const string flagName = "creator_images_seeded";
+            var flag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Name == flagName);
+            if (flag is { Enabled: true })
+            {
+                Console.WriteLine("[Seed] Creator image backfill already completed — skipping");
+                return;
+            }
+
             // ── Palette of unique banner photos (landscape, music/studio themed) ──
             // Using picsum.photos with deterministic seeds for stable, unique images.
             var bannerSeeds = new[]
@@ -1043,7 +1052,39 @@ internal static class StartupExtensions
                 idx++;
             }
 
-            // ── Update CreatorProfile table ──
+            // ── Create missing CreatorProfile rows + update existing ones ──
+            var allCreators = await db.Creators.ToListAsync();
+            var existingProfileUserIds = await db.CreatorProfiles
+                .Select(p => p.UserId)
+                .ToListAsync();
+
+            var createdProfiles = 0;
+            foreach (var creator in allCreators)
+            {
+                if (existingProfileUserIds.Contains(creator.UserId))
+                    continue;
+
+                var cIdx = allCreators.IndexOf(creator) % bannerSeeds.Length;
+                var cColor = avatarColors[allCreators.IndexOf(creator) % avatarColors.Length];
+                var cName = Uri.EscapeDataString(creator.DisplayName ?? creator.Username);
+
+                db.CreatorProfiles.Add(new CreatorProfile
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = creator.UserId,
+                    Slug = creator.Username,
+                    Bio = creator.Bio,
+                    ProfileImageUrl = $"https://api.dicebear.com/9.x/initials/svg?seed={cName}&backgroundColor={cColor}",
+                    BannerImageUrl = $"https://picsum.photos/seed/{bannerSeeds[cIdx]}/1500/500",
+                    ShowEarnings = false,
+                    ShowDownloadStats = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+                createdProfiles++;
+            }
+
+            // Update existing profiles that have missing images
             var profiles = await db.CreatorProfiles
                 .Where(p => p.ProfileImageUrl == null || p.ProfileImageUrl == ""
                          || p.BannerImageUrl == null || p.BannerImageUrl == "")
@@ -1051,9 +1092,8 @@ internal static class StartupExtensions
 
             foreach (var profile in profiles)
             {
-                // Try to match the same index as the Creator record for consistency
-                var matchingCreator = creators.FirstOrDefault(c => c.UserId == profile.UserId);
-                var profileIdx = matchingCreator != null ? creators.IndexOf(matchingCreator) : idx++;
+                var matchingCreator = allCreators.FirstOrDefault(c => c.UserId == profile.UserId);
+                var profileIdx = matchingCreator != null ? allCreators.IndexOf(matchingCreator) : idx++;
                 var seed = profileIdx % bannerSeeds.Length;
                 var color = avatarColors[profileIdx % avatarColors.Length];
                 var name = Uri.EscapeDataString(profile.Slug);
@@ -1067,14 +1107,26 @@ internal static class StartupExtensions
                 profile.UpdatedAt = DateTime.UtcNow;
             }
 
-            if (creators.Count > 0 || profiles.Count > 0)
+            if (creators.Count > 0 || profiles.Count > 0 || createdProfiles > 0)
             {
+                // Mark as done so this never runs again
+                if (flag is null)
+                    db.FeatureFlags.Add(new FeatureFlag { Id = Guid.NewGuid(), Name = flagName, Enabled = true, RolloutPercentage = 100 });
+                else
+                    flag.Enabled = true;
+
                 await db.SaveChangesAsync();
-                Console.WriteLine($"[Seed] Creator images backfilled: {creators.Count} creator(s), {profiles.Count} profile(s)");
+                Console.WriteLine($"[Seed] Creator images backfilled: {creators.Count} creator(s), {profiles.Count} updated profile(s), {createdProfiles} new profile(s)");
             }
             else
             {
-                Console.WriteLine("[Seed] Creator images: all creators already have images — nothing to backfill");
+                // Nothing to do but still mark complete to avoid re-querying every startup
+                if (flag is null)
+                    db.FeatureFlags.Add(new FeatureFlag { Id = Guid.NewGuid(), Name = flagName, Enabled = true, RolloutPercentage = 100 });
+                else
+                    flag.Enabled = true;
+                await db.SaveChangesAsync();
+                Console.WriteLine("[Seed] Creator images: all creators already have images — marked complete");
             }
         }
         catch (Exception ex)
