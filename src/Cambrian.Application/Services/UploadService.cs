@@ -52,7 +52,9 @@ public class UploadService : IUploadService
     private static readonly Dictionary<string, byte[][]> AudioMagicBytes = new()
     {
         [".mp3"] = [new byte[] { 0xFF, 0xFB }, new byte[] { 0xFF, 0xF3 }, new byte[] { 0xFF, 0xF2 }, "ID3"u8.ToArray()],
-        [".wav"] = ["RIFF"u8.ToArray()],
+        // WAV variants: standard RIFF, RF64 (64-bit extension), BW64 (Broadcast Wave 64).
+        // All valid WAV containers also carry "WAVE" at offset 8, checked as a secondary gate.
+        [".wav"] = ["RIFF"u8.ToArray(), "RF64"u8.ToArray(), "BW64"u8.ToArray()],
         [".flac"] = ["fLaC"u8.ToArray()],
         [".ogg"] = ["OggS"u8.ToArray()],
         [".aac"] = [new byte[] { 0xFF, 0xF1 }, new byte[] { 0xFF, 0xF9 }],
@@ -86,11 +88,18 @@ public class UploadService : IUploadService
             && buffer.AsSpan(4, 4).SequenceEqual("ftyp"u8))
             return true;
 
+        // Primary check: match any known magic byte sequence at offset 0
         foreach (var magic in expected)
         {
             if (magic.Length > 0 && bytesRead >= magic.Length && buffer.AsSpan(0, magic.Length).SequenceEqual(magic))
                 return true;
         }
+
+        // WAV fallback: all valid WAV containers embed "WAVE" at offset 8 regardless of
+        // the outer chunk identifier (RIFF, RF64, BW64, or future variants).
+        if (extension is ".wav" && bytesRead >= 12
+            && buffer.AsSpan(8, 4).SequenceEqual("WAVE"u8))
+            return true;
 
         return false;
     }
