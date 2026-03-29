@@ -76,9 +76,16 @@ public class UploadService : IUploadService
         if (!signatures.TryGetValue(extension, out var expected))
             return false;
 
+        // Always read from the very start, regardless of current stream position.
+        if (stream.CanSeek)
+            stream.Seek(0, SeekOrigin.Begin);
+
         var buffer = new byte[12];
         var bytesRead = stream.Read(buffer, 0, buffer.Length);
-        stream.Position = 0; // reset for upload
+
+        // Reset so the caller can pipe the full file to storage.
+        if (stream.CanSeek)
+            stream.Seek(0, SeekOrigin.Begin);
 
         if (bytesRead < 2)
             return false;
