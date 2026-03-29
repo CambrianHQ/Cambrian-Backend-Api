@@ -233,6 +233,13 @@ public class CreatorsController : BaseController
         }
 
         var saved = await _creators.UpsertAsync(userId, body);
+
+        // Sync image changes to CreatorProfile (marketplace reads from that table)
+        if (!string.IsNullOrWhiteSpace(body.ProfileImageUrl))
+            await _profiles.UpdateImageAsync(userId, null, body.ProfileImageUrl.Trim());
+        if (!string.IsNullOrWhiteSpace(body.CoverImageUrl))
+            await _profiles.UpdateImageAsync(userId, body.CoverImageUrl.Trim(), null);
+
         return OkResponse(saved);
     }
 

@@ -203,7 +203,7 @@ public class CreatorProfileController : BaseController
         if (owner != userId) return ForbiddenResponse();
 
         await _profiles.DeleteCollectionAsync(collectionId);
-        return MessageResponse("Collection deleted.");
+        return NoContent();
     }
 
     // ───── Pinned tracks: update pinned track order ─────

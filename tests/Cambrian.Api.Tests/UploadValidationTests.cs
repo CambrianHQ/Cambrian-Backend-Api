@@ -74,6 +74,8 @@ public sealed class UploadValidationTests
     [Theory]
     [InlineData("beat.mp3", "audio/mpeg")]
     [InlineData("track.wav", "audio/wav")]
+    [InlineData("track.wav", "audio/vnd.wave")]
+    [InlineData("track.wav", "audio/x-pn-wav")]
     [InlineData("song.flac", "audio/flac")]
     [InlineData("vibe.aac", "audio/aac")]
     [InlineData("loop.ogg", "audio/ogg")]

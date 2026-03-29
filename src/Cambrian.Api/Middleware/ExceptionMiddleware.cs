@@ -52,11 +52,13 @@ public sealed class ExceptionMiddleware
                 _                           => (int)HttpStatusCode.InternalServerError
             };
 
-            var message = _isProduction
+            // ArgumentException and InvalidOperationException carry user-facing validation
+            // messages (e.g. "Audio file is required.", "MIME type not allowed") that are
+            // safe to surface in production. Only internal 5xx errors use generic text.
+            var message = _isProduction && ex is not ArgumentException && ex is not InvalidOperationException
                 ? context.Response.StatusCode switch
                 {
                     500 => "An unexpected error occurred.",
-                    400 => "The request was invalid.",
                     401 => "Authentication is required.",
                     403 => "Access denied.",
                     404 => "The requested resource was not found.",

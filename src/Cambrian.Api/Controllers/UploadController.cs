@@ -39,14 +39,28 @@ public class UploadController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         _logger.LogInformation("EVENT: UploadStarted userId:{UserId} title:{Title}", userId, request.Title);
         request.CreatorId = userId;
-        var result = await _upload.Upload(request);
-        _logger.LogInformation("EVENT: UploadCompleted userId:{UserId} trackId:{TrackId} title:{Title}", userId, result, request.Title);
 
-        // Invalidate catalog cache so the new track appears immediately
-        if (_cache is MemoryCache mc)
-            mc.Compact(1.0);
+        try
+        {
+            var result = await _upload.Upload(request);
+            _logger.LogInformation("EVENT: UploadCompleted userId:{UserId} trackId:{TrackId} title:{Title}", userId, result, request.Title);
 
-        return CreatedResponse(result, "Track uploaded successfully.");
+            // Invalidate catalog cache so the new track appears immediately
+            if (_cache is MemoryCache mc)
+                mc.Compact(1.0);
+
+            return CreatedResponse(result, "Track uploaded successfully.");
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "EVENT: UploadRejected userId:{UserId} title:{Title}", userId, request.Title);
+            return ErrorResponse(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "EVENT: UploadBlocked userId:{UserId} title:{Title}", userId, request.Title);
+            return ErrorResponse(ex.Message);
+        }
     }
 
     // ───── POST /uploads/image — generic image upload ─────

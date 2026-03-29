@@ -27,6 +27,15 @@ Write-Host "  Cambrian Pre-Deploy Integration Tests" -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 
+Write-Host "[0/3] Running contract drift checks..." -ForegroundColor Yellow
+node (Join-Path $root "scripts\check-contract-drift.cjs")
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "CONTRACT DRIFT CHECK FAILED — reconcile contracts before deploying." -ForegroundColor Red
+    exit 1
+}
+Write-Host "      Contract drift checks passed." -ForegroundColor Green
+
 $testProject = Join-Path $root "tests\Cambrian.Api.Tests\Cambrian.Api.Tests.csproj"
 
 if (-not (Test-Path $testProject)) {
@@ -42,7 +51,7 @@ if ($Filter) {
 
 $verbosityArg = if ($Verbose) { "--verbosity", "detailed" } else { "--verbosity", "normal" }
 
-Write-Host "[1/2] Building solution..." -ForegroundColor Yellow
+Write-Host "[1/3] Building solution..." -ForegroundColor Yellow
 dotnet build $testProject --configuration Release --nologo --no-restore 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
@@ -53,7 +62,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "      Build succeeded." -ForegroundColor Green
 
 Write-Host ""
-Write-Host "[2/2] Running integration tests..." -ForegroundColor Yellow
+Write-Host "[2/3] Running integration tests..." -ForegroundColor Yellow
 Write-Host ""
 
 dotnet test $testProject `
