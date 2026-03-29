@@ -107,6 +107,7 @@ service-account.json
 
 test-results/
 playwright-report/
+.playwright-mcp/
 coverage/
 
 ################################################
