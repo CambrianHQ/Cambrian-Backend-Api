@@ -75,9 +75,15 @@ public class AuthService : IAuthService
 
         var token = GenerateJwt(user);
 
-        // A user is "new" if their UserName is still their email (never set a custom username)
-        var isNewUser = string.IsNullOrWhiteSpace(user.UserName)
+        // A user "needs a username" if their UserName is still their email (never personalized)
+        var needsUsername = string.IsNullOrWhiteSpace(user.UserName)
                      || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+
+        // isNewUser should only be true during the initial onboarding window.
+        // Creators (set-username promotes to Creator) and Admins are never "new".
+        var isCreatorOrAdmin = string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase);
+        var isNewUser = needsUsername && !isCreatorOrAdmin;
 
         _logger.LogInformation("Login success: User={UserId} Tier={Tier} IsNew={IsNew}", user.Id, resolvedTier, isNewUser);
 
@@ -88,7 +94,7 @@ public class AuthService : IAuthService
             Token = token,
             Tier = resolvedTier.ToLowerInvariant(),
             Role = user.Role ?? "User",
-            Username = isNewUser ? null : user.UserName,
+            Username = needsUsername ? null : user.UserName,
             PhoneNumber = user.PhoneNumber,
             IsNewUser = isNewUser
         };
@@ -480,8 +486,11 @@ public class AuthService : IAuthService
 
         var token = GenerateJwt(user);
 
-        var isNewGoogleUser = string.IsNullOrWhiteSpace(user.UserName)
+        var needsUsername = string.IsNullOrWhiteSpace(user.UserName)
                             || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+        var isCreatorOrAdmin = string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase);
+        var isNewGoogleUser = needsUsername && !isCreatorOrAdmin;
 
         _logger.LogInformation("Google login success: User={UserId} Tier={Tier} IsNew={IsNew}", user.Id, resolvedTier, isNewGoogleUser);
 
@@ -492,7 +501,7 @@ public class AuthService : IAuthService
             Token = token,
             Tier = resolvedTier.ToLowerInvariant(),
             Role = user.Role ?? "User",
-            Username = isNewGoogleUser ? null : user.UserName,
+            Username = needsUsername ? null : user.UserName,
             PhoneNumber = user.PhoneNumber,
             IsNewUser = isNewGoogleUser
         };
