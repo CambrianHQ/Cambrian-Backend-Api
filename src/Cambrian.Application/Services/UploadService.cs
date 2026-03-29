@@ -71,7 +71,7 @@ public class UploadService : IUploadService
         [".webp"] = ["RIFF"u8.ToArray()],
     };
 
-    private static bool ValidateMagicBytes(Stream stream, string extension, Dictionary<string, byte[][]> signatures)
+    private bool ValidateMagicBytes(Stream stream, string extension, Dictionary<string, byte[][]> signatures)
     {
         if (!signatures.TryGetValue(extension, out var expected))
             return false;
@@ -88,7 +88,10 @@ public class UploadService : IUploadService
             stream.Seek(0, SeekOrigin.Begin);
 
         if (bytesRead < 2)
+        {
+            _logger.LogWarning("MagicBytes: only {N} bytes readable for ext={Ext}", bytesRead, extension);
             return false;
+        }
 
         // M4A/MP4 special case: "ftyp" appears at offset 4 (first 4 bytes are box size)
         if (extension is ".m4a" && bytesRead >= 8
@@ -107,6 +110,12 @@ public class UploadService : IUploadService
         if (extension is ".wav" && bytesRead >= 12
             && buffer.AsSpan(8, 4).SequenceEqual("WAVE"u8))
             return true;
+
+        // Log first 12 bytes as hex to diagnose unexpected file formats in production.
+        _logger.LogWarning("MagicBytes FAIL ext={Ext} bytes=[{Hex}] text=[{Text}]",
+            extension,
+            Convert.ToHexString(buffer.AsSpan(0, bytesRead)),
+            System.Text.Encoding.ASCII.GetString(buffer.AsSpan(0, bytesRead)).Replace('\0', '.'));
 
         return false;
     }

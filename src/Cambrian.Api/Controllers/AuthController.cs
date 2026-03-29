@@ -178,10 +178,20 @@ public class AuthController : BaseController
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var user = await _userManager.FindByIdAsync(userId);
-        var isNewUser = user is null
+
+        // A user "needs a username" if their UserName is still their email (never personalized)
+        var needsUsername = user is null
             || string.IsNullOrWhiteSpace(user.UserName)
             || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
-        var username = isNewUser ? null : user!.UserName;
+
+        // isNewUser should only be true during the very first session after registration.
+        // Once a user has the Creator role (set-username promotes to Creator) or has any
+        // purchase activity, they are no longer "new" even if they skipped username setup.
+        var isCreatorRole = string.Equals(user?.Role, "Creator", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(user?.Role, "Admin", StringComparison.OrdinalIgnoreCase);
+        var isNewUser = needsUsername && !isCreatorRole;
+
+        var username = needsUsername ? null : user!.UserName;
 
         return OkResponse(new
         {
@@ -194,6 +204,7 @@ public class AuthController : BaseController
             displayName = profile.DisplayName,
             phoneNumber = user?.PhoneNumber,
             isNewUser,
+            needsUsername,
             creatorTier = profile.CreatorTier,
             uploadCount = profile.UploadCount,
             uploadLimit = profile.UploadLimit,

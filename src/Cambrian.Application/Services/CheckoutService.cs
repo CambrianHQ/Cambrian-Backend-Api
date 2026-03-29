@@ -190,7 +190,8 @@ public class CheckoutService : ICheckoutService
                 TrackId = trackIdStr,
                 LicenseType = licenseType,
                 AddedToLibrary = true,
-                SessionId = sessionId
+                SessionId = sessionId,
+                LicenseId = alreadyFulfilled.LicenseId?.ToString()
             };
         }
 
@@ -238,7 +239,8 @@ public class CheckoutService : ICheckoutService
                 TrackId = trackIdStr,
                 LicenseType = licenseType,
                 AddedToLibrary = true,
-                SessionId = sessionId
+                SessionId = sessionId,
+                LicenseId = existingPurchase.LicenseId?.ToString()
             };
         }
 
