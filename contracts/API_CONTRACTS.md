@@ -91,37 +91,183 @@
 
 ### `GET /auth/csrf-token`
 
-**Response (200):**
+**Response (201):**
 ```json
 { "csrfToken": "..." }
 ```
 
 ### `POST /auth/forgot-password`
 
+### `GET /auth/google/status`
+
+**Response (200):**
+```json
+{
+  "configured": true,
+  "clientIdPrefix": "12345678..."
+}
+```
+
+### `POST /auth/google`
+
 **Request:**
 ```json
-{ "email": "user@example.com" }
+{ "idToken": "google-id-token" }
+```
+
+**Response (200):** Same session shape as login/register.
+
+### `POST /auth/set-password` (Authorized)
+
+Set a local password for an authenticated account that does not already have one.
+
+**Request:**
+```json
+{ "password": "NewSecure456!" }
 ```
 
 **Response (200):**
 ```json
+{ "message": "Password set successfully." }
+```
+
+### `POST /auth/link-google` (Authorized)
+
+Link a Google account to the authenticated user when the Google email matches the local account email.
+
+**Request:**
+```json
+{ "idToken": "google-id-token" }
+```
+
+**Response (200):**
+```json
+{ "message": "Google account linked successfully." }
+```
+
+### `POST /auth/refresh` (Authorized)
+
+Returns a fresh JWT with updated claims.
+
+**Response (200):**
+```json
+{ "token": "eyJ..." }
+```
+
+### `POST /auth/set-username` (Authorized)
+
+Set the current user's creator username during onboarding. This may promote a `User` to the `Creator` role.
+
+**Request:**
+```json
+{ "username": "studio-nova" }
+```
+
+**Response (200):**
+```json
+{
+  "username": "studio-nova",
+  "displayName": "Studio Nova",
+  "role": "Creator",
+  "token": "eyJ..."
+}
+```
+
+### `GET /auth/username-availability`
+
+**Query:** `?username=studio-nova`
+
+**Response (200):**
+```json
+{
+  "username": "studio-nova",
+  "available": true
+}
+```
+
+**Request:**
+**Response (200):**
+```json
+{ "message": "Code verified successfully." }
+```
+**Response (200):**
+### `POST /settings/profile/avatar` (Authorized)
 { "message": "If the account exists, a reset code has been sent." }
 ```
 
 ### `POST /auth/verify-code`
+**Request:**
+```json
+Upload an image to object storage and receive back its current access URL. Under the current implementation this URL may be signed and time-limited rather than a permanent public URL. Use it only if that behavior is acceptable for the calling flow.
+```
+**Current flow:** Upload → get URL → `PATCH /users/me` with URL
+**Response (200):**
+
+Create a direct-upload URL for a creator profile or cover image.
 
 **Request:**
 ```json
-{ "email": "user@example.com", "code": "123456" }
+{
+  "type": "profile",
+  "fileName": "avatar.png",
+  "contentType": "image/png"
+}
 ```
 
 **Response (200):**
+```json
+{
+  "uploadUrl": "https://storage.example.com/...",
+  "publicUrl": "https://cdn.example.com/creator-profiles/..."
+}
+```
+
+### `PUT /api/uploads/creator-image/{**key}` (Authorized)
+
+Local-storage proxy endpoint used when direct signed uploads are not supported.
+
+**Response (200):** Empty body.
+
+### `POST /api/uploads/creator-image` (Authorized, Creator role)
+
+Multipart fallback for creator profile or cover image uploads.
+
+**Query:** `?type=profile` or `?type=cover`
+
+**Response (200):**
+```json
+{
+  "uploadUrl": "https://cdn.example.com/creator-profiles/...",
+  "publicUrl": "https://cdn.example.com/creator-profiles/..."
+}
+```
 ```json
 { "valid": true }
 ```
 
 ### `POST /auth/reset-password`
 
+
+### `GET /creator-profile/{slug}/follow` (Authorized)
+
+**Response (200):**
+```json
+{ "following": true, "followerCount": 42 }
+```
+
+### `POST /creator-profile/{slug}/follow` (Authorized)
+
+**Response (200):**
+```json
+{ "following": true, "followerCount": 42 }
+```
+
+### `DELETE /creator-profile/{slug}/follow` (Authorized)
+
+**Response (200):**
+```json
+{ "following": false, "followerCount": 41 }
+```
 **Request:**
 ```json
 {

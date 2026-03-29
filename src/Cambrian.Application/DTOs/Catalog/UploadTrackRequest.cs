@@ -5,8 +5,7 @@ namespace Cambrian.Application.DTOs.Catalog;
 
 public class UploadTrackRequest
 {
-    [Required]
-    public IFormFile Audio { get; set; } = null!;
+    public IFormFile? Audio { get; set; }
 
     /// <summary>Optional cover art image (JPEG, PNG, WebP; max 10 MB).</summary>
     public IFormFile? CoverArt { get; set; }

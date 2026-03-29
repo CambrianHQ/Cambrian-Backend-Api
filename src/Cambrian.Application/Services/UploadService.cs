@@ -25,6 +25,7 @@ public class UploadService : IUploadService
     private static readonly HashSet<string> AllowedMimeTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave",
+        "audio/vnd.wave", "audio/x-pn-wav",
         "audio/flac", "audio/x-flac", "audio/aac", "audio/mp4", "audio/m4a",
         "audio/ogg", "audio/x-m4a"
     };
