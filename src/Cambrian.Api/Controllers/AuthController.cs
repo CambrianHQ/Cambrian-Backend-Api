@@ -314,6 +314,12 @@ public class AuthController : BaseController
         if (user is null)
             return NotFoundResponse("User not found.");
 
+        // Once a creator has chosen a username it is permanent — reject further changes.
+        var alreadyHasUsername = !string.IsNullOrWhiteSpace(user.UserName)
+            && !string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+        if (alreadyHasUsername)
+            return ErrorResponse("Username cannot be changed once set.");
+
         // Check uniqueness via Identity UserName
         var existingByName = await _userManager.FindByNameAsync(normalized);
         if (existingByName is not null && existingByName.Id != userId)

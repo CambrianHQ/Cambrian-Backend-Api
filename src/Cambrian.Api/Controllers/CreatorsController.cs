@@ -218,18 +218,27 @@ public class CreatorsController : BaseController
             }
         }
 
-        // Validate username if provided
+        // Validate username if provided — but once set it cannot be changed.
         if (body.Username is not null)
         {
-            var normalized = body.Username.Trim().ToLowerInvariant();
-            if (normalized.Length < 3 || normalized.Length > 40)
-                return ErrorResponse("Username must be between 3 and 40 characters.");
+            var existingCreator = await _creators.GetByUserIdAsync(userId);
+            if (existingCreator?.Username is not null)
+            {
+                // Username already set — silently keep the existing one (ignore the request field).
+                body.Username = existingCreator.Username;
+            }
+            else
+            {
+                var normalized = body.Username.Trim().ToLowerInvariant();
+                if (normalized.Length < 3 || normalized.Length > 40)
+                    return ErrorResponse("Username must be between 3 and 40 characters.");
 
-            // Check uniqueness (excluding own record)
-            var existingCreatorId = await _creators.GetCreatorIdForUserAsync(userId);
-            var taken = await _creators.IsUsernameTakenAsync(normalized, existingCreatorId);
-            if (taken)
-                return ConflictResponse("That username is already taken.");
+                // Check uniqueness (excluding own record)
+                var existingCreatorId = await _creators.GetCreatorIdForUserAsync(userId);
+                var taken = await _creators.IsUsernameTakenAsync(normalized, existingCreatorId);
+                if (taken)
+                    return ConflictResponse("That username is already taken.");
+            }
         }
 
         var saved = await _creators.UpsertAsync(userId, body);
