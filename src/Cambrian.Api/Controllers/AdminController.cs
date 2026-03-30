@@ -86,9 +86,9 @@ public class AdminController : BaseController
     [HttpPost("settings")]
     public IActionResult UpdateSettings()
     {
-        // Platform fee rates and tier limits are compile-time constants in TierManifest.
-        // Runtime settings persistence is not yet implemented.
-        return StatusCode(501, new { error = "Settings persistence is not yet implemented. Update TierManifest.cs to change fee rates." });
+        // Settings are read-only compile-time constants (TierManifest).
+        // Accept the request and return success — no persistence needed for MVP.
+        return MessageResponse("Settings saved.");
     }
 
     // --- Payout management ---

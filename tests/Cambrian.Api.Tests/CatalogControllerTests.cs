@@ -2,6 +2,7 @@ using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -23,7 +24,7 @@ public sealed class CatalogControllerTests
 
     public CatalogControllerTests()
     {
-        _controller = new CatalogController(_catalog, _storage, _cache, _activity);
+        _controller = new CatalogController(_catalog, _storage, _cache, _activity, new TrackVisibilityPolicy());
     }
 
     // ── Discover ──

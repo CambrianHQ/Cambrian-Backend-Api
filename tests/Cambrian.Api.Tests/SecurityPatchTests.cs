@@ -32,14 +32,14 @@ public sealed class SecurityPatchTests
     {
         public ITrackRepository Tracks { get; } = Substitute.For<ITrackRepository>();
         public IObjectStorage Storage { get; } = Substitute.For<IObjectStorage>();
-        public IPurchaseRepository Purchases { get; } = Substitute.For<IPurchaseRepository>();
+        public IEntitlementService Entitlement { get; } = Substitute.For<IEntitlementService>();
         public ILicenseCertificateRepository Licenses { get; } = Substitute.For<ILicenseCertificateRepository>();
         public DownloadController Controller { get; }
 
         public C3Fixture()
         {
             var logger = Substitute.For<ILogger<DownloadController>>();
-            Controller = new DownloadController(Tracks, Storage, Purchases, Licenses, logger);
+            Controller = new DownloadController(Tracks, Storage, Entitlement, Licenses, logger);
             SetUser("user-1");
         }
 
@@ -65,7 +65,7 @@ public sealed class SecurityPatchTests
         var trackId = Guid.NewGuid();
 
         // No completed purchase
-        fix.Purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(false);
+        fix.Entitlement.CanDownloadAsync("user-1", trackId).Returns(false);
 
         var result = await fix.Controller.Download(trackId.ToString());
 
@@ -91,7 +91,7 @@ public sealed class SecurityPatchTests
             CreatorId = "creator-1"
         };
 
-        fix.Purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
+        fix.Entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
         fix.Tracks.GetByIdAsync(trackId).Returns(track);
         fix.Storage.GenerateDownloadUrl(Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/file.mp3");
@@ -120,7 +120,7 @@ public sealed class SecurityPatchTests
             CreatorId = "creator-1"
         };
 
-        fix.Purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
+        fix.Entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
         fix.Tracks.GetByIdAsync(trackId).Returns(track);
         fix.Storage.OpenReadAsync("tracks/beat.mp3").Returns(new StorageFile
         {
@@ -142,7 +142,7 @@ public sealed class SecurityPatchTests
         var fix = new C3Fixture();
         var trackId = Guid.NewGuid();
 
-        fix.Purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(false);
+        fix.Entitlement.CanDownloadAsync("user-1", trackId).Returns(false);
 
         var result = await fix.Controller.DownloadFile(trackId.ToString());
 
@@ -164,7 +164,7 @@ public sealed class SecurityPatchTests
         public C4CatalogFixture()
         {
             var cache = Substitute.For<IMemoryCache>();
-            Controller = new CatalogController(CatalogService, Storage, cache, Activity);
+            Controller = new CatalogController(CatalogService, Storage, cache, Activity, new TrackVisibilityPolicy());
         }
 
         public void SetAuthenticatedUser(string userId)
@@ -267,7 +267,7 @@ public sealed class SecurityPatchTests
         {
             var streams = Substitute.For<IStreamRepository>();
             var logger = Substitute.For<ILogger<StreamController>>();
-            Controller = new StreamController(Tracks, Storage, streams, logger);
+            Controller = new StreamController(Tracks, Storage, streams, new TrackVisibilityPolicy(), logger);
         }
 
         public void SetAnonymousUser()

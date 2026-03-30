@@ -18,14 +18,14 @@ public sealed class DownloadControllerTests
 {
     private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
     private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
-    private readonly IPurchaseRepository _purchases = Substitute.For<IPurchaseRepository>();
+    private readonly IEntitlementService _entitlement = Substitute.For<IEntitlementService>();
     private readonly ILicenseCertificateRepository _licenses = Substitute.For<ILicenseCertificateRepository>();
     private readonly DownloadController _controller;
 
     public DownloadControllerTests()
     {
         var logger = Substitute.For<ILogger<DownloadController>>();
-        _controller = new DownloadController(_tracks, _storage, _purchases, _licenses, logger);
+        _controller = new DownloadController(_tracks, _storage, _entitlement, _licenses, logger);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -56,7 +56,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser("user-no-access");
-        _purchases.HasCompletedPurchaseAsync("user-no-access", trackId).Returns(false);
+        _entitlement.CanDownloadAsync("user-no-access", trackId).Returns(false);
 
         var result = await _controller.Download(trackId.ToString());
 
@@ -71,7 +71,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
+        _entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns((Track?)null);
 
         var result = await _controller.Download(trackId.ToString());
@@ -84,7 +84,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
+        _entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns(new Track
         {
             Id = trackId,
@@ -103,7 +103,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
+        _entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns(new Track
         {
             Id = trackId,
@@ -130,7 +130,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
+        _entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns(new Track
         {
             Id = trackId,
@@ -165,7 +165,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(false);
+        _entitlement.CanDownloadAsync("user-1", trackId).Returns(false);
 
         var result = await _controller.SignedUrl(trackId.ToString());
 
@@ -178,7 +178,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
+        _entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns(new Track
         {
             Id = trackId,

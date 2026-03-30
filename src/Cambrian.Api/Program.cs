@@ -261,6 +261,10 @@ builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Se
 builder.Services.AddScoped<IDebugService, Cambrian.Persistence.Services.DebugService>();
 builder.Services.AddScoped<IHealthService, Cambrian.Persistence.Services.HealthService>();
 
+// Anti-drift: single source of truth services
+builder.Services.AddScoped<IEntitlementService, EntitlementService>();
+builder.Services.AddSingleton<ITrackVisibilityPolicy, TrackVisibilityPolicy>();
+
 // Growth features
 builder.Services.Configure<Cambrian.Infrastructure.Options.GrowthFeaturesOptions>(
     builder.Configuration.GetSection("GrowthFeatures"));

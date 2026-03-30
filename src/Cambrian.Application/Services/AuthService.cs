@@ -111,7 +111,8 @@ public class AuthService : IAuthService
             Tier = "free",
             Role = isCreator ? "Creator" : "User",
             CreatorTier = CreatorTier.Free,
-            PhoneNumber = request.PhoneNumber
+            PhoneNumber = request.PhoneNumber,
+            EmailVerified = false  // H1: requires email verification flow
         };
 
         var result = await _users.CreateAsync(user, request.Password);
@@ -510,7 +511,8 @@ public class AuthService : IAuthService
                 Role = "User",
                 CreatorTier = CreatorTier.Free,
                 GoogleId = payload.Subject,
-                AuthProvider = "Google"
+                AuthProvider = "Google",
+                EmailVerified = true  // Google-verified email address
             };
 
             var result = await _users.CreateAsync(user);
