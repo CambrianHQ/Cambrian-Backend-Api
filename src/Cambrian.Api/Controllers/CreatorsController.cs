@@ -192,7 +192,19 @@ public class CreatorsController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var creator = await _creators.GetByUserIdAsync(userId);
         if (creator is null) return NotFoundResponse("Creator profile not found.");
-        return OkResponse(creator);
+        return OkResponse(new
+        {
+            creator.Id,
+            creator.Username,
+            canChangeUsername = string.IsNullOrWhiteSpace(creator.Username),
+            creator.DisplayName,
+            creator.Bio,
+            creator.ProfileImageUrl,
+            creator.CoverImageUrl,
+            creator.SocialLinks,
+            creator.Stats,
+            creator.Tracks
+        });
     }
 
     // ───── PUT /api/creator/me ─────
