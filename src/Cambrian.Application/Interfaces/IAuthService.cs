@@ -35,4 +35,9 @@ public interface IAuthService
 
     /// <summary>Get the configured Google OAuth Client ID.</summary>
     string GetGoogleClientId();
+
+    /// <summary>
+    /// Complete an email change by verifying the token that was sent to the new email address.
+    /// </summary>
+    Task VerifyEmailChangeAsync(string token);
 }

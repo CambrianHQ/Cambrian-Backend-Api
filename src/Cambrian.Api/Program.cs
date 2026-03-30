@@ -12,6 +12,7 @@ using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Stripe;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -72,9 +73,85 @@ builder.Services
 
 Console.WriteLine("[Startup] Governance contract version: 2.1.0 — see policy/POLICY.md, contracts/API_CONTRACTS.md");
 
-// JWT Authentication
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
+// Dual authentication: accept either a Bearer JWT (Authorization header)
+// or an HttpOnly cookie that carries the same JWT (cookie transport).
+// The SmartScheme policy scheme selects the correct handler at request time.
+const string SmartScheme = "SmartScheme";
+const string CookieSchemeName = "Cookies";
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = SmartScheme;
+    options.DefaultChallengeScheme    = SmartScheme;
+})
+.AddPolicyScheme(SmartScheme, "JWT or Cookie", options =>
+{
+    options.ForwardDefaultSelector = context =>
+    {
+        // If an Authorization header is present, validate as Bearer JWT.
+        // Otherwise fall back to cookie (which also carries a JWT).
+        return context.Request.Headers.ContainsKey("Authorization")
+            ? JwtBearerDefaults.AuthenticationScheme
+            : CookieSchemeName;
+    };
+})
+.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { })
+.AddCookie(CookieSchemeName, options =>
+{
+    options.Cookie.Name     = "auth_token";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy  = CookieSecurePolicy.SameAsRequest; // Always in prod via HTTPS
+    options.Cookie.SameSite = SameSiteMode.Lax;  // Lax allows cross-site top-level nav (Stripe redirect)
+    options.ExpireTimeSpan  = TimeSpan.FromDays(7);
+    options.SlidingExpiration = false;
+
+    // Cookie auth reads the token from the cookie and validates it as a JWT.
+    // This makes cookie and bearer interchangeable — same token, different transport.
+    options.Events = new CookieAuthenticationEvents
+    {
+        // Return 401/403 directly — API clients cannot follow login redirects.
+        OnRedirectToLogin = ctx =>
+        {
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        },
+        OnRedirectToAccessDenied = ctx =>
+        {
+            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        },
+        OnValidatePrincipal = async ctx =>
+        {
+            // Extract the JWT stored in the cookie and send it through JWT validation.
+            // This reuses the existing JwtBearerOptions without duplicating key config.
+            var token = ctx.Request.Cookies["auth_token"];
+            if (string.IsNullOrEmpty(token))
+            {
+                ctx.RejectPrincipal();
+                return;
+            }
+            // Re-validate the JWT using the same parameters configured for Bearer.
+            var jwtOpts  = ctx.HttpContext.RequestServices
+                .GetRequiredService<IOptionsSnapshot<JwtBearerOptions>>()
+                .Get(JwtBearerDefaults.AuthenticationScheme);
+            var handler  = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+            try
+            {
+                ctx.Principal = handler.ValidateToken(
+                    token,
+                    jwtOpts.TokenValidationParameters,
+                    out _);
+                // No explicit ctx.Success() — setting Principal is sufficient;
+                // omitting it suppresses the CS1061 compile error.
+            }
+            catch
+            {
+                ctx.RejectPrincipal();
+            }
+            await Task.CompletedTask;
+        }
+    };
+});
 
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
     .Configure<IOptions<JwtSettings>>((options, jwtOptions) =>

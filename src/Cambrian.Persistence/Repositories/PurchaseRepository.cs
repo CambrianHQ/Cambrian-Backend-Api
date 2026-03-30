@@ -67,4 +67,14 @@ public class PurchaseRepository : IPurchaseRepository
         _db.Purchases.Update(purchase);
         await _db.SaveChangesAsync();
     }
+
+    /// <inheritdoc />
+    public async Task<bool> HasCompletedPurchaseAsync(string userId, Guid trackId)
+    {
+        return await _db.Purchases
+            .AnyAsync(p =>
+                p.BuyerId == userId &&
+                p.TrackId == trackId &&
+                p.Status == "completed");
+    }
 }

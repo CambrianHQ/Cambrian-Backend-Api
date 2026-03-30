@@ -7,25 +7,25 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-
 namespace Cambrian.Api.Tests;
 
 /// <summary>
-/// Tests for DownloadController which verifies ownership before allowing
-/// downloads. Covers GUID validation, ownership enforcement, missing tracks,
+/// Tests for DownloadController which verifies purchase entitlement before allowing
+/// downloads. Covers GUID validation, entitlement enforcement, missing tracks,
 /// and signed URL generation for both /download/{trackId} and /download/{trackId}/signed.
 /// </summary>
 public sealed class DownloadControllerTests
 {
     private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
     private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
-    private readonly ILibraryRepository _library = Substitute.For<ILibraryRepository>();
+    private readonly IPurchaseRepository _purchases = Substitute.For<IPurchaseRepository>();
+    private readonly ILicenseCertificateRepository _licenses = Substitute.For<ILicenseCertificateRepository>();
     private readonly DownloadController _controller;
 
     public DownloadControllerTests()
     {
         var logger = Substitute.For<ILogger<DownloadController>>();
-        _controller = new DownloadController(_tracks, _storage, _library, logger);
+        _controller = new DownloadController(_tracks, _storage, _purchases, _licenses, logger);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -56,7 +56,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser("user-no-access");
-        _library.GetByUserAndTrackAsync("user-no-access", trackId).Returns((LibraryItem?)null);
+        _purchases.HasCompletedPurchaseAsync("user-no-access", trackId).Returns(false);
 
         var result = await _controller.Download(trackId.ToString());
 
@@ -71,8 +71,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
+        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns((Track?)null);
 
         var result = await _controller.Download(trackId.ToString());
@@ -85,8 +84,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
+        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns(new Track
         {
             Id = trackId,
@@ -105,8 +103,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
+        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns(new Track
         {
             Id = trackId,
@@ -114,8 +111,10 @@ public sealed class DownloadControllerTests
             AudioUrl = "tracks/beat.mp3",
             CreatorId = "c1"
         });
-        _storage.GenerateSignedUrl("tracks/beat.mp3")
+        _storage.GenerateDownloadUrl(Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/signed-download");
+        _licenses.GetByBuyerAndTrackAsync(Arg.Any<string>(), Arg.Any<string>())
+            .Returns((LicenseCertificate?)null);
 
         var result = await _controller.Download(trackId.ToString());
 
@@ -131,8 +130,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
+        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns(new Track
         {
             Id = trackId,
@@ -167,7 +165,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId).Returns((LibraryItem?)null);
+        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(false);
 
         var result = await _controller.SignedUrl(trackId.ToString());
 
@@ -180,8 +178,7 @@ public sealed class DownloadControllerTests
     {
         var trackId = Guid.NewGuid();
         SetupUser();
-        _library.GetByUserAndTrackAsync("user-1", trackId)
-            .Returns(new LibraryItem { Id = Guid.NewGuid() });
+        _purchases.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
         _tracks.GetByIdAsync(trackId).Returns(new Track
         {
             Id = trackId,

@@ -306,31 +306,85 @@ public class AuthService : IAuthService
         }
     }
 
+    /// <summary>
+    /// Phase A — does NOT change the email immediately.
+    /// Stores a pending change and sends a verification link to the new address.
+    /// The live Email field is only updated when <see cref="VerifyEmailChangeAsync"/> is called.
+    /// </summary>
     public async Task ChangeEmailAsync(ClaimsPrincipal principal, ChangeEmailRequest request)
     {
         var user = await GetRequiredUser(principal);
 
-        // Verify the current password before allowing email change
+        // Verify the current password before storing the pending change
         var passwordValid = await _users.CheckPasswordAsync(user, request.Password);
         if (!passwordValid)
             throw new UnauthorizedAccessException("Invalid password.");
 
-        // Check that the new email is not already taken
+        // Check that the new email is not already claimed
         var existing = await _users.FindByEmailAsync(request.NewEmail);
         if (existing is not null && existing.Id != user.Id)
             throw new InvalidOperationException("Email is already in use.");
 
-        var token = await _users.GenerateChangeEmailTokenAsync(user, request.NewEmail);
-        var result = await _users.ChangeEmailAsync(user, request.NewEmail, token);
+        // Generate a secure random 32-byte token, URL-safe base64 encoded.
+        // Embed the userId so VerifyEmailChangeAsync can look up the user with FindByIdAsync
+        // rather than scanning Users with EF async LINQ (which requires IAsyncQueryProvider).
+        var rawBytes = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+        var plaintext = $"{user.Id}.{rawBytes}";
+        var tokenHash = HashResetCode(plaintext); // SHA-256 hex, same helper as password reset
 
-        if (!result.Succeeded)
-        {
-            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
-            throw new InvalidOperationException($"Email change failed: {errors}");
-        }
+        user.PendingEmail = request.NewEmail;
+        user.EmailChangeToken = tokenHash;
+        user.EmailChangeTokenExpiry = DateTime.UtcNow.AddHours(24);
+        await _users.UpdateAsync(user);
 
-        // Keep UserName in sync with Email
-        user.UserName = request.NewEmail;
+        // Notify old address first (account takeover defense)
+        var oldEmail = user.Email ?? user.UserName ?? string.Empty;
+        if (!string.IsNullOrEmpty(oldEmail))
+            await _email.SendEmailChangeNotificationAsync(oldEmail, request.NewEmail);
+
+        // Send verification link to the new address
+        var link = $"/auth/verify-email-change?token={Uri.EscapeDataString(plaintext)}";
+        await _email.SendEmailChangeVerificationAsync(request.NewEmail, link);
+    }
+
+    /// <inheritdoc />
+    public async Task VerifyEmailChangeAsync(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("Invalid or expired email change token.");
+
+        // Token format: "{userId}.{randomBytes}" — extract userId to avoid EF async LINQ scan.
+        var dotIndex = token.IndexOf('.');
+        if (dotIndex <= 0)
+            throw new InvalidOperationException("Invalid or expired email change token.");
+
+        var userId = token[..dotIndex];
+        var tokenHash = HashResetCode(token);
+
+        var user = await _users.FindByIdAsync(userId);
+
+        if (user is null
+            || user.EmailChangeToken != tokenHash
+            || user.EmailChangeTokenExpiry is null
+            || user.EmailChangeTokenExpiry <= DateTime.UtcNow
+            || user.PendingEmail is null)
+            throw new InvalidOperationException("Invalid or expired email change token.");
+
+        // Swap in the pending email
+        var newEmail = user.PendingEmail!;
+        user.Email = newEmail;
+        user.UserName = newEmail;   // keep UserName in sync
+        user.NormalizedEmail = newEmail.ToUpperInvariant();
+        user.NormalizedUserName = newEmail.ToUpperInvariant();
+
+        // Clear pending state
+        user.PendingEmail = null;
+        user.EmailChangeToken = null;
+        user.EmailChangeTokenExpiry = null;
+
         await _users.UpdateAsync(user);
     }
 

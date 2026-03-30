@@ -3,6 +3,7 @@ using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using System.Security.Claims;
 
 namespace Cambrian.Api.Controllers;
 
@@ -97,6 +98,19 @@ public class CatalogController : BaseController
         var result = await _catalog.GetTrackAsync(trackId);
         if (result is null)
             return NotFoundResponse($"Track '{trackId}' not found.");
+
+        // C4: enforce visibility — non-public tracks are hidden from non-owners.
+        // Return NotFound (not 403) to avoid leaking the existence of hidden tracks.
+        if (result.Visibility != "public")
+        {
+            var requestingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.Equals(result.CreatorId, requestingUserId, StringComparison.Ordinal)
+                && !User.IsInRole("Admin"))
+            {
+                return NotFoundResponse($"Track '{trackId}' not found.");
+            }
+        }
+
         result.AudioUrl = ResolveAbsoluteUrl($"/stream/{result.Id}/audio");
         if (!string.IsNullOrEmpty(result.CoverArtUrl))
             result.CoverArtUrl = ResolveCoverArtUrl(result.CoverArtUrl);

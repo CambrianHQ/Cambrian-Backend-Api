@@ -25,11 +25,11 @@ public sealed class DownloadTests : IClassFixture<CambrianApiFixture>
         var creatorId = await _factory.GetUserIdAsync(creatorEmail);
         var trackId = await _factory.SeedTrackAsync(creatorId, "Download Beat");
 
-        // Register buyer + add to library (simulates completed purchase)
+        // Register buyer + seed completed purchase (entitlement check uses purchase, not library row)
         var buyerEmail = "dl-buyer@cambrian.com";
         var client = await _factory.CreateAuthenticatedClientAsync(buyerEmail, "Test1234!@");
         var buyerId = await _factory.GetUserIdAsync(buyerEmail);
-        await _factory.SeedLibraryItemAsync(buyerId, trackId);
+        await _factory.SeedCompletedPurchaseAsync(buyerId, trackId);
 
         var res = await client.GetAsync($"/download/{trackId}");
 
@@ -88,11 +88,11 @@ public sealed class DownloadTests : IClassFixture<CambrianApiFixture>
         var creatorId = await _factory.GetUserIdAsync(creatorEmail);
         var trackId = await _factory.SeedTrackAsync(creatorId, "Signed URL Beat");
 
-        // Buyer with library item
+        // Buyer with completed purchase
         var buyerEmail = "dl-signed-buyer@cambrian.com";
         var client = await _factory.CreateAuthenticatedClientAsync(buyerEmail, "Test1234!@");
         var buyerId = await _factory.GetUserIdAsync(buyerEmail);
-        await _factory.SeedLibraryItemAsync(buyerId, trackId);
+        await _factory.SeedCompletedPurchaseAsync(buyerId, trackId);
 
         var res = await client.GetAsync($"/download/{trackId}/signed");
 

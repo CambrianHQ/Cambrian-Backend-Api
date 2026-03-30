@@ -19,4 +19,10 @@ public interface IPurchaseRepository
     Task AddAsync(Purchase purchase);
 
     Task UpdateAsync(Purchase purchase);
+
+    /// <summary>
+    /// Returns true when the user has at least one completed purchase for this track.
+    /// Used by download endpoints — library membership alone does not grant download access.
+    /// </summary>
+    Task<bool> HasCompletedPurchaseAsync(string userId, Guid trackId);
 }

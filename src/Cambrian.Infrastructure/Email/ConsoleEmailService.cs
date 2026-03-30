@@ -41,4 +41,16 @@ public sealed class ConsoleEmailService : IEmailService
         _logger.LogInformation("[Email] Welcome email sent to {To} ({Name})", to, displayName);
         return Task.CompletedTask;
     }
+
+    public Task SendEmailChangeVerificationAsync(string newEmail, string verificationLink)
+    {
+        _logger.LogInformation("[Email] Email-change verification link sent to {To}: {Link}", newEmail, verificationLink);
+        return Task.CompletedTask;
+    }
+
+    public Task SendEmailChangeNotificationAsync(string oldEmail, string newEmail)
+    {
+        _logger.LogInformation("[Email] Email-change notification sent to {OldEmail} (new: {NewEmail})", oldEmail, newEmail);
+        return Task.CompletedTask;
+    }
 }

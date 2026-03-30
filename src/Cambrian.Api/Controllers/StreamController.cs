@@ -63,6 +63,15 @@ public class StreamController : BaseController
         if (string.IsNullOrEmpty(track.AudioUrl))
             return ErrorResponse("Track has no audio file configured.");
 
+        // C4: enforce visibility for authenticated users.
+        if (track.Visibility != "public")
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.Equals(track.CreatorId, userId, StringComparison.Ordinal)
+                && !User.IsInRole("Admin"))
+                return NotFoundResponse("Track not found.");
+        }
+
         var streamUrl = _storage.GenerateSignedUrl(track.AudioUrl);
         return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl) });
     }
@@ -86,6 +95,16 @@ public class StreamController : BaseController
             return NotFoundResponse("Track not found.");
         if (string.IsNullOrEmpty(track.AudioUrl))
             return ErrorResponse("Track has no audio file configured.");
+
+        // C4: enforce visibility on the anonymous audio endpoint.
+        // A non-public track must not be streamable to anyone other than its creator.
+        if (track.Visibility != "public")
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.Equals(track.CreatorId, userId, StringComparison.Ordinal)
+                && !User.IsInRole("Admin"))
+                return NotFoundResponse("Track not found.");
+        }
 
         _logger.LogInformation("StreamAudio: redirecting trackId={TrackId} to signed storage URL", trackId);
 

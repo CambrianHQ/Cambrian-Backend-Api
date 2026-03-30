@@ -180,6 +180,26 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Add a completed Purchase directly to the database (satisfies C3 entitlement check).</summary>
+    public async Task SeedCompletedPurchaseAsync(string userId, Guid trackId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        db.Purchases.Add(new Purchase
+        {
+            Id = Guid.NewGuid(),
+            BuyerId = userId,
+            TrackId = trackId,
+            AmountCents = 5000,
+            PaymentMethod = "stripe",
+            LicenseType = "nonexclusive",
+            Status = "completed",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+    }
+
     /// <summary>Enable or disable a feature flag in the test database.</summary>
     public async Task SetFeatureFlagAsync(string name, bool enabled)
     {

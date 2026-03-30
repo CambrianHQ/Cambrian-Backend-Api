@@ -308,7 +308,10 @@ public class StripeWebhookService : IWebhookService
                 $"UPDATE \"Tracks\" SET \"ExclusiveSold\" = true WHERE \"Id\" = {trackId} AND \"ExclusiveSold\" = false");
             if (marked == 0)
             {
-                _logger.LogWarning("Exclusive race: Track {TrackId} was sold by another request — skipping for user {UserId}", trackId, userId);
+                _logger.LogWarning(
+                    "Exclusive race: Track {TrackId} was sold by another request — initiating refund for user {UserId}.",
+                    trackId, userId);
+                await IssueAutoRefundAsync(stripeSessionId, userId, trackId);
                 return;
             }
         }
@@ -326,7 +329,10 @@ public class StripeWebhookService : IWebhookService
                 $"UPDATE \"Tracks\" SET \"ExclusiveSold\" = true, \"Status\" = 'copyright_transferred', \"Visibility\" = 'hidden', \"OriginalCreatorId\" = \"CreatorId\", \"CopyrightOwnerId\" = {userId}, \"CopyrightTransferredAt\" = {DateTime.UtcNow} WHERE \"Id\" = {trackId} AND \"ExclusiveSold\" = false AND \"Status\" != 'copyright_transferred'");
             if (marked == 0)
             {
-                _logger.LogWarning("Copyright buyout race: Track {TrackId} was sold/transferred by another request — skipping for user {UserId}", trackId, userId);
+                _logger.LogWarning(
+                    "Copyright buyout race: Track {TrackId} was sold/transferred by another request — initiating refund for user {UserId}.",
+                    trackId, userId);
+                await IssueAutoRefundAsync(stripeSessionId, userId, trackId);
                 return;
             }
         }
@@ -829,5 +835,56 @@ public class StripeWebhookService : IWebhookService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Issue an automatic Stripe refund for the losing party in an exclusive-sale or
+    /// copyright-buyout race condition. The DB already rejected their purchase; this
+    /// ensures they are not silently charged without receiving the product.
+    /// Errors are caught and logged — failure here does NOT re-throw because we must
+    /// not mark the webhook as failed (which would trigger a Stripe retry loop).
+    /// </summary>
+    private async Task IssueAutoRefundAsync(string? stripeSessionId, string userId, Guid trackId)
+    {
+        if (string.IsNullOrWhiteSpace(stripeSessionId))
+        {
+            _logger.LogError(
+                "[AUTO-REFUND-FAILED] No session ID available — manual refund required. " +
+                "User={UserId} Track={TrackId}",
+                userId, trackId);
+            return;
+        }
+
+        try
+        {
+            var session = await new SessionService().GetAsync(stripeSessionId);
+
+            if (string.IsNullOrEmpty(session?.PaymentIntentId))
+            {
+                _logger.LogError(
+                    "[AUTO-REFUND-FAILED] Session {SessionId} has no PaymentIntentId — manual refund required. " +
+                    "User={UserId} Track={TrackId}",
+                    stripeSessionId, userId, trackId);
+                return;
+            }
+
+            await new RefundService().CreateAsync(new RefundCreateOptions
+            {
+                PaymentIntent = session.PaymentIntentId,
+                Reason = RefundReasons.Duplicate
+            });
+
+            _logger.LogInformation(
+                "[AUTO-REFUND] Exclusive race loser refunded successfully. " +
+                "User={UserId} Track={TrackId} Session={SessionId}",
+                userId, trackId, stripeSessionId);
+        }
+        catch (StripeException ex)
+        {
+            _logger.LogError(ex,
+                "[AUTO-REFUND-FAILED] Stripe error — manual refund required. " +
+                "User={UserId} Track={TrackId} Session={SessionId}",
+                userId, trackId, stripeSessionId);
+        }
     }
 }
