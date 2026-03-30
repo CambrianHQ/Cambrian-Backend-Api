@@ -12,13 +12,15 @@ public class StreamController : BaseController
     private readonly ITrackRepository _tracks;
     private readonly IObjectStorage _storage;
     private readonly IStreamRepository _streams;
+    private readonly ITrackVisibilityPolicy _visibility;
     private readonly ILogger<StreamController> _logger;
 
-    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams, ILogger<StreamController> logger)
+    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams, ITrackVisibilityPolicy visibility, ILogger<StreamController> logger)
     {
         _tracks = tracks;
         _storage = storage;
         _streams = streams;
+        _visibility = visibility;
         _logger = logger;
     }
 
@@ -63,14 +65,10 @@ public class StreamController : BaseController
         if (string.IsNullOrEmpty(track.AudioUrl))
             return ErrorResponse("Track has no audio file configured.");
 
-        // C4: enforce visibility for authenticated users.
-        if (track.Visibility != "public")
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!string.Equals(track.CreatorId, userId, StringComparison.Ordinal)
-                && !User.IsInRole("Admin"))
-                return NotFoundResponse("Track not found.");
-        }
+        // C4: enforce visibility via shared policy.
+        var streamUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!_visibility.CanAccess(track.Visibility, track.CreatorId, streamUserId, User.IsInRole("Admin")))
+            return NotFoundResponse("Track not found.");
 
         var streamUrl = _storage.GenerateSignedUrl(track.AudioUrl);
         return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl) });
@@ -96,15 +94,10 @@ public class StreamController : BaseController
         if (string.IsNullOrEmpty(track.AudioUrl))
             return ErrorResponse("Track has no audio file configured.");
 
-        // C4: enforce visibility on the anonymous audio endpoint.
-        // A non-public track must not be streamable to anyone other than its creator.
-        if (track.Visibility != "public")
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!string.Equals(track.CreatorId, userId, StringComparison.Ordinal)
-                && !User.IsInRole("Admin"))
-                return NotFoundResponse("Track not found.");
-        }
+        // C4: enforce visibility via shared policy (anonymous users allowed for public tracks).
+        var audioUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!_visibility.CanAccess(track.Visibility, track.CreatorId, audioUserId, User.IsInRole("Admin")))
+            return NotFoundResponse("Track not found.");
 
         _logger.LogInformation("StreamAudio: redirecting trackId={TrackId} to signed storage URL", trackId);
 

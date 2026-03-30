@@ -13,16 +13,18 @@ public class CatalogController : BaseController
     private readonly ICatalogService _catalog;
     private readonly IObjectStorage _storage;
     private readonly IMemoryCache _cache;
+    private readonly ITrackVisibilityPolicy _visibility;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
     private readonly IActivityService _activity;
 
-    public CatalogController(ICatalogService catalog, IObjectStorage storage, IMemoryCache cache, IActivityService activity)
+    public CatalogController(ICatalogService catalog, IObjectStorage storage, IMemoryCache cache, IActivityService activity, ITrackVisibilityPolicy visibility)
     {
         _catalog = catalog;
         _storage = storage;
         _cache = cache;
         _activity = activity;
+        _visibility = visibility;
     }
 
     [HttpGet("discover")]
@@ -99,17 +101,10 @@ public class CatalogController : BaseController
         if (result is null)
             return NotFoundResponse($"Track '{trackId}' not found.");
 
-        // C4: enforce visibility — non-public tracks are hidden from non-owners.
-        // Return NotFound (not 403) to avoid leaking the existence of hidden tracks.
-        if (result.Visibility != "public")
-        {
-            var requestingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!string.Equals(result.CreatorId, requestingUserId, StringComparison.Ordinal)
-                && !User.IsInRole("Admin"))
-            {
-                return NotFoundResponse($"Track '{trackId}' not found.");
-            }
-        }
+        // C4: enforce visibility via shared policy — single source of truth.
+        var visUserId = User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!_visibility.CanAccess(result.Visibility ?? "public", result.CreatorId, visUserId, User?.IsInRole("Admin") == true))
+            return NotFoundResponse($"Track '{trackId}' not found.");
 
         result.AudioUrl = ResolveAbsoluteUrl($"/stream/{result.Id}/audio");
         if (!string.IsNullOrEmpty(result.CoverArtUrl))

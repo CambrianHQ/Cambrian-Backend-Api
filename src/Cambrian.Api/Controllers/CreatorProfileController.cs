@@ -19,6 +19,7 @@ public class CreatorProfileController : BaseController
     private readonly IStorefrontService _storefront;
     private readonly IFeatureFlagRepository _flags;
     private readonly ICreatorIdentityRepository _creators;
+    private readonly ITrackRepository _tracks;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -27,13 +28,30 @@ public class CreatorProfileController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators)
+    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators, ITrackRepository tracks)
     {
         _profiles = profiles;
         _storage = storage;
         _storefront = storefront;
         _flags = flags;
         _creators = creators;
+        _tracks = tracks;
+    }
+
+    // Returns false if any track ID in the comma-separated list does not belong to userId.
+    private async Task<bool> AllTracksOwnedByCreatorAsync(string? trackIds, string userId)
+    {
+        if (string.IsNullOrWhiteSpace(trackIds)) return true;
+        var ids = trackIds.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var segment in ids)
+        {
+            if (!Guid.TryParse(segment.Trim(), out var trackId))
+                return false; // malformed ID
+            var track = await _tracks.GetByIdAsync(trackId);
+            if (track is null || !string.Equals(track.CreatorId, userId, StringComparison.Ordinal))
+                return false;
+        }
+        return true;
     }
 
     // ───── Public: view a creator profile by slug ─────
@@ -148,6 +166,7 @@ public class CreatorProfileController : BaseController
     // ───── Collections: list ─────
 
     [HttpGet("{slug}/collections")]
+    [HttpGet("/creator/username/{slug}/collections")]
     public async Task<IActionResult> GetCollections(string slug)
     {
         var profile = await _profiles.GetBySlugAsync(slug);
@@ -168,6 +187,10 @@ public class CreatorProfileController : BaseController
         if (string.IsNullOrWhiteSpace(body.Title))
             return ErrorResponse("Title is required.");
 
+        // H3: Only the creator's own tracks may be added to their collection.
+        if (!await AllTracksOwnedByCreatorAsync(body.TrackIds, userId))
+            return ErrorResponse("One or more tracks do not belong to you.");
+
         var saved = await _profiles.AddCollectionAsync(userId, body.Title.Trim(),
             body.Description?.Trim(), body.TrackIds ?? "");
         return CreatedResponse(saved);
@@ -184,6 +207,10 @@ public class CreatorProfileController : BaseController
         var owner = await _profiles.GetCollectionOwnerAsync(collectionId);
         if (owner is null) return NotFoundResponse("Collection not found.");
         if (owner != userId) return ForbiddenResponse();
+
+        // H3: Only the creator's own tracks may be added to their collection.
+        if (!await AllTracksOwnedByCreatorAsync(body.TrackIds, userId))
+            return ErrorResponse("One or more tracks do not belong to you.");
 
         var saved = await _profiles.UpdateCollectionAsync(collectionId, userId,
             body.Title?.Trim(), body.Description?.Trim(), body.TrackIds);

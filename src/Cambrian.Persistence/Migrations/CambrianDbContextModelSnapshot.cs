@@ -175,6 +175,10 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("EmailVerified")
+                        .HasDefaultValue(true)
+                        .HasColumnType("boolean");
+
                     b.Property<string>("GoogleId")
                         .HasColumnType("text");
 

@@ -6,19 +6,18 @@ public class DownloadService : IDownloadService
 {
     private readonly ITrackRepository _tracks;
     private readonly IObjectStorage _storage;
-    private readonly ILibraryRepository _library;
+    private readonly IEntitlementService _entitlement;
 
-    public DownloadService(ITrackRepository tracks, IObjectStorage storage, ILibraryRepository library)
+    public DownloadService(ITrackRepository tracks, IObjectStorage storage, IEntitlementService entitlement)
     {
         _tracks = tracks;
         _storage = storage;
-        _library = library;
+        _entitlement = entitlement;
     }
 
     public async Task<object> GetDownloadUrlAsync(Guid trackId, string userId)
     {
-        var libraryItem = await _library.GetByUserAndTrackAsync(userId, trackId);
-        if (libraryItem is null)
+        if (!await _entitlement.CanDownloadAsync(userId, trackId))
             throw new UnauthorizedAccessException("You must purchase this track before downloading.");
 
         var track = await _tracks.GetByIdAsync(trackId);
@@ -31,8 +30,7 @@ public class DownloadService : IDownloadService
 
     public async Task<object> GetSignedUrlAsync(Guid trackId, string userId)
     {
-        var libraryItem = await _library.GetByUserAndTrackAsync(userId, trackId);
-        if (libraryItem is null)
+        if (!await _entitlement.CanDownloadAsync(userId, trackId))
             throw new UnauthorizedAccessException("You must purchase this track before downloading.");
 
         var track = await _tracks.GetByIdAsync(trackId);

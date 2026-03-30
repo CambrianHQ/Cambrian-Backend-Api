@@ -55,6 +55,14 @@ public class ApplicationUser : IdentityUser
     /// <summary>Primary auth provider: "Local", "Google", etc.</summary>
     public string? AuthProvider { get; set; }
 
+    /// <summary>
+    /// True when the user's email address has been verified.
+    /// Google-registered accounts are pre-verified. Local-registration accounts
+    /// start as false until the verification email is confirmed.
+    /// Existing accounts default to true via migration (backward-compatible).
+    /// </summary>
+    public bool EmailVerified { get; set; }
+
     // ── Email change (two-step verification) ──
 
     /// <summary>

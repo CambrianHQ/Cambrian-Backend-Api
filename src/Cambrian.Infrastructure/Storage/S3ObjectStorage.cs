@@ -68,7 +68,7 @@ public sealed class S3ObjectStorage : IObjectStorage
         {
             BucketName = _options.Bucket,
             Key = normalised,
-            Expires = DateTime.UtcNow.AddHours(1),
+            Expires = DateTime.UtcNow.AddMinutes(15), // H6: reduced from 1h
             Verb = HttpVerb.GET,
         };
         return _client.GetPreSignedURL(request);
@@ -85,7 +85,7 @@ public sealed class S3ObjectStorage : IObjectStorage
         {
             BucketName = _options.Bucket,
             Key = normalised,
-            Expires = DateTime.UtcNow.AddHours(1),
+            Expires = DateTime.UtcNow.AddMinutes(30), // H6: reduced from 1h
             Verb = HttpVerb.GET,
             ResponseHeaderOverrides =
             {

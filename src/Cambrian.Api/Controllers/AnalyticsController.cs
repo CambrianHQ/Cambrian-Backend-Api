@@ -60,9 +60,9 @@ public class AnalyticsController : BaseController
     }
 
     /// <summary>
-    /// Admin: query raw analytics events.
+    /// Query analytics events. Admins receive real data; other authenticated users receive an empty list (MVP-safe).
     /// </summary>
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     [HttpGet("events")]
     public async Task<IActionResult> Events(
         [FromQuery] string? eventType,
@@ -70,6 +70,10 @@ public class AnalyticsController : BaseController
         [FromQuery] DateTime? to,
         [FromQuery] int limit = 100)
     {
+        // Non-admin users get an empty list — keeps the endpoint accessible without exposing raw event data.
+        if (!User.IsInRole("Admin"))
+            return OkResponse(new List<object>());
+
         var events = await _analytics.QueryAsync(eventType, from, to, limit);
         var result = new List<object>();
         foreach (var e in events)

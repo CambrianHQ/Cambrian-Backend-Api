@@ -295,6 +295,49 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
+        // H4: Price re-validation — guard against checkout price manipulation.
+        // Compare the Stripe-reported amount against the track's current listed price.
+        // A legitimate checkout is always server-created, so a charge below 50% of the
+        // current price is anomalous and is refunded rather than fulfilled.
+        var expectedCents = licenseType switch
+        {
+            "exclusive"        => track.ExclusivePriceCents,
+            "nonexclusive"     => track.NonExclusivePriceCents,
+            "copyright_buyout" => track.CopyrightBuyoutPriceCents,
+            _                  => track.NonExclusivePriceCents,
+        };
+        if (expectedCents > 0 && amountTotal.HasValue)
+        {
+            if (amountTotal.Value < expectedCents / 2)
+            {
+                _logger.LogError(
+                    "[PRICE-ANOMALY] Track {TrackId} license={LicenseType}: expected≥{Expected}c but charged={Actual}c " +
+                    "for user {UserId} — issuing refund. Session={Session}",
+                    trackId, licenseType, expectedCents, amountTotal.Value, userId, stripeSessionId);
+                await IssueAutoRefundAsync(stripeSessionId, userId, trackId);
+                return;
+            }
+            if (amountTotal.Value < expectedCents)
+            {
+                // Within tolerance — may happen if the creator changed the price between
+                // checkout creation and webhook delivery. Log and proceed.
+                _logger.LogWarning(
+                    "[PRICE-WARNING] Track {TrackId} license={LicenseType}: expected={Expected}c charged={Actual}c " +
+                    "for user {UserId}. Possible price change during session. Proceeding.",
+                    trackId, licenseType, expectedCents, amountTotal.Value, userId);
+            }
+        }
+
+        // H2: Buyer must not be the creator — prevents self-crediting fraud.
+        if (string.Equals(track.CreatorId, userId, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogError(
+                "[SELF-PURCHASE] Creator {UserId} attempted to purchase their own track {TrackId} — issuing refund. Session={Session}",
+                userId, trackId, stripeSessionId);
+            await IssueAutoRefundAsync(stripeSessionId, userId, trackId);
+            return;
+        }
+
         // ── Exclusive: atomic check-and-set to prevent race conditions ──
         if (licenseType == "exclusive")
         {

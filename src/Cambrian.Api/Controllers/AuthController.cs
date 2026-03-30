@@ -97,6 +97,7 @@ public class AuthController : BaseController
     }
 
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpPost("set-password")]
     public async Task<IActionResult> SetPassword([FromBody] SetPasswordRequest request)
     {
@@ -122,6 +123,7 @@ public class AuthController : BaseController
     }
 
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpPost("link-google")]
     public async Task<IActionResult> LinkGoogle([FromBody] GoogleLoginRequest request)
     {
