@@ -139,7 +139,12 @@ public class CreatorProfileController : BaseController
         // Sync Creator table
         await _creators.UpdateImageUrlAsync(userId, "cover", url);
 
-        return OkResponse(new { bannerImageUrl = updated.BannerImageUrl });
+        return OkResponse(new
+        {
+            bannerImageUrl = updated.BannerImageUrl,
+            coverImageUrl = updated.BannerImageUrl,   // alias — frontend may use either name
+            profileImageUrl = updated.ProfileImageUrl,
+        });
     }
 
     // ───── Upload profile image ─────
@@ -160,7 +165,12 @@ public class CreatorProfileController : BaseController
         // Sync Creator table
         await _creators.UpdateImageUrlAsync(userId, "profile", url);
 
-        return OkResponse(new { profileImageUrl = updated.ProfileImageUrl });
+        return OkResponse(new
+        {
+            profileImageUrl = updated.ProfileImageUrl,
+            coverImageUrl = updated.BannerImageUrl,   // include both fields for consistency
+            bannerImageUrl = updated.BannerImageUrl,
+        });
     }
 
     // ───── Collections: list ─────
