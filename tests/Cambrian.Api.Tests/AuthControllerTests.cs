@@ -5,7 +5,9 @@ using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
@@ -21,11 +23,18 @@ public sealed class AuthControllerTests
 {
     private readonly IAuthService _auth = Substitute.For<IAuthService>();
     private readonly ISubscriptionRepository _subscriptions = Substitute.For<ISubscriptionRepository>();
+    private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ILogger<AuthController> _logger = Substitute.For<ILogger<AuthController>>();
     private readonly AuthController _controller;
 
     public AuthControllerTests()
     {
-        _controller = new AuthController(_auth, _subscriptions);
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        _userManager = Substitute.For<UserManager<ApplicationUser>>(
+            store, null, null, null, null, null, null, null, null);
+
+        _controller = new AuthController(_auth, _subscriptions, _creators, _userManager, _logger);
     }
 
     private void SetupUser(string userId, string? bearerToken = null)
@@ -208,13 +217,11 @@ public sealed class AuthControllerTests
     // ── CSRF Token (anonymous) ──
 
     [Fact]
-    public void CsrfToken_ReturnsUniqueTokens()
+    public void CsrfToken_ReturnsOk()
     {
-        var r1 = _controller.GetCsrfToken();
-        var r2 = _controller.GetCsrfToken();
+        var result = _controller.CsrfToken();
 
-        Assert.IsType<OkObjectResult>(r1);
-        Assert.IsType<OkObjectResult>(r2);
+        Assert.IsType<OkObjectResult>(result);
     }
 
     // ── Forgot Password ──
@@ -248,22 +255,63 @@ public sealed class AuthControllerTests
     // ── Settings (Authorize-protected) ──
 
     [Fact]
-    public void GetProfile_ReturnsOk()
+    public async Task ChangePassword_ReturnsOk()
     {
         SetupUser("user-1");
-        var result = _controller.GetProfile();
+        _auth.ChangePasswordAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ChangePasswordRequest>())
+            .Returns(Task.CompletedTask);
 
-        Assert.IsType<OkObjectResult>(result);
-    }
-
-    [Fact]
-    public void ChangePassword_ReturnsOk()
-    {
-        SetupUser("user-1");
-        var result = _controller.ChangePassword();
+        var result = await _controller.ChangePassword(new ChangePasswordRequest
+        {
+            CurrentPassword = "old",
+            NewPassword = "NewPass123!"
+        });
 
         var ok = Assert.IsType<OkObjectResult>(result);
         var envelope = Assert.IsType<ApiResponse<object?>>(ok.Value);
         Assert.Equal("Password updated.", envelope.Message);
+    }
+
+    // ── Email change (two-step) ──
+
+    [Fact]
+    public async Task ChangeEmail_ReturnsVerificationMessage()
+    {
+        SetupUser("user-1");
+        _auth.ChangeEmailAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ChangeEmailRequest>())
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.ChangeEmail(new ChangeEmailRequest
+        {
+            Password = "pass",
+            NewEmail = "new@test.com"
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var envelope = Assert.IsType<ApiResponse<object?>>(ok.Value);
+        Assert.Contains("Verification email sent", envelope.Message);
+    }
+
+    [Fact]
+    public async Task VerifyEmailChange_ReturnsSuccess()
+    {
+        _auth.VerifyEmailChangeAsync(Arg.Any<string>())
+            .Returns(Task.CompletedTask);
+
+        var result = await _controller.VerifyEmailChange("u1.sometoken123");
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var envelope = Assert.IsType<ApiResponse<object?>>(ok.Value);
+        Assert.Equal("Email address updated successfully.", envelope.Message);
+    }
+
+    [Fact]
+    public async Task VerifyEmailChange_Returns400_WhenTokenEmpty()
+    {
+        var result = await _controller.VerifyEmailChange("");
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
+        Assert.Contains("token is required", envelope.Error);
     }
 }
