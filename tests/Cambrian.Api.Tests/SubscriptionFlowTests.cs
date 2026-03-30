@@ -3,32 +3,26 @@ using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Subscriptions;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
 /// <summary>
 /// Tests for SubscriptionsController covering the subscription lifecycle:
 /// plan listing, current subscription retrieval, upgrades, downgrades,
-/// cancellation, and tier synchronization with the ApplicationUser entity.
+/// cancellation, and history.
 /// </summary>
 public sealed class SubscriptionFlowTests
 {
-    private readonly ISubscriptionRepository _subscriptions = Substitute.For<ISubscriptionRepository>();
-    private readonly UserManager<ApplicationUser> _users;
+    private readonly ISubscriptionService _subscriptions = Substitute.For<ISubscriptionService>();
     private readonly SubscriptionsController _controller;
 
     public SubscriptionFlowTests()
     {
-        var store = Substitute.For<IUserStore<ApplicationUser>>();
-        _users = Substitute.For<UserManager<ApplicationUser>>(
-            store, null, null, null, null, null, null, null, null);
-
-        _controller = new SubscriptionsController(_subscriptions, _users);
+        _controller = new SubscriptionsController(_subscriptions);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -44,9 +38,11 @@ public sealed class SubscriptionFlowTests
     // ── Plans (anonymous) ──
 
     [Fact]
-    public void Plans_ReturnsOk()
+    public async Task Plans_ReturnsOk()
     {
-        var result = _controller.Plans();
+        _subscriptions.GetPlansAsync().Returns(new List<PlanResponse>());
+
+        var result = await _controller.Plans();
 
         Assert.IsType<OkObjectResult>(result);
     }
@@ -54,27 +50,13 @@ public sealed class SubscriptionFlowTests
     // ── Current subscription ──
 
     [Fact]
-    public async Task Current_ReturnsFree_WhenNoActiveSubscription()
+    public async Task Current_ReturnsOk_WithCurrentSubscription()
     {
         SetupUser();
-        _subscriptions.GetActiveAsync("user-1").Returns((Subscription?)null);
-
-        var result = await _controller.Current();
-
-        Assert.IsType<OkObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task Current_ReturnsActivePlan()
-    {
-        SetupUser();
-        _subscriptions.GetActiveAsync("user-1").Returns(new Subscription
+        _subscriptions.GetCurrentAsync("user-1").Returns(new SubscriptionResponse
         {
-            Id = Guid.NewGuid(),
-            UserId = "user-1",
-            Plan = "creator",
-            Status = "active",
-            ExpiresAt = DateTime.UtcNow.AddMonths(1)
+            Plan = "free",
+            Status = "active"
         });
 
         var result = await _controller.Current();
@@ -85,116 +67,48 @@ public sealed class SubscriptionFlowTests
     // ── Update subscription ──
 
     [Fact]
-    public async Task Update_CreatesNewSubscription_WhenNoneExists()
+    public async Task Update_Returns402_ForPaidPlanUpgradeWithoutCheckout()
     {
         SetupUser();
-        _subscriptions.GetActiveAsync("user-1").Returns((Subscription?)null);
-        _users.FindByIdAsync("user-1").Returns(new ApplicationUser
+        _subscriptions.GetCurrentAsync("user-1").Returns(new SubscriptionResponse
         {
-            Id = "user-1",
-            Tier = "free"
+            Plan = "free",
+            Status = "active"
         });
-        _users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
 
         var result = await _controller.Update(new UpdateSubscriptionRequest { Plan = "paid" });
 
-        var ok = Assert.IsType<OkObjectResult>(result);
-        await _subscriptions.Received(1).CreateAsync(Arg.Is<Subscription>(s =>
-            s.Plan == "paid" && s.Status == "active" && s.UserId == "user-1"));
+        var obj = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(402, obj.StatusCode);
     }
 
     [Fact]
-    public async Task Update_CancelsOldSubscription_WhenUpgrading()
+    public async Task Update_AllowsResync_WhenAlreadyOnSamePaidPlan()
     {
         SetupUser();
-        var existingId = Guid.NewGuid();
-        _subscriptions.GetActiveAsync("user-1").Returns(new Subscription
+        _subscriptions.GetCurrentAsync("user-1").Returns(new SubscriptionResponse
         {
-            Id = existingId,
-            UserId = "user-1",
             Plan = "paid",
             Status = "active"
         });
-        _users.FindByIdAsync("user-1").Returns(new ApplicationUser
-        {
-            Id = "user-1",
-            Tier = "paid"
-        });
-        _users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        _subscriptions.UpdateAsync(Arg.Any<UpdateSubscriptionRequest>(), "user-1")
+            .Returns(new SubscriptionResponse { Plan = "paid", Status = "active" });
 
-        await _controller.Update(new UpdateSubscriptionRequest { Plan = "creator" });
+        var result = await _controller.Update(new UpdateSubscriptionRequest { Plan = "paid" });
 
-        await _subscriptions.Received(1).CancelAsync(existingId);
-        await _subscriptions.Received(1).CreateAsync(Arg.Is<Subscription>(s =>
-            s.Plan == "creator"));
+        Assert.IsType<OkObjectResult>(result);
     }
 
     [Fact]
-    public async Task Update_NoOp_WhenSamePlanAlreadyActive()
+    public async Task Update_AllowsFreeDowngrade()
     {
         SetupUser();
-        _subscriptions.GetActiveAsync("user-1").Returns(new Subscription
-        {
-            Id = Guid.NewGuid(),
-            UserId = "user-1",
-            Plan = "creator",
-            Status = "active"
-        });
-        _users.FindByIdAsync("user-1").Returns(new ApplicationUser
-        {
-            Id = "user-1",
-            Tier = "creator"
-        });
+        _subscriptions.UpdateAsync(Arg.Any<UpdateSubscriptionRequest>(), "user-1")
+            .Returns(new SubscriptionResponse { Plan = "free", Status = "active" });
 
-        var result = await _controller.Update(new UpdateSubscriptionRequest { Plan = "creator" });
+        var result = await _controller.Update(new UpdateSubscriptionRequest { Plan = "free" });
 
-        var ok = Assert.IsType<OkObjectResult>(result);
-        await _subscriptions.DidNotReceive().CancelAsync(Arg.Any<Guid>());
-        await _subscriptions.DidNotReceive().CreateAsync(Arg.Any<Subscription>());
-    }
-
-    [Fact]
-    public async Task Update_SyncsTier_WhenSamePlanButTierMismatch()
-    {
-        SetupUser();
-        _subscriptions.GetActiveAsync("user-1").Returns(new Subscription
-        {
-            Id = Guid.NewGuid(),
-            UserId = "user-1",
-            Plan = "paid",
-            Status = "active"
-        });
-        var user = new ApplicationUser { Id = "user-1", Tier = "free" };
-        _users.FindByIdAsync("user-1").Returns(user);
-        _users.UpdateAsync(user).Returns(IdentityResult.Success);
-
-        await _controller.Update(new UpdateSubscriptionRequest { Plan = "paid" });
-
-        Assert.Equal("paid", user.Tier);
-        await _users.Received(1).UpdateAsync(user);
-    }
-
-    [Fact]
-    public async Task Update_DowngradesTo_Free_WithoutCreatingSubscription()
-    {
-        SetupUser();
-        var existingId = Guid.NewGuid();
-        _subscriptions.GetActiveAsync("user-1").Returns(new Subscription
-        {
-            Id = existingId,
-            UserId = "user-1",
-            Plan = "paid",
-            Status = "active"
-        });
-        var user = new ApplicationUser { Id = "user-1", Tier = "paid" };
-        _users.FindByIdAsync("user-1").Returns(user);
-        _users.UpdateAsync(user).Returns(IdentityResult.Success);
-
-        await _controller.Update(new UpdateSubscriptionRequest { Plan = "free" });
-
-        await _subscriptions.Received(1).CancelAsync(existingId);
-        await _subscriptions.DidNotReceive().CreateAsync(Arg.Any<Subscription>());
-        Assert.Equal("free", user.Tier);
+        Assert.IsType<OkObjectResult>(result);
     }
 
     // ── Cancel ──
@@ -203,7 +117,8 @@ public sealed class SubscriptionFlowTests
     public async Task Cancel_Returns400_WhenNoActiveSubscription()
     {
         SetupUser();
-        _subscriptions.GetActiveAsync("user-1").Returns((Subscription?)null);
+        _subscriptions.CancelAsync("user-1")
+            .ThrowsAsync(new InvalidOperationException("No active subscription to cancel."));
 
         var result = await _controller.Cancel();
 
@@ -213,28 +128,16 @@ public sealed class SubscriptionFlowTests
     }
 
     [Fact]
-    public async Task Cancel_CancelsAndResetsTier()
+    public async Task Cancel_ReturnsOk_WhenCancelled()
     {
         SetupUser();
-        var subId = Guid.NewGuid();
-        _subscriptions.GetActiveAsync("user-1").Returns(new Subscription
-        {
-            Id = subId,
-            UserId = "user-1",
-            Plan = "creator",
-            Status = "active"
-        });
-        var user = new ApplicationUser { Id = "user-1", Tier = "creator" };
-        _users.FindByIdAsync("user-1").Returns(user);
-        _users.UpdateAsync(user).Returns(IdentityResult.Success);
+        _subscriptions.CancelAsync("user-1").Returns(Task.CompletedTask);
 
         var result = await _controller.Cancel();
 
         var ok = Assert.IsType<OkObjectResult>(result);
         var envelope = Assert.IsType<ApiResponse<object?>>(ok.Value);
         Assert.Contains("cancelled", envelope.Message);
-        await _subscriptions.Received(1).CancelAsync(subId);
-        Assert.Equal("free", user.Tier);
     }
 
     // ── History ──
@@ -243,10 +146,10 @@ public sealed class SubscriptionFlowTests
     public async Task History_ReturnsAllSubscriptions()
     {
         SetupUser();
-        _subscriptions.GetHistoryAsync("user-1").Returns(new List<Subscription>
+        _subscriptions.GetHistoryAsync("user-1").Returns(new List<SubscriptionResponse>
         {
-            new() { Id = Guid.NewGuid(), Plan = "paid", Status = "cancelled", UserId = "user-1", StartedAt = DateTime.UtcNow.AddMonths(-2) },
-            new() { Id = Guid.NewGuid(), Plan = "creator", Status = "active", UserId = "user-1", StartedAt = DateTime.UtcNow }
+            new() { Plan = "paid", Status = "cancelled", StartedAt = DateTime.UtcNow.AddMonths(-2) },
+            new() { Plan = "creator", Status = "active", StartedAt = DateTime.UtcNow }
         });
 
         var result = await _controller.History();
