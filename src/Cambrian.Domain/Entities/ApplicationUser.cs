@@ -55,6 +55,23 @@ public class ApplicationUser : IdentityUser
     /// <summary>Primary auth provider: "Local", "Google", etc.</summary>
     public string? AuthProvider { get; set; }
 
+    // ── Email change (two-step verification) ──
+
+    /// <summary>
+    /// New email address awaiting verification. Null when no change is pending.
+    /// The live Email field is NOT changed until the verification token is confirmed.
+    /// </summary>
+    public string? PendingEmail { get; set; }
+
+    /// <summary>
+    /// SHA-256 hash (64 hex chars) of the email-change verification token.
+    /// Null when no change is pending. Cleared after successful verification.
+    /// </summary>
+    public string? EmailChangeToken { get; set; }
+
+    /// <summary>UTC expiry of the email change token (24 hours from issuance).</summary>
+    public DateTime? EmailChangeTokenExpiry { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();

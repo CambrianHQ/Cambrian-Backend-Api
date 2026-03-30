@@ -12,4 +12,14 @@ public interface IEmailService
     Task SendVerificationCodeAsync(string to, string code);
 
     Task SendWelcomeAsync(string to, string displayName);
+
+    /// <summary>
+    /// Send a verification link to the new email address when a user requests an email change.
+    /// </summary>
+    Task SendEmailChangeVerificationAsync(string newEmail, string verificationLink);
+
+    /// <summary>
+    /// Notify the old email address that an email change has been requested.
+    /// </summary>
+    Task SendEmailChangeNotificationAsync(string oldEmail, string newEmail);
 }

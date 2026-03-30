@@ -230,15 +230,21 @@ public sealed class Phase1SecurityTests
         _users.FindByIdAsync("u1").Returns(user);
         _users.CheckPasswordAsync(user, "correct").Returns(true);
         _users.FindByEmailAsync("new@example.com").Returns((ApplicationUser?)null);
-        _users.GenerateChangeEmailTokenAsync(user, "new@example.com").Returns("email-token");
-        _users.ChangeEmailAsync(user, "new@example.com", "email-token").Returns(IdentityResult.Success);
         _users.UpdateAsync(user).Returns(IdentityResult.Success);
 
         await _sut.ChangeEmailAsync(
             MakeUser("u1"),
             new ChangeEmailRequest { Password = "correct", NewEmail = "new@example.com" });
 
-        Assert.Equal("new@example.com", user.UserName);
+        // C2 fix: email is NOT changed immediately — pending state is stored instead
+        Assert.Equal("old@example.com", user.Email);
+        Assert.Equal("old@example.com", user.UserName);
+        Assert.Equal("new@example.com", user.PendingEmail);
+        Assert.NotNull(user.EmailChangeToken);
+        Assert.NotNull(user.EmailChangeTokenExpiry);
+        // Verification email sent to new address; notification to old address
+        await _email.Received(1).SendEmailChangeVerificationAsync("new@example.com", Arg.Any<string>());
+        await _email.Received(1).SendEmailChangeNotificationAsync("old@example.com", "new@example.com");
     }
 
     [Fact]

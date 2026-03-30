@@ -11,15 +11,20 @@ public class DownloadController : BaseController
 {
     private readonly ITrackRepository _tracks;
     private readonly IObjectStorage _storage;
-    private readonly ILibraryRepository _library;
+    private readonly IPurchaseRepository _purchases;
     private readonly ILicenseCertificateRepository _licenses;
     private readonly ILogger<DownloadController> _logger;
 
-    public DownloadController(ITrackRepository tracks, IObjectStorage storage, ILibraryRepository library, ILicenseCertificateRepository licenses, ILogger<DownloadController> logger)
+    public DownloadController(
+        ITrackRepository tracks,
+        IObjectStorage storage,
+        IPurchaseRepository purchases,
+        ILicenseCertificateRepository licenses,
+        ILogger<DownloadController> logger)
     {
         _tracks = tracks;
         _storage = storage;
-        _library = library;
+        _purchases = purchases;
         _licenses = licenses;
         _logger = logger;
     }
@@ -39,8 +44,9 @@ public class DownloadController : BaseController
 
         var userId = GetRequiredUserId()!;
 
-        var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
-        if (libraryItem is null)
+        // C3 — entitlement requires a completed purchase, not just a library row.
+        // Library is UX only; purchases are the source of truth for access rights.
+        if (!await _purchases.HasCompletedPurchaseAsync(userId, id))
             return ForbiddenResponse("You must purchase this track before downloading.");
 
         var track = await _tracks.GetByIdAsync(id);
@@ -85,8 +91,8 @@ public class DownloadController : BaseController
 
         var userId = GetRequiredUserId()!;
 
-        var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
-        if (libraryItem is null)
+        // C3 — same entitlement guard as the primary download endpoint.
+        if (!await _purchases.HasCompletedPurchaseAsync(userId, id))
             return ForbiddenResponse("You must purchase this track before downloading.");
 
         var track = await _tracks.GetByIdAsync(id);
@@ -118,8 +124,8 @@ public class DownloadController : BaseController
 
         var userId = GetRequiredUserId()!;
 
-        var libraryItem = await _library.GetByUserAndTrackAsync(userId, id);
-        if (libraryItem is null)
+        // C3 — same entitlement guard applies to the signed URL endpoint.
+        if (!await _purchases.HasCompletedPurchaseAsync(userId, id))
             return ForbiddenResponse("You must purchase this track before downloading.");
 
         var track = await _tracks.GetByIdAsync(id);

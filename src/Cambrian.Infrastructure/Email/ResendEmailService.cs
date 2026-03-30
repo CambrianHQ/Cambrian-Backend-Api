@@ -101,4 +101,26 @@ public sealed class ResendEmailService : IEmailService
             """;
         return SendAsync(to, "Welcome to Cambrian Music", html);
     }
+
+    public Task SendEmailChangeVerificationAsync(string newEmail, string verificationLink)
+    {
+        var html = $"""
+            <h2>Confirm your new email address</h2>
+            <p>Someone requested an email change for your Cambrian account.</p>
+            <p>Click the link below to confirm. The link expires in 24 hours.</p>
+            <p><a href="{verificationLink}">Confirm email change</a></p>
+            <p>If you did not request this, you can ignore this email.</p>
+            """;
+        return SendAsync(newEmail, "Cambrian — Confirm your new email address", html);
+    }
+
+    public Task SendEmailChangeNotificationAsync(string oldEmail, string newEmail)
+    {
+        var html = $"""
+            <h2>Email change requested for your Cambrian account</h2>
+            <p>A request was made to change your account email to <strong>{newEmail}</strong>.</p>
+            <p>If you did not request this change, please contact support immediately.</p>
+            """;
+        return SendAsync(oldEmail, "Cambrian — Email change requested", html);
+    }
 }

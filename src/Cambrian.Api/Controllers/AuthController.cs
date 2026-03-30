@@ -36,6 +36,7 @@ public class AuthController : BaseController
         _logger.LogInformation("EVENT: RegisterStarted");
         var result = await _auth.RegisterAsync(request);
         _logger.LogInformation("EVENT: RegisterCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
+        AppendAuthCookie(result.Token);
         return CreatedResponse(ToSession(result));
     }
 
@@ -46,6 +47,7 @@ public class AuthController : BaseController
         _logger.LogInformation("EVENT: LoginStarted");
         var result = await _auth.LoginAsync(request);
         _logger.LogInformation("EVENT: LoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
+        AppendAuthCookie(result.Token);
         return OkResponse(ToSession(result));
     }
 
@@ -74,6 +76,7 @@ public class AuthController : BaseController
             _logger.LogInformation("EVENT: GoogleLoginStarted");
             var result = await _auth.GoogleLoginAsync(request);
             _logger.LogInformation("EVENT: GoogleLoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
+            AppendAuthCookie(result.Token);
             return OkResponse(ToSession(result));
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("not configured"))
@@ -215,6 +218,26 @@ public class AuthController : BaseController
         });
     }
 
+    /// <summary>
+    /// Appends an HttpOnly auth cookie carrying the JWT.
+    /// Cookie auth and Bearer auth are interchangeable — same token, different transport.
+    /// </summary>
+    private void AppendAuthCookie(string jwt)
+    {
+        var isProduction = HttpContext.RequestServices
+            .GetRequiredService<IHostEnvironment>().IsProduction();
+
+        Response.Cookies.Append("auth_token", jwt, new CookieOptions
+        {
+            HttpOnly = true,
+            // Secure=true in production (HTTPS); allow HTTP in dev for local testing
+            Secure   = isProduction,
+            SameSite = SameSiteMode.Lax,
+            Expires  = DateTimeOffset.UtcNow.AddDays(7),
+            Path     = "/"
+        });
+    }
+
     private static object ToSession(AuthResponse auth) => new
     {
         token = auth.Token,
@@ -234,6 +257,13 @@ public class AuthController : BaseController
     [HttpPost("logout")]
     public IActionResult Logout()
     {
+        Response.Cookies.Delete("auth_token", new CookieOptions
+        {
+            HttpOnly = true,
+            Secure   = true,
+            SameSite = SameSiteMode.Lax,
+            Path     = "/"
+        });
         return MessageResponse("Logged out successfully.");
     }
 
@@ -483,12 +513,27 @@ public class AuthController : BaseController
     public async Task<IActionResult> ChangeEmail([FromBody] ChangeEmailRequest request)
     {
         await _auth.ChangeEmailAsync(User, request);
-        return MessageResponse("Email updated.");
+        // C2: email is NOT changed immediately — a verification link was sent to the new address.
+        return MessageResponse("Verification email sent. Check your inbox to confirm the change.");
     }
 
     [Authorize]
     [HttpPut("/settings/email")]
     public Task<IActionResult> UpdateEmail([FromBody] ChangeEmailRequest request) => ChangeEmail(request);
+
+    /// <summary>
+    /// Complete an email change by verifying the token from the link sent to the new address.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("/auth/verify-email-change")]
+    public async Task<IActionResult> VerifyEmailChange([FromQuery] string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return ErrorResponse("Verification token is required.");
+
+        await _auth.VerifyEmailChangeAsync(token);
+        return MessageResponse("Email address updated successfully.");
+    }
 
     /// <summary>
     /// Update the current user's display name.
