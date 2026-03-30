@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
@@ -221,10 +222,10 @@ public sealed class Phase1SecurityTests
                 new ChangePasswordRequest { CurrentPassword = "wrong", NewPassword = "NewP@ss1!" }));
     }
 
-    // ── ChangeEmail Tests ──
+    // ── ChangeEmail Tests (two-step flow) ──
 
     [Fact]
-    public async Task ChangeEmail_Succeeds_WithValidPassword()
+    public async Task ChangeEmail_StoresPendingEmailAndSendsCode()
     {
         var user = new ApplicationUser { Id = "u1", Email = "old@example.com", UserName = "old@example.com" };
         _users.FindByIdAsync("u1").Returns(user);
@@ -273,6 +274,87 @@ public sealed class Phase1SecurityTests
             _sut.ChangeEmailAsync(
                 MakeUser("u1"),
                 new ChangeEmailRequest { Password = "correct", NewEmail = "taken@example.com" }));
+    }
+
+    [Fact]
+    public async Task ChangeEmail_RollsBackPendingState_WhenEmailSendFails()
+    {
+        var user = new ApplicationUser { Id = "u1", Email = "old@example.com", UserName = "old@example.com" };
+        _users.FindByIdAsync("u1").Returns(user);
+        _users.CheckPasswordAsync(user, "correct").Returns(true);
+        _users.FindByEmailAsync("new@example.com").Returns((ApplicationUser?)null);
+        _users.UpdateAsync(user).Returns(IdentityResult.Success);
+        _email.SendEmailChangeVerificationAsync("new@example.com", Arg.Any<string>())
+            .ThrowsAsync(new Exception("SMTP failure"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.ChangeEmailAsync(
+                MakeUser("u1"),
+                new ChangeEmailRequest { Password = "correct", NewEmail = "new@example.com" }));
+
+        // Pending state should be rolled back
+        Assert.Null(user.PendingEmail);
+        Assert.Null(user.EmailChangeToken);
+        Assert.Null(user.EmailChangeTokenExpiry);
+    }
+
+    [Fact]
+    public async Task VerifyEmailChange_AppliesChange_WithValidToken()
+    {
+        var token = "u1.SomeRandomBase64TokenValue";
+        var hashedToken = HashCode(token);
+        var user = new ApplicationUser
+        {
+            Id = "u1",
+            Email = "old@example.com",
+            UserName = "old@example.com",
+            PendingEmail = "new@example.com",
+            EmailChangeToken = hashedToken,
+            EmailChangeTokenExpiry = DateTime.UtcNow.AddHours(12)
+        };
+        _users.FindByIdAsync("u1").Returns(user);
+        _users.UpdateAsync(user).Returns(IdentityResult.Success);
+
+        await _sut.VerifyEmailChangeAsync(token);
+
+        Assert.Equal("new@example.com", user.Email);
+        Assert.Equal("new@example.com", user.UserName);
+        Assert.Null(user.PendingEmail);
+        Assert.Null(user.EmailChangeToken);
+        Assert.Null(user.EmailChangeTokenExpiry);
+    }
+
+    [Fact]
+    public async Task VerifyEmailChange_Throws_WhenTokenExpired()
+    {
+        var token = "u1.SomeRandomBase64TokenValue";
+        var user = new ApplicationUser
+        {
+            Id = "u1",
+            PendingEmail = "new@example.com",
+            EmailChangeToken = HashCode(token),
+            EmailChangeTokenExpiry = DateTime.UtcNow.AddMinutes(-1) // expired
+        };
+        _users.FindByIdAsync("u1").Returns(user);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.VerifyEmailChangeAsync(token));
+    }
+
+    [Fact]
+    public async Task VerifyEmailChange_Throws_WhenTokenInvalid()
+    {
+        var user = new ApplicationUser
+        {
+            Id = "u1",
+            PendingEmail = "new@example.com",
+            EmailChangeToken = HashCode("u1.CorrectToken"),
+            EmailChangeTokenExpiry = DateTime.UtcNow.AddHours(12)
+        };
+        _users.FindByIdAsync("u1").Returns(user);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.VerifyEmailChangeAsync("u1.WrongToken"));
     }
 
     private static string HashCode(string code)

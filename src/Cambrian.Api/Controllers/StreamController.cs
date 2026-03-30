@@ -62,10 +62,11 @@ public class StreamController : BaseController
         var track = await _tracks.GetByIdAsync(id);
         if (track is null)
             return NotFoundResponse("Track not found.");
+
         if (string.IsNullOrEmpty(track.AudioUrl))
             return ErrorResponse("Track has no audio file configured.");
 
-        // C4: enforce visibility via shared policy.
+        // C4: enforce visibility via shared policy — single source of truth.
         var streamUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, streamUserId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
@@ -91,6 +92,7 @@ public class StreamController : BaseController
         var track = await _tracks.GetByIdAsync(id);
         if (track is null)
             return NotFoundResponse("Track not found.");
+
         if (string.IsNullOrEmpty(track.AudioUrl))
             return ErrorResponse("Track has no audio file configured.");
 
@@ -117,6 +119,11 @@ public class StreamController : BaseController
         var track = await _tracks.GetByIdAsync(parsedTrackId);
         if (track is null)
             return NotFoundResponse("Track not found.");
+
+        // C4: enforce visibility via shared policy.
+        if (!_visibility.CanAccess(track.Visibility, track.CreatorId, userId, User.IsInRole("Admin")))
+            return NotFoundResponse("Track not found.");
+
         if (string.IsNullOrEmpty(track.AudioUrl))
             return ErrorResponse("Track has no audio file configured.");
 

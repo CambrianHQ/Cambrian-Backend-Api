@@ -341,14 +341,26 @@ public class AuthService : IAuthService
         user.EmailChangeTokenExpiry = DateTime.UtcNow.AddHours(24);
         await _users.UpdateAsync(user);
 
-        // Notify old address first (account takeover defense)
-        var oldEmail = user.Email ?? user.UserName ?? string.Empty;
-        if (!string.IsNullOrEmpty(oldEmail))
-            await _email.SendEmailChangeNotificationAsync(oldEmail, request.NewEmail);
+        // Send verification link to the new address; notify old address for account takeover defense.
+        try
+        {
+            var oldEmail = user.Email ?? user.UserName ?? string.Empty;
+            if (!string.IsNullOrEmpty(oldEmail))
+                await _email.SendEmailChangeNotificationAsync(oldEmail, request.NewEmail);
 
-        // Send verification link to the new address
-        var link = $"/auth/verify-email-change?token={Uri.EscapeDataString(plaintext)}";
-        await _email.SendEmailChangeVerificationAsync(request.NewEmail, link);
+            var link = $"/auth/verify-email-change?token={Uri.EscapeDataString(plaintext)}";
+            await _email.SendEmailChangeVerificationAsync(request.NewEmail, link);
+        }
+        catch (Exception ex)
+        {
+            // Roll back pending state so the user isn't stuck
+            _logger.LogError(ex, "Failed to send email change verification to {Email} for user {UserId}", request.NewEmail, user.Id);
+            user.PendingEmail = null;
+            user.EmailChangeToken = null;
+            user.EmailChangeTokenExpiry = null;
+            await _users.UpdateAsync(user);
+            throw new InvalidOperationException("Failed to send verification email. Please try again.");
+        }
     }
 
     /// <inheritdoc />

@@ -6699,7 +6699,17 @@
                       "type": "object",
                       "properties": {
                         "bannerImageUrl": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "The uploaded banner/cover image URL"
+                        },
+                        "coverImageUrl": {
+                          "type": "string",
+                          "description": "Alias for bannerImageUrl — same value, alternate field name"
+                        },
+                        "profileImageUrl": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Current profile image URL (included for completeness)"
                         }
                       }
                     },
@@ -6755,7 +6765,18 @@
                       "type": "object",
                       "properties": {
                         "profileImageUrl": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "The uploaded profile/avatar image URL"
+                        },
+                        "coverImageUrl": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Current cover/banner image URL (included for completeness)"
+                        },
+                        "bannerImageUrl": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Alias for coverImageUrl — same value, alternate field name"
                         }
                       }
                     },
