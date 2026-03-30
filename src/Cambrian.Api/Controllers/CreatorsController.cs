@@ -289,7 +289,8 @@ public class CreatorsController : BaseController
 
         var contentType = Request.ContentType ?? "application/octet-stream";
         await _storage.UploadAsync(Request.Body, key, contentType);
-        return Ok();
+        var publicUrl = _storage.GetPublicUrl(key);
+        return OkResponse(new { publicUrl });
     }
 
     // ───── POST /api/uploads/creator-image (multipart fallback) ─────
