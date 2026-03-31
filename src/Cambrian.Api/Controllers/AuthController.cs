@@ -210,6 +210,7 @@ public class AuthController : BaseController
             phoneNumber = user?.PhoneNumber,
             isNewUser,
             needsUsername,
+            canChangeUsername = needsUsername,
             creatorTier = profile.CreatorTier,
             uploadCount = profile.UploadCount,
             uploadLimit = profile.UploadLimit,
@@ -313,6 +314,12 @@ public class AuthController : BaseController
         var user = await _userManager.FindByIdAsync(userId);
         if (user is null)
             return NotFoundResponse("User not found.");
+
+        // Once a creator has chosen a username it is permanent — reject further changes.
+        var alreadyHasUsername = !string.IsNullOrWhiteSpace(user.UserName)
+            && !string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+        if (alreadyHasUsername)
+            return ErrorResponse("Username cannot be changed once set.");
 
         // Check uniqueness via Identity UserName
         var existingByName = await _userManager.FindByNameAsync(normalized);
@@ -468,9 +475,15 @@ public class AuthController : BaseController
         var canUpgrade = currentTierConfig.Tier != CreatorTier.Pro;
         var proTier = TierManifest.Pro;
 
+        var hasUsername = user is not null
+            && !string.IsNullOrWhiteSpace(user.UserName)
+            && !string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+
         return OkResponse(new
         {
             displayName = profile.DisplayName,
+            username = hasUsername ? user!.UserName : null,
+            canChangeUsername = !hasUsername,
             email = profile.Email,
             tier = profile.Tier,
             role = profile.Role,

@@ -182,7 +182,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             return MapToDto(creator, stats);
         }
 
-        if (request.Username is not null)
+        // Username is immutable once set — only apply on first assignment.
+        if (request.Username is not null && string.IsNullOrWhiteSpace(existing.Username))
         {
             var normalized = NormalizeUsername(request.Username);
             existing.Username = normalized;
