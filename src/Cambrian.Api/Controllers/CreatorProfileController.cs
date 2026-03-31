@@ -87,7 +87,25 @@ public class CreatorProfileController : BaseController
         var profile = await _profiles.GetByUserIdAsync(userId);
         if (profile is null)
             return OkResponse(new { exists = false });
-        return OkResponse(profile);
+
+        // Look up creator identity to determine username immutability.
+        var creator = await _creators.GetByUserIdAsync(userId);
+        var hasUsername = !string.IsNullOrWhiteSpace(creator?.Username);
+
+        return OkResponse(new
+        {
+            profile.Id,
+            profile.UserId,
+            profile.Slug,
+            username = creator?.Username,
+            canChangeUsername = !hasUsername,
+            profile.Bio,
+            profile.Niche,
+            profile.ProfileImageUrl,
+            profile.BannerImageUrl,
+            profile.SocialLinks,
+            profile.Stats
+        });
     }
 
     // ───── Upsert profile (bio, niche, social links, stats toggles) ─────
