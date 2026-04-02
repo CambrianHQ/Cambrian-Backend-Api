@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Creators;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -22,7 +21,7 @@ public class CreatorsController : BaseController
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository _profiles;
     private readonly IObjectStorage _storage;
-    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ILogger<CreatorsController> _logger;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -32,7 +31,7 @@ public class CreatorsController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorsController(ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, IObjectStorage storage, UserManager<ApplicationUser> userManager, ILogger<CreatorsController> logger)
+    public CreatorsController(ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, IObjectStorage storage, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorsController> logger)
     {
         _creators = creators;
         _profiles = profiles;
