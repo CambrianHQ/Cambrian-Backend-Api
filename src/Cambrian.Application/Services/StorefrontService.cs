@@ -102,9 +102,13 @@ public sealed class StorefrontService : IStorefrontService
 
     private static TrackResponse MapTrack(Track t, decimal feeRate)
     {
-        var nonExPrice = t.NonExclusivePriceCents / 100m;
-        var exPrice = t.ExclusivePriceCents / 100m;
-        var buyoutPrice = t.CopyrightBuyoutPriceCents / 100m;
+        // Fallback: if *PriceCents fields are 0, use legacy Price field (matches checkout logic)
+        var legacyPriceDollars = t.Price;
+        var nonExPrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : legacyPriceDollars;
+        var exPrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : legacyPriceDollars;
+        var buyoutPrice = t.CopyrightBuyoutPriceCents > 0
+            ? t.CopyrightBuyoutPriceCents / 100m
+            : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : legacyPriceDollars);
 
         return new TrackResponse
         {
@@ -132,7 +136,13 @@ public sealed class StorefrontService : IStorefrontService
             AudioUrl = t.AudioUrl,
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
-            Artist = t.Creator?.DisplayName ?? "Unknown",
+            CreatorSlug = t.CreatorEntity?.Username,
+            CreatorProfileImageUrl = t.CreatorEntity?.ProfileImageUrl,
+            Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
+                ? t.CreatorEntity.DisplayName
+                : t.CreatorEntity?.Username
+                  ?? t.Creator?.DisplayName
+                  ?? "Unknown",
             CreatedAt = t.CreatedAt,
         };
     }

@@ -52,8 +52,10 @@ public class CreatorService : ICreatorService
             .Take(pageSize)
             .Select(t =>
             {
-                var nonExPrice = t.NonExclusivePriceCents / 100m;
-                var exPrice = t.ExclusivePriceCents / 100m;
+                // Fallback: if *PriceCents fields are 0, use legacy Price field (matches checkout logic)
+                var legacyPriceDollars = t.Price;
+                var nonExPrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : legacyPriceDollars;
+                var exPrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : legacyPriceDollars;
 
                 return new TrackResponse
                 {
@@ -70,6 +72,8 @@ public class CreatorService : ICreatorService
                     ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - feeRate), 2),
                     AudioUrl = t.AudioUrl ?? "",
                     CoverArtUrl = t.CoverArtUrl,
+                    CreatorSlug = t.CreatorEntity?.Username,
+                    CreatorProfileImageUrl = t.CreatorEntity?.ProfileImageUrl,
                     Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
                         ? t.CreatorEntity.DisplayName
                         : t.CreatorEntity?.Username

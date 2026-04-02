@@ -115,9 +115,11 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             Description = t.Description,
             Genre = t.Genre ?? "",
             Price = (decimal)t.Price,
-            NonExclusivePrice = t.NonExclusivePriceCents / 100m,
-            ExclusivePrice = t.ExclusivePriceCents / 100m,
-            CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents / 100m,
+            NonExclusivePrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : (decimal)t.Price,
+            ExclusivePrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : (decimal)t.Price,
+            CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents > 0
+                ? t.CopyrightBuyoutPriceCents / 100m
+                : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : (decimal)t.Price),
             ExclusiveSold = t.ExclusiveSold,
             Status = t.Status ?? "available",
             IsCopyrightTransferred = t.CopyrightOwnerId != null,
