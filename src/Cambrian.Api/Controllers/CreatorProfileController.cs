@@ -106,7 +106,8 @@ public class CreatorProfileController : BaseController
             profile.Id,
             profile.UserId,
             profile.Slug,
-            username = creator?.Username,
+            username = creator?.Username ?? profile.Username,
+            displayName = creator?.DisplayName ?? profile.DisplayName,
             canChangeUsername = !hasUsername,
             profile.Bio,
             profile.Niche,
@@ -141,6 +142,18 @@ public class CreatorProfileController : BaseController
         var slugOwner = await _profiles.GetBySlugAsync(slug);
         if (slugOwner is not null && slugOwner.UserId != userId)
             return ConflictResponse("That slug is already taken.");
+
+        // Validate social link URLs
+        if (body.SocialLinks is not null)
+        {
+            foreach (var link in body.SocialLinks)
+            {
+                if (string.IsNullOrWhiteSpace(link.Url)) continue;
+                if (!Uri.TryCreate(link.Url, UriKind.Absolute, out var uri)
+                    || (uri.Scheme != "https" && uri.Scheme != "http"))
+                    return ErrorResponse($"Invalid URL for {link.Platform}: must be a valid http(s) URL.");
+            }
+        }
 
         var socialLinksJson = body.SocialLinks is not null
             ? JsonSerializer.Serialize(body.SocialLinks)

@@ -6,6 +6,12 @@ public class CreatorProfileDto
     public string UserId { get; set; } = "";
     public string Slug { get; set; } = "";
 
+    /// <summary>Creator's display name (from Creator identity or ApplicationUser).</summary>
+    public string? DisplayName { get; set; }
+
+    /// <summary>Canonical routing username (Creator.Username). Use for storefront links.</summary>
+    public string? Username { get; set; }
+
     public string Bio { get; set; } = "";
     public string? Niche { get; set; }
 
