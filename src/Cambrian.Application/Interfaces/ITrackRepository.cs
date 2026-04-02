@@ -41,4 +41,12 @@ public interface ITrackRepository
     /// Prevents race conditions on concurrent exclusive purchase attempts.
     /// </summary>
     Task<bool> TryMarkExclusiveSoldAsync(Guid trackId);
+
+    /// <summary>
+    /// Atomically mark a track as copyright-transferred. Sets ExclusiveSold, Status,
+    /// Visibility, OriginalCreatorId, CopyrightOwnerId, and CopyrightTransferredAt
+    /// in a single conditional UPDATE. Returns true if the update succeeded.
+    /// Prevents race conditions on concurrent copyright buyout attempts.
+    /// </summary>
+    Task<bool> TryMarkCopyrightBuyoutAsync(Guid trackId, string buyerUserId);
 }

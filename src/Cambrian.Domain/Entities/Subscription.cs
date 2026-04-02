@@ -12,6 +12,10 @@ public class Subscription
 
     public string Status { get; set; } = "active"; // active, cancelled, expired
 
+    public string? StripeSubscriptionId { get; set; }
+
+    public string? StripeCustomerId { get; set; }
+
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? ExpiresAt { get; set; }

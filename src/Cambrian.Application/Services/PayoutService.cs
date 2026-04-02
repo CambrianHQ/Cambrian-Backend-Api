@@ -53,8 +53,11 @@ public class PayoutService : IPayoutService
 
         var grossCents = allPurchases.Sum(p => p.AmountCents);
         var totalGross = grossCents / 100m;
-        var totalPlatformFee = Math.Round(totalGross * platformFeeRate, 2);
-        var totalEarned = Math.Round(totalGross * (1 - platformFeeRate), 2);
+        // Use per-purchase floor to match wallet credit calculation in CheckoutService,
+        // so the displayed earnings always equal the withdrawable wallet balance.
+        var totalEarnedCents = allPurchases.Sum(p => (long)Math.Floor(p.AmountCents * (1 - platformFeeRate)));
+        var totalEarned = totalEarnedCents / 100m;
+        var totalPlatformFee = Math.Round(totalGross - totalEarned, 2);
 
         var payouts = await _payouts.GetByCreatorIdAsync(userId);
         var paidOut = payouts.Where(p => p.Status == "completed").Sum(p => p.AmountCents) / 100m;

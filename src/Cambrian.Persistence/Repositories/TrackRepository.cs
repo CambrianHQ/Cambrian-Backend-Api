@@ -162,4 +162,14 @@ public class TrackRepository : ITrackRepository
             $"UPDATE \"Tracks\" SET \"ExclusiveSold\" = true WHERE \"Id\" = {trackId} AND \"ExclusiveSold\" = false");
         return affected > 0;
     }
+
+    public async Task<bool> TryMarkCopyrightBuyoutAsync(Guid trackId, string buyerUserId)
+    {
+        // Atomic UPDATE with multi-field WHERE clause — sets all six fields in a single
+        // conditional statement. Prevents race conditions on concurrent copyright buyout attempts.
+        var now = DateTime.UtcNow;
+        var affected = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"Tracks\" SET \"ExclusiveSold\" = true, \"Status\" = 'copyright_transferred', \"Visibility\" = 'hidden', \"OriginalCreatorId\" = \"CreatorId\", \"CopyrightOwnerId\" = {buyerUserId}, \"CopyrightTransferredAt\" = {now} WHERE \"Id\" = {trackId} AND \"ExclusiveSold\" = false AND \"Status\" != 'copyright_transferred'");
+        return affected > 0;
+    }
 }

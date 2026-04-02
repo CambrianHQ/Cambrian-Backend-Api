@@ -3,6 +3,7 @@ using System;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cambrian.Persistence.Migrations
 {
     [DbContext(typeof(CambrianDbContext))]
-    partial class CambrianDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260402001647_AddSubscriptionStripeFields")]
+    partial class AddSubscriptionStripeFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -49,7 +52,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("TrackId");
 
-                    b.ToTable("AbuseReports", (string)null);
+                    b.ToTable("AbuseReports");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.ActivityItem", b =>
@@ -133,7 +136,7 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("TrackId", "EventType", "CreatedAt")
                         .HasDatabaseName("ix_analytics_events_track_type_created");
 
-                    b.ToTable("AnalyticsEvents", (string)null);
+                    b.ToTable("AnalyticsEvents");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.ApplicationUser", b =>
@@ -301,7 +304,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.Creator", b =>
@@ -355,7 +358,7 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("Username")
                         .IsUnique();
 
-                    b.ToTable("Creators", (string)null);
+                    b.ToTable("Creators");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.CreatorFollow", b =>
@@ -382,7 +385,7 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("FollowerId", "CreatorId")
                         .IsUnique();
 
-                    b.ToTable("CreatorFollows", (string)null);
+                    b.ToTable("CreatorFollows");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.CreatorProfile", b =>
@@ -445,7 +448,7 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("CreatorProfiles", (string)null);
+                    b.ToTable("CreatorProfiles");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.FeatureFlag", b =>
@@ -476,7 +479,7 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("FeatureFlags", (string)null);
+                    b.ToTable("FeatureFlags");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.Invoice", b =>
@@ -515,7 +518,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Invoices", (string)null);
+                    b.ToTable("Invoices");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.LibraryItem", b =>
@@ -555,7 +558,7 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("UserId", "TrackId")
                         .IsUnique();
 
-                    b.ToTable("Library", (string)null);
+                    b.ToTable("Library");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.LicenseCertificate", b =>
@@ -613,7 +616,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("PurchaseId");
 
-                    b.ToTable("LicenseCertificates", (string)null);
+                    b.ToTable("LicenseCertificates");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.Payout", b =>
@@ -643,7 +646,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("CreatorId");
 
-                    b.ToTable("Payouts", (string)null);
+                    b.ToTable("Payouts");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.Purchase", b =>
@@ -711,7 +714,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("TrackId");
 
-                    b.ToTable("Purchases", (string)null);
+                    b.ToTable("Purchases");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.StreamSession", b =>
@@ -739,7 +742,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("TrackId");
 
-                    b.ToTable("StreamSessions", (string)null);
+                    b.ToTable("StreamSessions");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.StripeWebhookEvent", b =>
@@ -786,7 +789,7 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("EventId")
                         .IsUnique();
 
-                    b.ToTable("StripeWebhookEvents", (string)null);
+                    b.ToTable("StripeWebhookEvents");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.Subscription", b =>
@@ -825,7 +828,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Subscriptions", (string)null);
+                    b.ToTable("Subscriptions");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.Track", b =>
@@ -943,7 +946,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("CreatorUuid");
 
-                    b.ToTable("Tracks", (string)null);
+                    b.ToTable("Tracks");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.TrackCollection", b =>
@@ -985,7 +988,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("CreatorId");
 
-                    b.ToTable("TrackCollections", (string)null);
+                    b.ToTable("TrackCollections");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.WalletTransaction", b =>
@@ -1018,7 +1021,7 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("WalletTransactions", (string)null);
+                    b.ToTable("WalletTransactions");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
