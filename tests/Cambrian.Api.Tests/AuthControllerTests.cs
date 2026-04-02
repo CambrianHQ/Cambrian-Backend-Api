@@ -7,6 +7,8 @@ using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -35,11 +37,19 @@ public sealed class AuthControllerTests
             store, null, null, null, null, null, null, null, null);
 
         _controller = new AuthController(_auth, _subscriptions, _creators, _userManager, _logger);
+
+        // Provide a default HttpContext so AppendAuthCookie can resolve IHostEnvironment
+        var env = Substitute.For<IHostEnvironment>();
+        env.EnvironmentName.Returns("Testing");
+        var services = new ServiceCollection();
+        services.AddSingleton(env);
+        var context = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
     }
 
     private void SetupUser(string userId, string? bearerToken = null)
     {
-        var context = new DefaultHttpContext();
+        var context = _controller.ControllerContext.HttpContext as DefaultHttpContext ?? new DefaultHttpContext();
         context.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
         {
             new Claim(ClaimTypes.NameIdentifier, userId)
