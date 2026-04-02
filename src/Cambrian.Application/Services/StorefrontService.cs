@@ -51,13 +51,14 @@ public sealed class StorefrontService : IStorefrontService
         // Map tracks to responses
         var trackResponses = tracks.Select(t => MapTrack(t, feeRate)).ToList();
 
-        // Build stats from completed purchases
+        // Build stats from completed purchases — use per-purchase floor to match wallet credits
         var completedPurchases = purchases.Where(p => p.Status == "completed").ToList();
+        var totalEarnedCents = completedPurchases.Sum(p => (long)Math.Floor(p.AmountCents * (1 - feeRate)));
         var stats = new CreatorStatsDto
         {
             TotalDownloads = completedPurchases.Count,
             TotalEarnings = profile.ShowEarnings
-                ? completedPurchases.Sum(p => p.AmountCents) / 100m
+                ? totalEarnedCents / 100m
                 : 0m
         };
 

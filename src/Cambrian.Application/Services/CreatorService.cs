@@ -104,8 +104,11 @@ public class CreatorService : ICreatorService
 
         var grossCents = allPurchases.Sum(p => p.AmountCents);
         var totalGross = grossCents / 100m;
-        var totalPlatformFee = Math.Round(totalGross * feeRate, 2);
-        var totalEarned = Math.Round(totalGross * (1 - feeRate), 2);
+        // Use per-purchase floor to match wallet credit calculation,
+        // consistent with PayoutService.GetEarningsAsync
+        var totalEarnedCents = allPurchases.Sum(p => (long)Math.Floor(p.AmountCents * (1 - feeRate)));
+        var totalEarned = totalEarnedCents / 100m;
+        var totalPlatformFee = Math.Round(totalGross - totalEarned, 2);
 
         var payouts = await _payouts.GetByCreatorIdAsync(userId);
         var pendingPayouts = payouts.Where(p => p.Status == "pending").Sum(p => p.AmountCents) / 100m;
