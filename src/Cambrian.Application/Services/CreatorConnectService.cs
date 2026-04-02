@@ -49,8 +49,26 @@ public class CreatorConnectService : ICreatorConnectService
         var returnUrl = $"{frontendUrl}/payouts?stripe_connect=complete";
         var refreshUrl = $"{frontendUrl}/payouts?stripe_connect=refresh";
 
-        var onboardingUrl = await _gateway.CreateAccountOnboardingLinkAsync(
-            accountId, returnUrl, refreshUrl);
+        string onboardingUrl;
+        try
+        {
+            onboardingUrl = await _gateway.CreateAccountOnboardingLinkAsync(
+                accountId, returnUrl, refreshUrl);
+        }
+        catch (Exception ex) when (ex.Message.Contains("No such account"))
+        {
+            // Stale or invalid account ID (e.g. seed data placeholder) — create a fresh one
+            _logger.LogWarning(
+                "Stripe account {AccountId} not found for user {UserId}, creating new account",
+                accountId, userId);
+
+            accountId = await _gateway.CreateConnectAccountAsync(user.Email!);
+            user.StripeAccountId = accountId;
+            await _users.UpdateAsync(user);
+
+            onboardingUrl = await _gateway.CreateAccountOnboardingLinkAsync(
+                accountId, returnUrl, refreshUrl);
+        }
 
         return new CreatorConnectResult
         {

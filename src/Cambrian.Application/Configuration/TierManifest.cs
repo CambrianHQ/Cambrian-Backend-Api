@@ -15,10 +15,10 @@ public static class TierManifest
         Tier = CreatorTier.Free,
         Slug = "free",
         DisplayName = "Free Creator",
-        UploadLimit = 10,
+        UploadLimit = 3,
         FeeRate = 0.35m,
         PriceCents = 0,
-        Features = ["Upload up to 10 tracks", "Sell licenses", "Basic analytics"],
+        Features = ["Upload up to 3 tracks", "Sell licenses", "Basic analytics"],
         AnalyticsAccess = AnalyticsAccess.Basic
     };
 

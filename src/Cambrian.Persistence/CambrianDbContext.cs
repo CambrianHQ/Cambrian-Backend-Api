@@ -150,6 +150,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<Subscription>(e =>
         {
             e.HasKey(s => s.Id);
+            e.Property(s => s.StripeSubscriptionId).HasMaxLength(255);
+            e.Property(s => s.StripeCustomerId).HasMaxLength(255);
             e.HasOne(s => s.User)
                 .WithMany()
                 .HasForeignKey(s => s.UserId)

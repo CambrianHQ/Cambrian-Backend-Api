@@ -789,6 +789,9 @@ internal static class StartupExtensions
             var purchases = new List<Purchase>();
             var libraryItems = new List<LibraryItem>();
             var walletTxns = new List<WalletTransaction>();
+            var creatorById = new[] { aiden, bellanova, cassius, faye, griffin }
+                .Where(u => u is not null)
+                .ToDictionary(u => u!.Id, u => u!);
 
             foreach (var (buyer, track, licenseType, usageType, amountCents, status) in purchaseData)
             {
@@ -821,13 +824,15 @@ internal static class StartupExtensions
                     SavedAt = completedAt
                 });
 
-                // Creator wallet credit (platform takes 35% free / 15% pro)
-                var creatorUser = tracks.First(t => t.Id == track.Id);
+                // Creator wallet credit — use tier-based fee rate with floor to match CheckoutService
+                var creatorFeeRate = creatorById.TryGetValue(track.CreatorId, out var creatorUser)
+                    ? Cambrian.Application.Configuration.TierManifest.For(creatorUser.CreatorTier).FeeRate
+                    : Cambrian.Application.Configuration.TierManifest.Free.FeeRate;
                 walletTxns.Add(new WalletTransaction
                 {
                     Id = Guid.NewGuid(),
                     UserId = track.CreatorId,
-                    AmountCents = (long)(amountCents * 0.65), // ~65% to creator (free tier default)
+                    AmountCents = (long)Math.Floor(amountCents * (1 - creatorFeeRate)),
                     Type = "credit",
                     Description = $"Sale: {track.Title} ({licenseType})",
                     RelatedPurchaseId = purchaseId,

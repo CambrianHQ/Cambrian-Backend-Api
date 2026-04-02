@@ -260,24 +260,16 @@ public class CheckoutService : ICheckoutService
                 }
             }
 
-            // ── Mark copyright_buyout if applicable ──
+            // ── Mark copyright_buyout if applicable (atomic CAS — matches StripeWebhookService pattern) ──
             if (licenseType == "copyright_buyout")
             {
-                // Re-check after potential race
-                var freshTrack = await _tracks.GetByIdAsync(trackId);
-                if (freshTrack is null || freshTrack.ExclusiveSold || freshTrack.Status == "copyright_transferred")
+                var buyoutMarked = await _tracks.TryMarkCopyrightBuyoutAsync(trackId, userId);
+                if (!buyoutMarked)
                 {
                     _logger.LogWarning("Copyright buyout race in ConfirmAsync: Track {TrackId} already sold/transferred — skipping for user {UserId}", trackId, userId);
                     await _transactions.RollbackAsync();
                     return new CheckoutConfirmResponse { Status = "failed", SessionId = sessionId };
                 }
-                freshTrack.ExclusiveSold = true;
-                freshTrack.Status = "copyright_transferred";
-                freshTrack.Visibility = "hidden";
-                freshTrack.OriginalCreatorId = freshTrack.CreatorId;
-                freshTrack.CopyrightOwnerId = userId;
-                freshTrack.CopyrightTransferredAt = DateTime.UtcNow;
-                await _tracks.UpdateAsync(freshTrack);
             }
 
             // ── Create Purchase record ──

@@ -25,42 +25,6 @@
 
 ## 4. Do NOT Expose Email Publicly
 
-- Email is **internal-only** — authentication, admin, and private profile endpoints only.
-- Email must NEVER appear in track responses, storefront pages, search results, or any public API.
 
-## 5. Always Use Username/Slug for Creator Identity
-
-- `slug` (from `CreatorProfile`) is the **only** public creator identifier.
-- `DisplayName` maps to `Artist` in track responses.
-- Never use `Email`, `UserId`, or `CreatorId` as a public-facing identity.
-
-## 6. Always Update Governance Files
-
-Any code change must update the relevant governance files:
-
-| What Changed | Update These |
-|---|---|
-| API shape (DTO fields) | `contracts/API_CONTRACTS.md`, `contracts/openapi.v1.json` |
-| Endpoint added/removed | `contracts/API_CONTRACTS.md`, `contracts/endpoint-manifest.v1.json`, `contracts/openapi.v1.json` |
-| Database schema | `manifests/BACKEND_MANIFEST.json`, `architecture/ARCHITECTURE.md` |
-| Environment variable | `config/.env.example`, `render.yaml`, `manifests/BACKEND_MANIFEST.json` |
-| Service/repo added | `manifests/BACKEND_MANIFEST.json` |
-| Frontend route/API usage | `manifests/FRONTEND_MANIFEST.json` |
-| Policy rule changed | `contracts/policy.v1.json`, `governance/backend-policy.v1.json` |
-
-## 7. Required Reading Before Making Changes
-
-Before writing any code, AI agents **must** read:
-
-1. `policy/POLICY.md` — full engineering rules
-2. `contracts/API_CONTRACTS.md` — all endpoint shapes
-3. `architecture/ARCHITECTURE.md` — system design and entity relationships
-4. The specific file(s) being modified — understand existing code before changing it
-
-## 8. If Uncertain — STOP and Ask
-
-- If a change might break an existing consumer → **ask**.
-- If a migration might lose data → **ask**.
-- If you're unsure whether a field is public or private → **ask**.
 - If the governance update scope is unclear → **ask**.
 - **Never guess. Never assume. Ask the human.**
