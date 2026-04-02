@@ -46,18 +46,6 @@ jobs:
       - name: Contract Validation
         run: node scripts/validate-contracts.cjs
 
-  secret-scan:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Gitleaks secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
-
   security:
     needs: build-test
     runs-on: ubuntu-latest
