@@ -810,17 +810,25 @@
             "name": "slug",
             "in": "path",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "page",
             "in": "query",
-            "schema": { "type": "integer", "default": 1 }
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
           },
           {
             "name": "pageSize",
             "in": "query",
-            "schema": { "type": "integer", "default": 20 }
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
           }
         ],
         "responses": {
@@ -830,13 +838,23 @@
               "application/json": {
                 "schema": {
                   "properties": {
-                    "success": { "type": "boolean" },
+                    "success": {
+                      "type": "boolean"
+                    },
                     "data": {
-                      "items": { "$ref": "#/components/schemas/TrackResponse" },
+                      "items": {
+                        "$ref": "#/components/schemas/TrackResponse"
+                      },
                       "type": "array"
                     },
-                    "message": { "nullable": true, "type": "string" },
-                    "error": { "nullable": true, "type": "string" }
+                    "message": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "error": {
+                      "nullable": true,
+                      "type": "string"
+                    }
                   },
                   "type": "object"
                 }
@@ -4461,13 +4479,32 @@
     },
     "/health/audio-audit": {
       "get": {
-        "tags": ["Health"],
+        "tags": [
+          "Health"
+        ],
         "summary": "Admin-only: audit all tracks for missing audio files",
-        "security": [{ "Bearer": [] }],
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
         "responses": {
-          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } },
-          "401": { "description": "Unauthorized" },
-          "403": { "description": "Forbidden" }
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
         }
       }
     },
@@ -5213,22 +5250,67 @@
     },
     "/creator-profile/{slug}/follow": {
       "get": {
-        "tags": ["CreatorProfile"],
+        "tags": [
+          "CreatorProfile"
+        ],
         "summary": "Check if authenticated user is following a creator",
-        "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "OK" } }
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       },
       "post": {
-        "tags": ["CreatorProfile"],
+        "tags": [
+          "CreatorProfile"
+        ],
         "summary": "Follow a creator by slug",
-        "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "OK" } }
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       },
       "delete": {
-        "tags": ["CreatorProfile"],
+        "tags": [
+          "CreatorProfile"
+        ],
         "summary": "Unfollow a creator by slug",
-        "parameters": [{ "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "OK" } }
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/creator-profile/me/pinned-tracks": {
@@ -6228,22 +6310,70 @@
     },
     "/api/creators/{creatorId}/follow": {
       "get": {
-        "tags": ["Creators"],
+        "tags": [
+          "Creators"
+        ],
         "summary": "Check follow status for a creator by UUID",
-        "parameters": [{ "name": "creatorId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "responses": { "200": { "description": "OK" } }
+        "parameters": [
+          {
+            "name": "creatorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       },
       "post": {
-        "tags": ["Creators"],
+        "tags": [
+          "Creators"
+        ],
         "summary": "Follow a creator by UUID",
-        "parameters": [{ "name": "creatorId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "responses": { "200": { "description": "OK" } }
+        "parameters": [
+          {
+            "name": "creatorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       },
       "delete": {
-        "tags": ["Creators"],
+        "tags": [
+          "Creators"
+        ],
         "summary": "Unfollow a creator by UUID",
-        "parameters": [{ "name": "creatorId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "responses": { "200": { "description": "OK" } }
+        "parameters": [
+          {
+            "name": "creatorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/api/creators/username-availability": {
@@ -6406,18 +6536,30 @@
     },
     "/auth/display-name": {
       "put": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Update the current user's display name",
-        "security": [{ "Bearer": [] }],
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["displayName"],
+                "required": [
+                  "displayName"
+                ],
                 "properties": {
-                  "displayName": { "type": "string", "minLength": 1, "maxLength": 100 }
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
                 }
               }
             }
@@ -6431,39 +6573,65 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean" },
+                    "success": {
+                      "type": "boolean"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "displayName": { "type": "string" }
+                        "displayName": {
+                          "type": "string"
+                        }
                       }
                     },
-                    "message": { "nullable": true, "type": "string" },
-                    "error": { "nullable": true, "type": "string" }
+                    "message": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "error": {
+                      "nullable": true,
+                      "type": "string"
+                    }
                   }
                 }
               }
             }
           },
-          "400": { "description": "Validation error" },
-          "401": { "description": "Unauthorized" }
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
         }
       }
     },
     "/settings/display-name": {
       "put": {
-        "tags": ["Auth"],
+        "tags": [
+          "Auth"
+        ],
         "summary": "Update display name (settings alias)",
-        "security": [{ "Bearer": [] }],
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["displayName"],
+                "required": [
+                  "displayName"
+                ],
                 "properties": {
-                  "displayName": { "type": "string", "minLength": 1, "maxLength": 100 }
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
                 }
               }
             }
@@ -6477,22 +6645,36 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean" },
+                    "success": {
+                      "type": "boolean"
+                    },
                     "data": {
                       "type": "object",
                       "properties": {
-                        "displayName": { "type": "string" }
+                        "displayName": {
+                          "type": "string"
+                        }
                       }
                     },
-                    "message": { "nullable": true, "type": "string" },
-                    "error": { "nullable": true, "type": "string" }
+                    "message": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "error": {
+                      "nullable": true,
+                      "type": "string"
+                    }
                   }
                 }
               }
             }
           },
-          "400": { "description": "Validation error" },
-          "401": { "description": "Unauthorized" }
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
         }
       }
     },
@@ -6991,6 +7173,203 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Refresh JWT token",
+        "description": "Returns a fresh token with updated claims (role, tier, etc.). Requires a valid token.",
+        "responses": {
+          "200": {
+            "description": "Token refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfObject"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token"
+          }
+        }
+      }
+    },
+    "/auth/verify-email-change": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Verify email change token",
+        "description": "Complete an email change by verifying the token sent to the new address.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired token"
+          }
+        }
+      }
+    },
+    "/creator-profile/me/banner": {
+      "post": {
+        "tags": [
+          "CreatorProfile"
+        ],
+        "summary": "Upload banner image (alias)",
+        "description": "Alias for /creator-profile/me/cover-image-upload.",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator-profile/me/avatar": {
+      "post": {
+        "tags": [
+          "CreatorProfile"
+        ],
+        "summary": "Upload profile/avatar image (alias)",
+        "description": "Alias for /creator-profile/me/profile-image-upload.",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/username/{slug}/collections": {
+      "get": {
+        "tags": [
+          "CreatorProfile"
+        ],
+        "summary": "Get collections by creator username",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfArray"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found"
+          }
+        }
+      }
+    },
+    "/creator/username/{username}": {
+      "get": {
+        "tags": [
+          "Creators"
+        ],
+        "summary": "Get creator by username",
+        "description": "Resolve username to creator profile. Normalizes username before lookup.",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseOfObject"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found"
           }
         }
       }
