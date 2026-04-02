@@ -16,4 +16,6 @@ public class Payout
     public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? CompletedAt { get; set; }
+
+    public string? FailureReason { get; set; }
 }

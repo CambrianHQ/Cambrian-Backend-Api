@@ -126,6 +126,19 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return await MapToDtoAsync(existing);
     }
 
+    public async Task<CreatorProfileDto?> UpdateSettingsAsync(string userId, bool? showEarnings, bool? showDownloadStats)
+    {
+        var existing = await _db.CreatorProfiles
+            .FirstOrDefaultAsync(p => p.UserId == userId);
+        if (existing is null) return null;
+
+        if (showEarnings.HasValue) existing.ShowEarnings = showEarnings.Value;
+        if (showDownloadStats.HasValue) existing.ShowDownloadStats = showDownloadStats.Value;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return await MapToDtoAsync(existing);
+    }
+
     public async Task<IReadOnlyList<TrackCollectionDto>> GetCollectionsAsync(string creatorId)
     {
         var collections = await _db.TrackCollections.AsNoTracking()

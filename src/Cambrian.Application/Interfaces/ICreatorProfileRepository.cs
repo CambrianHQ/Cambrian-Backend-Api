@@ -19,6 +19,8 @@ public interface ICreatorProfileRepository
 
     Task<CreatorProfileDto> UpdatePinnedTracksAsync(string userId, string pinnedTrackIds);
 
+    Task<CreatorProfileDto?> UpdateSettingsAsync(string userId, bool? showEarnings, bool? showDownloadStats);
+
     Task<IReadOnlyList<TrackCollectionDto>> GetCollectionsAsync(string creatorId);
 
     Task<TrackCollectionDto?> GetCollectionByIdAsync(Guid id);

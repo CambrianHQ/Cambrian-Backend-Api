@@ -13,22 +13,34 @@ public sealed class StorefrontService : IStorefrontService
     private readonly ITrackRepository _tracks;
     private readonly IPurchaseRepository _purchases;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly ICreatorIdentityRepository _creators;
 
     public StorefrontService(
         ICreatorProfileRepository profiles,
         ITrackRepository tracks,
         IPurchaseRepository purchases,
-        UserManager<ApplicationUser> users)
+        UserManager<ApplicationUser> users,
+        ICreatorIdentityRepository creators)
     {
         _profiles = profiles;
         _tracks = tracks;
         _purchases = purchases;
         _users = users;
+        _creators = creators;
     }
 
     public async Task<StorefrontResponse?> GetStorefrontAsync(string slug)
     {
         var profile = await _profiles.GetBySlugAsync(slug);
+
+        // Fall back to Creator.Username (canonical routing identifier)
+        if (profile is null)
+        {
+            var creatorByUsername = await _creators.GetByUsernameAsync(slug);
+            if (creatorByUsername is not null)
+                profile = await _profiles.GetByUserIdAsync(creatorByUsername.UserId);
+        }
+
         if (profile is null) return null;
 
         // Fetch storefront-safe tracks, collections, and stats in parallel

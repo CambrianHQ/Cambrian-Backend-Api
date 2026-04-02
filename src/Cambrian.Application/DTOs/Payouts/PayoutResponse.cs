@@ -9,4 +9,6 @@ public class PayoutResponse
     public DateTime RequestedAt { get; set; }
 
     public DateTime? CompletedAt { get; set; }
+
+    public string? FailureReason { get; set; }
 }
