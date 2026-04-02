@@ -153,6 +153,7 @@ public class PayoutService : IPayoutService
             });
 
             payout.Status = "failed";
+            payout.FailureReason = ex.Message;
             await _payouts.UpdateAsync(payout);
 
             throw new InvalidOperationException(
@@ -175,7 +176,8 @@ public class PayoutService : IPayoutService
             Amount = p.AmountCents / 100m,
             Status = p.Status,
             RequestedAt = p.RequestedAt,
-            CompletedAt = p.CompletedAt
+            CompletedAt = p.CompletedAt,
+            FailureReason = p.FailureReason
         }).ToList();
     }
 }

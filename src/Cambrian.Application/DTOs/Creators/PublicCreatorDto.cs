@@ -8,6 +8,7 @@ using Cambrian.Application.DTOs.Catalog;
 public class PublicCreatorDto
 {
     public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
     public string Username { get; set; } = "";
     public string? DisplayName { get; set; }
     public string Bio { get; set; } = "";

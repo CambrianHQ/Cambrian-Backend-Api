@@ -60,6 +60,15 @@ public class CreatorProfileController : BaseController
     public async Task<IActionResult> GetBySlug(string slug)
     {
         var profile = await _profiles.GetBySlugAsync(slug);
+
+        // Fall back to Creator.Username (canonical routing identifier)
+        if (profile is null)
+        {
+            var creator = await _creators.GetByUsernameAsync(slug);
+            if (creator is not null)
+                profile = await _profiles.GetByUserIdAsync(creator.UserId);
+        }
+
         if (profile is null) return NotFoundResponse("Creator not found.");
         return OkResponse(profile);
     }
@@ -141,6 +150,18 @@ public class CreatorProfileController : BaseController
             body.Niche?.Trim(), socialLinksJson, body.ShowEarnings, body.ShowDownloadStats);
 
         return OkResponse(saved);
+    }
+
+    // ───── Partial update: toggle showEarnings / showDownloadStats ─────
+
+    [Authorize]
+    [HttpPatch("me/settings")]
+    public async Task<IActionResult> PatchSettings([FromBody] PatchProfileSettingsRequest body)
+    {
+        var userId = GetRequiredUserId()!;
+        var updated = await _profiles.UpdateSettingsAsync(userId, body.ShowEarnings, body.ShowDownloadStats);
+        if (updated is null) return NotFoundResponse("Create a profile first.");
+        return OkResponse(updated);
     }
 
     // ───── Upload banner image ─────

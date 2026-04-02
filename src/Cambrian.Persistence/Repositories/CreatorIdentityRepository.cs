@@ -331,6 +331,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         return new PublicCreatorDto
         {
             Id = c.Id.ToString(),
+            UserId = c.UserId,
             Username = c.Username,
             DisplayName = c.DisplayName,
             Bio = c.Bio,
