@@ -173,7 +173,9 @@ public class PayoutService : IPayoutService
         return payouts.Take(take).Select(p => new PayoutResponse
         {
             Amount = p.AmountCents / 100m,
-            Status = p.Status
+            Status = p.Status,
+            RequestedAt = p.RequestedAt,
+            CompletedAt = p.CompletedAt
         }).ToList();
     }
 }

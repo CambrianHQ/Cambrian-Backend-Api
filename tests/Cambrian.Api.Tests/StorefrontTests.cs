@@ -304,7 +304,9 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
         var stats = (await res.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("data").GetProperty("stats");
 
-        Assert.Equal(50m, stats.GetProperty("totalEarnings").GetDecimal());
+        // Earnings should reflect net (post-fee) amount, not gross.
+        // Free tier fee = 35%, so $50.00 gross → floor(5000 × 0.65) = 3250 → $32.50 net.
+        Assert.Equal(32.5m, stats.GetProperty("totalEarnings").GetDecimal());
         Assert.Equal(1, stats.GetProperty("totalDownloads").GetInt32());
     }
 

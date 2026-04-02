@@ -220,14 +220,16 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     private async Task<CreatorStatsDto> ComputeStatsAsync(string userId)
     {
-        var trackCount = await _db.Tracks.CountAsync(t => t.CreatorId == userId);
         var totalSales = await _db.Purchases
             .CountAsync(p => _db.Tracks.Any(t => t.CreatorId == userId && t.Id == p.TrackId)
                              && p.Status == "completed");
-        var totalEarningsCents = await _db.Purchases
-            .Where(p => _db.Tracks.Any(t => t.CreatorId == userId && t.Id == p.TrackId)
-                        && p.Status == "completed")
-            .SumAsync(p => (int?)p.AmountCents ?? 0);
+
+        // Use wallet transaction credits as the source of truth for earnings.
+        // These are already post-fee, per-purchase-floored values matching the
+        // withdrawable balance (consistent with PayoutService.GetEarningsAsync).
+        var totalEarningsCents = await _db.WalletTransactions
+            .Where(w => w.UserId == userId && w.Type == "credit")
+            .SumAsync(w => (long?)w.AmountCents ?? 0);
 
         return new CreatorStatsDto
         {

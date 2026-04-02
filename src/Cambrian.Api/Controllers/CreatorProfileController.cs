@@ -104,7 +104,12 @@ public class CreatorProfileController : BaseController
             profile.ProfileImageUrl,
             profile.BannerImageUrl,
             profile.SocialLinks,
-            profile.Stats
+            profile.ShowEarnings,
+            profile.ShowDownloadStats,
+            profile.PinnedTrackIds,
+            profile.Stats,
+            profile.CreatedAt,
+            profile.UpdatedAt
         });
     }
 
