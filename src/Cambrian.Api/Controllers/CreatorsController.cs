@@ -20,6 +20,7 @@ public class CreatorsController : BaseController
 {
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository _profiles;
+    private readonly ICreatorService _creatorService;
     private readonly IObjectStorage _storage;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ILogger<CreatorsController> _logger;
@@ -31,13 +32,26 @@ public class CreatorsController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorsController(ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, IObjectStorage storage, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorsController> logger)
+    public CreatorsController(ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, ICreatorService creatorService, IObjectStorage storage, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorsController> logger)
     {
         _creators = creators;
         _profiles = profiles;
+        _creatorService = creatorService;
         _storage = storage;
         _userManager = userManager;
         _logger = logger;
+    }
+
+    // ───── GET /api/creators/dashboard ─────
+
+    [HttpGet("dashboard")]
+    [Authorize(Roles = "Creator,Admin")]
+    public async Task<IActionResult> Dashboard()
+    {
+        var userId = GetRequiredUserId();
+        if (userId is null) return Unauthorized();
+        var dashboard = await _creatorService.GetDashboardAsync(userId);
+        return OkResponse(dashboard);
     }
 
     // ───── GET /api/creators/{creatorId} ─────

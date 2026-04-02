@@ -77,4 +77,14 @@ public class PurchaseRepository : IPurchaseRepository
                 p.TrackId == trackId &&
                 p.Status == "completed");
     }
+
+    public async Task<Dictionary<Guid, int>> GetCompletedCountsByTrackIdsAsync(IEnumerable<Guid> trackIds)
+    {
+        var trackIdSet = trackIds.ToHashSet();
+        return await _db.Purchases
+            .Where(p => trackIdSet.Contains(p.TrackId) && p.Status == "completed")
+            .GroupBy(p => p.TrackId)
+            .Select(g => new { TrackId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TrackId, x => x.Count);
+    }
 }
