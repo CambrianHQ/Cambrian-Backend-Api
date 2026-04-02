@@ -212,11 +212,17 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
         var stats = await ComputeStatsAsync(p.UserId);
 
+        // Resolve canonical display name and routing username from Creator identity table
+        var creator = await _db.Creators.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.UserId == p.UserId);
+
         return new CreatorProfileDto
         {
             Id = p.Id.ToString(),
             UserId = p.UserId,
             Slug = p.Slug,
+            DisplayName = creator?.DisplayName,
+            Username = creator?.Username,
             Bio = p.Bio,
             Niche = p.Niche,
             BannerImageUrl = p.BannerImageUrl,
