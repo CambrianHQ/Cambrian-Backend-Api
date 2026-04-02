@@ -79,6 +79,16 @@ build/
 publish/
 
 ################################################
+# Generated reports / audit artifacts
+################################################
+
+SECURITY_AUDIT_REPORT.md
+GOVERNANCE_AUDIT_REPORT.md
+TEST_COVERAGE_ANALYSIS.md
+QA-USER-FLOW-REPORT.md
+CREATOR-IDENTITY-ROLLOUT.md
+
+################################################
 # Docker
 ################################################
 
