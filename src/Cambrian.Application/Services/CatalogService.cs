@@ -139,9 +139,17 @@ public class CatalogService : ICatalogService
 
     private static TrackResponse BuildTrackResponse(Track t, decimal feeRate, string? creatorSlug, string? creatorProfileImageUrl)
     {
-        var nonExPrice = t.NonExclusivePriceCents / 100m;
-        var exPrice = t.ExclusivePriceCents / 100m;
-        var buyoutPrice = t.CopyrightBuyoutPriceCents / 100m;
+        // Fallback: if *PriceCents fields are 0, use legacy Price field (matches checkout logic)
+        var legacyPriceDollars = t.Price;
+        var nonExPrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : legacyPriceDollars;
+        var exPrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : legacyPriceDollars;
+        var buyoutPrice = t.CopyrightBuyoutPriceCents > 0
+            ? t.CopyrightBuyoutPriceCents / 100m
+            : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : legacyPriceDollars);
+
+        // Canonical slug: prefer Creator.Username (new identity), fall back to CreatorProfile.Slug
+        var canonicalSlug = t.CreatorEntity?.Username ?? creatorSlug;
+        var canonicalImage = t.CreatorEntity?.ProfileImageUrl ?? creatorProfileImageUrl;
 
         return new TrackResponse
         {
@@ -174,8 +182,8 @@ public class CatalogService : ICatalogService
             AudioUrl = t.AudioUrl,
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
-            CreatorSlug = creatorSlug,
-            CreatorProfileImageUrl = creatorProfileImageUrl,
+            CreatorSlug = canonicalSlug,
+            CreatorProfileImageUrl = canonicalImage,
             Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
                 ? t.CreatorEntity.DisplayName
                 : t.CreatorEntity?.Username
