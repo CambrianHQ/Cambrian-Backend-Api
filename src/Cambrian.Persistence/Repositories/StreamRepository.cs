@@ -49,4 +49,14 @@ public class StreamRepository : IStreamRepository
             .Include(s => s.Track)
             .FirstOrDefaultAsync(s => s.Id == id);
     }
+
+    public async Task<Dictionary<Guid, int>> GetPlayCountsByTrackIdsAsync(IEnumerable<Guid> trackIds)
+    {
+        var trackIdSet = trackIds.ToHashSet();
+        return await _db.StreamSessions
+            .Where(s => trackIdSet.Contains(s.TrackId))
+            .GroupBy(s => s.TrackId)
+            .Select(g => new { TrackId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TrackId, x => x.Count);
+    }
 }

@@ -72,4 +72,33 @@ public class WalletRepository : IWalletRepository
             throw;
         }
     }
+
+    public async Task<long> GetTotalCreditsAsync(string userId)
+    {
+        return await _db.WalletTransactions
+            .Where(w => w.UserId == userId && w.Type == "credit")
+            .SumAsync(w => w.AmountCents);
+    }
+
+    public async Task<long> GetCreditsAfterAsync(string userId, DateTime after)
+    {
+        return await _db.WalletTransactions
+            .Where(w => w.UserId == userId && w.Type == "credit" && w.CreatedAt >= after)
+            .SumAsync(w => w.AmountCents);
+    }
+
+    public async Task<Dictionary<Guid, long>> GetCreditsByTrackAsync(string userId, IEnumerable<Guid> trackIds)
+    {
+        var trackIdSet = trackIds.ToHashSet();
+        return await _db.WalletTransactions
+            .Where(w => w.UserId == userId && w.Type == "credit" && w.RelatedPurchaseId != null)
+            .Join(_db.Purchases,
+                wt => wt.RelatedPurchaseId,
+                p => p.Id,
+                (wt, p) => new { p.TrackId, wt.AmountCents })
+            .Where(x => trackIdSet.Contains(x.TrackId))
+            .GroupBy(x => x.TrackId)
+            .Select(g => new { TrackId = g.Key, Total = g.Sum(x => x.AmountCents) })
+            .ToDictionaryAsync(x => x.TrackId, x => x.Total);
+    }
 }

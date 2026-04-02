@@ -16,4 +16,10 @@ public interface IWalletRepository
     /// Returns true if the withdrawal succeeded, false if balance was insufficient.
     /// </summary>
     Task<bool> AtomicWithdrawAsync(string userId, long amountCents, string description);
+
+    Task<long> GetTotalCreditsAsync(string userId);
+
+    Task<long> GetCreditsAfterAsync(string userId, DateTime after);
+
+    Task<Dictionary<Guid, long>> GetCreditsByTrackAsync(string userId, IEnumerable<Guid> trackIds);
 }

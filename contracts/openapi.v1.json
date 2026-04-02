@@ -6094,6 +6094,23 @@
         }
       }
     },
+    "/api/creators/dashboard": {
+      "get": {
+        "tags": [
+          "Creators"
+        ],
+        "summary": "Creator earnings dashboard with per-track stats",
+        "operationId": "getCreatorDashboard",
+        "responses": {
+          "200": {
+            "description": "Dashboard data"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/api/creators/{creatorId}": {
       "get": {
         "tags": [

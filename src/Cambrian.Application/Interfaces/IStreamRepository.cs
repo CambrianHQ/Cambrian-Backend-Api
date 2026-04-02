@@ -9,4 +9,6 @@ public interface IStreamRepository
     Task StopAsync(Guid sessionId);
 
     Task<StreamSession?> GetByIdAsync(Guid id);
+
+    Task<Dictionary<Guid, int>> GetPlayCountsByTrackIdsAsync(IEnumerable<Guid> trackIds);
 }

@@ -16,6 +16,8 @@ public interface IPurchaseRepository
     /// <summary>Look up a purchase by its Stripe Checkout Session ID.</summary>
     Task<Purchase?> GetByStripeSessionIdAsync(string stripeSessionId);
 
+    Task<Dictionary<Guid, int>> GetCompletedCountsByTrackIdsAsync(IEnumerable<Guid> trackIds);
+
     Task AddAsync(Purchase purchase);
 
     Task UpdateAsync(Purchase purchase);

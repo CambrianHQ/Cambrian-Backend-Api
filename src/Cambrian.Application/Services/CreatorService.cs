@@ -1,5 +1,6 @@
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Catalog;
+using Cambrian.Application.DTOs.Creator;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -12,14 +13,25 @@ public class CreatorService : ICreatorService
     private readonly ITrackRepository _tracks;
     private readonly IPurchaseRepository _purchases;
     private readonly IPayoutRepository _payouts;
+    private readonly IWalletRepository _wallet;
+    private readonly IStreamRepository _streams;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<CreatorService> _logger;
 
-    public CreatorService(ITrackRepository tracks, IPurchaseRepository purchases, IPayoutRepository payouts, UserManager<ApplicationUser> users, ILogger<CreatorService> logger)
+    public CreatorService(
+        ITrackRepository tracks,
+        IPurchaseRepository purchases,
+        IPayoutRepository payouts,
+        IWalletRepository wallet,
+        IStreamRepository streams,
+        UserManager<ApplicationUser> users,
+        ILogger<CreatorService> logger)
     {
         _tracks = tracks;
         _purchases = purchases;
         _payouts = payouts;
+        _wallet = wallet;
+        _streams = streams;
         _users = users;
         _logger = logger;
     }
@@ -104,6 +116,62 @@ public class CreatorService : ICreatorService
             pendingBalance = totalEarned - paidOut - pendingPayouts,
             pendingPayouts,
             paidOut
+        };
+    }
+
+    public async Task<CreatorDashboardResponse> GetDashboardAsync(string userId)
+    {
+        // Total earnings = SUM(AmountCents) FROM WalletTransactions WHERE Type='credit'
+        var totalEarnings = await _wallet.GetTotalCreditsAsync(userId);
+
+        // Weekly earnings = same query with CreatedAt >= 7 days ago
+        var weeklyEarnings = await _wallet.GetCreditsAfterAsync(userId, DateTime.UtcNow.AddDays(-7));
+
+        // Load creator tracks for per-track breakdown
+        var tracks = await _tracks.GetByCreatorIdAsync(userId);
+        var trackIds = tracks.Select(t => t.Id).ToList();
+
+        // Plays = COUNT(*) FROM StreamSessions WHERE TrackId IN (creator tracks)
+        var playCounts = trackIds.Count > 0
+            ? await _streams.GetPlayCountsByTrackIdsAsync(trackIds)
+            : new Dictionary<Guid, int>();
+
+        // Sales = COUNT(*) FROM Purchases WHERE Status='completed' AND TrackId IN (creator tracks)
+        var saleCounts = trackIds.Count > 0
+            ? await _purchases.GetCompletedCountsByTrackIdsAsync(trackIds)
+            : new Dictionary<Guid, int>();
+
+        // Earned per track = SUM(AmountCents) FROM WalletTransactions joined to Purchases
+        var earnedByTrack = trackIds.Count > 0
+            ? await _wallet.GetCreditsByTrackAsync(userId, trackIds)
+            : new Dictionary<Guid, long>();
+
+        var totalPlays = playCounts.Values.Sum();
+        var totalSales = saleCounts.Values.Sum();
+
+        // Conversion = sales / plays * 100
+        var conversion = totalPlays > 0
+            ? Math.Round((decimal)totalSales / totalPlays * 100, 2)
+            : 0m;
+
+        var trackStats = tracks.Select(t => new TrackStatsDto
+        {
+            Id = t.Id.ToString(),
+            Title = t.Title,
+            CoverArtUrl = t.CoverArtUrl,
+            Sales = saleCounts.GetValueOrDefault(t.Id),
+            Plays = playCounts.GetValueOrDefault(t.Id),
+            EarnedCents = earnedByTrack.GetValueOrDefault(t.Id),
+        }).ToList();
+
+        return new CreatorDashboardResponse
+        {
+            EarningsCents = totalEarnings,
+            WeeklyEarningsCents = weeklyEarnings,
+            TotalPlays = totalPlays,
+            TotalSales = totalSales,
+            ConversionRate = conversion,
+            Tracks = trackStats,
         };
     }
 }
