@@ -315,6 +315,7 @@ public class CreatorsController : BaseController
     // ───── PUT /api/uploads/creator-image/{**key} (local storage proxy) ─────
 
     [Authorize]
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpPut("/api/uploads/creator-image/{**key}")]
     public async Task<IActionResult> ProxyCreatorImageUpload(string key)
     {

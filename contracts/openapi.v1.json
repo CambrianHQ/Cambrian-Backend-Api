@@ -2795,28 +2795,6 @@
         }
       }
     },
-    "/api/uploads/creator-image/{key}": {
-      "put": {
-        "tags": [
-          "Creators"
-        ],
-        "parameters": [
-          {
-            "name": "key",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/uploads/creator-image": {
       "post": {
         "tags": [

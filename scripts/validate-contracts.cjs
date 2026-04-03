@@ -236,6 +236,12 @@ function checkRoutesInContract(controllerFiles, openApi) {
     for (const match of actionRoutes) {
       const actionPath = match[2] || "";
 
+      // Skip routes hidden from API explorer (e.g. internal/local-dev proxy endpoints)
+      const precedingContext = src.substring(Math.max(0, match.index - 200), match.index);
+      if (/\[ApiExplorerSettings\s*\(\s*IgnoreApi\s*=\s*true\s*\)\]/i.test(precedingContext)) {
+        continue;
+      }
+
       // In ASP.NET Core, a template starting with "/" is absolute
       // and overrides the controller-level [Route] prefix.
       let fullPath;
