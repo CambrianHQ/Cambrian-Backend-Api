@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -10,6 +11,7 @@ namespace Cambrian.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // ── Subscription Stripe fields ──
             migrationBuilder.AddColumn<string>(
                 name: "StripeCustomerId",
                 table: "Subscriptions",
@@ -24,34 +26,37 @@ namespace Cambrian.Persistence.Migrations
                 maxLength: 255,
                 nullable: true);
 
-            migrationBuilder.AlterColumn<string>(
+            // ── Exclusive purchase unique constraint (from AddExclusivePurchaseUniqueConstraint) ──
+            migrationBuilder.Sql(
+                "CREATE UNIQUE INDEX IF NOT EXISTS \"ux_purchases_track_exclusive\" " +
+                "ON \"Purchases\"(\"TrackId\") WHERE \"LicenseType\" = 'exclusive';");
+
+            // ── Pending email change columns (from AddPendingEmailChange) ──
+            migrationBuilder.AddColumn<string>(
                 name: "PendingEmail",
                 table: "AspNetUsers",
                 type: "text",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "character varying(256)",
-                oldMaxLength: 256,
-                oldNullable: true);
+                nullable: true);
 
-            migrationBuilder.AlterColumn<bool>(
+            migrationBuilder.AddColumn<string>(
+                name: "EmailChangeToken",
+                table: "AspNetUsers",
+                type: "text",
+                nullable: true);
+
+            migrationBuilder.AddColumn<DateTime>(
+                name: "EmailChangeTokenExpiry",
+                table: "AspNetUsers",
+                type: "timestamp with time zone",
+                nullable: true);
+
+            // ── Email verified flag (from AddEmailVerified) ──
+            migrationBuilder.AddColumn<bool>(
                 name: "EmailVerified",
                 table: "AspNetUsers",
                 type: "boolean",
                 nullable: false,
-                oldClrType: typeof(bool),
-                oldType: "boolean",
-                oldDefaultValue: true);
-
-            migrationBuilder.AlterColumn<string>(
-                name: "EmailChangeToken",
-                table: "AspNetUsers",
-                type: "text",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "character varying(64)",
-                oldMaxLength: 64,
-                oldNullable: true);
+                defaultValue: false);
         }
 
         /// <inheritdoc />
@@ -65,34 +70,24 @@ namespace Cambrian.Persistence.Migrations
                 name: "StripeSubscriptionId",
                 table: "Subscriptions");
 
-            migrationBuilder.AlterColumn<string>(
+            migrationBuilder.Sql(
+                "DROP INDEX IF EXISTS \"ux_purchases_track_exclusive\";");
+
+            migrationBuilder.DropColumn(
                 name: "PendingEmail",
-                table: "AspNetUsers",
-                type: "character varying(256)",
-                maxLength: 256,
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldNullable: true);
+                table: "AspNetUsers");
 
-            migrationBuilder.AlterColumn<bool>(
-                name: "EmailVerified",
-                table: "AspNetUsers",
-                type: "boolean",
-                nullable: false,
-                defaultValue: true,
-                oldClrType: typeof(bool),
-                oldType: "boolean");
-
-            migrationBuilder.AlterColumn<string>(
+            migrationBuilder.DropColumn(
                 name: "EmailChangeToken",
-                table: "AspNetUsers",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldNullable: true);
+                table: "AspNetUsers");
+
+            migrationBuilder.DropColumn(
+                name: "EmailChangeTokenExpiry",
+                table: "AspNetUsers");
+
+            migrationBuilder.DropColumn(
+                name: "EmailVerified",
+                table: "AspNetUsers");
         }
     }
 }
