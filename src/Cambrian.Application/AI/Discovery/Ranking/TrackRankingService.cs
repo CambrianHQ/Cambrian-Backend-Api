@@ -76,25 +76,28 @@ public class TrackRankingService : ITrackRankingService
                 matched++;
         }
 
-        if (!string.IsNullOrEmpty(query.Tempo))
+        if (query.InstrumentalOnly)
         {
             total++;
-            if (string.Equals(track.Tempo, query.Tempo, StringComparison.OrdinalIgnoreCase))
+            if (track.Instrumental)
                 matched++;
         }
 
-        if (query.Instrumental.HasValue)
+        if (query.Bpm.HasValue)
         {
             total++;
-            if (track.Instrumental == query.Instrumental.Value)
+            var trackBpm = Builders.TrackAiResponseBuilder.EstimateBpm(track.Tempo);
+            if (trackBpm > 0 && Math.Abs(trackBpm - query.Bpm.Value) <= 10)
                 matched++;
         }
 
-        if (!string.IsNullOrEmpty(query.Duration))
+        if (query.MinDurationSeconds.HasValue || query.MaxDurationSeconds.HasValue)
         {
             total++;
-            if (string.Equals(track.Duration, query.Duration, StringComparison.OrdinalIgnoreCase))
-                matched++;
+            var dur = Builders.TrackAiResponseBuilder.ParseDurationSeconds(track.Duration);
+            var inRange = (!query.MinDurationSeconds.HasValue || dur >= query.MinDurationSeconds.Value)
+                       && (!query.MaxDurationSeconds.HasValue || dur <= query.MaxDurationSeconds.Value);
+            if (inRange) matched++;
         }
 
         return total == 0 ? 0.5 : (double)matched / total;
