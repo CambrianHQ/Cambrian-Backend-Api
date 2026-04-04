@@ -298,6 +298,12 @@ builder.Services.AddScoped<IActivityService, Cambrian.Persistence.Services.Activ
 builder.Services.AddScoped<IAnalyticsService, Cambrian.Persistence.Services.AnalyticsService>();
 builder.Services.AddScoped<IActivityBackfillService, Cambrian.Persistence.Services.ActivityBackfillService>();
 
+// AI Discovery
+builder.Services.AddSingleton<Cambrian.Application.AI.Discovery.Ranking.ITrackRankingService,
+                              Cambrian.Application.AI.Discovery.Ranking.TrackRankingService>();
+builder.Services.AddScoped<Cambrian.Application.AI.Discovery.Services.ITrackDiscoveryService,
+                           Cambrian.Application.AI.Discovery.Services.TrackDiscoveryService>();
+
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
 builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
