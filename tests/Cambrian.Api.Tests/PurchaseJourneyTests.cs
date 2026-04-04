@@ -102,7 +102,8 @@ public sealed class PurchaseJourneyTests : IDisposable
                 LicenseType = "standard",
                 UsageType = "personal"
             });
-        _webhookService = new StripeWebhookService(_db, _licenseService, webhookConfig, webhookLogger, env);
+        var emailService = Substitute.For<IEmailService>();
+        _webhookService = new StripeWebhookService(_db, _licenseService, emailService, webhookConfig, webhookLogger, env);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-journey-1") =>

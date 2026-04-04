@@ -125,6 +125,17 @@ public class AuthService : IAuthService
         }
 
         _logger.LogInformation("Registration success: User={UserId} Email={Email}", user.Id, user.Email);
+
+        // Send welcome email (non-critical — failure must not block registration)
+        try
+        {
+            await _email.SendWelcomeAsync(user.Email!, user.DisplayName ?? user.Email!);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send welcome email to {Email} — non-critical", user.Email);
+        }
+
         var token = GenerateJwt(user);
 
         return new AuthResponse

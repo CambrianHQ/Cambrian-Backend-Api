@@ -94,6 +94,21 @@ public sealed class SmtpEmailService : IEmailService
         return SendAsync(to, "Welcome to Cambrian Music", html);
     }
 
+    public Task SendPurchaseConfirmationAsync(string to, string trackTitle, string licenseType, decimal pricePaid, string licenseUrl)
+    {
+        var html = $"""
+            <h2>Purchase Confirmed</h2>
+            <p>Thank you for your purchase on Cambrian!</p>
+            <table style="border-collapse:collapse;">
+              <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">Track</td><td>{trackTitle}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">License</td><td>{licenseType}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">Amount</td><td>${pricePaid:F2} USD</td></tr>
+            </table>
+            <p style="margin-top:16px;"><a href="{licenseUrl}">View your license in your hub</a></p>
+            """;
+        return SendAsync(to, $"Cambrian — Purchase Confirmed: {trackTitle}", html);
+    }
+
     public Task SendEmailChangeVerificationAsync(string newEmail, string verificationLink)
     {
         var html = $"""

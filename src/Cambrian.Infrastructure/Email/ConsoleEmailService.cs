@@ -42,6 +42,12 @@ public sealed class ConsoleEmailService : IEmailService
         return Task.CompletedTask;
     }
 
+    public Task SendPurchaseConfirmationAsync(string to, string trackTitle, string licenseType, decimal pricePaid, string licenseUrl)
+    {
+        _logger.LogInformation("[Email] Purchase confirmation sent to {To} for track '{Track}' ({License}, ${Price})", to, trackTitle, licenseType, pricePaid);
+        return Task.CompletedTask;
+    }
+
     public Task SendEmailChangeVerificationAsync(string newEmail, string verificationLink)
     {
         _logger.LogInformation("[Email] Email-change verification link sent to {To}: {Link}", newEmail, verificationLink);

@@ -16,6 +16,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
     private readonly CambrianDbContext _db;
     private readonly ILogger<StripeWebhookService> _logger = Substitute.For<ILogger<StripeWebhookService>>();
     private readonly ILicenseService _licenseService = Substitute.For<ILicenseService>();
+    private readonly IEmailService _emailService = Substitute.For<IEmailService>();
 
     public StripeWebhookServiceTests()
     {
@@ -35,7 +36,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns("Production");
 
-        return new StripeWebhookService(_db, _licenseService, config, _logger, env);
+        return new StripeWebhookService(_db, _licenseService, _emailService, config, _logger, env);
     }
 
     private static string UniqueEventId() => $"evt_{Guid.NewGuid():N}";
@@ -87,7 +88,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns("Development");
 
-        var svc = new StripeWebhookService(_db, _licenseService, config, _logger, env);
+        var svc = new StripeWebhookService(_db, _licenseService, _emailService, config, _logger, env);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.HandleStripeAsync("{}", ""));

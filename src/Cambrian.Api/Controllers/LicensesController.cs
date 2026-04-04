@@ -2,7 +2,9 @@ using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Application.Interfaces;
 using Cambrian.Api.Tools;
+using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
@@ -13,11 +15,13 @@ public class LicensesController : BaseController
 {
     private readonly ILicenseService _licenses;
     private readonly ITrackRepository _tracks;
+    private readonly UserManager<ApplicationUser> _users;
 
-    public LicensesController(ILicenseService licenses, ITrackRepository tracks)
+    public LicensesController(ILicenseService licenses, ITrackRepository tracks, UserManager<ApplicationUser> users)
     {
         _licenses = licenses;
         _tracks = tracks;
+        _users = users;
     }
 
     /// <summary>
@@ -79,6 +83,41 @@ public class LicensesController : BaseController
         var filename = $"license-{safeTitle}-{licenseId[..8]}.pdf";
 
         return File(pdfBytes, "application/pdf", filename);
+    }
+
+    /// <summary>
+    /// Publicly verify that a license certificate exists and is valid.
+    /// Does not expose buyer email or other PII.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("verify/{licenseId}")]
+    public async Task<IActionResult> VerifyLicense(string licenseId)
+    {
+        var cert = await _licenses.GetByIdAsync(licenseId);
+        if (cert is null)
+            return NotFoundResponse("License not found.");
+
+        string? trackTitle = null;
+        if (Guid.TryParse(cert.TrackId, out var trackGuid))
+        {
+            var track = await _tracks.GetByIdAsync(trackGuid);
+            trackTitle = track?.Title;
+        }
+
+        var buyer = await _users.FindByIdAsync(cert.BuyerId);
+        var creator = await _users.FindByIdAsync(cert.CreatorId);
+
+        return OkResponse(new
+        {
+            valid = true,
+            licenseId = cert.LicenseId,
+            trackTitle,
+            licenseType = cert.LicenseType,
+            usageType = cert.UsageType,
+            buyerDisplayName = buyer?.DisplayName ?? "Unknown",
+            creatorDisplayName = creator?.DisplayName ?? "Unknown",
+            issuedAt = cert.IssuedAt
+        });
     }
 
 }
