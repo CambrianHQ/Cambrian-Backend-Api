@@ -4534,6 +4534,341 @@
           }
         }
       }
+    },
+    "/ai-discovery/tracks/search": {
+      "get": {
+        "tags": [
+          "AiDiscovery"
+        ],
+        "operationId": "searchAiDiscoveryTracks",
+        "summary": "Search AI music tracks for discovery, recommendation, and licensing",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Free-text search query"
+          },
+          {
+            "name": "genre",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "mood",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "bpm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "description": "Musical key, for example D minor or C major"
+          },
+          {
+            "name": "instrumentalOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "vocalsAllowed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "aiGenerator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Generator used to create the track, for example Suno or Udio"
+          },
+          {
+            "name": "useCase",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Intended use case, for example youtube_background_music, trailer, ad, podcast"
+          },
+          {
+            "name": "commercialUseRequired",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "minDurationSeconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "maxDurationSeconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ranked AI discovery search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai-discovery/tracks/{trackId}": {
+      "get": {
+        "tags": [
+          "AiDiscovery"
+        ],
+        "operationId": "getAiDiscoveryTrackDetails",
+        "summary": "Get AI-friendly track details",
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Track details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackDetailsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai-discovery/tracks/{trackId}/licenses": {
+      "get": {
+        "tags": [
+          "AiDiscovery"
+        ],
+        "operationId": "getAiDiscoveryTrackLicenseOptions",
+        "summary": "Get available license options for a track",
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "License options",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackLicenseOptionsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai-discovery/tracks/{trackId}/preview": {
+      "get": {
+        "tags": [
+          "AiDiscovery"
+        ],
+        "operationId": "getAiDiscoveryTrackPreview",
+        "summary": "Get preview information for a track",
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preview information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackPreviewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai-discovery/creators/{creatorId}": {
+      "get": {
+        "tags": [
+          "AiDiscovery"
+        ],
+        "operationId": "getAiDiscoveryCreatorProfile",
+        "summary": "Get public creator profile and catalog summary",
+        "parameters": [
+          {
+            "name": "creatorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Creator profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiCreatorProfileResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4557,6 +4892,451 @@
           "trackTitle": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiCreatorCatalogHighlight": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "bestUseCase": {
+            "type": "string"
+          },
+          "previewAvailable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiCreatorProfileResponse": {
+        "type": "object",
+        "properties": {
+          "creator": {
+            "$ref": "#/components/schemas/AiCreatorProfile"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiCreatorProfile": {
+        "type": "object",
+        "properties": {
+          "creatorId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifiedCreator": {
+            "type": "boolean"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "trackCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "featuredGenres": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "featuredMoods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "catalogHighlights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiCreatorCatalogHighlight"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiCreatorSummary": {
+        "type": "object",
+        "properties": {
+          "creatorId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "verifiedCreator": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiLicenseOption": {
+        "type": "object",
+        "properties": {
+          "licenseType": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "commercialUse": {
+            "type": "boolean"
+          },
+          "attributionRequired": {
+            "type": "boolean"
+          },
+          "instantDownload": {
+            "type": "boolean"
+          },
+          "exclusivity": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "allowedUseCases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restrictions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recommendedFor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiLicenseSummary": {
+        "type": "object",
+        "properties": {
+          "cheapestLicenseType": {
+            "type": "string"
+          },
+          "cheapestPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "exclusiveAvailable": {
+            "type": "boolean"
+          },
+          "copyrightBuyoutAvailable": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiLicenseOption"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiQuerySummary": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string"
+          },
+          "matchedOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackAttributes": {
+        "type": "object",
+        "properties": {
+          "genre": {
+            "type": "string",
+            "nullable": true
+          },
+          "subgenre": {
+            "type": "string",
+            "nullable": true
+          },
+          "moods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bpm": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "key": {
+            "type": "string",
+            "nullable": true
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "instrumental": {
+            "type": "boolean"
+          },
+          "hasVocals": {
+            "type": "boolean"
+          },
+          "vocalsType": {
+            "type": "string",
+            "nullable": true
+          },
+          "energyLevel": {
+            "type": "string",
+            "nullable": true
+          },
+          "energyCurve": {
+            "type": "string",
+            "nullable": true
+          },
+          "loopFriendly": {
+            "type": "boolean"
+          },
+          "dropMomentSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackDetailsResponse": {
+        "type": "object",
+        "properties": {
+          "track": {
+            "$ref": "#/components/schemas/AiTrackDetails"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackDetails": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "creator": {
+            "$ref": "#/components/schemas/AiCreatorSummary"
+          },
+          "attributes": {
+            "$ref": "#/components/schemas/AiTrackAttributes"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aiGenerator": {
+            "type": "string",
+            "nullable": true
+          },
+          "useCaseHints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "whyThisWorks": {
+            "type": "string"
+          },
+          "licenseSummary": {
+            "$ref": "#/components/schemas/AiLicenseSummary"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/AiTrackPreview"
+          },
+          "waveformImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackLicenseOptionsResponse": {
+        "type": "object",
+        "properties": {
+          "licenses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiLicenseOption"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackPreviewResponse": {
+        "type": "object",
+        "properties": {
+          "preview": {
+            "$ref": "#/components/schemas/AiTrackPreview"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackPreview": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "clipStartSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "clipEndSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "format": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackSearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiTrackSearchResult"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "querySummary": {
+            "$ref": "#/components/schemas/AiQuerySummary"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackSearchResult": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "creator": {
+            "$ref": "#/components/schemas/AiCreatorSummary"
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "fitConfidence": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "bestUseCase": {
+            "type": "string"
+          },
+          "secondaryUseCases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "whyThisWorks": {
+            "type": "string"
+          },
+          "attributes": {
+            "$ref": "#/components/schemas/AiTrackAttributes"
+          },
+          "license": {
+            "$ref": "#/components/schemas/AiLicenseSummary"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/AiTrackPreview"
           }
         },
         "additionalProperties": false
