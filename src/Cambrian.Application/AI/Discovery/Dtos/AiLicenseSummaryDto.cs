@@ -2,10 +2,14 @@ namespace Cambrian.Application.AI.Discovery.Dtos;
 
 public class AiLicenseSummaryDto
 {
-    public string CheapestLicenseType { get; set; } = string.Empty;
-    public decimal CheapestPrice { get; set; }
-    public string Currency { get; set; } = "usd";
-    public bool ExclusiveAvailable { get; set; }
-    public bool CopyrightBuyoutAvailable { get; set; }
-    public List<AiLicenseOptionDto> Options { get; set; } = new();
+    public decimal StartingPrice { get; set; }
+    public string Currency { get; set; } = "USD";
+
+    public bool CommercialUse { get; set; }
+    public bool AttributionRequired { get; set; }
+    public bool InstantDownload { get; set; }
+
+    public double LicenseClarityScore { get; set; }
+
+    public List<string> CommercialSafetyNotes { get; set; } = new();
 }

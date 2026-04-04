@@ -77,7 +77,7 @@ public static class TrackAiResponseBuilder
             LicenseType = "non_exclusive",
             DisplayName = "Non-Exclusive License",
             Price = nonExCents / 100m,
-            Currency = "usd",
+            Currency = "USD",
             CommercialUse = true,
             AttributionRequired = true,
             InstantDownload = true,
@@ -110,17 +110,26 @@ public static class TrackAiResponseBuilder
                 ? track.ExclusivePriceCents
                 : nonExCents;
 
+            // Copyright buyout takes the highest price tier
+            var buyoutCents = track.CopyrightBuyoutPriceCents > 0
+                ? track.CopyrightBuyoutPriceCents
+                : (track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : nonExCents);
+
+            var price = track.CopyrightOwnerId == null ? buyoutCents : exCents;
+
             options.Add(new AiLicenseOptionDto
             {
-                LicenseType = "exclusive",
-                DisplayName = "Exclusive License",
-                Price = exCents / 100m,
-                Currency = "usd",
+                LicenseType = "exclusive_buyout",
+                DisplayName = track.CopyrightOwnerId == null ? "Exclusive Buyout (Full Copyright Transfer)" : "Exclusive License",
+                Price = price / 100m,
+                Currency = "USD",
                 CommercialUse = true,
                 AttributionRequired = false,
                 InstantDownload = true,
                 Exclusivity = "exclusive",
-                Summary = "Exclusive rights — track is removed from the marketplace after purchase.",
+                Summary = track.CopyrightOwnerId == null
+                    ? "Full copyright ownership transfer. Track is permanently removed from the marketplace."
+                    : "Exclusive rights — track is removed from the marketplace after purchase.",
                 AllowedUseCases = new List<string>
                 {
                     "Exclusive commercial use",
@@ -130,52 +139,14 @@ public static class TrackAiResponseBuilder
                 },
                 Restrictions = new List<string>
                 {
-                    "No resale of standalone track",
-                    "No sublicensing"
+                    "Existing non-exclusive licenses remain valid after an exclusive buyout",
+                    "No sublicensing without separate agreement"
                 },
                 RecommendedFor = new List<string>
                 {
                     "Brands and agencies",
                     "Film and TV producers",
-                    "Artists seeking unique sound"
-                }
-            });
-        }
-
-        if (!track.ExclusiveSold && track.CopyrightOwnerId == null)
-        {
-            var buyoutCents = track.CopyrightBuyoutPriceCents > 0
-                ? track.CopyrightBuyoutPriceCents
-                : (track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : nonExCents);
-
-            options.Add(new AiLicenseOptionDto
-            {
-                LicenseType = "copyright_buyout",
-                DisplayName = "Copyright Buyout",
-                Price = buyoutCents / 100m,
-                Currency = "usd",
-                CommercialUse = true,
-                AttributionRequired = false,
-                InstantDownload = true,
-                Exclusivity = "exclusive",
-                Summary = "Full copyright ownership transfer. You become the legal owner of this track.",
-                AllowedUseCases = new List<string>
-                {
-                    "Full copyright ownership transfer",
-                    "Perpetual and irrevocable rights",
-                    "Unlimited commercial use",
-                    "Sublicensing rights"
-                },
-                Restrictions = new List<string>
-                {
-                    "Track permanently removed from marketplace",
-                    "Original creator relinquishes all rights"
-                },
-                RecommendedFor = new List<string>
-                {
-                    "Record labels",
-                    "Publishers",
-                    "Brands wanting full ownership"
+                    "Creators needing fast commercial licensing"
                 }
             });
         }
@@ -257,14 +228,24 @@ public static class TrackAiResponseBuilder
         var options = BuildLicenseOptions(track);
         var cheapest = options.MinBy(o => o.Price) ?? options.FirstOrDefault();
 
+        var notes = new List<string>();
+        if (cheapest?.CommercialUse == true)
+            notes.Add("Commercial use permitted under this license.");
+        if (!track.ExclusiveSold && track.CopyrightOwnerId == null)
+            notes.Add("Full copyright buyout is available.");
+
+        // Clarity: 1.0 when prices are set and options are clear
+        var clarity = options.Count > 0 && cheapest?.Price > 0 ? 1.0 : 0.5;
+
         return new AiLicenseSummaryDto
         {
-            CheapestLicenseType = cheapest?.LicenseType ?? "non_exclusive",
-            CheapestPrice = cheapest?.Price ?? 0,
-            Currency = "usd",
-            ExclusiveAvailable = !track.ExclusiveSold,
-            CopyrightBuyoutAvailable = !track.ExclusiveSold && track.CopyrightOwnerId == null,
-            Options = options
+            StartingPrice = cheapest?.Price ?? 0,
+            Currency = "USD",
+            CommercialUse = cheapest?.CommercialUse ?? false,
+            AttributionRequired = cheapest?.AttributionRequired ?? true,
+            InstantDownload = cheapest?.InstantDownload ?? false,
+            LicenseClarityScore = clarity,
+            CommercialSafetyNotes = notes
         };
     }
 
