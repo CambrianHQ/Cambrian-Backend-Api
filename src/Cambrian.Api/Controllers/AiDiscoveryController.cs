@@ -5,9 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
 
+[ApiController]
 [Route("ai-discovery")]
 [AllowAnonymous]
-public class AiDiscoveryController : BaseController
+public class AiDiscoveryController : ControllerBase
 {
     private readonly ITrackDiscoveryService _discovery;
 
@@ -16,61 +17,45 @@ public class AiDiscoveryController : BaseController
         _discovery = discovery;
     }
 
-    /// <summary>
-    /// AI-optimised track search. Supports free-text query, structured filters,
-    /// and use-case intent. Returns scored, ranked results with explanations.
-    /// </summary>
     [HttpGet("tracks/search")]
     public async Task<IActionResult> Search([FromQuery] SearchTracksQuery query)
     {
-        if (query.PageSize is < 1 or > 100) query.PageSize = 20;
+        if (query.PageSize is < 1 or > 100) query.PageSize = 10;
         if (query.Page < 1) query.Page = 1;
 
         var result = await _discovery.SearchAsync(query);
-        return OkResponse(result);
+        return Ok(result);
     }
 
-    /// <summary>
-    /// Full track details with complete license options, creator info, and attributes.
-    /// </summary>
-    [HttpGet("tracks/{id}")]
-    public async Task<IActionResult> GetDetails(string id)
+    [HttpGet("tracks/{trackId}")]
+    public async Task<IActionResult> GetTrackDetails(string trackId)
     {
-        var result = await _discovery.GetDetailsAsync(new GetTrackDetailsQuery { TrackId = id });
-        if (result is null) return NotFoundResponse("Track not found.");
-        return OkResponse(result);
+        var result = await _discovery.GetTrackDetailsAsync(trackId);
+        if (result is null) return NotFound(new { error = "Track not found." });
+        return Ok(new { track = result });
     }
 
-    /// <summary>
-    /// All available license options for a track with pricing, allowed uses, and restrictions.
-    /// </summary>
-    [HttpGet("tracks/{id}/licenses")]
-    public async Task<IActionResult> GetLicenses(string id)
+    [HttpGet("tracks/{trackId}/licenses")]
+    public async Task<IActionResult> GetLicenses(string trackId)
     {
-        var result = await _discovery.GetLicenseOptionsAsync(new GetLicenseOptionsQuery { TrackId = id });
-        if (result.Count == 0) return NotFoundResponse("Track not found.");
-        return OkResponse(result);
+        var result = await _discovery.GetLicenseOptionsAsync(trackId);
+        if (result is null) return NotFound(new { error = "Track not found." });
+        return Ok(new { licenses = result });
     }
 
-    /// <summary>
-    /// Preview info for a track (audio URL, cover art, duration).
-    /// </summary>
-    [HttpGet("tracks/{id}/preview")]
-    public async Task<IActionResult> GetPreview(string id)
+    [HttpGet("tracks/{trackId}/preview")]
+    public async Task<IActionResult> GetPreview(string trackId)
     {
-        var result = await _discovery.GetDetailsAsync(new GetTrackDetailsQuery { TrackId = id });
-        if (result is null) return NotFoundResponse("Track not found.");
-        return OkResponse(result.Preview);
+        var result = await _discovery.GetPreviewAsync(trackId);
+        if (result is null) return NotFound(new { error = "Track not found." });
+        return Ok(new { preview = result });
     }
 
-    /// <summary>
-    /// Creator profile with track count, follower count, and bio.
-    /// </summary>
-    [HttpGet("creators/{id}")]
-    public async Task<IActionResult> GetCreator(string id)
+    [HttpGet("creators/{creatorId}")]
+    public async Task<IActionResult> GetCreatorProfile(string creatorId)
     {
-        var result = await _discovery.GetCreatorProfileAsync(new GetCreatorProfileQuery { Identifier = id });
-        if (result is null) return NotFoundResponse("Creator not found.");
-        return OkResponse(result);
+        var result = await _discovery.GetCreatorProfileAsync(creatorId);
+        if (result is null) return NotFound(new { error = "Creator not found." });
+        return Ok(new { creator = result });
     }
 }

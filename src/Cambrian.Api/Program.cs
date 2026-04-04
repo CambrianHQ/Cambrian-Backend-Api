@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using ModelContextProtocol.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -304,6 +305,12 @@ builder.Services.AddSingleton<Cambrian.Application.AI.Discovery.Ranking.ITrackRa
 builder.Services.AddScoped<Cambrian.Application.AI.Discovery.Services.ITrackDiscoveryService,
                            Cambrian.Application.AI.Discovery.Services.TrackDiscoveryService>();
 
+// MCP Server
+builder.Services.AddMcpServer()
+    .WithHttpTransport(options => options.Stateless = true)
+    .WithTools<Cambrian.Api.Mcp.CambrianMcpTools>()
+    .WithResources<Cambrian.Api.Mcp.CambrianMcpResources>();
+
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
 builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
@@ -397,6 +404,7 @@ app.UseMiddleware<DevAuthMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapMcp();
 
 await app.RunMigrationsAsync();
 await app.SeedDataAsync();
