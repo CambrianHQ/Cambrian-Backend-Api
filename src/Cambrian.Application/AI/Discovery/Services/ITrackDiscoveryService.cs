@@ -1,13 +1,17 @@
 using Cambrian.Application.AI.Discovery.Dtos;
 using Cambrian.Application.AI.Discovery.Queries;
-using Cambrian.Application.DTOs.Catalog;
 
 namespace Cambrian.Application.AI.Discovery.Services;
 
 public interface ITrackDiscoveryService
 {
-    Task<PagedResult<TrackSearchResultDto>> SearchAsync(SearchTracksQuery query);
-    Task<TrackDetailsDto?> GetDetailsAsync(GetTrackDetailsQuery query);
-    Task<List<LicenseOptionDto>> GetLicenseOptionsAsync(GetLicenseOptionsQuery query);
-    Task<CreatorProfileDetailDto?> GetCreatorProfileAsync(GetCreatorProfileQuery query);
+    Task<AiTrackSearchResponseDto> SearchAsync(SearchTracksQuery query);
+
+    Task<AiTrackDetailsDto?> GetTrackDetailsAsync(string trackId);
+
+    Task<List<AiLicenseOptionDto>?> GetLicenseOptionsAsync(string trackId);
+
+    Task<AiTrackPreviewDto?> GetPreviewAsync(string trackId);
+
+    Task<AiCreatorProfileDto?> GetCreatorProfileAsync(string creatorId);
 }
