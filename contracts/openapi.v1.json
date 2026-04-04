@@ -5043,26 +5043,30 @@
       "AiLicenseSummary": {
         "type": "object",
         "properties": {
-          "cheapestLicenseType": {
-            "type": "string"
-          },
-          "cheapestPrice": {
+          "startingPrice": {
             "type": "number",
             "format": "double"
           },
           "currency": {
             "type": "string"
           },
-          "exclusiveAvailable": {
+          "commercialUse": {
             "type": "boolean"
           },
-          "copyrightBuyoutAvailable": {
+          "attributionRequired": {
             "type": "boolean"
           },
-          "options": {
+          "instantDownload": {
+            "type": "boolean"
+          },
+          "licenseClarityScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "commercialSafetyNotes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AiLicenseOption"
+              "type": "string"
             }
           }
         },

@@ -2,7 +2,7 @@ namespace Cambrian.Application.AI.Discovery.Dtos;
 
 public class AiLicenseOptionDto
 {
-    public string LicenseType { get; set; } = string.Empty; // non_exclusive | exclusive | copyright_buyout
+    public string LicenseType { get; set; } = string.Empty; // non_exclusive | exclusive_buyout
     public string DisplayName { get; set; } = string.Empty;
 
     public decimal Price { get; set; }
