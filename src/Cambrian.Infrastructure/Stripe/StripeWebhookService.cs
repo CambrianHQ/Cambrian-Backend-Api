@@ -22,18 +22,23 @@ public class StripeWebhookService : IWebhookService
     private const string StatusCompleted = "completed";
     private readonly CambrianDbContext _db;
     private readonly ILicenseService _licenseService;
+    private readonly IEmailService _email;
+    private readonly IConfiguration _config;
     private readonly string _webhookSecret;
     private readonly ILogger<StripeWebhookService> _logger;
 
     public StripeWebhookService(
         CambrianDbContext db,
         ILicenseService licenseService,
+        IEmailService email,
         IConfiguration configuration,
         ILogger<StripeWebhookService> logger,
         IHostEnvironment env)
     {
         _db = db;
         _licenseService = licenseService;
+        _email = email;
+        _config = configuration;
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "";
         _logger = logger;
     }
@@ -540,6 +545,27 @@ public class StripeWebhookService : IWebhookService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to create invoice for purchase {PurchaseId} — non-critical", purchase.Id);
+        }
+
+        // ── Send purchase confirmation email ──
+        try
+        {
+            var buyer = await _db.Users.FindAsync(userId);
+            if (buyer?.Email is not null)
+            {
+                var frontendUrl = _config["App:FrontendUrl"]?.TrimEnd('/') ?? "";
+                var licenseUrl = $"{frontendUrl}/hub/licenses/{purchase.LicenseId}";
+                await _email.SendPurchaseConfirmationAsync(
+                    buyer.Email,
+                    track.Title,
+                    licenseType,
+                    (amountTotal ?? 0) / 100m,
+                    licenseUrl);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send purchase confirmation email for purchase {PurchaseId} — non-critical", purchase.Id);
         }
 
         // ── Append sale activity (display layer — never blocks purchase) ──

@@ -14,6 +14,11 @@ public interface IEmailService
     Task SendWelcomeAsync(string to, string displayName);
 
     /// <summary>
+    /// Send a purchase confirmation email after a track is bought.
+    /// </summary>
+    Task SendPurchaseConfirmationAsync(string to, string trackTitle, string licenseType, decimal pricePaid, string licenseUrl);
+
+    /// <summary>
     /// Send a verification link to the new email address when a user requests an email change.
     /// </summary>
     Task SendEmailChangeVerificationAsync(string newEmail, string verificationLink);
