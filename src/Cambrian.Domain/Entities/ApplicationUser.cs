@@ -80,6 +80,15 @@ public class ApplicationUser : IdentityUser
     /// <summary>UTC expiry of the email change token (24 hours from issuance).</summary>
     public DateTime? EmailChangeTokenExpiry { get; set; }
 
+    /// <summary>Whether this user is enrolled in the Founding Creator program (0% fee).</summary>
+    public bool IsFoundingCreator { get; set; }
+
+    /// <summary>When the user was enrolled in the Founding Creator program.</summary>
+    public DateTime? FoundingCreatorEnrolledAt { get; set; }
+
+    /// <summary>When the Founding Creator benefits expire.</summary>
+    public DateTime? FoundingCreatorExpiresAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();

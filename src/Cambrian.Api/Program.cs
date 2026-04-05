@@ -298,6 +298,14 @@ builder.Services.AddScoped<IActivityService, Cambrian.Persistence.Services.Activ
 builder.Services.AddScoped<IAnalyticsService, Cambrian.Persistence.Services.AnalyticsService>();
 builder.Services.AddScoped<IActivityBackfillService, Cambrian.Persistence.Services.ActivityBackfillService>();
 
+// Marketplace features
+builder.Services.AddScoped<IFoundingCreatorService, FoundingCreatorService>();
+builder.Services.AddScoped<IApiKeyService, Cambrian.Persistence.Services.ApiKeyService>();
+builder.Services.AddScoped<ISearchAnalyticsService, Cambrian.Persistence.Services.SearchAnalyticsService>();
+builder.Services.AddScoped<IReferralService, Cambrian.Persistence.Services.ReferralService>();
+builder.Services.AddScoped<ISyncService, Cambrian.Persistence.Services.SyncService>();
+builder.Services.AddScoped<IPricingIntelligenceService, Cambrian.Persistence.Services.PricingIntelligenceService>();
+
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
 builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();

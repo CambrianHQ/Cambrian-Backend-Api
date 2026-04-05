@@ -51,6 +51,16 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<CreatorFollow> CreatorFollows => Set<CreatorFollow>();
 
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+
+    public DbSet<SearchQuery> SearchQueries => Set<SearchQuery>();
+
+    public DbSet<Referral> Referrals => Set<Referral>();
+
+    public DbSet<SyncBrief> SyncBriefs => Set<SyncBrief>();
+
+    public DbSet<SyncSubmission> SyncSubmissions => Set<SyncSubmission>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -316,6 +326,97 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany()
                 .HasForeignKey(f => f.CreatorId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── API Keys ──
+        builder.Entity<ApiKey>(e =>
+        {
+            e.HasKey(k => k.Id);
+            e.Property(k => k.UserId).HasMaxLength(450).IsRequired();
+            e.Property(k => k.KeyHash).HasMaxLength(128).IsRequired();
+            e.HasIndex(k => k.KeyHash).IsUnique();
+            e.Property(k => k.KeySuffix).HasMaxLength(4).IsRequired();
+            e.Property(k => k.Name).HasMaxLength(100).IsRequired();
+            e.Property(k => k.IsActive).HasDefaultValue(true);
+            e.Property(k => k.RateLimit).HasDefaultValue(1000);
+            e.HasIndex(k => k.UserId);
+            e.HasOne(k => k.User)
+                .WithMany()
+                .HasForeignKey(k => k.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── Search Queries ──
+        builder.Entity<SearchQuery>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Query).HasMaxLength(500).IsRequired();
+            e.Property(s => s.Filters).HasMaxLength(2000);
+            e.Property(s => s.UserId).HasMaxLength(450);
+            e.Property(s => s.SessionId).HasMaxLength(100);
+            e.HasIndex(s => s.Query);
+            e.HasIndex(s => s.CreatedAt);
+        });
+
+        // ── Referrals ──
+        builder.Entity<Referral>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.ReferrerId).HasMaxLength(450).IsRequired();
+            e.Property(r => r.ReferredUserId).HasMaxLength(450);
+            e.Property(r => r.ReferralCode).HasMaxLength(20).IsRequired();
+            e.HasIndex(r => r.ReferralCode).IsUnique();
+            e.HasIndex(r => r.ReferrerId);
+            e.Property(r => r.CommissionRate).HasDefaultValue(0.10m);
+            e.Property(r => r.TotalCommissionEarned).HasDefaultValue(0m);
+            e.HasOne(r => r.Referrer)
+                .WithMany()
+                .HasForeignKey(r => r.ReferrerId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Sync Briefs ──
+        builder.Entity<SyncBrief>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.BuyerUserId).HasMaxLength(450).IsRequired();
+            e.Property(s => s.Title).HasMaxLength(200).IsRequired();
+            e.Property(s => s.Description).HasMaxLength(2000);
+            e.Property(s => s.Genre).HasMaxLength(100);
+            e.Property(s => s.Mood).HasMaxLength(50);
+            e.Property(s => s.UsageType).HasMaxLength(100);
+            e.Property(s => s.Territory).HasMaxLength(100);
+            e.Property(s => s.Status).HasMaxLength(20).HasDefaultValue("open").IsRequired();
+            e.HasIndex(s => s.BuyerUserId);
+            e.HasIndex(s => s.Status);
+            e.HasOne(s => s.Buyer)
+                .WithMany()
+                .HasForeignKey(s => s.BuyerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Sync Submissions ──
+        builder.Entity<SyncSubmission>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.CreatorUserId).HasMaxLength(450).IsRequired();
+            e.Property(s => s.Note).HasMaxLength(1000);
+            e.Property(s => s.Status).HasMaxLength(20).HasDefaultValue("pending").IsRequired();
+            e.HasIndex(s => s.SyncBriefId);
+            e.HasIndex(s => s.CreatorUserId);
+            e.HasIndex(s => s.TrackId);
+            e.HasOne(s => s.SyncBrief)
+                .WithMany(b => b.Submissions)
+                .HasForeignKey(s => s.SyncBriefId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(s => s.Creator)
+                .WithMany()
+                .HasForeignKey(s => s.CreatorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(s => s.Track)
+                .WithMany()
+                .HasForeignKey(s => s.TrackId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // ── Activity items (backfill-safe display layer) ──
