@@ -23,6 +23,7 @@ public interface IAdminService
     Task<bool> ReactivateUserAsync(string userId);
     Task<bool> SetUserRoleAsync(string userId, string role);
     Task<bool> VerifyCreatorAsync(string userId);
+    Task<bool> UpgradeCreatorTierAsync(string userId, string tier);
 
     /// <summary>Returns the generated temporary password, or null if user not found.</summary>
     Task<string?> ResetUserPasswordAsync(string userId);

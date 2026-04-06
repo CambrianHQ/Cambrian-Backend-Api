@@ -56,6 +56,9 @@ public class AdminService : IAdminService
     public Task<bool> VerifyCreatorAsync(string userId)
         => _admin.VerifyCreatorAsync(userId);
 
+    public Task<bool> UpgradeCreatorTierAsync(string userId, string tier)
+        => _admin.UpgradeCreatorTierAsync(userId, tier);
+
     public Task<string?> ResetUserPasswordAsync(string userId)
         => _admin.ResetUserPasswordAsync(userId);
 
