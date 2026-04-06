@@ -444,7 +444,10 @@ public class AuthService : IAuthService
             throw new InvalidOperationException(InvalidOrExpiredCode);
         }
 
-        if (!string.Equals(user.PasswordResetCode, HashResetCode(code), StringComparison.Ordinal))
+        // Generated codes are always uppercase — normalize input so users are not
+        // penalized for typing lowercase (e.g. mobile autocorrect).
+        var normalizedCode = code.Trim().ToUpperInvariant();
+        if (!string.Equals(user.PasswordResetCode, HashResetCode(normalizedCode), StringComparison.Ordinal))
         {
             throw new InvalidOperationException(InvalidOrExpiredCode);
         }
@@ -520,10 +523,15 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Google login attempt for {Email}", email);
 
-        var user = await _users.FindByEmailAsync(email);
+        // First try to find by email. Also try by GoogleId in case the stored email
+        // differs from the Google-returned email (e.g. changed on Google's side).
+        var user = await _users.FindByEmailAsync(email)
+                   ?? await _users.Users.FirstOrDefaultAsync(u => u.GoogleId == payload.Subject);
 
+        var accountCreated = false;
         if (user is null)
         {
+            accountCreated = true;
             user = new ApplicationUser
             {
                 UserName = email,
@@ -550,13 +558,13 @@ public class AuthService : IAuthService
         }
         else
         {
-            // Link Google identity if not already linked
+            // Link Google identity to existing account if not already linked
             if (string.IsNullOrEmpty(user.GoogleId))
             {
                 user.GoogleId = payload.Subject;
                 user.AuthProvider ??= "Google";
                 await _users.UpdateAsync(user);
-                _logger.LogInformation("Google identity linked: User={UserId}", user.Id);
+                _logger.LogInformation("Google identity linked to existing account: User={UserId}", user.Id);
             }
         }
 
@@ -569,9 +577,11 @@ public class AuthService : IAuthService
                             || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
         var isCreatorOrAdmin = string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase)
                             || string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase);
-        var isNewGoogleUser = needsUsername && !isCreatorOrAdmin;
+        // Only flag as new user if the account was JUST created — not if Google was linked
+        // to an existing email-registered account (which would incorrectly re-trigger onboarding).
+        var isNewGoogleUser = accountCreated && needsUsername && !isCreatorOrAdmin;
 
-        _logger.LogInformation("Google login success: User={UserId} Tier={Tier} IsNew={IsNew}", user.Id, resolvedTier, isNewGoogleUser);
+        _logger.LogInformation("Google login success: User={UserId} Tier={Tier} IsNew={IsNew} AccountCreated={Created}", user.Id, resolvedTier, isNewGoogleUser, accountCreated);
 
         return new AuthResponse
         {
