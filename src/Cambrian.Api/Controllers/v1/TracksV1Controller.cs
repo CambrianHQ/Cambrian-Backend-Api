@@ -2,6 +2,7 @@ using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cambrian.Api.Controllers.v1;
 
@@ -11,6 +12,7 @@ namespace Cambrian.Api.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1")]
+[EnableRateLimiting("api_key_free")]
 public class TracksV1Controller : ControllerBase
 {
     private readonly ICatalogService _catalog;
