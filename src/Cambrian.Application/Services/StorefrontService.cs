@@ -60,8 +60,8 @@ public sealed class StorefrontService : IStorefrontService
             ? TierManifest.For(creator.CreatorTier).FeeRate
             : TierManifest.Free.FeeRate;
 
-        // Map tracks to responses
-        var trackResponses = tracks.Select(t => MapTrack(t, feeRate)).ToList();
+        // Map tracks to responses (pass profile for image fallback when CreatorEntity is null)
+        var trackResponses = tracks.Select(t => MapTrack(t, feeRate, profile)).ToList();
 
         // Build stats from completed purchases — use per-purchase floor to match wallet credits
         var completedPurchases = purchases.Where(p => p.Status == "completed").ToList();
@@ -113,7 +113,7 @@ public sealed class StorefrontService : IStorefrontService
         return allTracks.Take(5).ToList();
     }
 
-    private static TrackResponse MapTrack(Track t, decimal feeRate)
+    private static TrackResponse MapTrack(Track t, decimal feeRate, CreatorProfileDto? profile = null)
     {
         // Fallback: if *PriceCents fields are 0, use legacy Price field (matches checkout logic)
         var legacyPriceDollars = t.Price;
@@ -149,8 +149,8 @@ public sealed class StorefrontService : IStorefrontService
             AudioUrl = t.AudioUrl,
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
-            CreatorSlug = t.CreatorEntity?.Username,
-            CreatorProfileImageUrl = t.CreatorEntity?.ProfileImageUrl,
+            CreatorSlug = t.CreatorEntity?.Username ?? profile?.Username ?? profile?.Slug,
+            CreatorProfileImageUrl = t.CreatorEntity?.ProfileImageUrl ?? profile?.ProfileImageUrl,
             Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
                 ? t.CreatorEntity.DisplayName
                 : t.CreatorEntity?.Username
