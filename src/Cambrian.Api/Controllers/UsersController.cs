@@ -10,11 +10,19 @@ public class UsersController : BaseController
 {
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _users;
     private readonly ITrackRepository _tracks;
+    private readonly ICreatorIdentityRepository _creators;
+    private readonly ICreatorProfileRepository _profiles;
 
-    public UsersController(UserManager<Cambrian.Domain.Entities.ApplicationUser> users, ITrackRepository tracks)
+    public UsersController(
+        UserManager<Cambrian.Domain.Entities.ApplicationUser> users,
+        ITrackRepository tracks,
+        ICreatorIdentityRepository creators,
+        ICreatorProfileRepository profiles)
     {
         _users = users;
         _tracks = tracks;
+        _creators = creators;
+        _profiles = profiles;
     }
 
     // ───── GET /users/:username — public profile ─────
@@ -89,6 +97,20 @@ public class UsersController : BaseController
             var msgs = new List<string>();
             foreach (var e in result.Errors) msgs.Add(e.Description);
             return ErrorResponse(string.Join("; ", msgs));
+        }
+
+        // Sync image changes to Creator and CreatorProfile tables so marketplace displays them
+        if (body.ProfileImageUrl is not null)
+        {
+            var url = user.ProfileImageUrl ?? "";
+            await _creators.UpdateImageUrlAsync(userId, "profile", url);
+            await _profiles.UpdateImageAsync(userId, null, url);
+        }
+        if (body.CoverImageUrl is not null)
+        {
+            var url = user.CoverImageUrl ?? "";
+            await _creators.UpdateImageUrlAsync(userId, "cover", url);
+            await _profiles.UpdateImageAsync(userId, url, null);
         }
 
         return OkResponse(new
