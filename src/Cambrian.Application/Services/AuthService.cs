@@ -508,12 +508,7 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Validating Google token with ClientId length={Length}", _googleSettings.ClientId.Length);
 
-        var payload = await GoogleJsonWebSignature.ValidateAsync(
-            request.IdToken,
-            new GoogleJsonWebSignature.ValidationSettings
-            {
-                Audience = new[] { _googleSettings.ClientId }
-            });
+        var payload = await ValidateGoogleTokenAsync(request.IdToken);
 
         if (payload.EmailVerified is false)
             throw new UnauthorizedAccessException("Email not verified");
@@ -597,4 +592,15 @@ public class AuthService : IAuthService
     }
 
     public string GetGoogleClientId() => _googleSettings.ClientId;
+
+    /// <summary>
+    /// Validates a Google ID token and returns the payload.
+    /// Extracted as a protected virtual method so tests can override it
+    /// without needing a real Google token.
+    /// </summary>
+    protected virtual Task<GoogleJsonWebSignature.Payload> ValidateGoogleTokenAsync(string idToken)
+        => GoogleJsonWebSignature.ValidateAsync(idToken, new GoogleJsonWebSignature.ValidationSettings
+        {
+            Audience = new[] { _googleSettings.ClientId }
+        });
 }

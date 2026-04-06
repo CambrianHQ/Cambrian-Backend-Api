@@ -311,6 +311,8 @@ builder.Services.AddMcpServer()
     .WithTools<Cambrian.Api.Mcp.CambrianMcpTools>()
     .WithResources<Cambrian.Api.Mcp.CambrianMcpResources>();
 
+builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
 builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
@@ -326,6 +328,7 @@ builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
 builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
+builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
 builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 
 // Infrastructure
@@ -402,6 +405,7 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseRateLimiter();
 app.UseMiddleware<DevAuthMiddleware>();
 app.UseAuthentication();
+app.UseMiddleware<ApiKeyMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapMcp();

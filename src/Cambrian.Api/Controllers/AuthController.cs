@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
@@ -20,6 +21,13 @@ public class AuthController : BaseController
     private readonly ICreatorIdentityRepository _creators;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ILogger<AuthController> _logger;
+
+    private static readonly HashSet<string> _reservedUsernames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "admin", "api", "www", "support", "help", "mail", "blog", "app",
+        "creator", "cambrian", "marketplace", "verify", "press", "business",
+        "developers", "embed", "sync", "pricing", "about"
+    };
 
     public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<AuthController> logger)
     {
@@ -209,6 +217,7 @@ public class AuthController : BaseController
             phoneNumber = user?.PhoneNumber,
             isNewUser,
             needsUsername,
+            requiresUsernameSetup = needsUsername,
             canChangeUsername = needsUsername,
             creatorTier = profile.CreatorTier,
             uploadCount = profile.UploadCount,
@@ -247,6 +256,7 @@ public class AuthController : BaseController
         role = auth.Role ?? "User",
         isNewUser = auth.IsNewUser,
         needsUsername = auth.Username == null,
+        requiresUsernameSetup = auth.Username == null,
         user = new
         {
             id = auth.UserId.ToString(),
@@ -310,15 +320,16 @@ public class AuthController : BaseController
         if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^[a-z0-9_-]+$"))
             return ErrorResponse("Username may only contain letters, numbers, hyphens, and underscores.");
 
+        if (_reservedUsernames.Contains(normalized))
+            return ErrorResponse("That username is reserved.");
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var user = await _userManager.FindByIdAsync(userId);
         if (user is null)
             return NotFoundResponse("User not found.");
 
         // Once a creator has chosen a username it is permanent — reject further changes.
-        var alreadyHasUsername = !string.IsNullOrWhiteSpace(user.UserName)
-            && !string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
-        if (alreadyHasUsername)
+        if (UsernameHelper.IsSet(user))
             return ErrorResponse("Username cannot be changed once set.");
 
         // Check uniqueness via Identity UserName
@@ -363,9 +374,16 @@ public class AuthController : BaseController
             await _creators.UpsertAsync(userId, new Cambrian.Application.DTOs.Creators.UpdateCreatorProfileRequest { Username = normalized });
             _logger.LogInformation("EVENT: CreatorUsernameSynced userId:{UserId} username:{Username}", userId, normalized);
         }
+        catch (DbUpdateException dbEx) when (
+            dbEx.InnerException?.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) == true ||
+            dbEx.InnerException?.Message.Contains("23505", StringComparison.Ordinal) == true)
+        {
+            _logger.LogWarning("EVENT: CreatorUsernameConflict userId:{UserId} username:{Username} — DB unique violation", userId, normalized);
+            return ConflictResponse("That username is already taken.");
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to sync Creator username for userId:{UserId} — non-critical", userId);
+            _logger.LogWarning(ex, "Non-critical: Failed to sync Creator username for userId:{UserId}", userId);
         }
 
         // Return a fresh JWT with updated role/username claims
@@ -405,6 +423,9 @@ public class AuthController : BaseController
 
         if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^[a-z0-9_-]+$"))
             return OkResponse(new { username = normalized, available = false, reason = "Username may only contain letters, numbers, hyphens, and underscores." });
+
+        if (_reservedUsernames.Contains(normalized))
+            return OkResponse(new { username = normalized, available = false, reason = "That username is reserved." });
 
         var existing = await _userManager.FindByNameAsync(normalized);
         // Also check Creators table — username must be globally unique

@@ -51,6 +51,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<CreatorFollow> CreatorFollows => Set<CreatorFollow>();
 
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -326,6 +328,22 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         {
             e.Property(t => t.UseCase).HasMaxLength(100);
             e.Property(t => t.TrendingScore).HasDefaultValue(0m);
+        });
+
+        // ── API keys ──
+        builder.Entity<ApiKey>(e =>
+        {
+            e.HasKey(k => k.Id);
+            e.Property(k => k.UserId).HasMaxLength(450).IsRequired();
+            e.Property(k => k.KeyHash).IsRequired();
+            e.HasIndex(k => k.KeyHash).IsUnique();
+            e.Property(k => k.KeyPrefix).HasMaxLength(8).IsRequired();
+            e.Property(k => k.Name).HasMaxLength(100).IsRequired();
+            e.HasIndex(k => k.UserId);
+            e.HasOne(k => k.User)
+                .WithMany()
+                .HasForeignKey(k => k.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
