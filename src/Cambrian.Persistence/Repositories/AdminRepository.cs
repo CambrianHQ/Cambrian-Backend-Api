@@ -210,6 +210,37 @@ public class AdminRepository : IAdminRepository
         return true;
     }
 
+    public async Task<bool> UpgradeCreatorTierAsync(string userId, string tier)
+    {
+        var user = await _users.FindByIdAsync(userId);
+        if (user is null) return false;
+        var oldTier = user.CreatorTier;
+        if (tier.Equals("pro", StringComparison.OrdinalIgnoreCase))
+        {
+            user.CreatorTier = Cambrian.Domain.Enums.CreatorTier.Pro;
+            user.Tier = "pro";
+            user.SubscriptionStatus = "Active";
+            user.SubscriptionEndDate = null; // manual grant — no expiry
+        }
+        else
+        {
+            user.CreatorTier = Cambrian.Domain.Enums.CreatorTier.Free;
+            user.Tier = "free";
+            user.SubscriptionStatus = "Inactive";
+            user.SubscriptionEndDate = null;
+        }
+        await _users.UpdateAsync(user);
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "upgrade_creator_tier",
+            Admin = SystemActor,
+            Details = $"Changed creator tier for {user.Email} from {oldTier} to {tier}"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<string?> ResetUserPasswordAsync(string userId)
     {
         var user = await _users.FindByIdAsync(userId);

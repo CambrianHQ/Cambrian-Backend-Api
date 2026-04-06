@@ -187,6 +187,39 @@ public class AdminController : BaseController
         return OkResponse(new { success = true, message = "Creator verified." });
     }
 
+    public record UpgradeTierRequest(string Tier);
+
+    private static readonly HashSet<string> AllowedTiers = new(StringComparer.OrdinalIgnoreCase) { "free", "pro" };
+
+    [HttpPost("upgrade-tier")]
+    public async Task<IActionResult> UpgradeTier([FromBody] UpgradeTierRequest? body)
+    {
+        var tier = body?.Tier ?? "pro";
+        if (!AllowedTiers.Contains(tier))
+            return BadRequest(new { success = false, message = $"Invalid tier '{tier}'. Allowed: free, pro." });
+        _logger.LogInformation("[Admin] UpgradeTier (bulk) tier={Tier}", tier);
+        var users = await _admin.GetUsersAsync();
+        var upgraded = 0;
+        foreach (var u in users)
+        {
+            await _admin.UpgradeCreatorTierAsync(u.Id, tier);
+            upgraded++;
+        }
+        return OkResponse(new { success = true, upgraded, message = $"Upgraded {upgraded} accounts to {tier}." });
+    }
+
+    [HttpPost("users/{id}/upgrade-tier")]
+    public async Task<IActionResult> UpgradeUserTier(string id, [FromBody] UpgradeTierRequest? body)
+    {
+        var tier = body?.Tier ?? "pro";
+        if (!AllowedTiers.Contains(tier))
+            return BadRequest(new { success = false, message = $"Invalid tier '{tier}'. Allowed: free, pro." });
+        _logger.LogInformation("[Admin] UpgradeUserTier id={UserId} tier={Tier}", id, tier);
+        var ok = await _admin.UpgradeCreatorTierAsync(id, tier);
+        if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
+        return OkResponse(new { success = true, message = $"User {id} upgraded to {tier}." });
+    }
+
     // --- Content moderation ---
 
     [HttpGet("reports")]

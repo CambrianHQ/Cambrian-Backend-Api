@@ -26,6 +26,7 @@ public interface IAdminRepository
     Task<bool> ReactivateUserAsync(string userId);
     Task<bool> SetUserRoleAsync(string userId, string role);
     Task<bool> VerifyCreatorAsync(string userId);
+    Task<bool> UpgradeCreatorTierAsync(string userId, string tier);
 
     /// <summary>
     /// Generates a random temporary password, resets the user's password via Identity, and returns the temp password.
