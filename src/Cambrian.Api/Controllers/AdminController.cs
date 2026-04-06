@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -23,6 +24,14 @@ public class AdminController : BaseController
         _integrity = integrity;
         _logger = logger;
         _env = env;
+    }
+
+    private string GetAdminActor()
+    {
+        return User.FindFirstValue(ClaimTypes.Email)
+            ?? User.FindFirstValue("email")
+            ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? "unknown";
     }
 
     [HttpGet("dashboard")]
@@ -116,8 +125,8 @@ public class AdminController : BaseController
     public async Task<IActionResult> ApprovePayout(string id)
     {
         _logger.LogInformation("[Admin] ApprovePayout id={PayoutId}", id);
-        var ok = await _admin.ApprovePayoutAsync(id);
-        if (!ok) return NotFound(new { success = false, message = "Payout not found." });
+        var ok = await _admin.ApprovePayoutAsync(id, GetAdminActor());
+        if (!ok) return NotFound(new { success = false, message = "Payout not found or not in pending status." });
         return OkResponse(new { success = true, message = $"Payout {id} approved." });
     }
 
@@ -125,8 +134,8 @@ public class AdminController : BaseController
     public async Task<IActionResult> RejectPayout(string id)
     {
         _logger.LogInformation("[Admin] RejectPayout id={PayoutId}", id);
-        var ok = await _admin.RejectPayoutAsync(id);
-        if (!ok) return NotFound(new { success = false, message = "Payout not found." });
+        var ok = await _admin.RejectPayoutAsync(id, GetAdminActor());
+        if (!ok) return NotFound(new { success = false, message = "Payout not found or not in pending status." });
         return OkResponse(new { success = true, message = $"Payout {id} rejected." });
     }
 
@@ -144,7 +153,7 @@ public class AdminController : BaseController
         if (!AllowedRoles.Contains(role))
             return BadRequest(new { success = false, message = $"Invalid role '{role}'. Allowed: User, Creator, Admin." });
         _logger.LogInformation("[Admin] SetUserRole id={UserId} role={Role}", id, role);
-        var ok = await _admin.SetUserRoleAsync(id, role);
+        var ok = await _admin.SetUserRoleAsync(id, role, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = $"Role updated to {role}." });
     }
@@ -153,7 +162,7 @@ public class AdminController : BaseController
     public async Task<IActionResult> SuspendUser(string id, [FromBody] SuspendRequest? body)
     {
         _logger.LogInformation("[Admin] SuspendUser id={UserId} reason={Reason}", id, body?.Reason);
-        var ok = await _admin.SuspendUserAsync(id, body?.Reason);
+        var ok = await _admin.SuspendUserAsync(id, body?.Reason, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = "User suspended." });
     }
@@ -162,7 +171,7 @@ public class AdminController : BaseController
     public async Task<IActionResult> ReactivateUser(string id)
     {
         _logger.LogInformation("[Admin] ReactivateUser id={UserId}", id);
-        var ok = await _admin.ReactivateUserAsync(id);
+        var ok = await _admin.ReactivateUserAsync(id, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = "User reactivated." });
     }
@@ -171,10 +180,10 @@ public class AdminController : BaseController
     public async Task<IActionResult> ResetUserPassword(string id)
     {
         _logger.LogInformation("[Admin] ResetUserPassword id={UserId}", id);
-        var tempPassword = await _admin.ResetUserPasswordAsync(id);
+        var tempPassword = await _admin.ResetUserPasswordAsync(id, GetAdminActor());
         if (tempPassword is null) return NotFound(new { success = false, message = MsgUserNotFound + " Or reset failed." });
         // SECURITY: Never return the temporary password in the API response.
-        // It is sent to the user's email by the service layer.
+        // It is sent to the user's email by the repository layer.
         return OkResponse(new { success = true, message = "Password has been reset. A temporary password was sent to the user's email." });
     }
 
@@ -182,7 +191,7 @@ public class AdminController : BaseController
     public async Task<IActionResult> VerifyCreator(string id)
     {
         _logger.LogInformation("[Admin] VerifyCreator id={UserId}", id);
-        var ok = await _admin.VerifyCreatorAsync(id);
+        var ok = await _admin.VerifyCreatorAsync(id, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = "Creator verified." });
     }
@@ -198,11 +207,12 @@ public class AdminController : BaseController
         if (!AllowedTiers.Contains(tier))
             return BadRequest(new { success = false, message = $"Invalid tier '{tier}'. Allowed: free, pro." });
         _logger.LogInformation("[Admin] UpgradeTier (bulk) tier={Tier}", tier);
+        var actor = GetAdminActor();
         var users = await _admin.GetUsersAsync();
         var upgraded = 0;
         foreach (var u in users)
         {
-            await _admin.UpgradeCreatorTierAsync(u.Id, tier);
+            await _admin.UpgradeCreatorTierAsync(u.Id, tier, actor);
             upgraded++;
         }
         return OkResponse(new { success = true, upgraded, message = $"Upgraded {upgraded} accounts to {tier}." });
@@ -215,7 +225,7 @@ public class AdminController : BaseController
         if (!AllowedTiers.Contains(tier))
             return BadRequest(new { success = false, message = $"Invalid tier '{tier}'. Allowed: free, pro." });
         _logger.LogInformation("[Admin] UpgradeUserTier id={UserId} tier={Tier}", id, tier);
-        var ok = await _admin.UpgradeCreatorTierAsync(id, tier);
+        var ok = await _admin.UpgradeCreatorTierAsync(id, tier, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
         return OkResponse(new { success = true, message = $"User {id} upgraded to {tier}." });
     }
@@ -238,7 +248,7 @@ public class AdminController : BaseController
     public async Task<IActionResult> RemoveTrack(string id)
     {
         _logger.LogInformation("[Admin] RemoveTrack id={TrackId}", id);
-        var ok = await _admin.RemoveTrackAsync(id);
+        var ok = await _admin.RemoveTrackAsync(id, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track removed." });
     }
@@ -247,7 +257,7 @@ public class AdminController : BaseController
     public async Task<IActionResult> RestoreTrack(string id)
     {
         _logger.LogInformation("[Admin] RestoreTrack id={TrackId}", id);
-        var ok = await _admin.RestoreTrackAsync(id);
+        var ok = await _admin.RestoreTrackAsync(id, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track restored." });
     }
@@ -256,7 +266,7 @@ public class AdminController : BaseController
     public async Task<IActionResult> HideTrack(string id)
     {
         _logger.LogInformation("[Admin] HideTrack id={TrackId}", id);
-        var ok = await _admin.HideTrackAsync(id);
+        var ok = await _admin.HideTrackAsync(id, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track hidden." });
     }
@@ -265,7 +275,7 @@ public class AdminController : BaseController
     public async Task<IActionResult> FlagTrack(string id)
     {
         _logger.LogInformation("[Admin] FlagTrack id={TrackId}", id);
-        var ok = await _admin.FlagTrackAsync(id);
+        var ok = await _admin.FlagTrackAsync(id, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track flagged." });
     }
@@ -282,13 +292,20 @@ public class AdminController : BaseController
         return StatusCode(501, new { error = "Track pinning is not yet implemented." });
     }
 
+    private static readonly HashSet<string> AllowedVisibilities = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "public", "hidden", "limited"
+    };
+
     public record VisibilityRequest(string Visibility);
 
     [HttpPost("tracks/{id}/visibility")]
     public async Task<IActionResult> SetTrackVisibility(string id, [FromBody] VisibilityRequest? body)
     {
         var visibility = body?.Visibility ?? "public";
-        var ok = await _admin.SetTrackVisibilityAsync(id, visibility);
+        if (!AllowedVisibilities.Contains(visibility))
+            return BadRequest(new { success = false, message = $"Invalid visibility '{visibility}'. Allowed: public, hidden, limited." });
+        var ok = await _admin.SetTrackVisibilityAsync(id, visibility, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgTrackNotFound });
         return OkResponse(new { success = true, message = "Track visibility updated." });
     }
