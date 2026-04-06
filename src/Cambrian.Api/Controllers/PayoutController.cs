@@ -9,6 +9,7 @@ namespace Cambrian.Api.Controllers;
 [Route("payouts")]
 [Authorize]
 [RequireCreatorTier]
+[RequireUsername]
 public class PayoutController : BaseController
 {
     private readonly IPayoutService _payouts;

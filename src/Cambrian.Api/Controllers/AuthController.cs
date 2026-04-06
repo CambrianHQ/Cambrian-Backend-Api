@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Cambrian.Api.Common;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
@@ -185,9 +186,7 @@ public class AuthController : BaseController
         var user = await _userManager.FindByIdAsync(userId);
 
         // A user "needs a username" if their UserName is still their email (never personalized)
-        var needsUsername = user is null
-            || string.IsNullOrWhiteSpace(user.UserName)
-            || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+        var needsUsername = user is null || !UsernameHelper.IsSet(user);
 
         // isNewUser should only be true during the very first session after registration.
         // Once a user has the Creator role (set-username promotes to Creator) or has any
@@ -247,6 +246,7 @@ public class AuthController : BaseController
         tier = (auth.Tier ?? "free").ToLowerInvariant(),
         role = auth.Role ?? "User",
         isNewUser = auth.IsNewUser,
+        needsUsername = auth.Username == null,
         user = new
         {
             id = auth.UserId.ToString(),
