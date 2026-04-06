@@ -9,15 +9,20 @@ namespace Cambrian.Persistence.Repositories;
 
 public class AdminRepository : IAdminRepository
 {
-    private const string SystemActor = "system";
+    private static readonly HashSet<string> AllowedVisibilities = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "public", "hidden", "limited"
+    };
 
     private readonly CambrianDbContext _db;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly IEmailService _email;
 
-    public AdminRepository(CambrianDbContext db, UserManager<ApplicationUser> users)
+    public AdminRepository(CambrianDbContext db, UserManager<ApplicationUser> users, IEmailService email)
     {
         _db = db;
         _users = users;
+        _email = email;
     }
 
     public async Task<AdminDashboardSummary> GetDashboardStatsAsync()
@@ -83,10 +88,13 @@ public class AdminRepository : IAdminRepository
     /// Delete all transactional data and non-admin users. FK-safe order.
     /// Uses raw SQL to avoid EF Core circular-dependency tracking issues
     /// (LicenseCertificate ↔ Purchase).
+    /// Wrapped in a transaction to ensure atomicity.
     /// </summary>
     public async Task<PurgeResult> PurgeTestDataAsync(string adminEmail)
     {
         var result = new PurgeResult { AdminPreserved = adminEmail };
+
+        await using var transaction = await _db.Database.BeginTransactionAsync();
 
         // Break the circular FK first: Purchase.LicenseId → LicenseCertificate
         await _db.Database.ExecuteSqlRawAsync("UPDATE \"Purchases\" SET \"LicenseId\" = NULL");
@@ -133,6 +141,8 @@ public class AdminRepository : IAdminRepository
         result.UsersDeleted = nonAdminUsers.Count;
         await _db.SaveChangesAsync();
 
+        await transaction.CommitAsync();
+
         return result;
     }
 
@@ -140,7 +150,7 @@ public class AdminRepository : IAdminRepository
     // User management
     // ══════════════════════════════════════════════
 
-    public async Task<bool> SuspendUserAsync(string userId, string? reason)
+    public async Task<bool> SuspendUserAsync(string userId, string? reason, string adminActor)
     {
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return false;
@@ -150,14 +160,14 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "suspend_user",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Suspended user {user.Email}. Reason: {reason ?? "N/A"}"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> ReactivateUserAsync(string userId)
+    public async Task<bool> ReactivateUserAsync(string userId, string adminActor)
     {
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return false;
@@ -167,14 +177,14 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "reactivate_user",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Reactivated user {user.Email}"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> SetUserRoleAsync(string userId, string role)
+    public async Task<bool> SetUserRoleAsync(string userId, string role, string adminActor)
     {
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return false;
@@ -185,14 +195,14 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "change_user_role",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Changed role for {user.Email} from {oldRole} to {role}"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> VerifyCreatorAsync(string userId)
+    public async Task<bool> VerifyCreatorAsync(string userId, string adminActor)
     {
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return false;
@@ -203,14 +213,14 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "verify_creator",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Verified creator {user.Email}"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> UpgradeCreatorTierAsync(string userId, string tier)
+    public async Task<bool> UpgradeCreatorTierAsync(string userId, string tier, string adminActor)
     {
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return false;
@@ -234,14 +244,14 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "upgrade_creator_tier",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Changed creator tier for {user.Email} from {oldTier} to {tier}"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<string?> ResetUserPasswordAsync(string userId)
+    public async Task<string?> ResetUserPasswordAsync(string userId, string adminActor)
     {
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return null;
@@ -252,10 +262,19 @@ public class AdminRepository : IAdminRepository
         var result = await _users.ResetPasswordAsync(user, token, tempPassword);
         if (!result.Succeeded) return null;
 
+        // Send the temporary password to the user's email
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            await _email.SendAsync(
+                user.Email,
+                "Your password has been reset",
+                $"<p>An administrator has reset your password.</p><p>Your temporary password is: <strong>{tempPassword}</strong></p><p>Please log in and change your password immediately.</p>");
+        }
+
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "reset_user_password",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Admin reset password for {user.Email}"
         });
         await _db.SaveChangesAsync();
@@ -343,33 +362,37 @@ public class AdminRepository : IAdminRepository
     // Payout management
     // ══════════════════════════════════════════════
 
-    public async Task<bool> ApprovePayoutAsync(Guid payoutId)
+    public async Task<bool> ApprovePayoutAsync(Guid payoutId, string adminActor)
     {
         var payout = await _db.Payouts.FindAsync(payoutId);
         if (payout is null) return false;
+        if (payout.Status != "pending") return false;
+
         payout.Status = "approved";
         payout.CompletedAt = DateTime.UtcNow;
 
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "approve_payout",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Approved payout {payoutId} (${payout.AmountCents / 100.0:F2})"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> RejectPayoutAsync(Guid payoutId)
+    public async Task<bool> RejectPayoutAsync(Guid payoutId, string adminActor)
     {
         var payout = await _db.Payouts.FindAsync(payoutId);
         if (payout is null) return false;
+        if (payout.Status != "pending") return false;
+
         payout.Status = "rejected";
 
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "reject_payout",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Rejected payout {payoutId} (${payout.AmountCents / 100.0:F2})"
         });
         await _db.SaveChangesAsync();
@@ -380,7 +403,7 @@ public class AdminRepository : IAdminRepository
     // Track moderation
     // ══════════════════════════════════════════════
 
-    public async Task<bool> RemoveTrackAsync(Guid trackId)
+    public async Task<bool> RemoveTrackAsync(Guid trackId, string adminActor)
     {
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null) return false;
@@ -390,14 +413,14 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "remove_track",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Removed track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> RestoreTrackAsync(Guid trackId)
+    public async Task<bool> RestoreTrackAsync(Guid trackId, string adminActor)
     {
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null) return false;
@@ -407,14 +430,14 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "restore_track",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Restored track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> HideTrackAsync(Guid trackId)
+    public async Task<bool> HideTrackAsync(Guid trackId, string adminActor)
     {
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null) return false;
@@ -423,14 +446,14 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "hide_track",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Hidden track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> FlagTrackAsync(Guid trackId)
+    public async Task<bool> FlagTrackAsync(Guid trackId, string adminActor)
     {
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null) return false;
@@ -439,15 +462,17 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "flag_track",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Flagged track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
         return true;
     }
 
-    public async Task<bool> SetTrackVisibilityAsync(Guid trackId, string visibility)
+    public async Task<bool> SetTrackVisibilityAsync(Guid trackId, string visibility, string adminActor)
     {
+        if (!AllowedVisibilities.Contains(visibility)) return false;
+
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null) return false;
         track.Visibility = visibility;
@@ -455,7 +480,7 @@ public class AdminRepository : IAdminRepository
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "set_track_visibility",
-            Admin = SystemActor,
+            Admin = adminActor,
             Details = $"Set visibility of '{track.Title}' to {visibility} (id={trackId})"
         });
         await _db.SaveChangesAsync();
