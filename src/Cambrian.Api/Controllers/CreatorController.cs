@@ -9,6 +9,7 @@ namespace Cambrian.Api.Controllers;
 [Route("creator")]
 [Authorize]
 [RequireCreatorTier]
+[RequireUsername]
 public class CreatorController : BaseController
 {
     private readonly ICreatorService _creator;

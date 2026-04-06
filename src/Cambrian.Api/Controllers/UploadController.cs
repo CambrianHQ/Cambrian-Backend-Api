@@ -32,6 +32,7 @@ public class UploadController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
+    [RequireUsername]
     [HttpPost("upload")]
     [RequestSizeLimit(150 * 1024 * 1024)]
     public async Task<IActionResult> Upload([FromForm] UploadTrackRequest request)

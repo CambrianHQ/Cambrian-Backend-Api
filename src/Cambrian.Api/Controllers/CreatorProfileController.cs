@@ -247,6 +247,7 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
+    [RequireUsername]
     [HttpPost("me/collections")]
     public async Task<IActionResult> CreateCollection([FromBody] UpsertCollectionRequest body)
     {
@@ -267,6 +268,7 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
+    [RequireUsername]
     [HttpPut("me/collections/{collectionId}")]
     public async Task<IActionResult> UpdateCollection(Guid collectionId, [FromBody] UpsertCollectionRequest body)
     {
@@ -288,6 +290,7 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
+    [RequireUsername]
     [HttpDelete("me/collections/{collectionId}")]
     public async Task<IActionResult> DeleteCollection(Guid collectionId)
     {
@@ -304,6 +307,7 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
+    [RequireUsername]
     [HttpPut("me/pinned-tracks")]
     public async Task<IActionResult> UpdatePinnedTracks([FromBody] UpdatePinnedTracksRequest body)
     {
