@@ -255,6 +255,20 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
+
+    // Per-API-key rate limit for public V1 endpoints.
+    // Falls back to IP when no key is present (anonymous access).
+    options.AddPolicy("api_key_free", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Request.Headers.TryGetValue("X-API-Key", out var k) && !string.IsNullOrEmpty(k)
+                ? k.ToString()
+                : ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
 });
 
 // CORS

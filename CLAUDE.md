@@ -124,6 +124,14 @@ HTTP Request
 [JWT Bearer Middleware] → validates token, populates ClaimsPrincipal
     │
     ▼
+[ApiKeyMiddleware]                      src/Cambrian.Api/Middleware/ApiKeyMiddleware.cs
+    │  • Skips if request already authenticated (JWT/cookie)
+    │  • If X-API-Key header present: SHA-256 hashes it → DB lookup
+    │  • Sets ClaimsPrincipal so downstream [Authorize] works normally
+    │  • Rejects invalid or revoked keys with 401 (even on AllowAnonymous endpoints)
+    │  • Updates LastUsedAt fire-and-forget via IServiceScopeFactory
+    │
+    ▼
 [Controller]                           src/Cambrian.Api/Controllers/
     │  • Reads request (HTTP only)
     │  • Validates [Authorize] attributes
@@ -429,6 +437,20 @@ Inherits `IdentityDbContext<ApplicationUser>`.
 
 Configuration applied via `ActivityItemConfiguration` (`IEntityTypeConfiguration<ActivityItem>`).
 
+#### ApiKeys
+| Column | Type | Notes |
+|--------|------|-------|
+| Id | Guid (PK) | |
+| UserId | varchar(450) (FK) | → AspNetUsers.Id, ON DELETE CASCADE |
+| KeyHash | text | SHA-256 hex of raw key — **unique index** — raw key never stored |
+| KeyPrefix | varchar(8) | Display prefix only, e.g. `cbr_0544` |
+| Name | varchar(100) | User-assigned label |
+| CreatedAt | DateTime | |
+| LastUsedAt | DateTime? | Updated fire-and-forget on each authenticated request |
+| IsActive | bool | `false` = soft-deleted / revoked |
+
+**Indexes:** `IX_ApiKeys_KeyHash` (unique), `IX_ApiKeys_UserId`
+
 #### ASP.NET Identity Tables (managed by IdentityDbContext)
 `AspNetRoles`, `AspNetRoleClaims`, `AspNetUserClaims`, `AspNetUserLogins`, `AspNetUserRoles`, `AspNetUserTokens`
 
@@ -464,6 +486,7 @@ All migrations: `src/Cambrian.Persistence/Migrations/`
 | 22 | `20260326120000_AddCreatorFollows` | CreatorFollow table |
 | 23 | `20260327000000_AddIdempotencyUniqueIndexes` | Unique indexes on StripeSessionId, EventId |
 | 24 | `20260327014723_AddActivityAndGrowthFeatures` | ActivityItem table + growth feature columns |
+| 25 | `20260406220049_AddApiKeysTable` | ApiKeys table, unique KeyHash index, FK → AspNetUsers cascade |
 
 **How to create a migration:**
 ```bash
@@ -674,13 +697,27 @@ Example valid: `Password123!`
 - `GET /auth/google/status` returns whether Google OAuth is configured (no credentials needed)
 - Account linking: `POST /auth/link-google` links a Google account to an existing local account
 
+### API Key Auth (ApiKeyMiddleware)
+
+| Property | Value |
+|----------|-------|
+| Header | `X-API-Key` |
+| Format | `cbr_` + 32 random bytes as lowercase hex (68 chars total) |
+| Storage | SHA-256 hash only — raw key returned **once** at creation, never persisted |
+| Revocation | Soft-delete (`IsActive = false`) via `DELETE /api/v1/keys/{id}` |
+| Scope | Any authenticated user can create keys |
+| Key management | Requires JWT — cannot use an API key to create/list/revoke API keys |
+| `LastUsedAt` | Updated fire-and-forget via `IServiceScopeFactory` (non-critical) |
+
+Claims set on authenticated API key request: `ClaimTypes.NameIdentifier` = userId, `auth_method` = `api_key`.
+
 ### Authorization Attributes
 
 ```csharp
-[Authorize]                         // any authenticated user
+[Authorize]                         // any authenticated user (JWT, cookie, or API key)
 [Authorize(Roles = "Admin")]        // admin only
 [Authorize(Roles = "Creator")]      // creator role required
-[AllowAnonymous]                    // public endpoint
+[AllowAnonymous]                    // public endpoint (API key still rejected if present but invalid)
 ```
 
 ---
@@ -894,8 +931,11 @@ Fixed-window, per-IP:
 |---------|-----------|---------|-------------|
 | Global | 100 req/min | 500 req/min | 500 req/min |
 | Auth (`/auth/*`) | 10 req/min | 100 req/min | 200 req/min |
+| `api_key_free` (V1 endpoints) | 100 req/min | 100 req/min | 100 req/min |
 
 Configured via `RateLimiting:GlobalPermitLimit` and `RateLimiting:AuthPermitLimit`. Disabled in `Testing` environment (set to `int.MaxValue`).
+
+The `api_key_free` policy partitions by the value of the `X-API-Key` header when present, falling back to remote IP for anonymous requests. Applied via `[EnableRateLimiting("api_key_free")]` on all V1 controllers.
 
 ### 10.9 Feature Flags
 
@@ -916,7 +956,45 @@ Evaluation: deterministic hash of `(userId, flagName)` checked against `RolloutP
 
 ---
 
-## 11. Protected Systems — Requires Explicit Human Approval Before Modification
+## 12. Public API v1
+
+**Base URL:** `https://api.cambrianmusic.com`  
+**Rate limit policy:** `api_key_free` — 100 req/min per API key (falls back to IP for anonymous)
+
+### Catalogue & Discovery
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| GET | `/api/v1/tracks` | None | `genre`, `mood`, `search`, `tempo`, `instrumental`, `sort`, `page`, `limit` (max 100) |
+| GET | `/api/v1/tracks/{id}` | None | Single track with license tier pricing |
+| GET | `/api/v1/genres` | None | Distinct genre list |
+| GET | `/api/v1/creators/{identifier}` | None | UUID or username slug |
+
+### Licensing
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/api/v1/licenses` | Required | Body: `{trackId, licenseType}` — returns `{checkoutUrl}` |
+| GET | `/api/v1/licenses/{id}/verify` | None | Public license certificate verification |
+
+### API Key Management
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/api/v1/keys` | JWT | Create key — raw key returned once in response |
+| GET | `/api/v1/keys` | JWT | List active keys (prefix + metadata, no hashes) |
+| DELETE | `/api/v1/keys/{id}` | JWT | Revoke key (soft delete) |
+
+### Frontend Routes (for reference)
+
+| Route | Purpose |
+|-------|---------|
+| `/developers` | API docs page — auth, endpoints, code examples |
+| `/dashboard/api-keys` | Key management — create, view prefix, revoke |
+
+---
+
+## 12. Protected Systems — Requires Explicit Human Approval Before Modification
 
 The following systems require explicit human approval before ANY modification. Do not make changes to these systems even if requested as part of a larger task — stop, document the required change, and wait for confirmation.
 
@@ -932,3 +1010,4 @@ The following systems require explicit human approval before ANY modification. D
 | **JWT validation configuration** | Weakening validation (e.g. removing issuer check) enables token forgery | `Program.cs` JWT bearer setup |
 | **Admin seeding** | Admin password changes affect production access | `StartupExtensions.cs` (SeedAdminAsync) |
 | **`TierManifest` fee rates** | Fee rates directly control how much creators are paid per sale | `src/Cambrian.Application/Configuration/TierManifest.cs` |
+| **API key hash storage** | `KeyHash` is the only stored form of a key — never add an endpoint that returns `KeyHash` values; key management endpoints must require JWT, not API key auth | `ApiKeyRepository.cs`, `ApiKeysController.cs`, `ApiKeyMiddleware.cs` |
