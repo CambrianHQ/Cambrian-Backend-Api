@@ -22,25 +22,25 @@ public interface IAdminRepository
     Task<PurgeResult> PurgeTestDataAsync(string adminEmail);
 
     // ── User management ──
-    Task<bool> SuspendUserAsync(string userId, string? reason);
-    Task<bool> ReactivateUserAsync(string userId);
-    Task<bool> SetUserRoleAsync(string userId, string role);
-    Task<bool> VerifyCreatorAsync(string userId);
-    Task<bool> UpgradeCreatorTierAsync(string userId, string tier);
+    Task<bool> SuspendUserAsync(string userId, string? reason, string adminActor);
+    Task<bool> ReactivateUserAsync(string userId, string adminActor);
+    Task<bool> SetUserRoleAsync(string userId, string role, string adminActor);
+    Task<bool> VerifyCreatorAsync(string userId, string adminActor);
+    Task<bool> UpgradeCreatorTierAsync(string userId, string tier, string adminActor);
 
     /// <summary>
     /// Generates a random temporary password, resets the user's password via Identity, and returns the temp password.
     /// </summary>
-    Task<string?> ResetUserPasswordAsync(string userId);
+    Task<string?> ResetUserPasswordAsync(string userId, string adminActor);
 
     // ── Payout management ──
-    Task<bool> ApprovePayoutAsync(Guid payoutId);
-    Task<bool> RejectPayoutAsync(Guid payoutId);
+    Task<bool> ApprovePayoutAsync(Guid payoutId, string adminActor);
+    Task<bool> RejectPayoutAsync(Guid payoutId, string adminActor);
 
     // ── Track moderation ──
-    Task<bool> RemoveTrackAsync(Guid trackId);
-    Task<bool> RestoreTrackAsync(Guid trackId);
-    Task<bool> HideTrackAsync(Guid trackId);
-    Task<bool> FlagTrackAsync(Guid trackId);
-    Task<bool> SetTrackVisibilityAsync(Guid trackId, string visibility);
+    Task<bool> RemoveTrackAsync(Guid trackId, string adminActor);
+    Task<bool> RestoreTrackAsync(Guid trackId, string adminActor);
+    Task<bool> HideTrackAsync(Guid trackId, string adminActor);
+    Task<bool> FlagTrackAsync(Guid trackId, string adminActor);
+    Task<bool> SetTrackVisibilityAsync(Guid trackId, string visibility, string adminActor);
 }

@@ -26,6 +26,7 @@ public class HealthController : ControllerBase
     /// Diagnostic endpoint to check audio storage state for a sample track.
     /// Returns the raw AudioUrl and whether the file exists in storage.
     /// </summary>
+    [Authorize(Roles = "Admin")]
     [HttpGet("storage")]
     public async Task<IActionResult> StorageDiag()
     {
