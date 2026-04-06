@@ -44,46 +44,46 @@ public class AdminService : IAdminService
 
     // ── User management ──
 
-    public Task<bool> SuspendUserAsync(string userId, string? reason)
-        => _admin.SuspendUserAsync(userId, reason);
+    public Task<bool> SuspendUserAsync(string userId, string? reason, string adminActor)
+        => _admin.SuspendUserAsync(userId, reason, adminActor);
 
-    public Task<bool> ReactivateUserAsync(string userId)
-        => _admin.ReactivateUserAsync(userId);
+    public Task<bool> ReactivateUserAsync(string userId, string adminActor)
+        => _admin.ReactivateUserAsync(userId, adminActor);
 
-    public Task<bool> SetUserRoleAsync(string userId, string role)
-        => _admin.SetUserRoleAsync(userId, role);
+    public Task<bool> SetUserRoleAsync(string userId, string role, string adminActor)
+        => _admin.SetUserRoleAsync(userId, role, adminActor);
 
-    public Task<bool> VerifyCreatorAsync(string userId)
-        => _admin.VerifyCreatorAsync(userId);
+    public Task<bool> VerifyCreatorAsync(string userId, string adminActor)
+        => _admin.VerifyCreatorAsync(userId, adminActor);
 
-    public Task<bool> UpgradeCreatorTierAsync(string userId, string tier)
-        => _admin.UpgradeCreatorTierAsync(userId, tier);
+    public Task<bool> UpgradeCreatorTierAsync(string userId, string tier, string adminActor)
+        => _admin.UpgradeCreatorTierAsync(userId, tier, adminActor);
 
-    public Task<string?> ResetUserPasswordAsync(string userId)
-        => _admin.ResetUserPasswordAsync(userId);
+    public Task<string?> ResetUserPasswordAsync(string userId, string adminActor)
+        => _admin.ResetUserPasswordAsync(userId, adminActor);
 
     // ── Payout management ──
 
-    public Task<bool> ApprovePayoutAsync(string payoutId)
-        => Guid.TryParse(payoutId, out var id) ? _admin.ApprovePayoutAsync(id) : Task.FromResult(false);
+    public Task<bool> ApprovePayoutAsync(string payoutId, string adminActor)
+        => Guid.TryParse(payoutId, out var id) ? _admin.ApprovePayoutAsync(id, adminActor) : Task.FromResult(false);
 
-    public Task<bool> RejectPayoutAsync(string payoutId)
-        => Guid.TryParse(payoutId, out var id) ? _admin.RejectPayoutAsync(id) : Task.FromResult(false);
+    public Task<bool> RejectPayoutAsync(string payoutId, string adminActor)
+        => Guid.TryParse(payoutId, out var id) ? _admin.RejectPayoutAsync(id, adminActor) : Task.FromResult(false);
 
     // ── Track moderation ──
 
-    public Task<bool> RemoveTrackAsync(string trackId)
-        => Guid.TryParse(trackId, out var id) ? _admin.RemoveTrackAsync(id) : Task.FromResult(false);
+    public Task<bool> RemoveTrackAsync(string trackId, string adminActor)
+        => Guid.TryParse(trackId, out var id) ? _admin.RemoveTrackAsync(id, adminActor) : Task.FromResult(false);
 
-    public Task<bool> RestoreTrackAsync(string trackId)
-        => Guid.TryParse(trackId, out var id) ? _admin.RestoreTrackAsync(id) : Task.FromResult(false);
+    public Task<bool> RestoreTrackAsync(string trackId, string adminActor)
+        => Guid.TryParse(trackId, out var id) ? _admin.RestoreTrackAsync(id, adminActor) : Task.FromResult(false);
 
-    public Task<bool> HideTrackAsync(string trackId)
-        => Guid.TryParse(trackId, out var id) ? _admin.HideTrackAsync(id) : Task.FromResult(false);
+    public Task<bool> HideTrackAsync(string trackId, string adminActor)
+        => Guid.TryParse(trackId, out var id) ? _admin.HideTrackAsync(id, adminActor) : Task.FromResult(false);
 
-    public Task<bool> FlagTrackAsync(string trackId)
-        => Guid.TryParse(trackId, out var id) ? _admin.FlagTrackAsync(id) : Task.FromResult(false);
+    public Task<bool> FlagTrackAsync(string trackId, string adminActor)
+        => Guid.TryParse(trackId, out var id) ? _admin.FlagTrackAsync(id, adminActor) : Task.FromResult(false);
 
-    public Task<bool> SetTrackVisibilityAsync(string trackId, string visibility)
-        => Guid.TryParse(trackId, out var id) ? _admin.SetTrackVisibilityAsync(id, visibility) : Task.FromResult(false);
+    public Task<bool> SetTrackVisibilityAsync(string trackId, string visibility, string adminActor)
+        => Guid.TryParse(trackId, out var id) ? _admin.SetTrackVisibilityAsync(id, visibility, adminActor) : Task.FromResult(false);
 }
