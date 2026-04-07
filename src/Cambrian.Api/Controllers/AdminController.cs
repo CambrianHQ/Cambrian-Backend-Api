@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.Interfaces;
+using Cambrian.Infrastructure.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Cambrian.Api.Controllers;
 
@@ -17,13 +19,17 @@ public class AdminController : BaseController
     private readonly IMarketplaceIntegrityService _integrity;
     private readonly ILogger<AdminController> _logger;
     private readonly IWebHostEnvironment _env;
+    private readonly StorageOptions _storageOptions;
+    private readonly IObjectStorage _storage;
 
-    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env)
+    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env, IOptions<StorageOptions> storageOptions, IObjectStorage storage)
     {
         _admin = admin;
         _integrity = integrity;
         _logger = logger;
         _env = env;
+        _storageOptions = storageOptions.Value;
+        _storage = storage;
     }
 
     private string GetAdminActor()
@@ -358,4 +364,64 @@ public class AdminController : BaseController
         var result = await _admin.PurgeTestDataAsync(adminEmail);
         return OkResponse(result);
     }
+
+    // --- Storage diagnostics ---
+
+    /// <summary>
+    /// Reports storage configuration status without exposing secrets.
+    /// Also performs a live connectivity test (write + read + delete a tiny probe file).
+    /// </summary>
+    [HttpGet("storage-diagnostics")]
+    public async Task<IActionResult> StorageDiagnostics()
+    {
+        var diag = new
+        {
+            provider = _storageOptions.Provider,
+            endpoint = string.IsNullOrEmpty(_storageOptions.Endpoint) ? "NOT SET" : MaskValue(_storageOptions.Endpoint),
+            bucket = string.IsNullOrEmpty(_storageOptions.Bucket) ? "NOT SET" : _storageOptions.Bucket,
+            accessKey = string.IsNullOrEmpty(_storageOptions.AccessKey) ? "NOT SET" : MaskSecret(_storageOptions.AccessKey),
+            secretKey = string.IsNullOrEmpty(_storageOptions.SecretKey) ? "NOT SET" : MaskSecret(_storageOptions.SecretKey),
+            region = _storageOptions.Region,
+            usePathStyle = _storageOptions.UsePathStyle,
+            publicUrl = string.IsNullOrEmpty(_storageOptions.PublicUrl) ? "NOT SET" : _storageOptions.PublicUrl,
+            localPath = _storageOptions.LocalPath,
+            storageImpl = _storage.GetType().Name,
+            configComplete = !string.IsNullOrEmpty(_storageOptions.Endpoint)
+                          && !string.IsNullOrEmpty(_storageOptions.Bucket)
+                          && !string.IsNullOrEmpty(_storageOptions.AccessKey)
+                          && !string.IsNullOrEmpty(_storageOptions.SecretKey)
+                          && !string.IsNullOrEmpty(_storageOptions.PublicUrl),
+            connectivity = await TestStorageConnectivity()
+        };
+        return OkResponse(diag);
+    }
+
+    private async Task<object> TestStorageConnectivity()
+    {
+        var probeKey = $"_diagnostics/probe-{Guid.NewGuid():N}.txt";
+        try
+        {
+            var content = System.Text.Encoding.UTF8.GetBytes("probe");
+            using var stream = new MemoryStream(content);
+            await _storage.UploadAsync(stream, probeKey, "text/plain");
+
+            var readBack = await _storage.OpenReadAsync(probeKey);
+            var canRead = readBack is not null;
+            readBack?.Stream?.Dispose();
+
+            await _storage.DeleteAsync(probeKey);
+
+            return new { status = "ok", canWrite = true, canRead, probeKey };
+        }
+        catch (Exception ex)
+        {
+            return new { status = "error", canWrite = false, canRead = false, error = ex.Message, type = ex.GetType().Name };
+        }
+    }
+
+    private static string MaskSecret(string value)
+        => value.Length <= 6 ? "***" : value[..3] + "***" + value[^3..];
+
+    private static string MaskValue(string value)
+        => value.Length <= 10 ? "***" : value[..8] + "***";
 }
