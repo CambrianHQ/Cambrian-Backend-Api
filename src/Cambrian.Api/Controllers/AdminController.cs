@@ -206,7 +206,10 @@ public class AdminController : BaseController
         _logger.LogInformation("[Admin] VerifyCreator id={UserId}", id);
         var ok = await _admin.VerifyCreatorAsync(id, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
-        return OkResponse(new { success = true, message = "Creator verified." });
+        // Return updated user so the frontend can refresh immediately
+        var users = await _admin.GetUsersAsync();
+        var updated = users.FirstOrDefault(u => u.Id == id);
+        return OkResponse(new { success = true, message = "Creator verified and upgraded to Pro tier.", user = updated });
     }
 
     public record UpgradeTierRequest(string Tier);
@@ -240,7 +243,10 @@ public class AdminController : BaseController
         _logger.LogInformation("[Admin] UpgradeUserTier id={UserId} tier={Tier}", id, tier);
         var ok = await _admin.UpgradeCreatorTierAsync(id, tier, GetAdminActor());
         if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
-        return OkResponse(new { success = true, message = $"User {id} upgraded to {tier}." });
+        // Return updated user so the frontend can refresh immediately
+        var allUsers = await _admin.GetUsersAsync();
+        var updatedUser = allUsers.FirstOrDefault(u => u.Id == id);
+        return OkResponse(new { success = true, message = $"User {id} upgraded to {tier}.", user = updatedUser });
     }
 
     // --- Content moderation ---
