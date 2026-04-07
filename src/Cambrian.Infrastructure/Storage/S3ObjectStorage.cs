@@ -101,8 +101,10 @@ public sealed class S3ObjectStorage : IObjectStorage
         var normalised = NormaliseKey(key);
         if (!string.IsNullOrWhiteSpace(_options.PublicUrl))
             return $"{_options.PublicUrl.TrimEnd('/')}/{normalised}";
-        // Fallback: generate a short-lived signed URL
-        return GenerateSignedUrl(normalised);
+        // No public URL configured — return bare key.
+        // The API layer resolves bare keys to /images/{key} proxy URLs,
+        // so storing just the key is safe and avoids expiring signed URLs.
+        return normalised;
     }
 
     public string? GenerateUploadUrl(string key, string contentType)
