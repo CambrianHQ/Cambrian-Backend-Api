@@ -52,6 +52,11 @@ public class CreatorsController : BaseController
         var userId = GetRequiredUserId();
         if (userId is null) return Unauthorized();
         var dashboard = await _creatorService.GetDashboardAsync(userId);
+        foreach (var t in dashboard.Tracks)
+        {
+            if (!string.IsNullOrEmpty(t.CoverArtUrl))
+                t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
+        }
         return OkResponse(dashboard);
     }
 
@@ -69,6 +74,7 @@ public class CreatorsController : BaseController
             _logger.LogWarning("CreatorLookup: UUID={CreatorId} not found", creatorId);
             return NotFoundResponse("Creator not found.");
         }
+        ResolveCreatorImageUrls(creator);
         return OkResponse(creator);
     }
 
@@ -91,6 +97,7 @@ public class CreatorsController : BaseController
             _logger.LogWarning("CreatorLookup: username={Username} not found", username);
             return NotFoundResponse("Creator not found.");
         }
+        ResolveCreatorImageUrls(creator);
         return OkResponse(creator);
     }
 
@@ -112,6 +119,7 @@ public class CreatorsController : BaseController
             _logger.LogWarning("CreatorResolve: failed to resolve identifier={Identifier}", identifier);
             return NotFoundResponse("Creator not found.");
         }
+        ResolveCreatorImageUrls(creator);
         return OkResponse(creator);
     }
 
@@ -211,8 +219,8 @@ public class CreatorsController : BaseController
                 canChangeUsername = true,
                 DisplayName = appUser.DisplayName ?? appUser.Email?.Split('@')[0] ?? "",
                 Bio = appUser.Bio ?? "",
-                ProfileImageUrl = appUser.ProfileImageUrl,
-                CoverImageUrl = appUser.CoverImageUrl,
+                ProfileImageUrl = ResolveImageUrl(appUser.ProfileImageUrl),
+                CoverImageUrl = ResolveImageUrl(appUser.CoverImageUrl),
                 SocialLinks = (object?)null,
                 Stats = (object?)null,
                 Tracks = Array.Empty<object>(),
@@ -226,8 +234,8 @@ public class CreatorsController : BaseController
             canChangeUsername = string.IsNullOrWhiteSpace(creator.Username),
             creator.DisplayName,
             creator.Bio,
-            creator.ProfileImageUrl,
-            creator.CoverImageUrl,
+            ProfileImageUrl = ResolveImageUrl(creator.ProfileImageUrl),
+            CoverImageUrl = ResolveImageUrl(creator.CoverImageUrl),
             creator.SocialLinks,
             creator.Stats,
             creator.Tracks
@@ -328,6 +336,8 @@ public class CreatorsController : BaseController
 
         await _transactions.CommitAsync();
 
+        saved.ProfileImageUrl = ResolveImageUrl(saved.ProfileImageUrl);
+        saved.CoverImageUrl = ResolveImageUrl(saved.CoverImageUrl);
         return OkResponse(saved);
     }
 
@@ -385,7 +395,16 @@ public class CreatorsController : BaseController
             return ErrorResponse("Image must be under 10 MB.");
 
         var contentType = Request.ContentType ?? "application/octet-stream";
-        await _storage.UploadAsync(Request.Body, key, contentType);
+        try
+        {
+            await _storage.UploadAsync(Request.Body, key, contentType);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Proxy image upload failed: key={Key}, storage={StorageType}",
+                key, _storage.GetType().Name);
+            return StatusCode(502, new { success = false, error = "Image upload failed. Storage may be misconfigured." });
+        }
         var publicUrl = _storage.GetPublicUrl(key);
         return OkResponse(new { publicUrl });
     }
@@ -413,7 +432,16 @@ public class CreatorsController : BaseController
 
         await using var stream = file.OpenReadStream();
         var contentType = file.ContentType ?? "application/octet-stream";
-        await _storage.UploadAsync(stream, key, contentType);
+        try
+        {
+            await _storage.UploadAsync(stream, key, contentType);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Creator image upload failed: key={Key}, storage={StorageType}",
+                key, _storage.GetType().Name);
+            return StatusCode(502, new { success = false, error = "Image upload failed. Storage may be misconfigured." });
+        }
         var publicUrl = _storage.GetPublicUrl(key);
 
         // Canonical write: CreatorProfile is the source of truth for images
@@ -485,15 +513,21 @@ public class CreatorsController : BaseController
         {
             t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
             if (!string.IsNullOrEmpty(t.CoverArtUrl))
-                t.CoverArtUrl = ResolveCoverArtUrl(t.CoverArtUrl);
+                t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
+            if (!string.IsNullOrEmpty(t.CreatorProfileImageUrl))
+                t.CreatorProfileImageUrl = ResolveImageUrl(t.CreatorProfileImageUrl);
         }
     }
 
-    private string ResolveCoverArtUrl(string rawUrl)
+    private void ResolveCreatorImageUrls(Cambrian.Application.DTOs.Creators.PublicCreatorDto dto)
     {
-        if (rawUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            rawUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            return rawUrl;
-        return ResolveAbsoluteUrl(rawUrl);
+        dto.ProfileImageUrl = ResolveImageUrl(dto.ProfileImageUrl);
+        dto.CoverImageUrl = ResolveImageUrl(dto.CoverImageUrl);
+        foreach (var t in dto.Tracks)
+        {
+            t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
+            if (!string.IsNullOrEmpty(t.CoverArtUrl))
+                t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
+        }
     }
 }

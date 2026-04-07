@@ -67,4 +67,32 @@ public class BaseController : ControllerBase
         var separator = url.StartsWith('/') ? "" : "/";
         return $"{Request.Scheme}://{Request.Host}{separator}{url}";
     }
+
+    /// <summary>
+    /// Resolve an image URL (stored as an object key, absolute R2/S3 URL, or local /uploads/ path)
+    /// to a URL proxied through the backend's /images/ endpoint. This avoids CORS issues
+    /// with direct R2/S3 bucket access.
+    /// </summary>
+    protected string ResolveImageUrl(string? rawUrl)
+    {
+        if (string.IsNullOrEmpty(rawUrl))
+            return rawUrl ?? "";
+        // Local storage paths (/uploads/...) — resolve to absolute backend URL
+        if (rawUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+            return ResolveAbsoluteUrl(rawUrl);
+        // Absolute R2/S3 URL — extract the object key and proxy through /images/
+        if (rawUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            rawUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri))
+            {
+                var key = uri.AbsolutePath.TrimStart('/');
+                if (!string.IsNullOrEmpty(key))
+                    return ResolveAbsoluteUrl($"/images/{key}");
+            }
+            return rawUrl; // unrecognized — pass through
+        }
+        // Bare object key (e.g. covers/abc/img.jpg) — proxy through /images/
+        return ResolveAbsoluteUrl($"/images/{rawUrl}");
+    }
 }

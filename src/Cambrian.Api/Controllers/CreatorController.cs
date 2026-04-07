@@ -33,6 +33,12 @@ public class CreatorController : BaseController
 
         var userId = GetRequiredUserId()!;
         var tracks = await _creator.GetTracksAsync(userId, page, pageSize);
+        foreach (var t in tracks)
+        {
+            t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
+            if (!string.IsNullOrEmpty(t.CoverArtUrl))
+                t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
+        }
         return OkResponse(tracks);
     }
 

@@ -315,6 +315,7 @@ public sealed class SecurityPatchTests
 
     /// <summary>
     /// REGRESSION — public tracks must still stream for anonymous users.
+    /// Audio is proxied through the backend (not redirected) to avoid R2 CORS issues.
     /// </summary>
     [Fact]
     public async Task C4_Regression_StreamAudio_Returns302_ForPublicTrack_WhenAnonymous()
@@ -330,12 +331,17 @@ public sealed class SecurityPatchTests
             Visibility = "public",
             CreatorId = "creator-1"
         });
-        fix.Storage.GenerateSignedUrl("tracks/public.mp3").Returns("https://cdn.test/signed");
+        fix.Storage.OpenReadAsync("tracks/public.mp3").Returns(new StorageFile
+        {
+            Stream = new MemoryStream(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }),
+            ContentType = "audio/mpeg",
+            Length = 4
+        });
         fix.SetAnonymousUser();
 
         var result = await fix.Controller.StreamAudio(trackId.ToString());
 
-        Assert.IsType<RedirectResult>(result);
+        Assert.IsType<FileStreamResult>(result);
     }
 
     // ──────────────────────────────────────────────────────────────

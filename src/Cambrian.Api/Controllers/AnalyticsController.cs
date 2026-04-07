@@ -70,6 +70,9 @@ public class AnalyticsController : BaseController
         [FromQuery] DateTime? to,
         [FromQuery] int limit = 100)
     {
+        if (!User.IsInRole("Admin"))
+            return OkResponse(new List<object>());
+
         var events = await _analytics.QueryAsync(eventType, from, to, limit);
         var result = new List<object>();
         foreach (var e in events)
