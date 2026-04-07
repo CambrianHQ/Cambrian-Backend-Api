@@ -453,6 +453,7 @@ public class AdminRepository : IAdminRepository
         if (payout.Status != "pending") return false;
 
         payout.Status = "rejected";
+        payout.CompletedAt = DateTime.UtcNow;
 
         // Re-credit the creator's wallet — the debit was taken at request time
         _db.WalletTransactions.Add(new WalletTransaction
