@@ -154,24 +154,15 @@ public class CatalogController : BaseController
             // get the correct Content-Type, Range support, and CORS headers.
             t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
             if (!string.IsNullOrEmpty(t.CoverArtUrl))
-                t.CoverArtUrl = ResolveCoverArtUrl(t.CoverArtUrl);
+                t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
+            if (!string.IsNullOrEmpty(t.CreatorProfileImageUrl))
+                t.CreatorProfileImageUrl = ResolveImageUrl(t.CreatorProfileImageUrl);
         }
     }
 
     /// <summary>
     /// Produce a public URL for cover art that works for both local storage
-    /// (relative /uploads/ path) and S3/R2 (public bucket URL or signed URL).
+    /// (relative /uploads/ path) and S3/R2 (proxied through /images/ endpoint).
     /// </summary>
-    private string ResolveCoverArtUrl(string rawUrl)
-    {
-        // If it's already an absolute URL (e.g. from S3), leave it alone
-        if (rawUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            rawUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            return rawUrl;
-        // For local storage paths (/uploads/covers/...) — keep using the existing absolute URL resolution
-        if (rawUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
-            return ResolveAbsoluteUrl(rawUrl);
-        // Otherwise it's an object key (e.g. covers/{creatorId}/{guid}.jpg) — use storage provider
-        return _storage.GetPublicUrl(rawUrl);
-    }
+    private string ResolveCoverArtUrl(string rawUrl) => ResolveImageUrl(rawUrl);
 }

@@ -48,7 +48,7 @@ public class UsersController : BaseController
                 id = t.Id,
                 title = t.Title,
                 genre = t.Genre,
-                coverArtUrl = t.CoverArtUrl,
+                coverArtUrl = ResolveImageUrl(t.CoverArtUrl),
                 nonExclusivePriceCents = t.NonExclusivePriceCents,
                 exclusivePriceCents = t.ExclusivePriceCents,
                 copyrightBuyoutPriceCents = t.CopyrightBuyoutPriceCents,
@@ -64,8 +64,8 @@ public class UsersController : BaseController
         {
             username = user.UserName,
             displayName = user.DisplayName,
-            profileImageUrl = user.ProfileImageUrl,
-            coverImageUrl = user.CoverImageUrl,
+            profileImageUrl = ResolveImageUrl(user.ProfileImageUrl),
+            coverImageUrl = ResolveImageUrl(user.CoverImageUrl),
             bio,
             role = user.Role,
             verifiedCreator = user.VerifiedCreator,
@@ -133,8 +133,8 @@ public class UsersController : BaseController
         {
             username = user.UserName,
             displayName = user.DisplayName,
-            profileImageUrl = user.ProfileImageUrl,
-            coverImageUrl = user.CoverImageUrl,
+            profileImageUrl = ResolveImageUrl(user.ProfileImageUrl),
+            coverImageUrl = ResolveImageUrl(user.CoverImageUrl),
             bio = user.Bio
         });
     }
