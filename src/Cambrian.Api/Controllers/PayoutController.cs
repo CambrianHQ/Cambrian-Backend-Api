@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Payouts;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cambrian.Api.Controllers;
 
@@ -10,6 +11,7 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 [RequireCreatorTier]
 [RequireUsername]
+[EnableRateLimiting("auth")]
 public class PayoutController : BaseController
 {
     private readonly IPayoutService _payouts;
@@ -54,19 +56,11 @@ public class PayoutController : BaseController
     }
 
     [HttpPost("connect")]
-    public async Task<IActionResult> Connect([FromBody] PayoutConnectRequest? request = null)
+    public async Task<IActionResult> Connect()
     {
         var userId = GetRequiredUserId()!;
         var result = await _connect.StartOnboardingAsync(userId);
         return OkResponse(result);
-    }
-
-    public class PayoutConnectRequest
-    {
-        public string? PlaidPublicToken { get; set; }
-        public string? AccountId { get; set; }
-        public string? AccountHolderName { get; set; }
-        public string? AccountType { get; set; }
     }
 
     [HttpDelete("disconnect")]

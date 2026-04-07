@@ -18,6 +18,7 @@ public class CheckoutService : ICheckoutService
     private readonly IWalletRepository _wallet;
     private readonly ILicenseService _licenseService;
     private readonly ITransactionManager _transactions;
+    private readonly IEmailService _email;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<CheckoutService> _logger;
     private readonly string _frontendUrl;
@@ -30,6 +31,7 @@ public class CheckoutService : ICheckoutService
         IWalletRepository wallet,
         ILicenseService licenseService,
         ITransactionManager transactions,
+        IEmailService email,
         IConfiguration configuration,
         UserManager<ApplicationUser> users,
         ILogger<CheckoutService> logger)
@@ -41,6 +43,7 @@ public class CheckoutService : ICheckoutService
         _wallet = wallet;
         _licenseService = licenseService;
         _transactions = transactions;
+        _email = email;
         _users = users;
         _logger = logger;
         _frontendUrl = configuration["App:FrontendUrl"]
@@ -368,6 +371,22 @@ public class CheckoutService : ICheckoutService
             }
 
             await _transactions.CommitAsync();
+
+            // Send purchase confirmation email (non-critical — after tx commit)
+            try
+            {
+                var buyer = await _users.FindByIdAsync(userId);
+                if (buyer?.Email is not null)
+                {
+                    var pricePaid = (session.AmountTotal ?? 0) / 100m;
+                    var licenseUrl = $"{_frontendUrl}/licenses/{licenseId}";
+                    await _email.SendPurchaseConfirmationAsync(buyer.Email, track.Title, licenseType, pricePaid, licenseUrl);
+                }
+            }
+            catch (Exception emailEx)
+            {
+                _logger.LogWarning(emailEx, "Failed to send purchase confirmation email for purchase {PurchaseId} — non-critical", purchase.Id);
+            }
 
             _logger.LogInformation(
                 "Purchase confirmed: User={UserId} Track={TrackId} License={License} LicenseId={LicenseId}",

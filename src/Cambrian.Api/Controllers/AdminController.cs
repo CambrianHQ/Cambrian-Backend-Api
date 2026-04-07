@@ -153,9 +153,16 @@ public class AdminController : BaseController
         if (!AllowedRoles.Contains(role))
             return BadRequest(new { success = false, message = $"Invalid role '{role}'. Allowed: User, Creator, Admin." });
         _logger.LogInformation("[Admin] SetUserRole id={UserId} role={Role}", id, role);
-        var ok = await _admin.SetUserRoleAsync(id, role, GetAdminActor());
-        if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
-        return OkResponse(new { success = true, message = $"Role updated to {role}." });
+        try
+        {
+            var ok = await _admin.SetUserRoleAsync(id, role, GetAdminActor());
+            if (!ok) return NotFound(new { success = false, message = MsgUserNotFound });
+            return OkResponse(new { success = true, message = $"Role updated to {role}." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return UnprocessableEntity(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpPost("users/{id}/suspend")]

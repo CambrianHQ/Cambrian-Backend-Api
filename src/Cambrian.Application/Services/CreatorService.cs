@@ -16,6 +16,7 @@ public class CreatorService : ICreatorService
     private readonly IWalletRepository _wallet;
     private readonly IStreamRepository _streams;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly ICreatorIdentityRepository _creators;
     private readonly ILogger<CreatorService> _logger;
 
     public CreatorService(
@@ -25,6 +26,7 @@ public class CreatorService : ICreatorService
         IWalletRepository wallet,
         IStreamRepository streams,
         UserManager<ApplicationUser> users,
+        ICreatorIdentityRepository creators,
         ILogger<CreatorService> logger)
     {
         _tracks = tracks;
@@ -33,12 +35,14 @@ public class CreatorService : ICreatorService
         _wallet = wallet;
         _streams = streams;
         _users = users;
+        _creators = creators;
         _logger = logger;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetTracksAsync(string userId, int page, int pageSize)
     {
-        var tracks = await _tracks.GetByCreatorIdAsync(userId);
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
+        var tracks = await _tracks.GetByCreatorIdAsync(userId, creatorUuid);
         _logger.LogInformation("Creator dashboard: User={UserId} tracks={Count}", userId, tracks.Count);
 
         // Resolve creator's actual fee rate from TierManifest
@@ -86,7 +90,8 @@ public class CreatorService : ICreatorService
 
     public async Task<object> GetRevenueAsync(string userId)
     {
-        var tracks = await _tracks.GetByCreatorIdAsync(userId);
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
+        var tracks = await _tracks.GetByCreatorIdAsync(userId, creatorUuid);
         var trackIds = tracks.Select(t => t.Id).ToHashSet();
 
         var allPurchases = new List<Domain.Entities.Purchase>();
@@ -135,7 +140,8 @@ public class CreatorService : ICreatorService
         var weeklyEarnings = await _wallet.GetCreditsAfterAsync(userId, DateTime.UtcNow.AddDays(-7));
 
         // Load creator tracks for per-track breakdown
-        var tracks = await _tracks.GetByCreatorIdAsync(userId);
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
+        var tracks = await _tracks.GetByCreatorIdAsync(userId, creatorUuid);
         var trackIds = tracks.Select(t => t.Id).ToList();
 
         // Plays = COUNT(*) FROM StreamSessions WHERE TrackId IN (creator tracks)

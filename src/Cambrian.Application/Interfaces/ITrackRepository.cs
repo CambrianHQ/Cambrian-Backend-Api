@@ -17,13 +17,13 @@ public interface ITrackRepository
     /// <summary>Lookup a track by its Cambrian track ID (CAMB-TRK-XXXX).</summary>
     Task<Track?> GetByCambrianTrackIdAsync(string cambrianTrackId);
 
-    Task<List<Track>> GetByCreatorIdAsync(string creatorId);
+    Task<List<Track>> GetByCreatorIdAsync(string creatorId, Guid? creatorUuid = null);
 
     /// <summary>
     /// Returns public storefront-safe tracks for a creator: not deleted, not hidden,
     /// not draft/private, not copyright-transferred. Ordered by creation date descending.
     /// </summary>
-    Task<List<Track>> GetStorefrontTracksAsync(string creatorId);
+    Task<List<Track>> GetStorefrontTracksAsync(string creatorId, Guid? creatorUuid = null);
 
     /// <summary>Count tracks matching the given filters (for pagination metadata).</summary>
     Task<int> CountAsync(string? genre = null, string? search = null,

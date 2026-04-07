@@ -14,6 +14,8 @@ public class PayoutService : IPayoutService
     private readonly IPaymentGateway _gateway;
     private readonly UserManager<ApplicationUser> _users;
     private readonly IWalletRepository _wallet;
+    private readonly ITransactionManager _transactions;
+    private readonly ICreatorIdentityRepository _creators;
     private readonly ILogger<PayoutService> _logger;
 
     public PayoutService(
@@ -23,6 +25,8 @@ public class PayoutService : IPayoutService
         IPaymentGateway gateway,
         UserManager<ApplicationUser> users,
         IWalletRepository wallet,
+        ITransactionManager transactions,
+        ICreatorIdentityRepository creators,
         ILogger<PayoutService> logger)
     {
         _payouts = payouts;
@@ -31,6 +35,8 @@ public class PayoutService : IPayoutService
         _gateway = gateway;
         _users = users;
         _wallet = wallet;
+        _transactions = transactions;
+        _creators = creators;
         _logger = logger;
     }
 
@@ -43,7 +49,8 @@ public class PayoutService : IPayoutService
             : Configuration.TierManifest.Free.FeeRate;
 
         // Compute real earnings from completed purchases on the creator's tracks
-        var tracks = await _tracks.GetByCreatorIdAsync(userId);
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
+        var tracks = await _tracks.GetByCreatorIdAsync(userId, creatorUuid);
         var allPurchases = new List<Purchase>();
         foreach (var track in tracks)
         {
@@ -84,7 +91,11 @@ public class PayoutService : IPayoutService
         if (string.IsNullOrWhiteSpace(creatorId))
             throw new ArgumentException("Creator ID is required for payout requests.");
 
-        // No minimum payout amount — any positive amount is valid
+        // M1: Minimum payout threshold — Stripe fees make micro-payouts uneconomical
+        var requestCents = (long)Math.Round(request.Amount * 100, MidpointRounding.AwayFromZero);
+        const long MinPayoutCents = 500; // $5.00
+        if (requestCents < MinPayoutCents)
+            throw new InvalidOperationException($"Minimum payout amount is ${MinPayoutCents / 100m:F2}.");
 
         // Verify creator has a connected Stripe account
         var user = await _users.FindByIdAsync(creatorId)
@@ -100,17 +111,9 @@ public class PayoutService : IPayoutService
                 "Your Stripe account onboarding is incomplete. " +
                 "Please finish setting up your account before requesting a payout.");
 
-        // Atomically check balance and debit in a single serializable transaction
-        // to prevent race conditions from concurrent payout requests
-        var requestCents = (long)Math.Round(request.Amount * 100, MidpointRounding.AwayFromZero);
-
-        var withdrawn = await _wallet.AtomicWithdrawAsync(
-            creatorId, requestCents, $"Payout ${request.Amount:F2}");
-
-        if (!withdrawn)
-            throw new InvalidOperationException("Insufficient balance for this payout.");
-
-        // Create pending payout record
+        // ── Atomic balance check + debit + payout creation in one Serializable transaction ──
+        // Serializable isolation prevents phantom reads / double-withdrawal races.
+        // Both the wallet debit and the payout record commit together — neither can orphan.
         var payout = new Payout
         {
             Id = Guid.NewGuid(),
@@ -119,9 +122,50 @@ public class PayoutService : IPayoutService
             Status = "pending",
             RequestedAt = DateTime.UtcNow
         };
-        await _payouts.AddAsync(payout);
 
-        // Initiate Stripe transfer
+        await using var txHandle = await _transactions.BeginSerializableTransactionAsync();
+        try
+        {
+            var balance = await _wallet.GetBalanceAsync(creatorId);
+            if (balance < requestCents)
+            {
+                await _transactions.RollbackAsync();
+                throw new InvalidOperationException("Insufficient balance for this payout.");
+            }
+
+            // Both AddTransactionAsync and AddAsync call SaveChangesAsync internally.
+            // With an active ITransactionManager transaction those saves flush to the DB
+            // but do NOT commit — the commit happens only at CommitAsync() below.
+            await _wallet.AddTransactionAsync(new WalletTransaction
+            {
+                Id = Guid.NewGuid(),
+                UserId = creatorId,
+                AmountCents = -requestCents,
+                Type = "withdrawal",
+                Description = $"Payout ${request.Amount:F2}",
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await _payouts.AddAsync(payout);
+
+            await _transactions.CommitAsync();
+            _logger.LogInformation(
+                "Payout {PayoutId} debit+record committed atomically: {AmountCents}c for creator {CreatorId}",
+                payout.Id, requestCents, creatorId);
+        }
+        catch (InvalidOperationException)
+        {
+            // Validation error (insufficient balance) — already rolled back above, re-throw.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await _transactions.RollbackAsync();
+            _logger.LogError(ex, "Payout transaction failed for creator {CreatorId} — wallet unchanged", creatorId);
+            throw new InvalidOperationException("Payout could not be processed. Please try again later.");
+        }
+
+        // Initiate Stripe transfer (outside the DB transaction — Stripe calls cannot be transacted)
         try
         {
             var transferId = await _gateway.CreateTransferAsync(
@@ -142,14 +186,15 @@ public class PayoutService : IPayoutService
                 "Payout {PayoutId} Stripe transfer failed — refunding wallet",
                 payout.Id);
 
-            // Refund the wallet debit
+            // Compensate: credit the wallet back since the Stripe transfer failed
             await _wallet.AddTransactionAsync(new WalletTransaction
             {
                 Id = Guid.NewGuid(),
                 UserId = creatorId,
                 AmountCents = requestCents,
                 Type = "credit",
-                Description = $"Payout refund (transfer failed): ${request.Amount:F2}"
+                Description = $"Payout refund (transfer failed): ${request.Amount:F2}",
+                CreatedAt = DateTime.UtcNow
             });
 
             payout.Status = "failed";

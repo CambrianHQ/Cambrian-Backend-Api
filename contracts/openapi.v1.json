@@ -719,91 +719,164 @@
         "tags": [
           "AiDiscovery"
         ],
+        "operationId": "searchAiDiscoveryTracks",
+        "summary": "Search AI music tracks for discovery, recommendation, and licensing",
         "parameters": [
           {
-            "name": "Query",
+            "name": "query",
             "in": "query",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Free-text search query"
+          },
+          {
+            "name": "genre",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
             }
           },
           {
-            "name": "UseCase",
+            "name": "mood",
             "in": "query",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 100
             }
           },
           {
-            "name": "Genre",
+            "name": "bpm",
             "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Mood",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Tempo",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "Instrumental",
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "Duration",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "MaxPriceCents",
-            "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
-              "format": "int32"
+              "minimum": 1,
+              "maximum": 300
             }
           },
           {
-            "name": "LicenseType",
+            "name": "key",
             "in": "query",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 20
+            },
+            "description": "Musical key, for example D minor or C major"
+          },
+          {
+            "name": "instrumentalOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
             }
           },
           {
-            "name": "Page",
+            "name": "vocalsAllowed",
             "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "aiGenerator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Generator used to create the track, for example Suno or Udio"
+          },
+          {
+            "name": "useCase",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Intended use case, for example youtube_background_music, trailer, ad, podcast"
+          },
+          {
+            "name": "commercialUseRequired",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "minDurationSeconds",
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
-              "format": "int32"
+              "minimum": 1
             }
           },
           {
-            "name": "PageSize",
+            "name": "maxDurationSeconds",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
-              "format": "int32"
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "Ranked AI discovery search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -1078,9 +1151,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthSessionResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Register a new account. Every account is created as a Creator (Role=Creator)."
       }
     },
     "/auth/login": {
@@ -1109,9 +1206,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthSessionResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Log in with email and password."
       }
     },
     "/auth/google/status": {
@@ -1121,9 +1242,42 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "configured": {
+                          "type": "boolean"
+                        },
+                        "clientIdPrefix": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Check if Google OAuth is configured on this server."
       }
     },
     "/auth/google": {
@@ -1152,9 +1306,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthSessionResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Log in or register with a Google ID token."
       }
     },
     "/auth/set-password": {
@@ -1183,9 +1361,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Set password for Google-only accounts.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/auth/link-google": {
@@ -1214,9 +1416,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Link Google account to existing local account. Requires auth.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/auth/me": {
@@ -1226,9 +1452,41 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuthMeResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
           }
-        }
+        },
+        "summary": "Get current user profile with full account details. Requires authentication.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/auth/logout": {
@@ -1238,9 +1496,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Log out. Clears auth_token cookie.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/auth/refresh": {
@@ -1250,9 +1532,43 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Refresh JWT token. Requires valid (or within clock-skew) token.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/auth/set-username": {
@@ -1281,9 +1597,41 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SetUsernameResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Username already taken."
           }
-        }
+        },
+        "summary": "Set username during onboarding (one-time, immutable). Returns fresh JWT.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/auth/health": {
@@ -1293,9 +1641,42 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string"
+                        },
+                        "timestamp": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Auth health check."
       }
     },
     "/auth/username-availability": {
@@ -1314,9 +1695,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UsernameAvailabilityResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Check username availability (public, no auth required)."
       }
     },
     "/auth/csrf-token": {
@@ -1357,9 +1762,28 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Request password reset code via email or SMS."
       }
     },
     "/auth/verify-code": {
@@ -1388,9 +1812,28 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Verify password reset code."
       }
     },
     "/auth/reset-password": {
@@ -1419,9 +1862,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Reset password using verified code.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/auth/recover-username": {
@@ -1450,9 +1917,28 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Send username recovery email."
       }
     },
     "/settings/profile": {
@@ -1464,7 +1950,13 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "summary": "Get current user settings profile (includes subscription details).",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/settings/password": {
@@ -1493,9 +1985,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Alias for PUT /settings/password.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       },
       "put": {
         "tags": [
@@ -1522,9 +2038,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Change password (requires current password).",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/settings/email": {
@@ -1553,9 +2093,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Request email change. Sends verification link.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       },
       "put": {
         "tags": [
@@ -1582,9 +2146,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Alias for POST /settings/email.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/auth/verify-email-change": {
@@ -1603,9 +2191,28 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Complete email change via verification token."
       }
     },
     "/auth/display-name": {
@@ -1634,9 +2241,43 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "displayName": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Update display name. Canonical endpoint.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/settings/display-name": {
@@ -1665,9 +2306,43 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "displayName": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Update display name. Alias for PUT /auth/display-name.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/billing/checkout": {
@@ -2191,9 +2866,36 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CreatorProfileDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found."
           }
-        }
+        },
+        "summary": "Get public creator profile by slug."
       }
     },
     "/creator-profile/{slug}/storefront": {
@@ -2213,9 +2915,36 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StorefrontResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found or storefront feature disabled."
           }
-        }
+        },
+        "summary": "Full creator storefront. Requires creator_storefront feature flag."
       }
     },
     "/creator-profile/me": {
@@ -2225,9 +2954,44 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Envelope with data=CreatorProfileMeResponse when profile exists, or data={ exists: false } when not yet created.",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/CreatorProfileMeResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "exists": {
+                              "type": "boolean",
+                              "description": "Always false when profile not yet created."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Get own creator profile. Returns { exists: false } if profile not yet created, or full profile if exists.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       },
       "put": {
         "tags": [
@@ -2254,9 +3018,41 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CreatorProfileDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Slug already taken."
           }
-        }
+        },
+        "summary": "Create or update own creator profile (slug, bio, niche, social links, stats toggles).",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/me/settings": {
@@ -2285,9 +3081,41 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CreatorProfileDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Create a profile first."
           }
-        }
+        },
+        "summary": "Toggle showEarnings / showDownloadStats.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/me/cover-image-upload": {
@@ -2317,9 +3145,38 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ImageUploadResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Upload cover image. Alias for POST /creator-profile/me/banner.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/me/banner": {
@@ -2349,9 +3206,38 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ImageUploadResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Upload banner/cover image. Canonical endpoint.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/me/profile-image-upload": {
@@ -2381,9 +3267,38 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ImageUploadResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Upload profile image. Alias for POST /creator-profile/me/avatar.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/me/avatar": {
@@ -2413,9 +3328,38 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ImageUploadResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Upload avatar/profile image. Canonical endpoint.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/settings/profile/avatar": {
@@ -2445,9 +3389,38 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ImageUploadResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Upload profile avatar. Alias for POST /creator-profile/me/avatar.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/{slug}/collections": {
@@ -2519,10 +3492,39 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TrackCollectionDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Create a track collection.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/me/collections/{collectionId}": {
@@ -2562,9 +3564,38 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TrackCollectionDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Update a collection. Only the owner can update.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       },
       "delete": {
         "tags": [
@@ -2582,10 +3613,16 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "Collection deleted."
           }
-        }
+        },
+        "summary": "Delete a collection. Only the owner can delete.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/me/pinned-tracks": {
@@ -2614,9 +3651,45 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "pinnedTrackIds": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Comma-separated GUIDs of pinned tracks."
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Update pinned track list.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/creator-profile/{slug}/follow": {
@@ -2711,9 +3784,36 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PublicCreatorDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found."
           }
-        }
+        },
+        "summary": "Get public creator profile by UUID."
       }
     },
     "/api/creators/by-username/{username}": {
@@ -2733,9 +3833,36 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PublicCreatorDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found."
           }
-        }
+        },
+        "summary": "Get public creator profile by username."
       }
     },
     "/creator/username/{username}": {
@@ -2777,9 +3904,36 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PublicCreatorDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found."
           }
-        }
+        },
+        "summary": "Resolve creator by legacy identifier (ApplicationUser.Id, UUID, or username)."
       }
     },
     "/api/creators/{creatorId}/tracks": {
@@ -2818,9 +3972,39 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TrackResponse"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found."
           }
-        }
+        },
+        "summary": "Get tracks by creator UUID. Canonical endpoint."
       }
     },
     "/creator/tracks/{slug}": {
@@ -2858,9 +4042,39 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TrackResponse"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found."
           }
-        }
+        },
+        "summary": "Get tracks by creator slug (username) or GUID. Alias — canonical: GET /api/creators/{creatorId}/tracks."
       }
     },
     "/api/creators/username-availability": {
@@ -2879,9 +4093,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UsernameAvailabilityResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Check username availability. Canonical endpoint."
       }
     },
     "/creator/username-availability": {
@@ -2900,9 +4138,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UsernameAvailabilityResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Check username availability. Alias for GET /api/creators/username-availability."
       }
     },
     "/api/creator/me": {
@@ -2912,13 +4174,52 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Returns CreatorMeResponse when creator row exists, or CreatorMePartialResponse when username not set.",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/CreatorMeResponse"
+                        },
+                        {
+                          "$ref": "#/components/schemas/CreatorMePartialResponse"
+                        }
+                      ],
+                      "description": "Check data.needsUsername to distinguish."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
           }
-        }
+        },
+        "summary": "Get own creator profile. Returns partial response with needsUsername=true if username not yet set.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       },
       "put": {
         "tags": [
           "Creators"
+        ],
+        "summary": "Update own creator profile (username, displayName, bio, images, social links). Username is immutable once set.",
+        "security": [
+          {
+            "Bearer": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -2941,7 +4242,33 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PublicCreatorDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Username already taken."
           }
         }
       }
@@ -2972,9 +4299,38 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PresignedUploadResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Generate a presigned PUT URL for direct S3/R2 image upload.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/api/uploads/creator-image": {
@@ -3039,7 +4395,13 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "summary": "Follow a creator. Idempotent.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       },
       "delete": {
         "tags": [
@@ -3060,7 +4422,13 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "summary": "Unfollow a creator. Idempotent.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -3591,9 +4959,41 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LicenseCertificateDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "License not found."
           }
-        }
+        },
+        "summary": "Get license certificate details.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/licenses": {
@@ -3603,9 +5003,41 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LicenseCertificateDto"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "List license certificates for the current user.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/licenses/{licenseId}/pdf": {
@@ -4412,9 +5844,36 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UserPublicProfile"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found."
           }
-        }
+        },
+        "summary": "Get public user profile by username."
       }
     },
     "/users/me": {
@@ -4443,9 +5902,38 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UserProfileUpdateResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        },
+        "summary": "Update own profile (bio, profileImageUrl, coverImageUrl). Syncs to CreatorProfile.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     },
     "/wallet": {
@@ -4531,173 +6019,6 @@
         "responses": {
           "200": {
             "description": "OK"
-          }
-        }
-      }
-    },
-    "/ai-discovery/tracks/search": {
-      "get": {
-        "tags": [
-          "AiDiscovery"
-        ],
-        "operationId": "searchAiDiscoveryTracks",
-        "summary": "Search AI music tracks for discovery, recommendation, and licensing",
-        "parameters": [
-          {
-            "name": "query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 200
-            },
-            "description": "Free-text search query"
-          },
-          {
-            "name": "genre",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 100
-            }
-          },
-          {
-            "name": "mood",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 100
-            }
-          },
-          {
-            "name": "bpm",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 300
-            }
-          },
-          {
-            "name": "key",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 20
-            },
-            "description": "Musical key, for example D minor or C major"
-          },
-          {
-            "name": "instrumentalOnly",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          },
-          {
-            "name": "vocalsAllowed",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": true
-            }
-          },
-          {
-            "name": "aiGenerator",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 100
-            },
-            "description": "Generator used to create the track, for example Suno or Udio"
-          },
-          {
-            "name": "useCase",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 100
-            },
-            "description": "Intended use case, for example youtube_background_music, trailer, ad, podcast"
-          },
-          {
-            "name": "commercialUseRequired",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": true
-            }
-          },
-          {
-            "name": "minDurationSeconds",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "maxDurationSeconds",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100,
-              "default": 10
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Ranked AI discovery search results",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiTrackSearchResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid query parameters",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
           }
         }
       }
@@ -4866,6 +6187,700 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/creator/tracks/{trackId}": {
+      "put": {
+        "tags": [
+          "Creator"
+        ],
+        "summary": "Edit track metadata. Only the track owner can edit.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditTrackRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditTrackRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditTrackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TrackResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not the track owner."
+          },
+          "404": {
+            "description": "Track not found."
+          }
+        }
+      }
+    },
+    "/api/v1/genres": {
+      "get": {
+        "tags": [
+          "V1 Catalog"
+        ],
+        "summary": "List distinct genres with track counts.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GenreItem"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/keys": {
+      "post": {
+        "tags": [
+          "V1 API Keys"
+        ],
+        "summary": "Create a new API key. Raw key is returned once and never stored. Requires JWT (cannot use API key to create keys).",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ApiKeyCreateResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "V1 API Keys"
+        ],
+        "summary": "List active API keys (prefix + metadata, no hashes). Requires JWT.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ApiKeyListItem"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/keys/{id}": {
+      "delete": {
+        "tags": [
+          "V1 API Keys"
+        ],
+        "summary": "Revoke (soft-delete) an API key. Requires JWT.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Key revoked."
+          },
+          "404": {
+            "description": "Key not found."
+          }
+        }
+      }
+    },
+    "/admin/upgrade-tier": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Bulk upgrade user tiers. Requires Admin role.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeTierRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeTierRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeTierRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "upgraded": {
+                          "type": "integer"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/upgrade-tier": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Upgrade a specific user's tier. Requires Admin role.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeTierRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeTierRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpgradeTierRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found."
+          }
+        }
+      }
+    },
+    "/api/v1/licenses/{id}/verify": {
+      "get": {
+        "tags": [
+          "V1 Licenses"
+        ],
+        "summary": "Verify a license certificate. Public endpoint. Canonical V1 path.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LicenseVerifyResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "License not found."
+          }
+        }
+      }
+    },
+    "/api/v1/licenses": {
+      "post": {
+        "tags": [
+          "V1 Licenses"
+        ],
+        "summary": "Initiate license purchase checkout. Returns a Stripe checkout URL.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "trackId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "licenseType": {
+                    "type": "string",
+                    "enum": [
+                      "nonexclusive",
+                      "exclusive",
+                      "copyright_buyout"
+                    ]
+                  }
+                },
+                "required": [
+                  "trackId",
+                  "licenseType"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "V1 raw response (not wrapped in ApiResponse envelope).",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "checkoutUrl": {
+                      "type": "string",
+                      "description": "Stripe checkout URL to redirect the user to."
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tracks": {
+      "get": {
+        "tags": [
+          "V1 Catalog"
+        ],
+        "summary": "Search and browse tracks with pagination.",
+        "parameters": [
+          {
+            "name": "genre",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mood",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tempo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "instrumental",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TrackResponse"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/V1PaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{id}": {
+      "get": {
+        "tags": [
+          "V1 Catalog"
+        ],
+        "summary": "Get track details by ID (GUID or CambrianTrackId).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TrackResponse"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Track not found."
+          }
+        }
+      }
+    },
+    "/api/v1/creators/{identifier}": {
+      "get": {
+        "tags": [
+          "V1 Creators"
+        ],
+        "summary": "Get public creator profile by UUID or username.",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PublicCreatorDto"
+                    },
+                    "message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found."
           }
         }
       }
@@ -5316,7 +7331,11 @@
           },
           "fitConfidence": {
             "type": "string",
-            "enum": ["low", "medium", "high"]
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
           },
           "reason": {
             "type": "string"
@@ -5676,7 +7695,7 @@
             "nullable": true
           }
         },
-        "additionalProperties": { }
+        "additionalProperties": {}
       },
       "PurchaseCreateRequest": {
         "type": "object",
@@ -6119,20 +8138,1128 @@
           }
         },
         "additionalProperties": false
+      },
+      "ApiEnvelope": {
+        "type": "object",
+        "description": "Standard API response envelope. All endpoints wrap responses in this shape.",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "description": "Response payload. Null on error responses."
+          },
+          "message": {
+            "type": "string",
+            "nullable": true,
+            "description": "Human-readable message (used for message-only responses)."
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Error description when success=false."
+          }
+        }
+      },
+      "SessionUser": {
+        "type": "object",
+        "description": "User identity returned in login/register/google session responses.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ApplicationUser GUID string."
+          },
+          "email": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string",
+            "nullable": true,
+            "description": "Null if username not yet set (needsUsername=true)."
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "phoneNumber": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AuthSessionResponse": {
+        "type": "object",
+        "description": "Response from POST /auth/register, /auth/login, /auth/google. Wrapped in ApiEnvelope.data.",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "JWT bearer token."
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "free",
+              "paid",
+              "pro"
+            ],
+            "description": "Current subscription tier."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "User",
+              "Creator",
+              "Admin"
+            ],
+            "description": "Currently always \"Creator\" — every account is a creator."
+          },
+          "isNewUser": {
+            "type": "boolean",
+            "description": "True when account was just registered and username not yet set."
+          },
+          "needsUsername": {
+            "type": "boolean",
+            "description": "True when user.username is null (username setup not complete)."
+          },
+          "requiresUsernameSetup": {
+            "type": "boolean",
+            "description": "Alias for needsUsername. Both fields are always identical."
+          },
+          "user": {
+            "$ref": "#/components/schemas/SessionUser"
+          }
+        }
+      },
+      "AuthMeResponse": {
+        "type": "object",
+        "description": "Response from GET /auth/me. Wrapped in ApiEnvelope.data.",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Refreshed JWT bearer token."
+          },
+          "id": {
+            "type": "string",
+            "description": "ApplicationUser GUID string."
+          },
+          "email": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "free",
+              "paid",
+              "pro"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "User",
+              "Creator",
+              "Admin"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "phoneNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "isNewUser": {
+            "type": "boolean"
+          },
+          "needsUsername": {
+            "type": "boolean"
+          },
+          "requiresUsernameSetup": {
+            "type": "boolean"
+          },
+          "canChangeUsername": {
+            "type": "boolean",
+            "description": "False once username has been set (usernames are immutable)."
+          },
+          "creatorTier": {
+            "type": "string",
+            "enum": [
+              "Free",
+              "Pro"
+            ]
+          },
+          "uploadCount": {
+            "type": "integer"
+          },
+          "uploadLimit": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Null means unlimited (Pro tier)."
+          },
+          "subscriptionStatus": {
+            "type": "string",
+            "enum": [
+              "Inactive",
+              "Active",
+              "Cancelled"
+            ]
+          },
+          "subscriptionEndDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "platformFeePercent": {
+            "type": "number",
+            "format": "double",
+            "description": "Platform fee rate as decimal (e.g. 0.35 = 35%)."
+          },
+          "contractVersion": {
+            "type": "string",
+            "description": "TierManifest contract version."
+          }
+        }
+      },
+      "SetUsernameResponse": {
+        "type": "object",
+        "description": "Response from POST /auth/set-username.",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Normalized lowercase username."
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "description": "Fresh JWT with updated claims."
+          }
+        }
+      },
+      "CreatorStatsDto": {
+        "type": "object",
+        "properties": {
+          "trackCount": {
+            "type": "integer"
+          },
+          "totalSales": {
+            "type": "integer"
+          },
+          "totalDownloads": {
+            "type": "integer"
+          },
+          "averageRating": {
+            "type": "number",
+            "format": "double"
+          },
+          "followerCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "CreatorMeResponse": {
+        "type": "object",
+        "description": "Response from GET /api/creator/me when Creator row exists.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Creator UUID."
+          },
+          "username": {
+            "type": "string"
+          },
+          "canChangeUsername": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string"
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "socialLinks": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/SocialLinkDto"
+            }
+          },
+          "stats": {
+            "$ref": "#/components/schemas/CreatorStatsDto"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackResponse"
+            }
+          }
+        }
+      },
+      "CreatorMePartialResponse": {
+        "type": "object",
+        "description": "Response from GET /api/creator/me when Creator row does not exist yet (username not set). Frontend should check needsUsername and prompt for username setup.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Always null in this response."
+          },
+          "username": {
+            "type": "string",
+            "nullable": true,
+            "description": "Always null in this response."
+          },
+          "canChangeUsername": {
+            "type": "boolean",
+            "description": "Always true."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "From ApplicationUser.DisplayName or email prefix."
+          },
+          "bio": {
+            "type": "string"
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "socialLinks": {
+            "nullable": true,
+            "description": "Always null."
+          },
+          "stats": {
+            "nullable": true,
+            "description": "Always null."
+          },
+          "tracks": {
+            "type": "array",
+            "items": {},
+            "description": "Always empty array."
+          },
+          "needsUsername": {
+            "type": "boolean",
+            "description": "Always true."
+          }
+        }
+      },
+      "PublicCreatorDto": {
+        "type": "object",
+        "description": "Public creator profile. Returned by GET /api/creators/{id}, /resolve/{identifier}, /by-username/{username}.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Creator UUID."
+          },
+          "userId": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string"
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "socialLinks": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/SocialLinkDto"
+            }
+          },
+          "stats": {
+            "$ref": "#/components/schemas/CreatorStatsDto"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackResponse"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TrackResponse": {
+        "type": "object",
+        "description": "Track data returned by catalog, creator, and search endpoints.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cambrianTrackId": {
+            "type": "string",
+            "description": "Public track ID, e.g. CAMB-TRK-A1B2C3D4."
+          },
+          "title": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Alias for title."
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "genre": {
+            "type": "string",
+            "nullable": true
+          },
+          "mood": {
+            "type": "string",
+            "nullable": true
+          },
+          "tempo": {
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "instrumental": {
+            "type": "boolean"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "limited",
+              "hidden"
+            ]
+          },
+          "price": {
+            "type": "number",
+            "format": "double",
+            "description": "Legacy price field."
+          },
+          "nonExclusivePrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "exclusivePrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "copyrightBuyoutPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformFeePercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "nonExclusivePlatformFee": {
+            "type": "number",
+            "format": "double"
+          },
+          "nonExclusiveCreatorEarnings": {
+            "type": "number",
+            "format": "double"
+          },
+          "exclusivePlatformFee": {
+            "type": "number",
+            "format": "double"
+          },
+          "exclusiveCreatorEarnings": {
+            "type": "number",
+            "format": "double"
+          },
+          "copyrightBuyoutPlatformFee": {
+            "type": "number",
+            "format": "double"
+          },
+          "copyrightBuyoutCreatorEarnings": {
+            "type": "number",
+            "format": "double"
+          },
+          "exclusiveSold": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "exclusive_sold",
+              "copyright_transferred"
+            ]
+          },
+          "isCopyrightTransferred": {
+            "type": "boolean"
+          },
+          "licenseType": {
+            "type": "string",
+            "nullable": true
+          },
+          "duration": {
+            "type": "string",
+            "nullable": true
+          },
+          "audioUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverArtUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "creatorId": {
+            "type": "string"
+          },
+          "creatorSlug": {
+            "type": "string",
+            "nullable": true
+          },
+          "creatorProfileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "artist": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreatorProfileDto": {
+        "type": "object",
+        "description": "Creator profile (from CreatorProfile table). Returned by /creator-profile endpoints.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string"
+          },
+          "niche": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "bannerImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "socialLinks": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/SocialLinkDto"
+            }
+          },
+          "stats": {
+            "$ref": "#/components/schemas/CreatorStatsDto"
+          },
+          "showEarnings": {
+            "type": "boolean"
+          },
+          "showDownloadStats": {
+            "type": "boolean"
+          },
+          "pinnedTrackIds": {
+            "type": "string",
+            "nullable": true,
+            "description": "Comma-separated GUIDs."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreatorProfileMeResponse": {
+        "type": "object",
+        "description": "Response from GET /creator-profile/me when profile exists.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "canChangeUsername": {
+            "type": "boolean"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "niche": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "bannerImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "socialLinks": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/SocialLinkDto"
+            }
+          },
+          "showEarnings": {
+            "type": "boolean"
+          },
+          "showDownloadStats": {
+            "type": "boolean"
+          },
+          "pinnedTrackIds": {
+            "type": "string",
+            "nullable": true
+          },
+          "stats": {
+            "$ref": "#/components/schemas/CreatorStatsDto"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StorefrontResponse": {
+        "type": "object",
+        "description": "Full creator storefront with profile, tracks, and collections.",
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/CreatorProfileDto"
+          },
+          "pinnedTracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackResponse"
+            }
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackCollectionDto"
+            }
+          },
+          "allTracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrackResponse"
+            }
+          },
+          "stats": {
+            "$ref": "#/components/schemas/CreatorStatsDto"
+          }
+        }
+      },
+      "TrackCollectionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "trackIds": {
+            "type": "string",
+            "description": "Comma-separated GUIDs."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ImageUploadResponse": {
+        "type": "object",
+        "properties": {
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "bannerImageUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PresignedUploadResponse": {
+        "type": "object",
+        "properties": {
+          "uploadUrl": {
+            "type": "string",
+            "description": "Presigned PUT URL (S3/R2) or proxy upload endpoint."
+          },
+          "publicUrl": {
+            "type": "string",
+            "description": "Public CDN URL for the uploaded file."
+          }
+        }
+      },
+      "UsernameAvailabilityResponse": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "Present when available=false, explaining why."
+          }
+        }
+      },
+      "UserPublicProfile": {
+        "type": "object",
+        "description": "Public user profile from GET /users/{username}.",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "role": {
+            "type": "string"
+          },
+          "verifiedCreator": {
+            "type": "boolean"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "genre": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "coverArtUrl": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "nonExclusivePriceCents": {
+                  "type": "integer"
+                },
+                "exclusivePriceCents": {
+                  "type": "integer"
+                },
+                "copyrightBuyoutPriceCents": {
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "UserProfileUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "V1PaginatedResponse": {
+        "type": "object",
+        "description": "V1 API paginated response envelope.",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {}
+          },
+          "meta": {
+            "$ref": "#/components/schemas/V1PaginationMeta"
+          }
+        }
+      },
+      "V1PaginationMeta": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "totalPages": {
+            "type": "integer"
+          },
+          "hasNext": {
+            "type": "boolean"
+          },
+          "hasPrev": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GenreItem": {
+        "type": "object",
+        "properties": {
+          "genre": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "ApiKeyCreateResponse": {
+        "type": "object",
+        "description": "Returned once on key creation. The raw key is never shown again.",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Raw API key (cbr_ prefix + 32 hex bytes). Store securely."
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Display prefix, e.g. cbr_0544."
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ApiKeyListItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Display prefix, e.g. cbr_0544."
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LicenseCertificateDto": {
+        "type": "object",
+        "properties": {
+          "licenseId": {
+            "type": "string"
+          },
+          "trackId": {
+            "type": "string"
+          },
+          "licenseType": {
+            "type": "string"
+          },
+          "usageType": {
+            "type": "string",
+            "nullable": true
+          },
+          "buyerId": {
+            "type": "string"
+          },
+          "creatorId": {
+            "type": "string"
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "allowedUses": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "restrictions": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "copyrightOwner": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "LicenseVerifyResponse": {
+        "type": "object",
+        "properties": {
+          "licenseId": {
+            "type": "string"
+          },
+          "trackId": {
+            "type": "string"
+          },
+          "licenseType": {
+            "type": "string"
+          },
+          "usageType": {
+            "type": "string",
+            "nullable": true
+          },
+          "buyerId": {
+            "type": "string"
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateApiKeyRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "User-assigned label for the key."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "EditTrackRequest": {
+        "type": "object",
+        "description": "Request body for PUT /creator/tracks/{trackId}.",
+        "properties": {
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "genre": {
+            "type": "string",
+            "nullable": true
+          },
+          "mood": {
+            "type": "string",
+            "nullable": true
+          },
+          "tempo": {
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "type": "string",
+            "nullable": true,
+            "description": "Comma-separated tags."
+          },
+          "nonExclusivePriceCents": {
+            "type": "integer",
+            "nullable": true
+          },
+          "exclusivePriceCents": {
+            "type": "integer",
+            "nullable": true
+          },
+          "copyrightBuyoutPriceCents": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "UpgradeTierRequest": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string",
+            "description": "Target tier, e.g. \"pro\"."
+          }
+        },
+        "required": [
+          "tier"
+        ]
       }
     },
     "securitySchemes": {
       "Bearer": {
         "type": "http",
-        "description": "JWT Bearer token. Example: \"Authorization: Bearer {token}\"",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "JWT bearer token. Also accepts auth_token cookie."
+      },
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key (cbr_ prefix). Cannot be used for key management endpoints."
       }
     }
   },
   "security": [
     {
-      "Bearer": [ ]
+      "Bearer": []
     }
   ]
 }

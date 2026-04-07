@@ -204,6 +204,56 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         Assert.Equal(HttpStatusCode.Conflict, resB.StatusCode);
     }
 
+    // ---- F1/F2/F3: Authorization gap tests ----
+
+    [Fact]
+    public async Task UpsertProfile_RegularUser_Returns403()
+    {
+        var email = $"user-{Guid.NewGuid():N}@test.com";
+        var client = await _fixture.CreateAuthenticatedClientAsync(email, "Test1234!@");
+
+        var res = await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug = "should-fail",
+            bio = "I am a regular user",
+            showEarnings = false,
+            showDownloadStats = false,
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchSettings_Unauthenticated_Returns401()
+    {
+        var client = _fixture.CreateClient();
+
+        var res = await client.PatchAsync("/creator-profile/me/settings",
+            JsonContent.Create(new { showEarnings = true }));
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadAvatar_Unauthenticated_Returns401()
+    {
+        var client = _fixture.CreateClient();
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(new byte[] { 0xFF, 0xD8 }), "file", "avatar.jpg");
+        var res = await client.PostAsync("/creator-profile/me/avatar", form);
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadBanner_Unauthenticated_Returns401()
+    {
+        var client = _fixture.CreateClient();
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(new byte[] { 0xFF, 0xD8 }), "file", "banner.jpg");
+        var res = await client.PostAsync("/creator-profile/me/banner", form);
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
     /// <summary>
     /// Register user, set tier to creator in DB, then re-login to get a JWT with tier=creator claim.
     /// </summary>
@@ -212,7 +262,7 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         // Register
         await _fixture.RegisterUserAsync(email, password);
 
-        // Set tier in DB
+        // Set tier, role, and username in DB to simulate completed creator onboarding
         using (var scope = _fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
@@ -223,6 +273,8 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
                 {
                     u.Tier = "creator";
                     u.Role = "Creator";
+                    u.UserName = $"u{Guid.NewGuid():N}"[..12];
+                    u.NormalizedUserName = u.UserName.ToUpperInvariant();
                     break;
                 }
             }

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Cambrian.Application.DTOs.Library;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -23,7 +22,7 @@ public class LibraryController : BaseController
     [HttpGet]
     public async Task<IActionResult> GetLibrary()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetRequiredUserId();
         _logger.LogInformation("EVENT: LibraryRequested userId:{UserId}", userId);
         var items = await _library.GetLibraryAsync(User);
         // Point audioUrl at the authenticated streaming proxy so browsers

@@ -43,10 +43,13 @@ public sealed class StorefrontService : IStorefrontService
 
         if (profile is null) return null;
 
+        // Resolve creator UUID for dual-FK track lookup
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(profile.UserId);
+
         // Fetch storefront-safe tracks, collections, and stats in parallel
-        var tracksTask = _tracks.GetStorefrontTracksAsync(profile.UserId);
+        var tracksTask = _tracks.GetStorefrontTracksAsync(profile.UserId, creatorUuid);
         var collectionsTask = _profiles.GetCollectionsAsync(profile.UserId);
-        var purchasesTask = _purchases.GetByCreatorIdAsync(profile.UserId);
+        var purchasesTask = _purchases.GetByCreatorIdAsync(profile.UserId, creatorUuid);
 
         await Task.WhenAll(tracksTask, collectionsTask, purchasesTask);
 
@@ -150,7 +153,7 @@ public sealed class StorefrontService : IStorefrontService
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
             CreatorSlug = t.CreatorEntity?.Username ?? profile?.Username ?? profile?.Slug,
-            CreatorProfileImageUrl = t.CreatorEntity?.ProfileImageUrl ?? profile?.ProfileImageUrl,
+            CreatorProfileImageUrl = profile?.ProfileImageUrl,
             Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
                 ? t.CreatorEntity.DisplayName
                 : t.CreatorEntity?.Username

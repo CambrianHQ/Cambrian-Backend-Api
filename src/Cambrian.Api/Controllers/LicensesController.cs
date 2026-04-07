@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Application.Interfaces;
 using Cambrian.Api.Tools;
@@ -31,7 +30,7 @@ public class LicensesController : BaseController
     [HttpGet("{licenseId}")]
     public async Task<IActionResult> GetLicense(string licenseId)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetRequiredUserId();
 
         var cert = await _licenses.GetByIdAsync(licenseId);
         if (cert is null)
@@ -50,7 +49,7 @@ public class LicensesController : BaseController
     [HttpGet]
     public async Task<IActionResult> ListMyLicenses()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetRequiredUserId();
         if (string.IsNullOrEmpty(userId))
             return ErrorResponse("Not authenticated.");
 
@@ -64,7 +63,7 @@ public class LicensesController : BaseController
     [HttpGet("{licenseId}/pdf")]
     public async Task<IActionResult> DownloadPdf(string licenseId)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetRequiredUserId();
 
         var cert = await _licenses.GetByIdAsync(licenseId);
         if (cert is null || cert.BuyerId != userId)

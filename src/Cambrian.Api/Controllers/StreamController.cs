@@ -144,6 +144,16 @@ public class StreamController : BaseController
         if (string.IsNullOrWhiteSpace(streamId) || !Guid.TryParse(streamId, out var sid))
             return ErrorResponse("streamId must be a valid GUID.");
 
+        var session = await _streams.GetByIdAsync(sid);
+        if (session is null)
+            return NotFoundResponse("Stream session not found.");
+
+        // Ownership check: only the session owner or an admin may stop a stream.
+        // Return 404 rather than 403 to avoid leaking session existence to other users.
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (session.UserId != userId && !User.IsInRole("Admin"))
+            return NotFoundResponse("Stream session not found.");
+
         await _streams.StopAsync(sid);
 
         return MessageResponse("Stream stopped.");

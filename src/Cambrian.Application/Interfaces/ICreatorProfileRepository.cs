@@ -17,6 +17,12 @@ public interface ICreatorProfileRepository
 
     Task<CreatorProfileDto> UpdateImageAsync(string userId, string? bannerImageUrl, string? profileImageUrl);
 
+    /// <summary>
+    /// Update canonical presentation fields on an existing CreatorProfile.
+    /// Only non-null parameters are applied. Returns null if no profile exists.
+    /// </summary>
+    Task<CreatorProfileDto?> UpdatePresentationFieldsAsync(string userId, string? bio, string? socialLinksJson, string? bannerImageUrl, string? profileImageUrl);
+
     Task<CreatorProfileDto> UpdatePinnedTracksAsync(string userId, string pinnedTrackIds);
 
     Task<CreatorProfileDto?> UpdateSettingsAsync(string userId, bool? showEarnings, bool? showDownloadStats);

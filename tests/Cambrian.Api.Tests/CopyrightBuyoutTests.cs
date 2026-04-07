@@ -64,7 +64,7 @@ public sealed class CopyrightBuyoutTests
 
         return new CheckoutService(
             gateway, tracks, purchases, library, wallet,
-            licenseService, Substitute.For<ITransactionManager>(), config,
+            licenseService, Substitute.For<ITransactionManager>(), Substitute.For<IEmailService>(), config,
             Substitute.For<UserManager<ApplicationUser>>(Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null),
             Substitute.For<ILogger<CheckoutService>>());
     }

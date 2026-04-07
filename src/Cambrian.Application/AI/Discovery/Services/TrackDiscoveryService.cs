@@ -137,7 +137,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         var user = await _users.FindByIdAsync(dto.UserId);
 
         // Get creator's tracks for highlights and featured genres/moods
-        var creatorTracks = await _tracks.GetStorefrontTracksAsync(dto.UserId);
+        var creatorTracks = await _tracks.GetStorefrontTracksAsync(dto.UserId, Guid.Parse(dto.Id));
 
         var featuredGenres = creatorTracks
             .Where(t => !string.IsNullOrEmpty(t.Genre))

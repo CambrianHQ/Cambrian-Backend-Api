@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cambrian.Api.Controllers;
 
@@ -10,15 +11,18 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 [RequireCreatorTier]
 [RequireUsername]
+[EnableRateLimiting("auth")]
 public class CreatorController : BaseController
 {
     private readonly ICreatorService _creator;
     private readonly ITrackRepository _tracks;
+    private readonly ICreatorIdentityRepository _creators;
 
-    public CreatorController(ICreatorService creator, ITrackRepository tracks)
+    public CreatorController(ICreatorService creator, ITrackRepository tracks, ICreatorIdentityRepository creators)
     {
         _creator = creator;
         _tracks = tracks;
+        _creators = creators;
     }
 
     [HttpGet("tracks")]
@@ -46,7 +50,11 @@ public class CreatorController : BaseController
         var userId = GetRequiredUserId()!;
         var track = await _tracks.GetByIdAsync(trackId);
         if (track is null) return NotFoundResponse("Track not found.");
-        if (track.CreatorId != userId) return ForbiddenResponse("You can only edit your own tracks.");
+
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
+        var ownsLegacy = track.CreatorId == userId;
+        var ownsUuid = creatorUuid.HasValue && track.CreatorUuid == creatorUuid.Value;
+        if (!ownsLegacy && !ownsUuid) return ForbiddenResponse("You can only edit your own tracks.");
 
         if (request.Title is not null) track.Title = request.Title;
         if (request.Description is not null) track.Description = request.Description;

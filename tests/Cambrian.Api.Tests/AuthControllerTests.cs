@@ -27,6 +27,7 @@ public sealed class AuthControllerTests
     private readonly ISubscriptionRepository _subscriptions = Substitute.For<ISubscriptionRepository>();
     private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ITransactionManager _tx = Substitute.For<ITransactionManager>();
     private readonly ILogger<AuthController> _logger = Substitute.For<ILogger<AuthController>>();
     private readonly AuthController _controller;
 
@@ -36,7 +37,9 @@ public sealed class AuthControllerTests
         _userManager = Substitute.For<UserManager<ApplicationUser>>(
             store, null, null, null, null, null, null, null, null);
 
-        _controller = new AuthController(_auth, _subscriptions, _creators, _userManager, _logger);
+        _tx.BeginTransactionAsync().Returns(Substitute.For<IAsyncDisposable>());
+
+        _controller = new AuthController(_auth, _subscriptions, _creators, _userManager, _tx, _logger);
 
         // Provide a default HttpContext so AppendAuthCookie can resolve IHostEnvironment
         var env = Substitute.For<IHostEnvironment>();
@@ -323,5 +326,55 @@ public sealed class AuthControllerTests
         var bad = Assert.IsType<BadRequestObjectResult>(result);
         var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
         Assert.Contains("token is required", envelope.Error);
+    }
+
+    // ── SetUsername atomicity (F19) ──
+
+    [Fact]
+    public async Task SetUsername_RollsBack_WhenCreatorUpsertFails()
+    {
+        var userId = "user-f19";
+        SetupUser(userId);
+
+        var user = new ApplicationUser { Id = userId, Email = "f19@test.com", Role = "User" };
+        _userManager.FindByIdAsync(userId).Returns(user);
+        _userManager.FindByNameAsync("testcreator").Returns((ApplicationUser?)null);
+        _userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        _creators.IsUsernameTakenAsync("testcreator").Returns(false);
+        _creators.UpsertAsync(Arg.Any<string>(), Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>())
+            .ThrowsAsync(new InvalidOperationException("DB timeout"));
+
+        var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "testcreator" });
+
+        // Should return error, not success
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
+        Assert.Contains("Failed to complete username setup", envelope.Error);
+
+        // Transaction must have been rolled back
+        await _tx.Received(1).RollbackAsync();
+        await _tx.DidNotReceive().CommitAsync();
+    }
+
+    [Fact]
+    public async Task SetUsername_CommitsTransaction_OnSuccess()
+    {
+        var userId = "user-ok";
+        SetupUser(userId);
+
+        var user = new ApplicationUser { Id = userId, Email = "ok@test.com", Role = "User" };
+        _userManager.FindByIdAsync(userId).Returns(user);
+        _userManager.FindByNameAsync("goodname").Returns((ApplicationUser?)null);
+        _userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        _creators.IsUsernameTakenAsync("goodname").Returns(false);
+        _creators.UpsertAsync(Arg.Any<string>(), Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>())
+            .Returns(new Application.DTOs.Creators.PublicCreatorDto { Id = Guid.NewGuid().ToString(), Username = "goodname" });
+        _auth.GenerateFreshTokenAsync(userId).Returns("fresh-jwt");
+
+        var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "goodname" });
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        await _tx.Received(1).CommitAsync();
+        await _tx.DidNotReceive().RollbackAsync();
     }
 }

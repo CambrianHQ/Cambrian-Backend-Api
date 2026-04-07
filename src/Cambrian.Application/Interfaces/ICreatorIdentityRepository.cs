@@ -43,15 +43,6 @@ public interface ICreatorIdentityRepository
     /// </summary>
     Task<PublicCreatorDto?> ResolveByLegacyIdentifierAsync(string identifier);
 
-    /// <summary>
-    /// Update ProfileImageUrl or CoverImageUrl on the creator entity.
-    /// </summary>
-    /// <param name="userId">ApplicationUser.Id of the creator.</param>
-    /// <param name="imageType">"profile" or "cover".</param>
-    /// <param name="imageUrl">Public URL of the uploaded image.</param>
-    /// <returns>True if the creator was found and updated.</returns>
-    Task<bool> UpdateImageUrlAsync(string userId, string imageType, string imageUrl);
-
     /// <summary>Follow a creator. Idempotent — no-op if already following.</summary>
     Task FollowAsync(string followerUserId, Guid creatorId);
 

@@ -32,7 +32,7 @@ public sealed class CheckoutTests
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         var logger = Substitute.For<ILogger<CheckoutService>>();
-        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, transactions, config, users, logger);
+        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, transactions, Substitute.For<IEmailService>(), config, users, logger);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
