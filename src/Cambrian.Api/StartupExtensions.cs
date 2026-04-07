@@ -42,12 +42,33 @@ internal static class StartupExtensions
             Console.WriteLine($"[Startup] Parsed DB URI → Host={uri.Host}, Port={port}, DB={uri.AbsolutePath.TrimStart('/')}");
         }
 
-        // Ensure a pool size is configured — Npgsql defaults to 100 which may exhaust
-        // limited-connection Render databases (free = 97, basic-256 = 97).
+        // Connection pool tuning — Render databases have limited connections (free = 97, basic-256 = 97).
+        // Only append defaults when the connection string doesn't already specify each setting.
         if (!connectionString.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
             && !connectionString.Contains("MaxPoolSize", StringComparison.OrdinalIgnoreCase))
         {
             connectionString += ";Maximum Pool Size=20";
+        }
+        if (!connectionString.Contains("Minimum Pool Size", StringComparison.OrdinalIgnoreCase)
+            && !connectionString.Contains("MinPoolSize", StringComparison.OrdinalIgnoreCase))
+        {
+            connectionString += ";Minimum Pool Size=5";
+        }
+        if (!connectionString.Contains("Connection Idle Lifetime", StringComparison.OrdinalIgnoreCase))
+        {
+            connectionString += ";Connection Idle Lifetime=120";
+        }
+        if (!connectionString.Contains("Connection Pruning Interval", StringComparison.OrdinalIgnoreCase))
+        {
+            connectionString += ";Connection Pruning Interval=15";
+        }
+        if (!connectionString.Contains("Keepalive", StringComparison.OrdinalIgnoreCase))
+        {
+            connectionString += ";Keepalive=60";
+        }
+        if (!connectionString.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            connectionString += ";Timeout=30";
         }
 
         return connectionString;
