@@ -240,6 +240,7 @@ public class CreatorProfileController : BaseController
     [RequireCreatorTier]
     [HttpPost("me/cover-image-upload")]
     [HttpPost("me/banner")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<IActionResult> UploadBanner(IFormFile file)
     {
         string? url;
@@ -255,25 +256,31 @@ public class CreatorProfileController : BaseController
         if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 10 MB).");
 
         var userId = GetRequiredUserId()!;
-        var existing = await _profiles.GetByUserIdAsync(userId);
-        if (existing is null) return NotFoundResponse("Create a profile first.");
-
-        var updated = await _profiles.UpdateImageAsync(userId, url, null);
-
-        // Sync back to ApplicationUser so /auth/me and settings read the updated image
-        var appUser = await _userManager.FindByIdAsync(userId);
-        if (appUser is not null)
+        try
         {
-            appUser.CoverImageUrl = url;
-            await _userManager.UpdateAsync(appUser);
+            // UpdateImageAsync auto-creates the CreatorProfile if one doesn't exist yet
+            var updated = await _profiles.UpdateImageAsync(userId, url, null);
+
+            // Sync back to ApplicationUser so /auth/me and settings read the updated image
+            var appUser = await _userManager.FindByIdAsync(userId);
+            if (appUser is not null)
+            {
+                appUser.CoverImageUrl = url;
+                await _userManager.UpdateAsync(appUser);
+            }
+
+            return OkResponse(new
+            {
+                bannerImageUrl = ResolveImageUrl(updated.BannerImageUrl),
+                coverImageUrl = ResolveImageUrl(updated.BannerImageUrl),   // alias — frontend may use either name
+                profileImageUrl = ResolveImageUrl(updated.ProfileImageUrl),
+            });
         }
-
-        return OkResponse(new
+        catch (Exception ex)
         {
-            bannerImageUrl = ResolveImageUrl(updated.BannerImageUrl),
-            coverImageUrl = ResolveImageUrl(updated.BannerImageUrl),   // alias — frontend may use either name
-            profileImageUrl = ResolveImageUrl(updated.ProfileImageUrl),
-        });
+            _logger.LogError(ex, "Banner image save failed after upload: userId={UserId}", userId);
+            return StatusCode(500, new { success = false, error = "Image was uploaded but profile update failed. Please try again." });
+        }
     }
 
     // ───── Upload profile image ─────
@@ -283,6 +290,7 @@ public class CreatorProfileController : BaseController
     [HttpPost("me/profile-image-upload")]
     [HttpPost("me/avatar")]
     [HttpPost("/settings/profile/avatar")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<IActionResult> UploadAvatar(IFormFile file)
     {
         string? url;
@@ -298,25 +306,31 @@ public class CreatorProfileController : BaseController
         if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 10 MB).");
 
         var userId = GetRequiredUserId()!;
-        var existing = await _profiles.GetByUserIdAsync(userId);
-        if (existing is null) return NotFoundResponse("Create a profile first.");
-
-        var updated = await _profiles.UpdateImageAsync(userId, null, url);
-
-        // Sync back to ApplicationUser so /auth/me and settings read the updated image
-        var appUser = await _userManager.FindByIdAsync(userId);
-        if (appUser is not null)
+        try
         {
-            appUser.ProfileImageUrl = url;
-            await _userManager.UpdateAsync(appUser);
+            // UpdateImageAsync auto-creates the CreatorProfile if one doesn't exist yet
+            var updated = await _profiles.UpdateImageAsync(userId, null, url);
+
+            // Sync back to ApplicationUser so /auth/me and settings read the updated image
+            var appUser = await _userManager.FindByIdAsync(userId);
+            if (appUser is not null)
+            {
+                appUser.ProfileImageUrl = url;
+                await _userManager.UpdateAsync(appUser);
+            }
+
+            return OkResponse(new
+            {
+                profileImageUrl = ResolveImageUrl(updated.ProfileImageUrl),
+                coverImageUrl = ResolveImageUrl(updated.BannerImageUrl),   // include both fields for consistency
+                bannerImageUrl = ResolveImageUrl(updated.BannerImageUrl),
+            });
         }
-
-        return OkResponse(new
+        catch (Exception ex)
         {
-            profileImageUrl = ResolveImageUrl(updated.ProfileImageUrl),
-            coverImageUrl = ResolveImageUrl(updated.BannerImageUrl),   // include both fields for consistency
-            bannerImageUrl = ResolveImageUrl(updated.BannerImageUrl),
-        });
+            _logger.LogError(ex, "Avatar image save failed after upload: userId={UserId}", userId);
+            return StatusCode(500, new { success = false, error = "Image was uploaded but profile update failed. Please try again." });
+        }
     }
 
     // ───── Collections: list ─────
