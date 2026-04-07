@@ -65,6 +65,11 @@ public class ImageProxyController : BaseController
         if (file is null)
             return NotFoundResponse("Image not found.");
 
+        // Set Content-Length so browsers can render progressively and cache correctly.
+        // S3 response streams are non-seekable, so FileStreamResult won't infer the length.
+        if (file.Length > 0)
+            Response.ContentLength = file.Length;
+
         return File(file.Stream, file.ContentType);
     }
 }
