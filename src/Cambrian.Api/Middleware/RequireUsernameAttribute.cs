@@ -37,6 +37,13 @@ public class RequireUsernameAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
+        // Admins managing creator resources (e.g. payouts) don't need a username
+        if (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            await next();
+            return;
+        }
+
         if (!UsernameHelper.IsSet(user))
         {
             context.Result = new ObjectResult(

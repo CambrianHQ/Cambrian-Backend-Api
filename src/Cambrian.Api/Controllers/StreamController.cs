@@ -101,18 +101,11 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, audioUserId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        _logger.LogInformation("StreamAudio: redirecting trackId={TrackId} to signed storage URL", trackId);
+        _logger.LogInformation("StreamAudio: streaming trackId={TrackId} via backend proxy", trackId);
 
-        var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-
-        // S3/R2: signedUrl is a full https:// presigned URL → redirect to CDN.
-        // Local dev: signedUrl is a relative /uploads/audio/... path which the
-        // static-file middleware intentionally blocks. Serve the file directly
-        // from storage so the audio actually reaches the browser.
-        if (signedUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-            return Redirect(signedUrl);
-
-        // Local fallback — stream the file from disk
+        // Always proxy audio through the backend to avoid CORS issues with R2/S3.
+        // The browser's <audio> element follows redirects but cross-origin R2 URLs
+        // lack CORS headers, causing playback to fail silently.
         var file = await _storage.OpenReadAsync(track.AudioUrl);
         if (file is null)
             return NotFoundResponse("Audio file not found on storage.");
