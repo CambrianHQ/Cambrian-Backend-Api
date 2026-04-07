@@ -221,8 +221,11 @@ public class AdminRepository : IAdminRepository
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return false;
         user.VerifiedCreator = true;
-        user.Tier = "creator";
         user.Role = "Creator";
+        user.CreatorTier = Cambrian.Domain.Enums.CreatorTier.Pro;
+        user.Tier = "pro";
+        user.SubscriptionStatus = "Active";
+        user.SubscriptionEndDate = null; // manual grant — no expiry
         await _users.UpdateAsync(user);
 
         await EnsureCreatorRowAsync(user);
