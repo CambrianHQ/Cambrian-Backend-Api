@@ -17,6 +17,8 @@ public sealed class PayoutServiceTests
     private readonly IPaymentGateway _gateway = Substitute.For<IPaymentGateway>();
     private readonly UserManager<ApplicationUser> _users;
     private readonly IWalletRepository _wallet = Substitute.For<IWalletRepository>();
+    private readonly ITransactionManager _transactions = Substitute.For<ITransactionManager>();
+    private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
     private readonly PayoutService _sut;
 
     public PayoutServiceTests()
@@ -25,8 +27,13 @@ public sealed class PayoutServiceTests
         _users = Substitute.For<UserManager<ApplicationUser>>(
             store, null, null, null, null, null, null, null, null);
 
+        // ITransactionManager returns a no-op disposable from BeginSerializableTransactionAsync
+        var txHandle = Substitute.For<IAsyncDisposable>();
+        _transactions.BeginSerializableTransactionAsync().Returns(txHandle);
+
         _sut = new PayoutService(
-            _payouts, _purchases, _tracks, _gateway, _users, _wallet,
+            _payouts, _purchases, _tracks, _gateway, _users, _wallet, _transactions,
+            _creators,
             Substitute.For<ILogger<PayoutService>>());
     }
 
@@ -49,24 +56,39 @@ public sealed class PayoutServiceTests
             _sut.RequestAsync(new PayoutRequest { Amount = 10m }, ""));
     }
 
-    // ── No minimum payout amount ──
+    // ── Minimum payout threshold ──
 
     [Fact]
-    public async Task RequestAsync_AcceptsAnyPositiveAmount_NoMinimum()
+    public async Task RequestAsync_RejectsBelowMinimumPayout()
     {
         var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
-        _wallet.AtomicWithdrawAsync("c1", 1L, Arg.Any<string>()).Returns(true);
-        _gateway.CreateTransferAsync("acct_1", 1L, Arg.Any<string>())
+
+        // $4.99 — below $5.00 minimum
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.RequestAsync(new PayoutRequest { Amount = 4.99m }, "c1"));
+
+        Assert.Contains("5.00", ex.Message);
+    }
+
+    [Fact]
+    public async Task RequestAsync_AcceptsMinimumPayout()
+    {
+        var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
+        _users.FindByIdAsync("c1").Returns(user);
+        _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
+            { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
+        _wallet.GetBalanceAsync("c1").Returns(500L);
+        _gateway.CreateTransferAsync("acct_1", 500L, Arg.Any<string>())
             .Returns("tr_1");
 
-        // $0.01 — the smallest possible amount
-        var result = await _sut.RequestAsync(new PayoutRequest { Amount = 0.01m }, "c1");
+        // $5.00 — exactly at minimum
+        var result = await _sut.RequestAsync(new PayoutRequest { Amount = 5.00m }, "c1");
 
         Assert.Equal("completed", result.Status);
-        Assert.Equal(0.01m, result.Amount);
+        Assert.Equal(5.00m, result.Amount);
     }
 
     // ── Stripe account required ──
@@ -92,12 +114,14 @@ public sealed class PayoutServiceTests
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
-        _wallet.AtomicWithdrawAsync("c1", 5000L, Arg.Any<string>()).Returns(false);
+        _wallet.GetBalanceAsync("c1").Returns(100L); // only $1.00 available
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _sut.RequestAsync(new PayoutRequest { Amount = 50m }, "c1")); // $50
 
         Assert.Contains("Insufficient balance", ex.Message);
+        // Wallet debit must not have been called
+        await _wallet.DidNotReceive().AddTransactionAsync(Arg.Any<WalletTransaction>());
     }
 
     // ── Successful payout ──
@@ -109,7 +133,7 @@ public sealed class PayoutServiceTests
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
-        _wallet.AtomicWithdrawAsync("c1", 5000L, Arg.Any<string>()).Returns(true);
+        _wallet.GetBalanceAsync("c1").Returns(10000L); // $100 available
         _gateway.CreateTransferAsync("acct_1", 5000L, Arg.Any<string>())
             .Returns("tr_123");
 
@@ -118,11 +142,37 @@ public sealed class PayoutServiceTests
         Assert.Equal("completed", result.Status);
         Assert.Equal(50m, result.Amount);
 
-        // Verify atomic withdraw was called
-        await _wallet.Received(1).AtomicWithdrawAsync("c1", 5000L, Arg.Any<string>());
+        // Verify debit transaction was created inside the atomic block
+        await _wallet.Received(1).AddTransactionAsync(
+            Arg.Is<WalletTransaction>(t => t.AmountCents == -5000L && t.Type == "withdrawal"));
 
         // Verify Stripe transfer was initiated
         await _gateway.Received(1).CreateTransferAsync("acct_1", 5000L, Arg.Any<string>());
+
+        // Transaction committed
+        await _transactions.Received(1).CommitAsync();
+    }
+
+    // ── Atomicity: debit + payout row committed together ──
+
+    [Fact]
+    public async Task RequestAsync_CommitsTransactionAtomically_WithDebitAndPayoutRow()
+    {
+        var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
+        _users.FindByIdAsync("c1").Returns(user);
+        _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
+            { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
+        _wallet.GetBalanceAsync("c1").Returns(10000L);
+        _gateway.CreateTransferAsync(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<string>())
+            .Returns("tr_ok");
+
+        await _sut.RequestAsync(new PayoutRequest { Amount = 50m }, "c1");
+
+        // All three persistence calls happen, then commit
+        await _wallet.Received(1).AddTransactionAsync(Arg.Any<WalletTransaction>());
+        await _payouts.Received(1).AddAsync(Arg.Any<Payout>());
+        await _transactions.Received(1).CommitAsync();
+        await _transactions.DidNotReceive().RollbackAsync();
     }
 
     // ── Failed transfer refunds wallet ──
@@ -134,7 +184,7 @@ public sealed class PayoutServiceTests
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
-        _wallet.AtomicWithdrawAsync("c1", 5000L, Arg.Any<string>()).Returns(true);
+        _wallet.GetBalanceAsync("c1").Returns(10000L);
         _gateway.CreateTransferAsync("acct_1", Arg.Any<long>(), Arg.Any<string>())
             .Throws(new Exception("Stripe transfer failed"));
 
@@ -143,9 +193,9 @@ public sealed class PayoutServiceTests
 
         Assert.Contains("transfer failed", ex.Message);
 
-        // Wallet should have been refunded (1 credit transaction after atomic withdraw)
+        // Wallet should have been refunded (credit transaction after the debit committed)
         await _wallet.Received(1).AddTransactionAsync(
-            Arg.Is<WalletTransaction>(t => t.Type == "credit"));
+            Arg.Is<WalletTransaction>(t => t.Type == "credit" && t.AmountCents == 5000L));
 
         // Payout record should be marked failed
         await _payouts.Received(1).UpdateAsync(

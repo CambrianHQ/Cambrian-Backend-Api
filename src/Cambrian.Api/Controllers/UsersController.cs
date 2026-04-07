@@ -10,19 +10,22 @@ public class UsersController : BaseController
 {
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _users;
     private readonly ITrackRepository _tracks;
-    private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository _profiles;
+    private readonly ICreatorIdentityRepository _creators;
+    private readonly ITransactionManager _transactions;
 
     public UsersController(
         UserManager<Cambrian.Domain.Entities.ApplicationUser> users,
         ITrackRepository tracks,
+        ICreatorProfileRepository profiles,
         ICreatorIdentityRepository creators,
-        ICreatorProfileRepository profiles)
+        ITransactionManager transactions)
     {
         _users = users;
         _tracks = tracks;
-        _creators = creators;
         _profiles = profiles;
+        _creators = creators;
+        _transactions = transactions;
     }
 
     // ───── GET /users/:username — public profile ─────
@@ -33,7 +36,9 @@ public class UsersController : BaseController
         var user = await _users.FindByNameAsync(username);
         if (user is null) return NotFoundResponse("User not found.");
 
-        var userTracks = await _tracks.GetStorefrontTracksAsync(user.Id);
+        // Resolve creator UUID for dual-FK track query
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(user.Id);
+        var userTracks = await _tracks.GetStorefrontTracksAsync(user.Id, creatorUuid);
 
         var trackList = new List<object>();
         foreach (var t in userTracks)
@@ -51,13 +56,17 @@ public class UsersController : BaseController
             });
         }
 
+        // Prefer CreatorProfile.Bio (canonical, varchar(2000)), fall back to ApplicationUser.Bio
+        var profile = await _profiles.GetByUserIdAsync(user.Id);
+        var bio = profile?.Bio ?? user.Bio;
+
         return OkResponse(new
         {
             username = user.UserName,
             displayName = user.DisplayName,
             profileImageUrl = user.ProfileImageUrl,
             coverImageUrl = user.CoverImageUrl,
-            bio = user.Bio,
+            bio,
             role = user.Role,
             verifiedCreator = user.VerifiedCreator,
             tracks = trackList
@@ -91,6 +100,8 @@ public class UsersController : BaseController
             // Empty string explicitly clears the field
             user.CoverImageUrl = body.CoverImageUrl.Trim().Length == 0 ? null : body.CoverImageUrl.Trim();
 
+        await using var tx = await _transactions.BeginTransactionAsync();
+
         var result = await _users.UpdateAsync(user);
         if (!result.Succeeded)
         {
@@ -99,19 +110,24 @@ public class UsersController : BaseController
             return ErrorResponse(string.Join("; ", msgs));
         }
 
-        // Sync image changes to Creator and CreatorProfile tables so marketplace displays them
+        // Sync image changes to CreatorProfile (canonical source for marketplace presentation)
         if (body.ProfileImageUrl is not null)
         {
             var url = user.ProfileImageUrl ?? "";
-            await _creators.UpdateImageUrlAsync(userId, "profile", url);
             await _profiles.UpdateImageAsync(userId, null, url);
         }
         if (body.CoverImageUrl is not null)
         {
             var url = user.CoverImageUrl ?? "";
-            await _creators.UpdateImageUrlAsync(userId, "cover", url);
             await _profiles.UpdateImageAsync(userId, url, null);
         }
+        // Sync bio to CreatorProfile
+        if (body.Bio is not null)
+        {
+            await _profiles.UpdatePresentationFieldsAsync(userId, user.Bio, null, null, null);
+        }
+
+        await _transactions.CommitAsync();
 
         return OkResponse(new
         {

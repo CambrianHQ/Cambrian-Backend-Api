@@ -248,10 +248,16 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
 
+                    b.Property<int>("PasswordResetAttemptCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PasswordResetCode")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("PasswordResetCodeExpiry")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PasswordResetLockedUntil")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PendingEmail")

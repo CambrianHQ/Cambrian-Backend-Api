@@ -15,9 +15,15 @@ public class AuthResponse
     /// <summary>The user's chosen username (null/email-prefix if not yet set).</summary>
     public string? Username { get; set; }
 
+    /// <summary>The user's display name.</summary>
+    public string? DisplayName { get; set; }
+
     /// <summary>Phone number for account recovery.</summary>
     public string? PhoneNumber { get; set; }
 
     /// <summary>True when the user has not yet set a custom username (username still equals email).</summary>
     public bool IsNewUser { get; set; }
+
+    /// <summary>True when the welcome email failed to send during registration.</summary>
+    public bool WelcomeEmailFailed { get; set; }
 }

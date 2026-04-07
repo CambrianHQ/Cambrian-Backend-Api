@@ -29,6 +29,12 @@ public class AuthService : IAuthService
     /// <summary>How long a password reset code is valid.</summary>
     private static readonly TimeSpan ResetCodeLifetime = TimeSpan.FromMinutes(15);
 
+    /// <summary>Max consecutive wrong code attempts before lockout + code invalidation.</summary>
+    private const int MaxResetAttempts = 5;
+
+    /// <summary>Lockout duration applied after reaching MaxResetAttempts.</summary>
+    private static readonly TimeSpan ResetLockoutDuration = TimeSpan.FromMinutes(15);
+
     private const string InvalidOrExpiredCode = "Invalid or expired code.";
 
     public AuthService(
@@ -95,6 +101,7 @@ public class AuthService : IAuthService
             Tier = resolvedTier.ToLowerInvariant(),
             Role = user.Role ?? "User",
             Username = needsUsername ? null : user.UserName,
+            DisplayName = user.DisplayName,
             PhoneNumber = user.PhoneNumber,
             IsNewUser = isNewUser
         };
@@ -102,14 +109,13 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
-        var isCreator = string.Equals(request.Role, "creator", StringComparison.OrdinalIgnoreCase);
         var user = new ApplicationUser
         {
             Email = request.Email,
             UserName = request.Email,
             DisplayName = request.DisplayName ?? request.Email.Split('@')[0],
             Tier = "free",
-            Role = isCreator ? "Creator" : "User",
+            Role = "Creator",
             CreatorTier = CreatorTier.Free,
             PhoneNumber = request.PhoneNumber,
             EmailVerified = false  // H1: requires email verification flow
@@ -127,12 +133,14 @@ public class AuthService : IAuthService
         _logger.LogInformation("Registration success: User={UserId} Email={Email}", user.Id, user.Email);
 
         // Send welcome email (non-critical — failure must not block registration)
+        var welcomeEmailFailed = false;
         try
         {
             await _email.SendWelcomeAsync(user.Email!, user.DisplayName ?? user.Email!);
         }
         catch (Exception ex)
         {
+            welcomeEmailFailed = true;
             _logger.LogWarning(ex, "Failed to send welcome email to {Email} — non-critical", user.Email);
         }
 
@@ -146,8 +154,10 @@ public class AuthService : IAuthService
             Tier = user.Tier,
             Role = user.Role,
             Username = null,
+            DisplayName = user.DisplayName,
             PhoneNumber = user.PhoneNumber,
-            IsNewUser = true  // just registered, no custom username yet
+            IsNewUser = true,  // just registered, no custom username yet
+            WelcomeEmailFailed = welcomeEmailFailed
         };
     }
 
@@ -199,6 +209,7 @@ public class AuthService : IAuthService
             Token = token,
             Tier = tier.ToLowerInvariant(),
             Role = profile.Role ?? "User",
+            DisplayName = user.DisplayName,
             PhoneNumber = user.PhoneNumber
         };
     }
@@ -228,6 +239,8 @@ public class AuthService : IAuthService
 
         user.PasswordResetCode = HashResetCode(code);
         user.PasswordResetCodeExpiry = DateTime.UtcNow.Add(ResetCodeLifetime);
+        user.PasswordResetAttemptCount = 0;
+        user.PasswordResetLockedUntil = null;
         await _users.UpdateAsync(user);
 
         try
@@ -249,7 +262,7 @@ public class AuthService : IAuthService
         if (user is null)
             throw new InvalidOperationException(InvalidOrExpiredCode);
 
-        ValidateResetCode(user, request.Code);
+        await ValidateAndTrackResetCodeAsync(user, request.Code);
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request)
@@ -258,7 +271,7 @@ public class AuthService : IAuthService
         if (user is null)
             throw new InvalidOperationException(InvalidOrExpiredCode);
 
-        ValidateResetCode(user, request.Code);
+        await ValidateAndTrackResetCodeAsync(user, request.Code);
 
         // Code is valid - perform the actual password reset via Identity
         var token = await _users.GeneratePasswordResetTokenAsync(user);
@@ -270,9 +283,11 @@ public class AuthService : IAuthService
             throw new InvalidOperationException($"Password reset failed: {errors}");
         }
 
-        // Invalidate the code so it cannot be reused
+        // Invalidate the code and clear attempt tracking
         user.PasswordResetCode = null;
         user.PasswordResetCodeExpiry = null;
+        user.PasswordResetAttemptCount = 0;
+        user.PasswordResetLockedUntil = null;
         await _users.UpdateAsync(user);
     }
 
@@ -435,8 +450,22 @@ public class AuthService : IAuthService
         return null;
     }
 
-    private static void ValidateResetCode(ApplicationUser user, string code)
+    /// <summary>
+    /// Validates a password reset code for the given user, tracking failed attempts.
+    /// On success: returns without side effects (caller is responsible for clearing the code).
+    /// On failure: increments the attempt counter, applies lockout after MaxResetAttempts,
+    ///             then throws with a generic message to prevent enumeration.
+    /// </summary>
+    private async Task ValidateAndTrackResetCodeAsync(ApplicationUser user, string code)
     {
+        // Check lockout before anything else
+        if (user.PasswordResetLockedUntil.HasValue && user.PasswordResetLockedUntil > DateTime.UtcNow)
+        {
+            _logger.LogWarning("Password reset code verification blocked by lockout for user hash:{UserHash}", HashUserId(user.Id));
+            throw new InvalidOperationException(InvalidOrExpiredCode);
+        }
+
+        // Check code exists and not expired
         if (string.IsNullOrEmpty(user.PasswordResetCode)
             || user.PasswordResetCodeExpiry is null
             || user.PasswordResetCodeExpiry < DateTime.UtcNow)
@@ -444,13 +473,33 @@ public class AuthService : IAuthService
             throw new InvalidOperationException(InvalidOrExpiredCode);
         }
 
-        // Generated codes are always uppercase — normalize input so users are not
-        // penalized for typing lowercase (e.g. mobile autocorrect).
+        // Generated codes are always uppercase — normalize so mobile autocorrect doesn't penalise users.
         var normalizedCode = code.Trim().ToUpperInvariant();
         if (!string.Equals(user.PasswordResetCode, HashResetCode(normalizedCode), StringComparison.Ordinal))
         {
+            user.PasswordResetAttemptCount++;
+
+            if (user.PasswordResetAttemptCount >= MaxResetAttempts)
+            {
+                // Invalidate the code and apply lockout to prevent further brute-force
+                user.PasswordResetCode = null;
+                user.PasswordResetCodeExpiry = null;
+                user.PasswordResetLockedUntil = DateTime.UtcNow.Add(ResetLockoutDuration);
+                _logger.LogWarning(
+                    "Password reset code invalidated after {Attempts} failed attempts for user hash:{UserHash}",
+                    user.PasswordResetAttemptCount, HashUserId(user.Id));
+            }
+
+            await _users.UpdateAsync(user);
             throw new InvalidOperationException(InvalidOrExpiredCode);
         }
+    }
+
+    /// <summary>Returns a one-way hash of a user ID safe for security log entries.</summary>
+    private static string HashUserId(string userId)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(userId));
+        return Convert.ToHexString(bytes)[..16].ToLowerInvariant(); // first 8 bytes
     }
 
     private static string HashResetCode(string code)
@@ -534,7 +583,7 @@ public class AuthService : IAuthService
                 DisplayName = name,
                 EmailConfirmed = true,
                 Tier = "free",
-                Role = "User",
+                Role = "Creator",
                 CreatorTier = CreatorTier.Free,
                 GoogleId = payload.Subject,
                 AuthProvider = "Google",
@@ -586,6 +635,7 @@ public class AuthService : IAuthService
             Tier = resolvedTier.ToLowerInvariant(),
             Role = user.Role ?? "User",
             Username = needsUsername ? null : user.UserName,
+            DisplayName = user.DisplayName,
             PhoneNumber = user.PhoneNumber,
             IsNewUser = isNewGoogleUser
         };

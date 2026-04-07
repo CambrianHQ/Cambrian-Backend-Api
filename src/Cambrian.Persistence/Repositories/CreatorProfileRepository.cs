@@ -139,6 +139,20 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return await MapToDtoAsync(existing);
     }
 
+    public async Task<CreatorProfileDto?> UpdatePresentationFieldsAsync(string userId, string? bio, string? socialLinksJson, string? bannerImageUrl, string? profileImageUrl)
+    {
+        var existing = await _db.CreatorProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+        if (existing is null) return null;
+
+        if (bio is not null) existing.Bio = bio;
+        if (socialLinksJson is not null) existing.SocialLinks = socialLinksJson;
+        if (bannerImageUrl is not null) existing.BannerImageUrl = bannerImageUrl;
+        if (profileImageUrl is not null) existing.ProfileImageUrl = profileImageUrl;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return await MapToDtoAsync(existing);
+    }
+
     public async Task<IReadOnlyList<TrackCollectionDto>> GetCollectionsAsync(string creatorId)
     {
         var collections = await _db.TrackCollections.AsNoTracking()
@@ -225,8 +239,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             Username = creator?.Username,
             Bio = p.Bio,
             Niche = p.Niche,
-            BannerImageUrl = p.BannerImageUrl ?? creator?.CoverImageUrl,
-            ProfileImageUrl = p.ProfileImageUrl ?? creator?.ProfileImageUrl,
+            BannerImageUrl = p.BannerImageUrl,
+            ProfileImageUrl = p.ProfileImageUrl,
             SocialLinks = links,
             ShowEarnings = p.ShowEarnings,
             ShowDownloadStats = p.ShowDownloadStats,
@@ -239,8 +253,16 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     private async Task<CreatorStatsDto> ComputeStatsAsync(string userId)
     {
+        // Resolve UUID-based creator identity (if exists) for dual-FK track lookup
+        var creatorUuid = await _db.Creators.AsNoTracking()
+            .Where(c => c.UserId == userId)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync();
+
         var totalSales = await _db.Purchases
-            .CountAsync(p => _db.Tracks.Any(t => t.CreatorId == userId && t.Id == p.TrackId)
+            .CountAsync(p => _db.Tracks.Any(t =>
+                    (t.CreatorId == userId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                    && t.Id == p.TrackId)
                              && p.Status == "completed");
 
         // Use wallet transaction credits as the source of truth for earnings.

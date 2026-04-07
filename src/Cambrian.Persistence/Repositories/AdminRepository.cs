@@ -188,6 +188,16 @@ public class AdminRepository : IAdminRepository
     {
         var user = await _users.FindByIdAsync(userId);
         if (user is null) return false;
+
+        // Guard: promoting to Creator requires a username (set via onboarding)
+        if (string.Equals(role, "Creator", StringComparison.OrdinalIgnoreCase)
+            && (string.IsNullOrWhiteSpace(user.UserName)
+                || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                "Cannot promote to Creator: user has not completed username onboarding.");
+        }
+
         var oldRole = user.Role;
         user.Role = role;
         await _users.UpdateAsync(user);
@@ -389,11 +399,22 @@ public class AdminRepository : IAdminRepository
 
         payout.Status = "rejected";
 
+        // Re-credit the creator's wallet — the debit was taken at request time
+        _db.WalletTransactions.Add(new WalletTransaction
+        {
+            Id = Guid.NewGuid(),
+            UserId = payout.CreatorId,
+            AmountCents = payout.AmountCents,
+            Type = "credit",
+            Description = $"Payout {payoutId} rejected — funds returned",
+            CreatedAt = DateTime.UtcNow
+        });
+
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "reject_payout",
             Admin = adminActor,
-            Details = $"Rejected payout {payoutId} (${payout.AmountCents / 100.0:F2})"
+            Details = $"Rejected payout {payoutId} (${payout.AmountCents / 100.0:F2}), wallet re-credited"
         });
         await _db.SaveChangesAsync();
         return true;

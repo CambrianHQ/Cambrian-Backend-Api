@@ -39,11 +39,12 @@ public class PurchaseRepository : IPurchaseRepository
             .ToListAsync();
     }
 
-    public async Task<List<Purchase>> GetByCreatorIdAsync(string creatorId)
+    public async Task<List<Purchase>> GetByCreatorIdAsync(string creatorId, Guid? creatorUuid = null)
     {
         return await _db.Purchases
             .Include(p => p.Track)
-            .Where(p => p.Track.CreatorId == creatorId)
+            .Where(p => p.Track.CreatorId == creatorId
+                || (creatorUuid != null && p.Track.CreatorUuid == creatorUuid))
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();
     }

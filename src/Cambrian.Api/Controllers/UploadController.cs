@@ -4,12 +4,14 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
 [Route("")]
+[EnableRateLimiting("auth")]
 public class UploadController : BaseController
 {
     private readonly IUploadService _upload;

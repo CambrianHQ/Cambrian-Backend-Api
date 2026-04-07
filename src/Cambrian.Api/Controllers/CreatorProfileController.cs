@@ -1,10 +1,11 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cambrian.Api.Controllers;
 
@@ -12,6 +13,7 @@ namespace Cambrian.Api.Controllers;
 /// Creator profile management. Gate UI behind feature flag "creator_profiles".
 /// </summary>
 [Route("creator-profile")]
+[EnableRateLimiting("auth")]
 public class CreatorProfileController : BaseController
 {
     private readonly ICreatorProfileRepository _profiles;
@@ -20,6 +22,8 @@ public class CreatorProfileController : BaseController
     private readonly IFeatureFlagRepository _flags;
     private readonly ICreatorIdentityRepository _creators;
     private readonly ITrackRepository _tracks;
+    private readonly ITransactionManager _transactions;
+    private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -28,7 +32,7 @@ public class CreatorProfileController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators, ITrackRepository tracks)
+    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators, ITrackRepository tracks, ITransactionManager transactions, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager)
     {
         _profiles = profiles;
         _storage = storage;
@@ -36,20 +40,25 @@ public class CreatorProfileController : BaseController
         _flags = flags;
         _creators = creators;
         _tracks = tracks;
+        _transactions = transactions;
+        _userManager = userManager;
     }
 
     // Returns false if any track ID in the comma-separated list does not belong to userId.
     private async Task<bool> AllTracksOwnedByCreatorAsync(string? trackIds, string userId)
     {
         if (string.IsNullOrWhiteSpace(trackIds)) return true;
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
         var ids = trackIds.Split(',', StringSplitOptions.RemoveEmptyEntries);
         foreach (var segment in ids)
         {
             if (!Guid.TryParse(segment.Trim(), out var trackId))
                 return false; // malformed ID
             var track = await _tracks.GetByIdAsync(trackId);
-            if (track is null || !string.Equals(track.CreatorId, userId, StringComparison.Ordinal))
-                return false;
+            if (track is null) return false;
+            var ownsLegacy = string.Equals(track.CreatorId, userId, StringComparison.Ordinal);
+            var ownsUuid = creatorUuid.HasValue && track.CreatorUuid == creatorUuid.Value;
+            if (!ownsLegacy && !ownsUuid) return false;
         }
         return true;
     }
@@ -61,10 +70,10 @@ public class CreatorProfileController : BaseController
     {
         var profile = await _profiles.GetBySlugAsync(slug);
 
-        // Fall back to Creator.Username (canonical routing identifier)
+        // Fall back: resolve by UUID, ApplicationUser.Id, or username
         if (profile is null)
         {
-            var creator = await _creators.GetByUsernameAsync(slug);
+            var creator = await _creators.ResolveByLegacyIdentifierAsync(slug);
             if (creator is not null)
                 profile = await _profiles.GetByUserIdAsync(creator.UserId);
         }
@@ -126,6 +135,8 @@ public class CreatorProfileController : BaseController
     // ───── Upsert profile (bio, niche, social links, stats toggles) ─────
 
     [Authorize]
+    [RequireCreatorTier]
+    [RequireUsername]
     [HttpPut("me")]
     public async Task<IActionResult> UpsertProfile([FromBody] UpsertCreatorProfileRequest body)
     {
@@ -152,15 +163,40 @@ public class CreatorProfileController : BaseController
                 if (!Uri.TryCreate(link.Url, UriKind.Absolute, out var uri)
                     || (uri.Scheme != "https" && uri.Scheme != "http"))
                     return ErrorResponse($"Invalid URL for {link.Platform}: must be a valid http(s) URL.");
+                // Reject javascript:, data:, or URLs with userinfo (e.g. http://evil@host)
+                if (!string.IsNullOrEmpty(uri.UserInfo))
+                    return ErrorResponse($"Invalid URL for {link.Platform}: user credentials in URLs are not allowed.");
             }
         }
+
+        // H3: Enforce bio length limit (matches DB varchar(2000))
+        if (body.Bio is not null && body.Bio.Length > 2000)
+            return ErrorResponse("Bio must be 2000 characters or less.");
 
         var socialLinksJson = body.SocialLinks is not null
             ? JsonSerializer.Serialize(body.SocialLinks)
             : null;
 
+        await using var tx = await _transactions.BeginTransactionAsync();
+
         var saved = await _profiles.UpsertAsync(userId, slug, body.Bio?.Trim() ?? "",
             body.Niche?.Trim(), socialLinksJson, body.ShowEarnings, body.ShowDownloadStats);
+
+        // Sync bio back to ApplicationUser so /auth/me and settings return consistent data
+        if (body.Bio is not null)
+        {
+            var appUser = await _userManager.FindByIdAsync(userId);
+            if (appUser is not null)
+            {
+                // ApplicationUser.Bio is varchar(500) — store truncated mirror; CreatorProfile is canonical
+                appUser.Bio = body.Bio.Trim().Length > 500
+                    ? body.Bio.Trim()[..497] + "..."
+                    : body.Bio.Trim();
+                await _userManager.UpdateAsync(appUser);
+            }
+        }
+
+        await _transactions.CommitAsync();
 
         return OkResponse(saved);
     }
@@ -168,6 +204,7 @@ public class CreatorProfileController : BaseController
     // ───── Partial update: toggle showEarnings / showDownloadStats ─────
 
     [Authorize]
+    [RequireCreatorTier]
     [HttpPatch("me/settings")]
     public async Task<IActionResult> PatchSettings([FromBody] PatchProfileSettingsRequest body)
     {
@@ -180,6 +217,7 @@ public class CreatorProfileController : BaseController
     // ───── Upload banner image ─────
 
     [Authorize]
+    [RequireCreatorTier]
     [HttpPost("me/cover-image-upload")]
     [HttpPost("me/banner")]
     public async Task<IActionResult> UploadBanner(IFormFile file)
@@ -193,8 +231,13 @@ public class CreatorProfileController : BaseController
 
         var updated = await _profiles.UpdateImageAsync(userId, url, null);
 
-        // Sync Creator table
-        await _creators.UpdateImageUrlAsync(userId, "cover", url);
+        // Sync back to ApplicationUser so /auth/me and settings read the updated image
+        var appUser = await _userManager.FindByIdAsync(userId);
+        if (appUser is not null)
+        {
+            appUser.CoverImageUrl = url;
+            await _userManager.UpdateAsync(appUser);
+        }
 
         return OkResponse(new
         {
@@ -207,6 +250,7 @@ public class CreatorProfileController : BaseController
     // ───── Upload profile image ─────
 
     [Authorize]
+    [RequireCreatorTier]
     [HttpPost("me/profile-image-upload")]
     [HttpPost("me/avatar")]
     [HttpPost("/settings/profile/avatar")]
@@ -216,11 +260,18 @@ public class CreatorProfileController : BaseController
         if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 10 MB).");
 
         var userId = GetRequiredUserId()!;
-        // UpdateImageAsync auto-creates a minimal profile if one does not yet exist
+        var existing = await _profiles.GetByUserIdAsync(userId);
+        if (existing is null) return NotFoundResponse("Create a profile first.");
+
         var updated = await _profiles.UpdateImageAsync(userId, null, url);
 
-        // Sync Creator table
-        await _creators.UpdateImageUrlAsync(userId, "profile", url);
+        // Sync back to ApplicationUser so /auth/me and settings read the updated image
+        var appUser = await _userManager.FindByIdAsync(userId);
+        if (appUser is not null)
+        {
+            appUser.ProfileImageUrl = url;
+            await _userManager.UpdateAsync(appUser);
+        }
 
         return OkResponse(new
         {
@@ -329,7 +380,7 @@ public class CreatorProfileController : BaseController
         if (creator is null) return NotFoundResponse("Creator not found.");
         if (!Guid.TryParse(creator.Id, out var creatorGuid)) return ErrorResponse("Invalid creator ID.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         await _creators.FollowAsync(userId, creatorGuid);
 
         var followerCount = await _creators.GetFollowerCountAsync(creatorGuid);
@@ -344,7 +395,7 @@ public class CreatorProfileController : BaseController
         if (creator is null) return NotFoundResponse("Creator not found.");
         if (!Guid.TryParse(creator.Id, out var creatorGuid)) return ErrorResponse("Invalid creator ID.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         await _creators.UnfollowAsync(userId, creatorGuid);
 
         var followerCount = await _creators.GetFollowerCountAsync(creatorGuid);
@@ -359,7 +410,7 @@ public class CreatorProfileController : BaseController
         if (creator is null) return NotFoundResponse("Creator not found.");
         if (!Guid.TryParse(creator.Id, out var creatorGuid)) return ErrorResponse("Invalid creator ID.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var following = await _creators.IsFollowingAsync(userId, creatorGuid);
         var followerCount = await _creators.GetFollowerCountAsync(creatorGuid);
         return OkResponse(new { following, followerCount });

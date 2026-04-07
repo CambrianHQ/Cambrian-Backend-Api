@@ -33,7 +33,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
 
         var stats = await GetStatsAsync(creatorId);
         var tracks = await GetTracksByCreatorIdAsync(creatorId, 1, 50);
-        return MapToDto(creator, stats, tracks);
+        return await MapToDtoAsync(creator, stats, tracks);
     }
 
     public async Task<PublicCreatorDto?> GetByUsernameAsync(string username)
@@ -48,7 +48,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
 
         var stats = await GetStatsAsync(creator.Id);
         var tracks = await GetTracksByCreatorIdAsync(creator.Id, 1, 50);
-        return MapToDto(creator, stats, tracks);
+        return await MapToDtoAsync(creator, stats, tracks);
     }
 
     public async Task<PublicCreatorDto?> GetByUserIdAsync(string userId)
@@ -61,7 +61,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
 
         var stats = await GetStatsAsync(creator.Id);
         var tracks = await GetTracksByCreatorIdAsync(creator.Id, 1, 50);
-        return MapToDto(creator, stats, tracks);
+        return await MapToDtoAsync(creator, stats, tracks);
     }
 
     /// <summary>
@@ -81,6 +81,12 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
 
         if (creator is null)
             return new List<TrackResponse>();
+
+        // Canonical source for profile image: CreatorProfile
+        var profileImageUrl = await _db.CreatorProfiles.AsNoTracking()
+            .Where(p => p.UserId == creator.UserId)
+            .Select(p => p.ProfileImageUrl)
+            .FirstOrDefaultAsync();
 
         // Filter strictly by the UUID FK on the tracks table
         var tracks = await _db.Tracks
@@ -130,7 +136,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             CreatorId = t.CreatorId,
             Artist = creator.DisplayName ?? creator.Username,
             CreatorSlug = creator.Username,
-            CreatorProfileImageUrl = creator.ProfileImageUrl,
+            CreatorProfileImageUrl = profileImageUrl,
             CreatedAt = t.CreatedAt,
         }).ToList();
     }
@@ -167,13 +173,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 Id = Guid.NewGuid(),
                 UserId = userId,
                 Username = normalizedUsername,
-                DisplayName = normalizedUsername,
-                Bio = request.Bio?.Trim() ?? "",
-                ProfileImageUrl = request.ProfileImageUrl,
-                CoverImageUrl = request.CoverImageUrl,
-                SocialLinks = request.SocialLinks is not null
-                    ? JsonSerializer.Serialize(request.SocialLinks)
-                    : null,
+                DisplayName = request.DisplayName?.Trim() ?? normalizedUsername,
+                Bio = "",
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             };
@@ -181,7 +182,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             await _db.SaveChangesAsync();
 
             var stats = await GetStatsAsync(creator.Id);
-            return MapToDto(creator, stats);
+            return await MapToDtoAsync(creator, stats);
         }
 
         // Username is immutable once set — only apply on first assignment.
@@ -191,27 +192,34 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             existing.Username = normalized;
             existing.DisplayName = normalized;
         }
-        if (request.Bio is not null)
-            existing.Bio = request.Bio.Trim();
-        if (request.ProfileImageUrl is not null)
-            existing.ProfileImageUrl = request.ProfileImageUrl.Trim().Length == 0 ? null : request.ProfileImageUrl.Trim();
-        if (request.CoverImageUrl is not null)
-            existing.CoverImageUrl = request.CoverImageUrl.Trim().Length == 0 ? null : request.CoverImageUrl.Trim();
+        if (request.DisplayName is not null)
+            existing.DisplayName = request.DisplayName.Trim();
+
+        // Sync SocialLinks to Creator (legacy fallback) when provided
         if (request.SocialLinks is not null)
-            existing.SocialLinks = JsonSerializer.Serialize(request.SocialLinks);
+            existing.SocialLinks = System.Text.Json.JsonSerializer.Serialize(request.SocialLinks);
 
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         var updatedStats = await GetStatsAsync(existing.Id);
-        return MapToDto(existing, updatedStats);
+        return await MapToDtoAsync(existing, updatedStats);
     }
 
     public async Task<CreatorStatsResponseDto> GetStatsAsync(Guid creatorId)
     {
-        var trackCount = await _db.Tracks.CountAsync(t => t.CreatorUuid == creatorId);
+        // Resolve legacy userId for dual-FK track lookup
+        var legacyUserId = await _db.Creators.AsNoTracking()
+            .Where(c => c.Id == creatorId)
+            .Select(c => c.UserId)
+            .FirstOrDefaultAsync();
+
+        var trackCount = await _db.Tracks.CountAsync(t =>
+            t.CreatorUuid == creatorId || (legacyUserId != null && t.CreatorId == legacyUserId));
         var totalSales = await _db.Purchases
-            .CountAsync(p => _db.Tracks.Any(t => t.CreatorUuid == creatorId && t.Id == p.TrackId)
+            .CountAsync(p => _db.Tracks.Any(t =>
+                    (t.CreatorUuid == creatorId || (legacyUserId != null && t.CreatorId == legacyUserId))
+                    && t.Id == p.TrackId)
                              && p.Status == "completed");
 
         return new CreatorStatsResponseDto
@@ -265,21 +273,6 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         return null;
     }
 
-    public async Task<bool> UpdateImageUrlAsync(string userId, string imageType, string imageUrl)
-    {
-        var creator = await _db.Creators.FirstOrDefaultAsync(c => c.UserId == userId);
-        if (creator is null) return false;
-
-        if (imageType == "cover")
-            creator.CoverImageUrl = imageUrl;
-        else
-            creator.ProfileImageUrl = imageUrl;
-
-        creator.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-        return true;
-    }
-
     public async Task FollowAsync(string followerUserId, Guid creatorId)
     {
         var exists = await _db.CreatorFollows
@@ -319,12 +312,21 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
     internal static string NormalizeUsername(string raw)
         => raw.Trim().ToLowerInvariant();
 
-    private static PublicCreatorDto MapToDto(Creator c, CreatorStatsResponseDto stats, List<TrackResponse>? tracks = null)
+    /// <summary>
+    /// Build PublicCreatorDto with canonical presentation fields from CreatorProfile.
+    /// Creator table only provides identity fields (Username, DisplayName).
+    /// </summary>
+    private async Task<PublicCreatorDto> MapToDtoAsync(Creator c, CreatorStatsResponseDto stats, List<TrackResponse>? tracks = null)
     {
+        // Canonical source for presentation fields
+        var profile = await _db.CreatorProfiles.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == c.UserId);
+
+        var socialLinksSource = profile?.SocialLinks;
         List<SocialLinkItemDto>? links = null;
-        if (!string.IsNullOrEmpty(c.SocialLinks))
+        if (!string.IsNullOrEmpty(socialLinksSource))
         {
-            try { links = JsonSerializer.Deserialize<List<SocialLinkItemDto>>(c.SocialLinks); }
+            try { links = JsonSerializer.Deserialize<List<SocialLinkItemDto>>(socialLinksSource); }
             catch { /* ignore malformed JSON */ }
         }
 
@@ -334,9 +336,9 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             UserId = c.UserId,
             Username = c.Username,
             DisplayName = c.DisplayName,
-            Bio = c.Bio,
-            ProfileImageUrl = c.ProfileImageUrl,
-            CoverImageUrl = c.CoverImageUrl,
+            Bio = profile?.Bio ?? "",
+            ProfileImageUrl = profile?.ProfileImageUrl,
+            CoverImageUrl = profile?.BannerImageUrl,
             SocialLinks = links,
             Stats = stats,
             Tracks = tracks ?? new(),

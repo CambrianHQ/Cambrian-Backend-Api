@@ -20,6 +20,7 @@ public class AuthController : BaseController
     private readonly ISubscriptionRepository _subscriptions;
     private readonly ICreatorIdentityRepository _creators;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
+    private readonly ITransactionManager _tx;
     private readonly ILogger<AuthController> _logger;
 
     private static readonly HashSet<string> _reservedUsernames = new(StringComparer.OrdinalIgnoreCase)
@@ -29,12 +30,13 @@ public class AuthController : BaseController
         "developers", "embed", "sync", "pricing", "about"
     };
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<AuthController> logger)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
         _creators = creators;
         _userManager = userManager;
+        _tx = tx;
         _logger = logger;
     }
 
@@ -262,6 +264,7 @@ public class AuthController : BaseController
             id = auth.UserId.ToString(),
             email = auth.Email,
             username = auth.Username,
+            displayName = auth.DisplayName,
             phoneNumber = auth.PhoneNumber,
         }
     };
@@ -332,21 +335,6 @@ public class AuthController : BaseController
         if (UsernameHelper.IsSet(user))
             return ErrorResponse("Username cannot be changed once set.");
 
-        // Check uniqueness via Identity UserName
-        var existingByName = await _userManager.FindByNameAsync(normalized);
-        if (existingByName is not null && existingByName.Id != userId)
-            return ConflictResponse("That username is already taken.");
-
-        // Also check Creators table — username must be globally unique
-        var takenInCreators = await _creators.IsUsernameTakenAsync(normalized);
-        if (takenInCreators)
-            return ConflictResponse("That username is already taken.");
-
-        user.UserName = normalized;
-        user.NormalizedUserName = normalized.ToUpperInvariant();
-        if (string.IsNullOrWhiteSpace(user.DisplayName))
-            user.DisplayName = request.Username.Trim(); // preserve original casing for display
-
         // Promote to Creator role on username set — this is the onboarding completion step.
         // Users who set a username are entering the creator flow and need access to
         // creator-profile, payout, and upload endpoints.
@@ -356,34 +344,73 @@ public class AuthController : BaseController
             _logger.LogInformation("EVENT: RolePromoted userId:{UserId} from=User to=Creator (username onboarding)", userId);
         }
 
-        var result = await _userManager.UpdateAsync(user);
-        if (!result.Succeeded)
-        {
-            var msgs = new List<string>();
-            foreach (var e in result.Errors) msgs.Add(e.Description);
-            var errors = string.Join("; ", msgs);
-            _logger.LogWarning("EVENT: SetUsernameFailed userId:{UserId} errors:{Errors}", userId, errors);
-            return ErrorResponse(errors);
-        }
-
-        _logger.LogInformation("EVENT: UsernameSet userId:{UserId} username:{Username}", userId, normalized);
-
-        // Sync to Creator table — create if it doesn't exist, update if it does
+        // Wrap ALL uniqueness checks + writes in a transaction so concurrent requests
+        // cannot both pass checks and commit duplicate usernames.
+        await using var transaction = await _tx.BeginTransactionAsync();
         try
         {
-            await _creators.UpsertAsync(userId, new Cambrian.Application.DTOs.Creators.UpdateCreatorProfileRequest { Username = normalized });
+            // Check uniqueness via Identity UserName (inside transaction)
+            var existingByName = await _userManager.FindByNameAsync(normalized);
+            if (existingByName is not null && existingByName.Id != userId)
+            {
+                await _tx.RollbackAsync();
+                return ConflictResponse("That username is already taken.");
+            }
+
+            // Also check Creators table — username must be globally unique
+            var takenInCreators = await _creators.IsUsernameTakenAsync(normalized);
+            if (takenInCreators)
+            {
+                await _tx.RollbackAsync();
+                return ConflictResponse("That username is already taken.");
+            }
+
+            user.UserName = normalized;
+            user.NormalizedUserName = normalized.ToUpperInvariant();
+            // Preserve original casing for display; pass to Creator row too (BUG #4 fix)
+            var displayName = user.DisplayName;
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = request.Username.Trim(); // preserve original casing
+                user.DisplayName = displayName;
+            }
+
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+            {
+                await _tx.RollbackAsync();
+                var msgs = new List<string>();
+                foreach (var e in result.Errors) msgs.Add(e.Description);
+                var errors = string.Join("; ", msgs);
+                _logger.LogWarning("EVENT: SetUsernameFailed userId:{UserId} errors:{Errors}", userId, errors);
+                return ErrorResponse(errors);
+            }
+
+            _logger.LogInformation("EVENT: UsernameSet userId:{UserId} username:{Username}", userId, normalized);
+
+            // Pass DisplayName so Creator row gets the human-readable name, not just the normalized username
+            await _creators.UpsertAsync(userId, new Cambrian.Application.DTOs.Creators.UpdateCreatorProfileRequest
+            {
+                Username = normalized,
+                DisplayName = displayName
+            });
             _logger.LogInformation("EVENT: CreatorUsernameSynced userId:{UserId} username:{Username}", userId, normalized);
+
+            await _tx.CommitAsync();
         }
         catch (DbUpdateException dbEx) when (
             dbEx.InnerException?.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) == true ||
             dbEx.InnerException?.Message.Contains("23505", StringComparison.Ordinal) == true)
         {
+            await _tx.RollbackAsync();
             _logger.LogWarning("EVENT: CreatorUsernameConflict userId:{UserId} username:{Username} — DB unique violation", userId, normalized);
             return ConflictResponse("That username is already taken.");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Non-critical: Failed to sync Creator username for userId:{UserId}", userId);
+            await _tx.RollbackAsync();
+            _logger.LogError(ex, "EVENT: SetUsernameFailed userId:{UserId} — rolling back Identity + Creator changes", userId);
+            return ErrorResponse("Failed to complete username setup. Please try again.");
         }
 
         // Return a fresh JWT with updated role/username claims
@@ -595,6 +622,16 @@ public class AuthController : BaseController
             var msgs = new List<string>();
             foreach (var e in result.Errors) msgs.Add(e.Description);
             return ErrorResponse(string.Join("; ", msgs));
+        }
+
+        // Sync to Creator table so storefront/tracks show the updated name
+        var creatorId = await _creators.GetCreatorIdForUserAsync(userId);
+        if (creatorId.HasValue)
+        {
+            await _creators.UpsertAsync(userId, new Cambrian.Application.DTOs.Creators.UpdateCreatorProfileRequest
+            {
+                DisplayName = trimmed
+            });
         }
 
         _logger.LogInformation("EVENT: DisplayNameUpdated userId:{UserId}", userId);

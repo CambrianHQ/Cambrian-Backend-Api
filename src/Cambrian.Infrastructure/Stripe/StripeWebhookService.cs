@@ -123,15 +123,18 @@ public class StripeWebhookService : IWebhookService
         string? stripePaymentIntentId = null,
         string? payload = null)
     {
-        // ── Step 2: Idempotency — check for duplicate event ──
+        var normalizedEventId = eventId ?? $"no-id-{Guid.NewGuid():N}";
+
+        // ── Step 2: Idempotency — skip ONLY already-completed events ──
+        // Failed/processing events are retried so Stripe gets correct delivery guarantees.
         if (!string.IsNullOrWhiteSpace(eventId))
         {
-            var existing = await _db.StripeWebhookEvents
-                .FirstOrDefaultAsync(e => e.EventId == eventId);
+            var alreadyCompleted = await _db.StripeWebhookEvents
+                .AnyAsync(e => e.EventId == eventId && e.Status == "completed");
 
-            if (existing is not null)
+            if (alreadyCompleted)
             {
-                _logger.LogInformation("Skipping duplicate Stripe webhook event {EventId} (status={Status})", eventId, existing.Status);
+                _logger.LogInformation("Skipping already-completed Stripe webhook event {EventId}", eventId);
                 return;
             }
         }
@@ -142,32 +145,47 @@ public class StripeWebhookService : IWebhookService
                 eventType);
         }
 
-        // ── Step 3: Persist event as "received" BEFORE processing ──
-        var webhookEvent = new StripeWebhookEvent
-        {
-            Id = Guid.NewGuid(),
-            EventId = eventId ?? $"no-id-{Guid.NewGuid():N}",
-            EventType = eventType,
-            Payload = payload,
-            Status = "received",
-            Processed = false,
-            ReceivedAt = DateTime.UtcNow,
-            ProcessedAt = DateTime.UtcNow
-        };
-        _db.StripeWebhookEvents.Add(webhookEvent);
-        await _db.SaveChangesAsync();
-        _logger.LogInformation("Stripe event persisted: {EventId} {EventType} status=received", webhookEvent.EventId, eventType);
-
-        // ── Step 4: Process inside transaction, update status on success/failure ──
-        webhookEvent.Status = "processing";
-        await _db.SaveChangesAsync();
-
+        // ── Step 3: Begin transaction FIRST — event row and all business effects commit atomically ──
         var transaction = _db.Database.IsRelational()
             ? await _db.Database.BeginTransactionAsync()
             : null;
 
+        // Upsert: if a previous attempt left a "failed" row, update it; otherwise insert fresh.
+        var existingRow = !string.IsNullOrWhiteSpace(eventId)
+            ? await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == normalizedEventId)
+            : null;
+
+        StripeWebhookEvent webhookEvent;
+        if (existingRow is not null)
+        {
+            webhookEvent = existingRow;
+            webhookEvent.Status = "processing";
+            webhookEvent.ErrorMessage = null;
+            webhookEvent.Processed = false;
+            webhookEvent.ProcessedAt = DateTime.UtcNow;
+            _logger.LogInformation("Retrying previously failed Stripe webhook event {EventId}", normalizedEventId);
+        }
+        else
+        {
+            webhookEvent = new StripeWebhookEvent
+            {
+                Id = Guid.NewGuid(),
+                EventId = normalizedEventId,
+                EventType = eventType,
+                Payload = payload,
+                Status = "processing",
+                Processed = false,
+                ReceivedAt = DateTime.UtcNow,
+                ProcessedAt = DateTime.UtcNow
+            };
+            _db.StripeWebhookEvents.Add(webhookEvent);
+        }
+
+        _logger.LogInformation("Stripe event processing: {EventId} {EventType}", normalizedEventId, eventType);
+
         try
         {
+            // ── Step 4: Process inside transaction ──
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
                 await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
@@ -193,6 +211,7 @@ public class StripeWebhookService : IWebhookService
             webhookEvent.Processed = true;
             webhookEvent.ProcessedAt = DateTime.UtcNow;
 
+            // Single SaveChanges commits event row + all business side effects together.
             await _db.SaveChangesAsync();
 
             if (transaction is not null)
@@ -200,7 +219,7 @@ public class StripeWebhookService : IWebhookService
                 await transaction.CommitAsync();
             }
 
-            _logger.LogInformation("Stripe event completed: {EventId} {EventType}", webhookEvent.EventId, eventType);
+            _logger.LogInformation("Stripe event completed: {EventId} {EventType}", normalizedEventId, eventType);
         }
         catch (Exception ex)
         {
@@ -209,18 +228,42 @@ public class StripeWebhookService : IWebhookService
                 await transaction.RollbackAsync();
             }
 
-            // Mark event as failed (outside the rolled-back transaction)
+            // After rollback the change tracker contains stale/inconsistent state.
+            // Clear it so the failed-marker save starts from a clean baseline.
+            _db.ChangeTracker.Clear();
+
+            // Record failure for observability — this is a best-effort, non-transactional save.
             try
             {
-                webhookEvent.Status = "failed";
-                webhookEvent.ErrorMessage = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
-                webhookEvent.Processed = false;
+                // After rollback the event row may or may not exist in DB depending on
+                // whether it was a new insert (rolled back) or an update of an existing row.
+                var failedRecord = await _db.StripeWebhookEvents
+                    .FirstOrDefaultAsync(e => e.EventId == normalizedEventId);
+
+                if (failedRecord is null)
+                {
+                    failedRecord = new StripeWebhookEvent
+                    {
+                        Id = Guid.NewGuid(),
+                        EventId = normalizedEventId,
+                        EventType = eventType,
+                        Payload = payload,
+                        ReceivedAt = DateTime.UtcNow
+                    };
+                    _db.StripeWebhookEvents.Add(failedRecord);
+                }
+
+                failedRecord.Status = "failed";
+                failedRecord.Processed = false;
+                failedRecord.ErrorMessage = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                failedRecord.ProcessedAt = DateTime.UtcNow;
+
                 await _db.SaveChangesAsync();
-                _logger.LogError(ex, "Stripe event FAILED: {EventId} {EventType} — marked as failed for retry/investigation", webhookEvent.EventId, eventType);
+                _logger.LogError(ex, "Stripe event FAILED: {EventId} {EventType} — marked as failed for retry/investigation", normalizedEventId, eventType);
             }
             catch (Exception saveEx)
             {
-                _logger.LogError(saveEx, "Failed to update webhook event status to 'failed' for {EventId}", webhookEvent.EventId);
+                _logger.LogError(saveEx, "Failed to record webhook failure for {EventId}", normalizedEventId);
             }
 
             throw;
@@ -728,6 +771,7 @@ public class StripeWebhookService : IWebhookService
     /// <summary>
     /// Handle charge.refunded — revoke access for refunded purchases.
     /// Looks up the purchase by StripeSessionId (via PaymentIntent → Session).
+    /// Exceptions propagate to the outer transaction handler so the event is retried.
     /// </summary>
     private async Task HandleChargeRefunded(string? stripePaymentIntentId)
     {
@@ -737,78 +781,110 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        // Look up the checkout session via the payment intent
-        try
+        // Look up the checkout session via the payment intent.
+        // If this Stripe API call fails, the exception propagates and Stripe will retry.
+        var sessionService = new SessionService();
+        var sessions = await sessionService.ListAsync(new SessionListOptions
         {
-            var sessionService = new SessionService();
-            var sessions = await sessionService.ListAsync(new SessionListOptions
+            PaymentIntent = stripePaymentIntentId,
+            Limit = 1
+        });
+        var session = sessions.FirstOrDefault();
+        if (session is null)
+        {
+            _logger.LogWarning("charge.refunded: no checkout session found for PaymentIntent {PI}", stripePaymentIntentId);
+            return;
+        }
+
+        var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
+        if (purchase is null)
+        {
+            _logger.LogWarning("charge.refunded: no purchase found for session {SessionId}", session.Id);
+            return;
+        }
+
+        purchase.Status = "refunded";
+        purchase.UpdatedAt = DateTime.UtcNow;
+
+        // Remove library access
+        var libraryItem = await _db.Library
+            .FirstOrDefaultAsync(l => l.UserId == purchase.BuyerId && l.TrackId == purchase.TrackId);
+        if (libraryItem is not null)
+            _db.Library.Remove(libraryItem);
+
+        // SECURITY: Claw back creator wallet credit.
+        // Guard against double-clawback when the webhook fires twice.
+        var alreadyClawedBack = await _db.WalletTransactions
+            .AnyAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "debit"
+                && wt.Description != null && wt.Description.StartsWith("Refund clawback:"));
+
+        if (!alreadyClawedBack)
+        {
+            // Prefer the stored credit amount (exact match to what was credited).
+            // Fall back to authoritative re-computation if no credit record exists.
+            var originalCredit = await _db.WalletTransactions
+                .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
+
+            string? clawbackUserId;
+            long clawbackCents;
+
+            if (originalCredit is not null)
             {
-                PaymentIntent = stripePaymentIntentId,
-                Limit = 1
-            });
-            var session = sessions.FirstOrDefault();
-            if (session is null)
-            {
-                _logger.LogWarning("charge.refunded: no checkout session found for PaymentIntent {PI}", stripePaymentIntentId);
-                return;
+                clawbackUserId = originalCredit.UserId;
+                clawbackCents = originalCredit.AmountCents; // already positive
             }
-
-            var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
-            if (purchase is null)
+            else
             {
-                _logger.LogWarning("charge.refunded: no purchase found for session {SessionId}", session.Id);
-                return;
-            }
-
-            purchase.Status = "refunded";
-            purchase.UpdatedAt = DateTime.UtcNow;
-
-            // Remove library access
-            var libraryItem = await _db.Library
-                .FirstOrDefaultAsync(l => l.UserId == purchase.BuyerId && l.TrackId == purchase.TrackId);
-            if (libraryItem is not null)
-                _db.Library.Remove(libraryItem);
-
-            // SECURITY: Claw back creator wallet credit to prevent platform loss
-            // Guard against double-clawback if webhook fires twice
-            var alreadyClawedBack = await _db.WalletTransactions
-                .AnyAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "debit"
-                    && wt.Description != null && wt.Description.StartsWith("Refund clawback:"));
-            if (!alreadyClawedBack)
-            {
-                var originalCredit = await _db.WalletTransactions
-                    .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
-                if (originalCredit is not null)
+                // Authoritative fallback: compute from purchase amount + creator's current tier.
+                var track = await _db.Tracks.FirstOrDefaultAsync(t => t.Id == purchase.TrackId);
+                clawbackUserId = track?.CreatorId;
+                if (string.IsNullOrEmpty(clawbackUserId))
                 {
-                    _db.WalletTransactions.Add(new WalletTransaction
-                    {
-                        Id = Guid.NewGuid(),
-                        UserId = originalCredit.UserId,
-                        AmountCents = -originalCredit.AmountCents,
-                        Type = "debit",
-                        Description = $"Refund clawback: {purchase.Id}",
-                        RelatedPurchaseId = purchase.Id,
-                        CreatedAt = DateTime.UtcNow
-                    });
-                    _logger.LogInformation(
-                        "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for refunded purchase {PurchaseId}",
-                        originalCredit.AmountCents, originalCredit.UserId, purchase.Id);
+                    _logger.LogWarning(
+                        "Refund clawback skipped: no credit record and no track creator for purchase {PurchaseId}. Manual reconciliation required.",
+                        purchase.Id);
+                    clawbackCents = 0;
+                }
+                else
+                {
+                    var creatorUser = await _db.Users.FindAsync(clawbackUserId);
+                    var feeRate = creatorUser is not null
+                        ? TierManifest.For(creatorUser.CreatorTier).FeeRate
+                        : TierManifest.Free.FeeRate;
+                    clawbackCents = (long)Math.Floor(purchase.AmountCents * (1 - feeRate));
+                    _logger.LogWarning(
+                        "Refund clawback: no original credit transaction found for purchase {PurchaseId}; computed {Cents}c from purchase amount.",
+                        purchase.Id, clawbackCents);
                 }
             }
 
-            await _db.SaveChangesAsync();
-            _logger.LogInformation(
-                "Refund processed: PurchaseId={PurchaseId} UserId={UserId} TrackId={TrackId}",
-                purchase.Id, purchase.BuyerId, purchase.TrackId);
+            if (!string.IsNullOrEmpty(clawbackUserId) && clawbackCents > 0)
+            {
+                _db.WalletTransactions.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = clawbackUserId,
+                    AmountCents = -clawbackCents,
+                    Type = "debit",
+                    Description = $"Refund clawback: {purchase.Id}",
+                    RelatedPurchaseId = purchase.Id,
+                    CreatedAt = DateTime.UtcNow
+                });
+                _logger.LogInformation(
+                    "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for refunded purchase {PurchaseId}",
+                    clawbackCents, clawbackUserId, purchase.Id);
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process charge.refunded for PaymentIntent {PI}", stripePaymentIntentId);
-        }
+
+        await _db.SaveChangesAsync();
+        _logger.LogInformation(
+            "Refund processed: PurchaseId={PurchaseId} UserId={UserId} TrackId={TrackId}",
+            purchase.Id, purchase.BuyerId, purchase.TrackId);
     }
 
     /// <summary>
     /// Handle charge.dispute.created — flag the purchase as disputed for review.
+    /// Exceptions propagate to the outer transaction handler so the event is retried.
     /// </summary>
     private async Task HandleChargeDisputeCreated(string? stripePaymentIntentId)
     {
@@ -818,68 +894,63 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        try
+        var sessionService = new SessionService();
+        var sessions = await sessionService.ListAsync(new SessionListOptions
         {
-            var sessionService = new SessionService();
-            var sessions = await sessionService.ListAsync(new SessionListOptions
-            {
-                PaymentIntent = stripePaymentIntentId,
-                Limit = 1
-            });
-            var session = sessions.FirstOrDefault();
-            if (session is null)
-            {
-                _logger.LogWarning("charge.dispute.created: no checkout session found for PaymentIntent {PI}", stripePaymentIntentId);
-                return;
-            }
+            PaymentIntent = stripePaymentIntentId,
+            Limit = 1
+        });
+        var session = sessions.FirstOrDefault();
+        if (session is null)
+        {
+            _logger.LogWarning("charge.dispute.created: no checkout session found for PaymentIntent {PI}", stripePaymentIntentId);
+            return;
+        }
 
-            var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
-            if (purchase is null)
-            {
-                _logger.LogWarning("charge.dispute.created: no purchase found for session {SessionId}", session.Id);
-                return;
-            }
+        var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
+        if (purchase is null)
+        {
+            _logger.LogWarning("charge.dispute.created: no purchase found for session {SessionId}", session.Id);
+            return;
+        }
 
-            purchase.Status = "disputed";
-            purchase.UpdatedAt = DateTime.UtcNow;
+        purchase.Status = "disputed";
+        purchase.UpdatedAt = DateTime.UtcNow;
 
-            // SECURITY: Claw back creator wallet credit on dispute to prevent platform loss
-            // Guard against double-clawback if webhook fires twice
-            var alreadyClawedBack = await _db.WalletTransactions
-                .AnyAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "debit"
-                    && wt.Description != null && wt.Description.StartsWith("Dispute clawback:"));
-            if (!alreadyClawedBack)
+        // SECURITY: Claw back creator wallet credit on dispute.
+        // Guard against double-clawback if webhook fires twice.
+        var alreadyClawedBack = await _db.WalletTransactions
+            .AnyAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "debit"
+                && wt.Description != null && wt.Description.StartsWith("Dispute clawback:"));
+
+        if (!alreadyClawedBack)
+        {
+            var disputeCredit = await _db.WalletTransactions
+                .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
+
+            if (disputeCredit is not null)
             {
-                var disputeCredit = await _db.WalletTransactions
-                    .FirstOrDefaultAsync(wt => wt.RelatedPurchaseId == purchase.Id && wt.Type == "credit");
-                if (disputeCredit is not null)
+                _db.WalletTransactions.Add(new WalletTransaction
                 {
-                    _db.WalletTransactions.Add(new WalletTransaction
-                    {
-                        Id = Guid.NewGuid(),
-                        UserId = disputeCredit.UserId,
-                        AmountCents = -disputeCredit.AmountCents,
-                        Type = "debit",
-                        Description = $"Dispute clawback: {purchase.Id}",
-                        RelatedPurchaseId = purchase.Id,
-                        CreatedAt = DateTime.UtcNow
-                    });
-                    _logger.LogInformation(
-                        "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for disputed purchase {PurchaseId}",
-                        disputeCredit.AmountCents, disputeCredit.UserId, purchase.Id);
-                }
+                    Id = Guid.NewGuid(),
+                    UserId = disputeCredit.UserId,
+                    AmountCents = -disputeCredit.AmountCents,
+                    Type = "debit",
+                    Description = $"Dispute clawback: {purchase.Id}",
+                    RelatedPurchaseId = purchase.Id,
+                    CreatedAt = DateTime.UtcNow
+                });
+                _logger.LogInformation(
+                    "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for disputed purchase {PurchaseId}",
+                    disputeCredit.AmountCents, disputeCredit.UserId, purchase.Id);
             }
-
-            await _db.SaveChangesAsync();
-
-            _logger.LogWarning(
-                "Dispute opened: PurchaseId={PurchaseId} UserId={UserId} TrackId={TrackId} PaymentIntent={PI}",
-                purchase.Id, purchase.BuyerId, purchase.TrackId, stripePaymentIntentId);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to process charge.dispute.created for PaymentIntent {PI}", stripePaymentIntentId);
-        }
+
+        await _db.SaveChangesAsync();
+
+        _logger.LogWarning(
+            "Dispute opened: PurchaseId={PurchaseId} UserId={UserId} TrackId={TrackId} PaymentIntent={PI}",
+            purchase.Id, purchase.BuyerId, purchase.TrackId, stripePaymentIntentId);
     }
 
     /// <summary>

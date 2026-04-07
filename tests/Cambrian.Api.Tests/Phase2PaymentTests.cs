@@ -72,7 +72,7 @@ public sealed class Phase2PaymentTests
         subs.GetActiveAsync("user-1").Returns((Subscription?)null);
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
-        var sut = new SubscriptionService(subs, users);
+        var sut = new SubscriptionService(subs, Substitute.For<ITransactionManager>(), users);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.CancelAsync("user-1"));
     }
@@ -87,7 +87,7 @@ public sealed class Phase2PaymentTests
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         users.FindByIdAsync("user-1").Returns(new ApplicationUser { Id = "user-1", Tier = "free" });
         users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
-        var sut = new SubscriptionService(subs, users);
+        var sut = new SubscriptionService(subs, Substitute.For<ITransactionManager>(), users);
 
         var result = await sut.UpdateAsync(new UpdateSubscriptionRequest { Plan = "pro" }, "user-1");
 

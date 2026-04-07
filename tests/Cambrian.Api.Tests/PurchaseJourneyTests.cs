@@ -85,7 +85,7 @@ public sealed class PurchaseJourneyTests : IDisposable
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var checkoutUsers = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         var checkoutLogger = Substitute.For<ILogger<CheckoutService>>();
-        _checkoutService = new CheckoutService(_gateway, _tracks, _purchases, _libraryRepo, _walletRepo, _licenseService, transactions, config, checkoutUsers, checkoutLogger);
+        _checkoutService = new CheckoutService(_gateway, _tracks, _purchases, _libraryRepo, _walletRepo, _licenseService, transactions, Substitute.For<IEmailService>(), config, checkoutUsers, checkoutLogger);
 
         // ── Configure webhook service ──
         var webhookConfig = Substitute.For<IConfiguration>();

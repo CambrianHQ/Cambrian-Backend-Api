@@ -86,22 +86,22 @@ public class TrackRepository : ITrackRepository
             .FirstOrDefaultAsync(t => t.CambrianTrackId == cambrianTrackId);
     }
 
-    public async Task<List<Track>> GetByCreatorIdAsync(string creatorId)
+    public async Task<List<Track>> GetByCreatorIdAsync(string creatorId, Guid? creatorUuid = null)
     {
         return await _db.Tracks
             .Include(t => t.Creator)
             .Include(t => t.CreatorEntity)
-            .Where(t => t.CreatorId == creatorId)
+            .Where(t => t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
     }
 
-    public async Task<List<Track>> GetStorefrontTracksAsync(string creatorId)
+    public async Task<List<Track>> GetStorefrontTracksAsync(string creatorId, Guid? creatorUuid = null)
     {
         return await _db.Tracks
             .Include(t => t.Creator)
             .Include(t => t.CreatorEntity)
-            .Where(t => t.CreatorId == creatorId
+            .Where(t => (t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
                 && t.Visibility == "public"
                 && t.Status != "copyright_transferred"
                 && !t.ExclusiveSold)

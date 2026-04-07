@@ -428,6 +428,8 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
             var user = await db.Users.FirstAsync(u => u.Email == email);
             user.Tier = "creator";
             user.Role = "Creator";
+            user.UserName = $"u{Guid.NewGuid():N}"[..12];
+            user.NormalizedUserName = user.UserName.ToUpperInvariant();
             await db.SaveChangesAsync();
         }
 
@@ -520,5 +522,81 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
             CompletedAt = DateTime.UtcNow,
         });
         await db.SaveChangesAsync();
+    }
+
+    // ── F12: Dual FK storefront lookup ──
+
+    [Fact]
+    public async Task Storefront_IncludesUuidLinkedTracks()
+    {
+        var email = $"sf-uuid-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email);
+        var userId = await _fixture.GetUserIdAsync(email);
+
+        var slug = $"su-{Guid.NewGuid():N}"[..20];
+        (await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            bio = "UUID track test",
+            showEarnings = false,
+            showDownloadStats = false,
+        })).EnsureSuccessStatusCode();
+
+        // Register a second user (needed as legacy FK target for the UUID-only track)
+        var email2 = $"sf-uu2-{Guid.NewGuid():N}@test.com";
+        await _fixture.RegisterUserAsync(email2, "Test1234!@");
+        var userId2 = await _fixture.GetUserIdAsync(email2);
+
+        // Seed a Creator row for user1
+        Guid creatorUuid;
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            creatorUuid = Guid.NewGuid();
+            db.Creators.Add(new Creator
+            {
+                Id = creatorUuid,
+                UserId = userId,
+                Username = $"u{Guid.NewGuid():N}"[..10],
+                DisplayName = "Test",
+                Bio = "",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Seed a track linked to user1 via CreatorUuid but to user2 via legacy CreatorId
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            var trackId = Guid.NewGuid();
+            db.Tracks.Add(new Track
+            {
+                Id = trackId,
+                CambrianTrackId = $"CAMB-TRK-{trackId.ToString()[..8].ToUpper()}",
+                Title = "UUID-Only Beat",
+                Price = 9.99m,
+                LicenseType = "standard",
+                AudioUrl = "tracks/test.mp3",
+                CreatorId = userId2, // legacy FK points to different user
+                CreatorUuid = creatorUuid, // UUID FK points to user1's creator
+                Genre = "Electronic",
+                Visibility = "public",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var publicClient = _fixture.CreateClient();
+        var res = await publicClient.GetAsync($"/creator-profile/{slug}/storefront");
+        res.EnsureSuccessStatusCode();
+
+        var tracks = (await res.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").GetProperty("tracks");
+
+        Assert.True(tracks.GetArrayLength() >= 1);
+        Assert.Contains("UUID-Only Beat",
+            Enumerable.Range(0, tracks.GetArrayLength())
+                .Select(i => tracks[i].GetProperty("title").GetString()));
     }
 }

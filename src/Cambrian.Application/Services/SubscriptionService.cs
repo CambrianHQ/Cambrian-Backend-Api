@@ -10,11 +10,13 @@ namespace Cambrian.Application.Services;
 public class SubscriptionService : ISubscriptionService
 {
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly ITransactionManager _transactions;
     private readonly UserManager<ApplicationUser> _users;
 
-    public SubscriptionService(ISubscriptionRepository subscriptions, UserManager<ApplicationUser> users)
+    public SubscriptionService(ISubscriptionRepository subscriptions, ITransactionManager transactions, UserManager<ApplicationUser> users)
     {
         _subscriptions = subscriptions;
+        _transactions = transactions;
         _users = users;
     }
 
@@ -81,50 +83,64 @@ public class SubscriptionService : ISubscriptionService
                 }
                 return new SubscriptionResponse { Plan = existing.Plan, Status = existing.Status };
             }
-
-            await _subscriptions.CancelAsync(existing.Id);
         }
 
-        if (plan == "free")
+        // Wrap cancel + create + user tier update in a transaction
+        await using var txHandle = await _transactions.BeginTransactionAsync();
+        try
         {
+            if (existing is not null)
+                await _subscriptions.CancelAsync(existing.Id);
+
+            if (plan == "free")
+            {
+                if (user is not null)
+                {
+                    user.Tier = "free";
+                    SyncCreatorTier(user);
+                    await _users.UpdateAsync(user);
+                }
+                await _transactions.CommitAsync();
+                return new SubscriptionResponse { Plan = "free", Status = "active" };
+            }
+
+            var subscription = new Subscription
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Plan = plan,
+                Status = "active",
+                StartedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddMonths(1)
+            };
+
+            await _subscriptions.CreateAsync(subscription);
+
             if (user is not null)
             {
-                user.Tier = "free";
+                user.Tier = plan;
+                user.SubscriptionStatus = "Active";
+                user.SubscriptionEndDate = subscription.ExpiresAt;
                 SyncCreatorTier(user);
                 await _users.UpdateAsync(user);
             }
-            return new SubscriptionResponse { Plan = "free", Status = "active" };
+
+            await _transactions.CommitAsync();
+
+            return new SubscriptionResponse
+            {
+                Id = subscription.Id,
+                Plan = subscription.Plan,
+                Status = subscription.Status,
+                StartedAt = subscription.StartedAt,
+                ExpiresAt = subscription.ExpiresAt
+            };
         }
-
-        var subscription = new Subscription
+        catch
         {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Plan = plan,
-            Status = "active",
-            StartedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddMonths(1)
-        };
-
-        await _subscriptions.CreateAsync(subscription);
-
-        if (user is not null)
-        {
-            user.Tier = plan;
-            user.SubscriptionStatus = "Active";
-            user.SubscriptionEndDate = subscription.ExpiresAt;
-            SyncCreatorTier(user);
-            await _users.UpdateAsync(user);
+            await _transactions.RollbackAsync();
+            throw;
         }
-
-        return new SubscriptionResponse
-        {
-            Id = subscription.Id,
-            Plan = subscription.Plan,
-            Status = subscription.Status,
-            StartedAt = subscription.StartedAt,
-            ExpiresAt = subscription.ExpiresAt
-        };
     }
 
     public async Task CancelAsync(string userId)

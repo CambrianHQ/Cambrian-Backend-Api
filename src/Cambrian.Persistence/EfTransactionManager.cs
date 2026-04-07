@@ -1,4 +1,5 @@
 using Cambrian.Application.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Cambrian.Persistence;
@@ -13,6 +14,12 @@ public sealed class EfTransactionManager : ITransactionManager
     public async Task<IAsyncDisposable> BeginTransactionAsync()
     {
         _transaction = await _db.Database.BeginTransactionAsync();
+        return _transaction;
+    }
+
+    public async Task<IAsyncDisposable> BeginSerializableTransactionAsync()
+    {
+        _transaction = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
         return _transaction;
     }
 

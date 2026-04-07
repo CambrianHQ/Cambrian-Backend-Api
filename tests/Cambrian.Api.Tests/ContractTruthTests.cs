@@ -486,6 +486,10 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
             var user = await db.Users.FirstAsync(u => u.Email == email);
             user.Tier = "creator";
             user.Role = "Creator";
+            // Set a real username so [RequireUsername] passes
+            var username = $"ct-{Guid.NewGuid():N}"[..16];
+            user.UserName = username;
+            user.NormalizedUserName = username.ToUpperInvariant();
             await db.SaveChangesAsync();
         }
 

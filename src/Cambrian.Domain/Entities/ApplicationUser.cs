@@ -40,6 +40,18 @@ public class ApplicationUser : IdentityUser
     /// <summary>UTC expiry of the current password reset code.</summary>
     public DateTime? PasswordResetCodeExpiry { get; set; }
 
+    /// <summary>
+    /// Consecutive failed code-verification attempts for the current reset code.
+    /// Reset to 0 when a new code is issued or a correct code is accepted.
+    /// </summary>
+    public int PasswordResetAttemptCount { get; set; }
+
+    /// <summary>
+    /// When set, reset code verification is locked out until this UTC time.
+    /// Null = no active lockout.
+    /// </summary>
+    public DateTime? PasswordResetLockedUntil { get; set; }
+
     /// <summary>User's profile/avatar image URL (stored in object storage).</summary>
     public string? ProfileImageUrl { get; set; }
 

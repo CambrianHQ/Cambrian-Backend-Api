@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Creators;
 using Cambrian.Application.Interfaces;
@@ -22,6 +21,7 @@ public class CreatorsController : BaseController
     private readonly ICreatorProfileRepository _profiles;
     private readonly ICreatorService _creatorService;
     private readonly IObjectStorage _storage;
+    private readonly ITransactionManager _transactions;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ILogger<CreatorsController> _logger;
 
@@ -32,12 +32,13 @@ public class CreatorsController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorsController(ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, ICreatorService creatorService, IObjectStorage storage, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorsController> logger)
+    public CreatorsController(ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, ICreatorService creatorService, IObjectStorage storage, ITransactionManager transactions, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorsController> logger)
     {
         _creators = creators;
         _profiles = profiles;
         _creatorService = creatorService;
         _storage = storage;
+        _transactions = transactions;
         _userManager = userManager;
         _logger = logger;
     }
@@ -154,16 +155,8 @@ public class CreatorsController : BaseController
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
 
-        // If the slug looks like a GUID, resolve by ID (or ApplicationUser.Id fallback)
-        PublicCreatorDto? creator = null;
-        if (Guid.TryParse(slug, out var parsedId))
-        {
-            creator = await _creators.GetByIdAsync(parsedId);
-            creator ??= await _creators.GetByUserIdAsync(slug);
-        }
-
-        // Fallback: resolve by username
-        creator ??= await _creators.GetByUsernameAsync(slug);
+        // Use canonical resolver — handles UUID, ApplicationUser.Id, and username
+        var creator = await _creators.ResolveByLegacyIdentifierAsync(slug);
         if (creator is null) return NotFoundResponse("Creator not found.");
 
         var creatorId = Guid.Parse(creator.Id);
@@ -202,9 +195,30 @@ public class CreatorsController : BaseController
     [HttpGet("/api/creator/me")]
     public async Task<IActionResult> GetMyCreatorProfile()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var creator = await _creators.GetByUserIdAsync(userId);
-        if (creator is null) return NotFoundResponse("Creator profile not found.");
+        if (creator is null)
+        {
+            // Creator row doesn't exist yet — user hasn't completed set-username.
+            // Return a partial response from ApplicationUser so the frontend can
+            // show profile data and prompt for username setup.
+            var appUser = await _userManager.FindByIdAsync(userId);
+            if (appUser is null) return NotFoundResponse("User not found.");
+            return OkResponse(new
+            {
+                Id = (string?)null,
+                Username = (string?)null,
+                canChangeUsername = true,
+                DisplayName = appUser.DisplayName ?? appUser.Email?.Split('@')[0] ?? "",
+                Bio = appUser.Bio ?? "",
+                ProfileImageUrl = appUser.ProfileImageUrl,
+                CoverImageUrl = appUser.CoverImageUrl,
+                SocialLinks = (object?)null,
+                Stats = (object?)null,
+                Tracks = Array.Empty<object>(),
+                needsUsername = true
+            });
+        }
         return OkResponse(new
         {
             creator.Id,
@@ -228,7 +242,7 @@ public class CreatorsController : BaseController
     [HttpPut("/api/creator/me")]
     public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateCreatorProfileRequest body)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
 
         // If no username provided, auto-populate from ApplicationUser.UserName
         // so users who already set it via POST /auth/set-username don't have to repeat it.
@@ -258,21 +272,61 @@ public class CreatorsController : BaseController
                 if (normalized.Length < 3 || normalized.Length > 40)
                     return ErrorResponse("Username must be between 3 and 40 characters.");
 
-                // Check uniqueness (excluding own record)
+                // Check uniqueness in Creators table (excluding own record)
                 var existingCreatorId = await _creators.GetCreatorIdForUserAsync(userId);
                 var taken = await _creators.IsUsernameTakenAsync(normalized, existingCreatorId);
-                if (taken)
+                // Also check Identity table — username must be globally unique
+                var existingInIdentity = await _userManager.FindByNameAsync(normalized);
+                if (taken || (existingInIdentity is not null && existingInIdentity.Id != userId))
                     return ConflictResponse("That username is already taken.");
             }
         }
 
-        var saved = await _creators.UpsertAsync(userId, body);
+        // Pass only identity fields to Creator table (username/displayName)
+        var identityOnly = new UpdateCreatorProfileRequest
+        {
+            Username = body.Username,
+            DisplayName = body.DisplayName,
+            SocialLinks = body.SocialLinks,
+        };
 
-        // Sync image changes to CreatorProfile (marketplace reads from that table)
-        if (!string.IsNullOrWhiteSpace(body.ProfileImageUrl))
-            await _profiles.UpdateImageAsync(userId, null, body.ProfileImageUrl.Trim());
-        if (!string.IsNullOrWhiteSpace(body.CoverImageUrl))
-            await _profiles.UpdateImageAsync(userId, body.CoverImageUrl.Trim(), null);
+        await using var tx = await _transactions.BeginTransactionAsync();
+
+        var saved = await _creators.UpsertAsync(userId, identityOnly);
+
+        // Write canonical presentation fields to CreatorProfile (single source of truth).
+        // No-op if the creator hasn't created a CreatorProfile yet; legacy Creator fields
+        // serve as fallback at read time until a profile is created.
+        var socialLinksJson = body.SocialLinks is not null
+            ? System.Text.Json.JsonSerializer.Serialize(body.SocialLinks)
+            : null;
+        await _profiles.UpdatePresentationFieldsAsync(userId,
+            body.Bio?.Trim(),
+            socialLinksJson,
+            body.CoverImageUrl?.Trim(),
+            body.ProfileImageUrl?.Trim());
+
+        // Mirror DisplayName and Bio back to ApplicationUser for /auth/me consistency
+        var appUser = await _userManager.FindByIdAsync(userId);
+        if (appUser is not null)
+        {
+            var dirty = false;
+            if (body.DisplayName is not null)
+            {
+                appUser.DisplayName = body.DisplayName.Trim();
+                dirty = true;
+            }
+            if (body.Bio is not null)
+            {
+                // ApplicationUser.Bio is varchar(500) — store truncated mirror
+                var trimmed = body.Bio.Trim();
+                appUser.Bio = trimmed.Length > 500 ? trimmed[..497] + "..." : trimmed;
+                dirty = true;
+            }
+            if (dirty) await _userManager.UpdateAsync(appUser);
+        }
+
+        await _transactions.CommitAsync();
 
         return OkResponse(saved);
     }
@@ -319,6 +373,14 @@ public class CreatorsController : BaseController
     [HttpPut("/api/uploads/creator-image/{**key}")]
     public async Task<IActionResult> ProxyCreatorImageUpload(string key)
     {
+        // C1 FIX: Restrict keys to known safe prefixes generated by CreateCreatorImageUploadUrl.
+        // Without this, any authenticated user could write to arbitrary storage keys.
+        if (!key.StartsWith("creator-profiles/", StringComparison.Ordinal)
+            && !key.StartsWith("creator-covers/", StringComparison.Ordinal))
+        {
+            return ErrorResponse("Invalid upload key.");
+        }
+
         if (Request.ContentLength is > MaxImageSize)
             return ErrorResponse("Image must be under 10 MB.");
 
@@ -354,12 +416,8 @@ public class CreatorsController : BaseController
         await _storage.UploadAsync(stream, key, contentType);
         var publicUrl = _storage.GetPublicUrl(key);
 
-        // Update Creator table
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var updated = await _creators.UpdateImageUrlAsync(userId, type, publicUrl);
-        if (!updated) return NotFoundResponse("Create a profile first.");
-
-        // Sync CreatorProfile table so marketplace displays the image
+        // Canonical write: CreatorProfile is the source of truth for images
+        var userId = GetRequiredUserId()!;
         if (type == "cover")
             await _profiles.UpdateImageAsync(userId, publicUrl, null);
         else
@@ -382,7 +440,7 @@ public class CreatorsController : BaseController
         var creator = await _creators.GetByIdAsync(creatorId);
         if (creator is null) return NotFoundResponse("Creator not found.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         await _creators.FollowAsync(userId, creatorId);
 
         var followerCount = await _creators.GetFollowerCountAsync(creatorId);
@@ -399,7 +457,7 @@ public class CreatorsController : BaseController
         var creator = await _creators.GetByIdAsync(creatorId);
         if (creator is null) return NotFoundResponse("Creator not found.");
 
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         await _creators.UnfollowAsync(userId, creatorId);
 
         var followerCount = await _creators.GetFollowerCountAsync(creatorId);
@@ -413,7 +471,7 @@ public class CreatorsController : BaseController
     [HttpGet("{creatorId:guid}/follow")]
     public async Task<IActionResult> GetFollowStatus(Guid creatorId)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var userId = GetRequiredUserId()!;
         var following = await _creators.IsFollowingAsync(userId, creatorId);
         var followerCount = await _creators.GetFollowerCountAsync(creatorId);
         return OkResponse(new { following, followerCount });
