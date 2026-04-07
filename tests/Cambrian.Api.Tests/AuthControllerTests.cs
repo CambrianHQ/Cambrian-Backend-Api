@@ -26,6 +26,7 @@ public sealed class AuthControllerTests
     private readonly IAuthService _auth = Substitute.For<IAuthService>();
     private readonly ISubscriptionRepository _subscriptions = Substitute.For<ISubscriptionRepository>();
     private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
+    private readonly ICreatorProfileRepository _profiles = Substitute.For<ICreatorProfileRepository>();
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ITransactionManager _tx = Substitute.For<ITransactionManager>();
     private readonly ILogger<AuthController> _logger = Substitute.For<ILogger<AuthController>>();
@@ -39,7 +40,7 @@ public sealed class AuthControllerTests
 
         _tx.BeginTransactionAsync().Returns(Substitute.For<IAsyncDisposable>());
 
-        _controller = new AuthController(_auth, _subscriptions, _creators, _userManager, _tx, _logger);
+        _controller = new AuthController(_auth, _subscriptions, _creators, _profiles, _userManager, _tx, _logger);
 
         // Provide a default HttpContext so AppendAuthCookie can resolve IHostEnvironment
         var env = Substitute.For<IHostEnvironment>();

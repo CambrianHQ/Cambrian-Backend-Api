@@ -88,10 +88,11 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .Select(p => p.ProfileImageUrl)
             .FirstOrDefaultAsync();
 
-        // Filter strictly by the UUID FK on the tracks table
+        // Dual-FK query: match CreatorUuid (new) OR CreatorId (legacy string FK)
+        var legacyUserId = creator.UserId;
         var tracks = await _db.Tracks
             .AsNoTracking()
-            .Where(t => t.CreatorUuid == creatorId
+            .Where(t => (t.CreatorUuid == creatorId || t.CreatorId == legacyUserId)
                         && t.Visibility == "public"
                         && !t.ExclusiveSold
                         && t.Status != "copyright_transferred")
@@ -99,19 +100,6 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
-
-        // Zero-track mismatch: creator exists but has no tracks linked via CreatorUuid
-        if (tracks.Count == 0 && page == 1)
-        {
-            var legacyTrackCount = await _db.Tracks
-                .CountAsync(t => t.CreatorId == creator.UserId);
-            if (legacyTrackCount > 0)
-            {
-                _logger.LogWarning(
-                    "ZeroTrackMismatch: creator={CreatorId} has {LegacyCount} legacy tracks but 0 UUID-linked tracks. Backfill may be incomplete.",
-                    creatorId, legacyTrackCount);
-            }
-        }
 
         return tracks.Select(t => new TrackResponse
         {

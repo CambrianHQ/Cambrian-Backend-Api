@@ -34,17 +34,49 @@ jobs:
         run: dotnet test Cambrian.sln --no-build --configuration Release --logger "console;verbosity=minimal"
 
   contract-validation:
+    needs: build-test
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need git history for baseline comparison
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Contract Validation
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore & Build
+        run: |
+          dotnet restore Cambrian.sln
+          dotnet build src/Cambrian.Api/Cambrian.Api.csproj --no-restore --configuration Release
+
+      - name: Restore Swashbuckle CLI
+        run: dotnet tool restore
+
+      - name: Generate OpenAPI spec from compiled assembly
+        env:
+          ASPNETCORE_ENVIRONMENT: Testing
+          ConnectionStrings__DefaultConnection: "Host=localhost;Database=ci_openapi;Username=unused;Password=unused"
+        run: |
+          dotnet swagger tofile --output contracts/openapi.generated.json \
+            src/Cambrian.Api/bin/Release/net8.0/Cambrian.Api.dll v1
+
+      - name: Architecture Compliance
         run: node scripts/validate-contracts.cjs
+
+      - name: Breaking Change Detection
+        run: node scripts/detect-breaking-changes.cjs contracts/openapi.generated.json
 
   security:
     needs: build-test
