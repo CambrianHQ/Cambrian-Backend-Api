@@ -202,6 +202,10 @@ public class AdminRepository : IAdminRepository
         user.Role = role;
         await _users.UpdateAsync(user);
 
+        // Ensure Creator table row exists when promoting to Creator
+        if (string.Equals(role, "Creator", StringComparison.OrdinalIgnoreCase))
+            await EnsureCreatorRowAsync(user);
+
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "change_user_role",
@@ -218,7 +222,10 @@ public class AdminRepository : IAdminRepository
         if (user is null) return false;
         user.VerifiedCreator = true;
         user.Tier = "creator";
+        user.Role = "Creator";
         await _users.UpdateAsync(user);
+
+        await EnsureCreatorRowAsync(user);
 
         _db.AuditLogs.Add(new AuditLog
         {
@@ -251,6 +258,18 @@ public class AdminRepository : IAdminRepository
         }
         await _users.UpdateAsync(user);
 
+        // Pro upgrade implies creator status — ensure Creator row + role
+        if (tier.Equals("pro", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                user.Role = "Creator";
+                await _users.UpdateAsync(user);
+            }
+            await EnsureCreatorRowAsync(user);
+        }
+
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "upgrade_creator_tier",
@@ -259,6 +278,39 @@ public class AdminRepository : IAdminRepository
         });
         await _db.SaveChangesAsync();
         return true;
+    }
+
+    /// <summary>
+    /// Ensure a Creator table row exists for the given user.
+    /// Uses ApplicationUser.UserName as the creator username.
+    /// No-op if a row already exists or the user has no username set.
+    /// </summary>
+    private async Task EnsureCreatorRowAsync(ApplicationUser user)
+    {
+        var exists = await _db.Creators.AnyAsync(c => c.UserId == user.Id);
+        if (exists) return;
+
+        // Derive username: prefer UserName if it's not the email address
+        var username = user.UserName;
+        if (string.IsNullOrWhiteSpace(username)
+            || string.Equals(username, user.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            // No usable username — skip Creator row creation.
+            // The user will be prompted to set one on next login.
+            return;
+        }
+
+        _db.Creators.Add(new Creator
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            Username = username.Trim().ToLowerInvariant(),
+            DisplayName = user.DisplayName ?? username,
+            Bio = "",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        });
+        await _db.SaveChangesAsync();
     }
 
     public async Task<string?> ResetUserPasswordAsync(string userId, string adminActor)
