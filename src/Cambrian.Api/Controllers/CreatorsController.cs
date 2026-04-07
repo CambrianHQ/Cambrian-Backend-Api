@@ -227,6 +227,8 @@ public class CreatorsController : BaseController
                 needsUsername = true
             });
         }
+        // CreatorProfile is the source of truth for images — Creator table may be stale.
+        var profile = await _profiles.GetByUserIdAsync(userId);
         return OkResponse(new
         {
             creator.Id,
@@ -234,8 +236,8 @@ public class CreatorsController : BaseController
             canChangeUsername = string.IsNullOrWhiteSpace(creator.Username),
             creator.DisplayName,
             creator.Bio,
-            ProfileImageUrl = ResolveImageUrl(creator.ProfileImageUrl),
-            CoverImageUrl = ResolveImageUrl(creator.CoverImageUrl),
+            ProfileImageUrl = ResolveImageUrl(profile?.ProfileImageUrl ?? creator.ProfileImageUrl),
+            CoverImageUrl = ResolveImageUrl(profile?.BannerImageUrl ?? creator.CoverImageUrl),
             creator.SocialLinks,
             creator.Stats,
             creator.Tracks
@@ -314,7 +316,7 @@ public class CreatorsController : BaseController
             body.CoverImageUrl?.Trim(),
             body.ProfileImageUrl?.Trim());
 
-        // Mirror DisplayName and Bio back to ApplicationUser for /auth/me consistency
+        // Mirror DisplayName, Bio, and images back to ApplicationUser for /auth/me consistency
         var appUser = await _userManager.FindByIdAsync(userId);
         if (appUser is not null)
         {
@@ -331,13 +333,25 @@ public class CreatorsController : BaseController
                 appUser.Bio = trimmed.Length > 500 ? trimmed[..497] + "..." : trimmed;
                 dirty = true;
             }
+            if (body.ProfileImageUrl is not null)
+            {
+                appUser.ProfileImageUrl = body.ProfileImageUrl.Trim();
+                dirty = true;
+            }
+            if (body.CoverImageUrl is not null)
+            {
+                appUser.CoverImageUrl = body.CoverImageUrl.Trim();
+                dirty = true;
+            }
             if (dirty) await _userManager.UpdateAsync(appUser);
         }
 
         await _transactions.CommitAsync();
 
-        saved.ProfileImageUrl = ResolveImageUrl(saved.ProfileImageUrl);
-        saved.CoverImageUrl = ResolveImageUrl(saved.CoverImageUrl);
+        // CreatorProfile is the source of truth for images — prefer it over Creator table
+        var updatedProfile = await _profiles.GetByUserIdAsync(userId);
+        saved.ProfileImageUrl = ResolveImageUrl(updatedProfile?.ProfileImageUrl ?? saved.ProfileImageUrl);
+        saved.CoverImageUrl = ResolveImageUrl(updatedProfile?.BannerImageUrl ?? saved.CoverImageUrl);
         return OkResponse(saved);
     }
 
@@ -450,6 +464,17 @@ public class CreatorsController : BaseController
             await _profiles.UpdateImageAsync(userId, publicUrl, null);
         else
             await _profiles.UpdateImageAsync(userId, null, publicUrl);
+
+        // Sync to ApplicationUser so /auth/me returns updated images
+        var appUser = await _userManager.FindByIdAsync(userId);
+        if (appUser is not null)
+        {
+            if (type == "cover")
+                appUser.CoverImageUrl = publicUrl;
+            else
+                appUser.ProfileImageUrl = publicUrl;
+            await _userManager.UpdateAsync(appUser);
+        }
 
         return OkResponse(new CreatorImageUploadResponse
         {
