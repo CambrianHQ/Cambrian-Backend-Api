@@ -104,7 +104,20 @@ public class StreamController : BaseController
         _logger.LogInformation("StreamAudio: redirecting trackId={TrackId} to signed storage URL", trackId);
 
         var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
-        return Redirect(signedUrl);
+
+        // S3/R2: signedUrl is a full https:// presigned URL → redirect to CDN.
+        // Local dev: signedUrl is a relative /uploads/audio/... path which the
+        // static-file middleware intentionally blocks. Serve the file directly
+        // from storage so the audio actually reaches the browser.
+        if (signedUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return Redirect(signedUrl);
+
+        // Local fallback — stream the file from disk
+        var file = await _storage.OpenReadAsync(track.AudioUrl);
+        if (file is null)
+            return NotFoundResponse("Audio file not found on storage.");
+
+        return File(file.Stream, file.ContentType, enableRangeProcessing: true);
     }
 
     [Authorize]

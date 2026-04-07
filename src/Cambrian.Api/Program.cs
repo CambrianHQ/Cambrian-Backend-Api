@@ -365,11 +365,37 @@ var app = builder.Build();
         keyHash[..8]);
 }
 
+// Swagger JSON served in ALL environments at /swagger/v1/swagger.json
+// so the frontend can codegen from it. UI only in Development.
+app.UseSwagger(c =>
+{
+    c.RouteTemplate = "swagger/{documentName}/swagger.json";
+});
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Canonical OpenAPI endpoint: GET /openapi.json → redirects to swagger doc
+app.MapGet("/openapi.json", () => Results.Redirect("/swagger/v1/swagger.json", permanent: false))
+   .ExcludeFromDescription();
+
+// Endpoint manifest: derived from the live Swagger document
+app.MapGet("/manifest.json", (Swashbuckle.AspNetCore.Swagger.ISwaggerProvider swaggerProvider) =>
+{
+    var doc = swaggerProvider.GetSwagger("v1");
+    var endpoints = new List<object>();
+    foreach (var (pathKey, pathItem) in doc.Paths)
+    {
+        foreach (var (method, operation) in pathItem.Operations)
+        {
+            var hasBearerSecurity = operation.Security?.Any(r => r.Keys.Any(k => k.Reference?.Id == "Bearer")) == true;
+            var tag = operation.Tags?.FirstOrDefault()?.Name ?? "Other";
+            endpoints.Add(new { method = method.ToString().ToUpperInvariant(), path = pathKey, requiresAuth = hasBearerSecurity, tag });
+        }
+    }
+    return Results.Json(new { version = "v1", generatedAt = DateTime.UtcNow, endpoints });
+}).ExcludeFromDescription();
 
 // Normalize double-slash paths (e.g. //health → /health)
 // Prevents 404s when VITE_BACKEND_API has a trailing slash.
@@ -401,13 +427,15 @@ app.Use(async (context, next) =>
 
 app.UseCors();
 
-// Serve static files — block direct access to uploaded audio
+// Serve static files — block direct access to uploaded audio only.
+// Images (avatars, banners, covers, creator-profiles) must be publicly accessible.
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
         var path = ctx.File.PhysicalPath ?? "";
-        if (path.Contains("uploads") && !path.Contains("covers"))
+        // Only block audio/track files — allow all image paths through
+        if (path.Contains("uploads") && (path.Contains("audio") || path.Contains("tracks")))
         {
             ctx.Context.Response.StatusCode = StatusCodes.Status403Forbidden;
             ctx.Context.Response.ContentLength = 0;
