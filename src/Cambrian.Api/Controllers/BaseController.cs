@@ -87,12 +87,39 @@ public class BaseController : ControllerBase
             if (Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri))
             {
                 var key = uri.AbsolutePath.TrimStart('/');
+                // Strip bucket-name prefix. R2/S3 URLs have the path /{bucket}/{key}.
+                // If the first segment isn't a known image prefix, it's the bucket name.
+                key = StripBucketPrefix(key);
                 if (!string.IsNullOrEmpty(key))
                     return ResolveAbsoluteUrl($"/images/{key}");
             }
             return rawUrl; // unrecognized — pass through
         }
         // Bare object key (e.g. covers/abc/img.jpg) — proxy through /images/
-        return ResolveAbsoluteUrl($"/images/{rawUrl}");
+        // Also strip bucket prefix in case DB stored "cambrianaudio/covers/..."
+        return ResolveAbsoluteUrl($"/images/{StripBucketPrefix(rawUrl)}");
+    }
+
+    // Known first-segment prefixes for image object keys.
+    private static readonly HashSet<string> KnownImagePrefixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "covers", "avatars", "banners", "creator-profiles"
+    };
+
+    /// <summary>
+    /// If the first path segment is not a known image prefix (covers, avatars, etc.)
+    /// it is the S3/R2 bucket name embedded in the URL path — strip it.
+    /// e.g. "cambrianaudio/covers/abc.jpg" → "covers/abc.jpg"
+    /// </summary>
+    private static string StripBucketPrefix(string key)
+    {
+        var slash = key.IndexOf('/');
+        if (slash > 0)
+        {
+            var first = key[..slash];
+            if (!KnownImagePrefixes.Contains(first))
+                return key[(slash + 1)..];
+        }
+        return key;
     }
 }

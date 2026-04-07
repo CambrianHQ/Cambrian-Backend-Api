@@ -61,6 +61,12 @@ public class ImageProxyController : BaseController
         if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
             return NotFoundResponse("Image not found.");
 
+        // ETag based on the key — same key always serves the same content.
+        // Allows browsers to skip re-download on subsequent renders.
+        var etag = $"\"{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key)))[..16]}\"";
+        if (Request.Headers.IfNoneMatch.ToString() == etag)
+            return StatusCode(304);
+
         var file = await _storage.OpenReadAsync(key);
         if (file is null)
             return NotFoundResponse("Image not found.");
@@ -70,6 +76,7 @@ public class ImageProxyController : BaseController
         if (file.Length > 0)
             Response.ContentLength = file.Length;
 
+        Response.Headers.ETag = etag;
         return File(file.Stream, file.ContentType);
     }
 }
