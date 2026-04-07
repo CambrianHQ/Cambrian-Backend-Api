@@ -236,8 +236,8 @@ public class AuthController : BaseController
             contractVersion = profile.ContractVersion,
             // Profile fields — canonical source is CreatorProfile, fallback to ApplicationUser
             bio = creatorProfile?.Bio ?? user?.Bio ?? "",
-            profileImageUrl = creatorProfile?.ProfileImageUrl ?? user?.ProfileImageUrl,
-            coverImageUrl = creatorProfile?.BannerImageUrl ?? user?.CoverImageUrl,
+            profileImageUrl = ResolveImageUrl(creatorProfile?.ProfileImageUrl ?? user?.ProfileImageUrl),
+            coverImageUrl = ResolveImageUrl(creatorProfile?.BannerImageUrl ?? user?.CoverImageUrl),
             socialLinks = creatorProfile?.SocialLinks,
             slug = creatorProfile?.Slug,
             niche = creatorProfile?.Niche,
@@ -550,8 +550,8 @@ public class AuthController : BaseController
             tier = profile.Tier,
             role = profile.Role,
             bio = user?.Bio,
-            profileImageUrl = user?.ProfileImageUrl,
-            coverImageUrl = user?.CoverImageUrl,
+            profileImageUrl = ResolveImageUrl(user?.ProfileImageUrl),
+            coverImageUrl = ResolveImageUrl(user?.CoverImageUrl),
             subscription = new
             {
                 creatorTier = currentTierConfig.DisplayName,

@@ -24,6 +24,7 @@ public class CreatorProfileController : BaseController
     private readonly ITrackRepository _tracks;
     private readonly ITransactionManager _transactions;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
+    private readonly ILogger<CreatorProfileController> _logger;
 
     private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -32,7 +33,7 @@ public class CreatorProfileController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators, ITrackRepository tracks, ITransactionManager transactions, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager)
+    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators, ITrackRepository tracks, ITransactionManager transactions, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorProfileController> logger)
     {
         _profiles = profiles;
         _storage = storage;
@@ -42,6 +43,7 @@ public class CreatorProfileController : BaseController
         _tracks = tracks;
         _transactions = transactions;
         _userManager = userManager;
+        _logger = logger;
     }
 
     // Returns false if any track ID in the comma-separated list does not belong to userId.
@@ -79,6 +81,8 @@ public class CreatorProfileController : BaseController
         }
 
         if (profile is null) return NotFoundResponse("Creator not found.");
+        profile.ProfileImageUrl = ResolveImageUrl(profile.ProfileImageUrl);
+        profile.BannerImageUrl = ResolveImageUrl(profile.BannerImageUrl);
         return OkResponse(profile);
     }
 
@@ -92,6 +96,20 @@ public class CreatorProfileController : BaseController
 
         var storefront = await _storefront.GetStorefrontAsync(slug);
         if (storefront is null) return NotFoundResponse("Creator not found.");
+        storefront.Profile.ProfileImageUrl = ResolveImageUrl(storefront.Profile.ProfileImageUrl);
+        storefront.Profile.BannerImageUrl = ResolveImageUrl(storefront.Profile.BannerImageUrl);
+        foreach (var t in storefront.Tracks)
+        {
+            t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
+            if (!string.IsNullOrEmpty(t.CoverArtUrl))
+                t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
+        }
+        foreach (var t in storefront.PinnedTracks)
+        {
+            t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
+            if (!string.IsNullOrEmpty(t.CoverArtUrl))
+                t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
+        }
         return OkResponse(storefront);
     }
 
@@ -120,8 +138,8 @@ public class CreatorProfileController : BaseController
             canChangeUsername = !hasUsername,
             profile.Bio,
             profile.Niche,
-            profile.ProfileImageUrl,
-            profile.BannerImageUrl,
+            ProfileImageUrl = ResolveImageUrl(profile.ProfileImageUrl),
+            BannerImageUrl = ResolveImageUrl(profile.BannerImageUrl),
             profile.SocialLinks,
             profile.ShowEarnings,
             profile.ShowDownloadStats,
@@ -198,6 +216,8 @@ public class CreatorProfileController : BaseController
 
         await _transactions.CommitAsync();
 
+        saved.ProfileImageUrl = ResolveImageUrl(saved.ProfileImageUrl);
+        saved.BannerImageUrl = ResolveImageUrl(saved.BannerImageUrl);
         return OkResponse(saved);
     }
 
@@ -222,8 +242,17 @@ public class CreatorProfileController : BaseController
     [HttpPost("me/banner")]
     public async Task<IActionResult> UploadBanner(IFormFile file)
     {
-        var url = await UploadImage(file, "banners");
-        if (url is null) return ErrorResponse("Invalid image file.");
+        string? url;
+        try
+        {
+            url = await UploadImage(file, "banners");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Banner upload failed: storage={StorageType}", _storage.GetType().Name);
+            return StatusCode(502, new { success = false, error = "Image upload failed. Storage may be misconfigured." });
+        }
+        if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 10 MB).");
 
         var userId = GetRequiredUserId()!;
         var existing = await _profiles.GetByUserIdAsync(userId);
@@ -241,9 +270,9 @@ public class CreatorProfileController : BaseController
 
         return OkResponse(new
         {
-            bannerImageUrl = updated.BannerImageUrl,
-            coverImageUrl = updated.BannerImageUrl,   // alias — frontend may use either name
-            profileImageUrl = updated.ProfileImageUrl,
+            bannerImageUrl = ResolveImageUrl(updated.BannerImageUrl),
+            coverImageUrl = ResolveImageUrl(updated.BannerImageUrl),   // alias — frontend may use either name
+            profileImageUrl = ResolveImageUrl(updated.ProfileImageUrl),
         });
     }
 
@@ -256,7 +285,16 @@ public class CreatorProfileController : BaseController
     [HttpPost("/settings/profile/avatar")]
     public async Task<IActionResult> UploadAvatar(IFormFile file)
     {
-        var url = await UploadImage(file, "avatars");
+        string? url;
+        try
+        {
+            url = await UploadImage(file, "avatars");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Avatar upload failed: storage={StorageType}", _storage.GetType().Name);
+            return StatusCode(502, new { success = false, error = "Image upload failed. Storage may be misconfigured." });
+        }
         if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 10 MB).");
 
         var userId = GetRequiredUserId()!;
@@ -275,9 +313,9 @@ public class CreatorProfileController : BaseController
 
         return OkResponse(new
         {
-            profileImageUrl = updated.ProfileImageUrl,
-            coverImageUrl = updated.BannerImageUrl,   // include both fields for consistency
-            bannerImageUrl = updated.BannerImageUrl,
+            profileImageUrl = ResolveImageUrl(updated.ProfileImageUrl),
+            coverImageUrl = ResolveImageUrl(updated.BannerImageUrl),   // include both fields for consistency
+            bannerImageUrl = ResolveImageUrl(updated.BannerImageUrl),
         });
     }
 
@@ -428,6 +466,10 @@ public class CreatorProfileController : BaseController
         [".webp"] = [System.Text.Encoding.ASCII.GetBytes("RIFF")],
     };
 
+    /// <summary>
+    /// Validates and uploads an image. Returns the public URL on success, null for validation
+    /// failures, or throws on storage errors (caller should catch and return 502).
+    /// </summary>
     private async Task<string?> UploadImage(IFormFile? file, string folder)
     {
         if (file is null || file.Length == 0) return null;
