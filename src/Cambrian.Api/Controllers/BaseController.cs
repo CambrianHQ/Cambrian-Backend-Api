@@ -103,7 +103,7 @@ public class BaseController : ControllerBase
     // Known first-segment prefixes for image object keys.
     private static readonly HashSet<string> KnownImagePrefixes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "covers", "avatars", "banners", "creator-profiles"
+        "covers", "avatars", "banners", "creator-profiles", "creator-covers", "images"
     };
 
     /// <summary>

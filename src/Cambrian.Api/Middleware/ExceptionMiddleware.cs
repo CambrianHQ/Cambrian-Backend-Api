@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Cambrian.Api.Common;
+using Cambrian.Application.Exceptions;
 
 namespace Cambrian.Api.Middleware;
 

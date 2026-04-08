@@ -954,6 +954,18 @@ Active flags (seeded in `20260323030051_SeedCreatorIdentityFeatureFlags`):
 
 Evaluation: deterministic hash of `(userId, flagName)` checked against `RolloutPercentage`. Same user always gets same result for a given percentage.
 
+### 10.10 Git Workflow — Branch & PR Policy
+
+> ⚠️ **Never push or merge directly to `main`.** All changes must go through a pull request.
+
+| Rule | Detail |
+|------|--------|
+| **Feature branches** | Create a branch off `main` for every change (naming: `fix/description` or `feat/description`) |
+| **PR target** | All PRs target `staging` first for deployment verification |
+| **No direct main pushes** | `main` is updated only by merging a tested `staging` PR |
+| **PR flow** | Branch → PR to `staging` → verify on staging environment → PR/merge to `main` |
+| **AI assistants** | Must create a feature branch and open a PR to `staging` — never commit directly to `main` or `staging` |
+
 ---
 
 ## 12. Public API v1
