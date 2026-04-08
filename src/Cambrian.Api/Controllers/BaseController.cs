@@ -80,6 +80,9 @@ public class BaseController : ControllerBase
         // Local storage paths (/uploads/...) — resolve to absolute backend URL
         if (rawUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
             return ResolveAbsoluteUrl(rawUrl);
+        // Already an /images/ proxy path (e.g. seed data stores "/images/covers/...") — don't double-prefix
+        if (rawUrl.StartsWith("/images/", StringComparison.OrdinalIgnoreCase))
+            return ResolveAbsoluteUrl(rawUrl);
         // Absolute R2/S3 URL — extract the object key and proxy through /images/
         if (rawUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             rawUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
