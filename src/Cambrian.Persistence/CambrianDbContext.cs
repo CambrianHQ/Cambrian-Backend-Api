@@ -53,9 +53,20 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
+    public DbSet<WaitlistSignup> WaitlistSignups => Set<WaitlistSignup>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<WaitlistSignup>(e =>
+        {
+            e.HasKey(w => w.Id);
+            e.Property(w => w.Email).HasMaxLength(256).IsRequired();
+            e.HasIndex(w => w.Email).IsUnique();
+            e.Property(w => w.Source).HasMaxLength(100);
+            e.Property(w => w.CreatedAt).IsRequired();
+        });
 
         builder.Entity<Track>(e =>
         {

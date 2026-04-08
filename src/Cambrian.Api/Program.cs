@@ -342,6 +342,7 @@ builder.Services.AddMcpServer()
     .WithResources<Cambrian.Api.Mcp.CambrianMcpResources>();
 
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+builder.Services.AddScoped<IWaitlistService, WaitlistService>();
 
 // Repositories
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
@@ -359,6 +360,7 @@ builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
 builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
+builder.Services.AddScoped<IWaitlistRepository, WaitlistRepository>();
 builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 
 // Infrastructure

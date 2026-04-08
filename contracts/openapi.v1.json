@@ -5955,6 +5955,43 @@
         ]
       }
     },
+    "/waitlist": {
+      "post": {
+        "tags": [
+          "Waitlist"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Already on the waitlist (idempotent)."
+          },
+          "201": {
+            "description": "Newly added to the waitlist."
+          },
+          "400": {
+            "description": "Email missing or invalid."
+          }
+        },
+        "summary": "Public waitlist signup. Idempotent on email."
+      }
+    },
     "/wallet": {
       "get": {
         "tags": [
