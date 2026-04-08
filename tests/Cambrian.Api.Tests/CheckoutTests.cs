@@ -21,18 +21,24 @@ public sealed class CheckoutTests
 
     public CheckoutTests()
     {
-        var config = Substitute.For<IConfiguration>();
-        config["App:FrontendUrl"].Returns("http://localhost:5173");
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                ["Checkout:RequireSubscription"] = "false"
+            })
+            .Build();
         var purchases = Substitute.For<IPurchaseRepository>();
         purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
         var library = Substitute.For<ILibraryRepository>();
         var wallet = Substitute.For<IWalletRepository>();
         var licenseService = Substitute.For<ILicenseService>();
         var transactions = Substitute.For<ITransactionManager>();
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         var logger = Substitute.For<ILogger<CheckoutService>>();
-        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, transactions, Substitute.For<IEmailService>(), config, users, logger);
+        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, transactions, Substitute.For<IEmailService>(), subscriptions, config, users, logger);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
