@@ -516,12 +516,16 @@ public class AuthService : IAuthService
 
         var frontendUrl = _config["App:FrontendUrl"]?.TrimEnd('/') ?? "";
         var link = $"{frontendUrl}/auth/verify-email?token={Uri.EscapeDataString(plaintext)}";
+        // Defense in depth: HTML-encode the link before interpolating it into the
+        // href attribute. Uri.EscapeDataString covers URL syntax but not
+        // HTML-significant characters like " or & that could appear in frontendUrl.
+        var safeLink = System.Net.WebUtility.HtmlEncode(link);
 
         var html = $"""
             <h2>Verify your Cambrian email</h2>
             <p>Hi {System.Net.WebUtility.HtmlEncode(user.DisplayName ?? user.Email ?? "there")},</p>
             <p>Please verify your email address to unlock uploads, payouts, and API key creation.</p>
-            <p><a href="{link}">Verify email</a></p>
+            <p><a href="{safeLink}">Verify email</a></p>
             <p>This link expires in 24 hours. If you did not create a Cambrian account, you can ignore this email.</p>
             """;
         await _email.SendAsync(user.Email!, "Cambrian — Verify your email", html);
