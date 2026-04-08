@@ -451,6 +451,32 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-XSS-Protection"] = "0";
     if (!app.Environment.IsDevelopment())
         context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+
+    // Cross-Origin-Resource-Policy: emit "cross-origin" on image and audio
+    // responses so clients that bypass the Vercel image proxy (production CDN
+    // setups, third-party embeds, MCP/AI consumers) don't hit Opaque Response
+    // Blocking. Set via OnStarting so the Content-Type is populated by the
+    // time we inspect it. Also covers 302 redirect responses from /stream/*.
+    context.Response.OnStarting(() =>
+    {
+        var contentType = context.Response.ContentType;
+        var path = context.Request.Path.Value ?? string.Empty;
+
+        var isMedia =
+            (contentType is not null && (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                                      || contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)))
+            || path.StartsWith("/images/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/stream/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/uploads/covers/", StringComparison.OrdinalIgnoreCase);
+
+        if (isMedia)
+        {
+            context.Response.Headers["Cross-Origin-Resource-Policy"] = "cross-origin";
+        }
+
+        return Task.CompletedTask;
+    });
+
     await next();
 });
 
