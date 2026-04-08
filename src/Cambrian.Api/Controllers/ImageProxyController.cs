@@ -26,7 +26,7 @@ public class ImageProxyController : BaseController
     // Only allow image-like object keys — block path traversal and non-image paths.
     private static readonly HashSet<string> AllowedPrefixes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "covers", "avatars", "banners", "creator-profiles"
+        "covers", "avatars", "banners", "creator-profiles", "creator-covers", "images"
     };
 
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
