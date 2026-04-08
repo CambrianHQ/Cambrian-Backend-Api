@@ -152,7 +152,11 @@ public class AuthService : IAuthService
         {
             await IssueAndSendVerificationLinkAsync(user);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Failed to send initial email verification to {Email} — non-critical", user.Email);
+        }
+        catch (CryptographicException ex)
         {
             _logger.LogWarning(ex, "Failed to send initial email verification to {Email} — non-critical", user.Email);
         }
