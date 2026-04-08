@@ -97,6 +97,13 @@ public class PayoutService : IPayoutService
         if (requestCents < MinPayoutCents)
             throw new InvalidOperationException($"Minimum payout amount is ${MinPayoutCents / 100m:F2}.");
 
+        // Payout.AmountCents is int (~$21.4M ceiling). Refuse to silently truncate —
+        // an oversized request is almost certainly user error or a unit bug.
+        if (requestCents > int.MaxValue)
+            throw new InvalidOperationException(
+                $"Payout amount exceeds the maximum supported per-request size (${int.MaxValue / 100m:F2}). " +
+                "Split into multiple smaller payouts.");
+
         // Verify creator has a connected Stripe account
         var user = await _users.FindByIdAsync(creatorId)
             ?? throw new KeyNotFoundException("Creator not found.");

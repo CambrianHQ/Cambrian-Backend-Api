@@ -46,9 +46,12 @@ public sealed class GoogleOAuthIdempotencyTests
     }
 
     [Fact]
-    public async Task GoogleLoginAsync_CalledTwiceWithSameEmail_ReturnsSameUserId()
+    public async Task GoogleLoginAsync_CalledTwiceWithSameSubject_ReturnsSameUserId()
     {
         // --- Arrange -------------------------------------------------------
+        // Post-audit: Google login dedups by GoogleId (Subject), NOT by email.
+        // The mocked Users queryable returns capturedUser whenever its GoogleId
+        // matches the payload's Subject.
         var fakePayload = new GoogleJsonWebSignature.Payload
         {
             Email = "john@gmail.com",
@@ -57,25 +60,25 @@ public sealed class GoogleOAuthIdempotencyTests
             Name = "John Smith"
         };
 
-        // Track the user that gets created so we can return it on subsequent calls.
+        var backingList = new List<ApplicationUser>();
         ApplicationUser? capturedUser = null;
 
-        // Users.FirstOrDefaultAsync fallback when FindByEmailAsync returns null
-        _users.Users.Returns(new AsyncEmptyListQuery<ApplicationUser>());
+        // _users.Users — returns the live backingList wrapped as an async-capable IQueryable.
+        _users.Users.Returns(_ => new AsyncListQuery<ApplicationUser>(backingList));
 
-        // FindByEmailAsync returns whatever state capturedUser is in at call time.
-        // First call: capturedUser is null  → returns null (user not found yet)
-        // Second call: capturedUser is set  → returns the created user
+        // No existing local account by email — only Google identity counts.
         _users.FindByEmailAsync("john@gmail.com")
-            .Returns(_ => Task.FromResult<ApplicationUser?>(capturedUser));
+            .Returns(Task.FromResult<ApplicationUser?>(null));
 
-        // CreateAsync captures the user passed in and assigns an Id if missing.
+        // CreateAsync captures the user, assigns an Id, and adds it to the backing list
+        // so the GoogleId lookup on the second call finds it.
         _users.CreateAsync(Arg.Any<ApplicationUser>())
             .Returns(callInfo =>
             {
                 capturedUser = callInfo.Arg<ApplicationUser>();
                 if (string.IsNullOrEmpty(capturedUser.Id))
                     capturedUser.Id = Guid.NewGuid().ToString();
+                backingList.Add(capturedUser);
                 return Task.FromResult(IdentityResult.Success);
             });
 
@@ -90,7 +93,6 @@ public sealed class GoogleOAuthIdempotencyTests
         var second = await sut.GoogleLoginAsync(request);
 
         // --- Assert --------------------------------------------------------
-        // Same account returned both times
         Assert.Equal(first.UserId, second.UserId);
         Assert.Equal(first.Email, second.Email);
         Assert.Equal("john@gmail.com", first.Email);
@@ -100,25 +102,28 @@ public sealed class GoogleOAuthIdempotencyTests
     }
 
     [Fact]
-    public async Task GoogleLoginAsync_ExistingEmailAccount_LeavesUsernameIntact()
+    public async Task GoogleLoginAsync_ExistingLocalAccount_RefusesSilentLink()
     {
-        // Simulate a user who registered via email and set a username.
+        // Post-audit security fix: an existing local account (no GoogleId) must NOT
+        // be silently linked to an arbitrary Google identity that happens to share
+        // its email. The user must explicitly link from settings.
         var existingUser = new ApplicationUser
         {
             Id = Guid.NewGuid().ToString(),
             Email = "test@gmail.com",
-            UserName = "testuser", // real username, NOT email-sentinel
+            UserName = "testuser",
             DisplayName = "Test User",
             Role = "Creator",
             Tier = "free",
             GoogleId = null // not yet linked
         };
 
+        // No GoogleId match (the new lookup goes first).
+        _users.Users.Returns(new AsyncListQuery<ApplicationUser>(new List<ApplicationUser>()));
+
+        // But there IS a local account with this email.
         _users.FindByEmailAsync("test@gmail.com")
             .Returns(Task.FromResult<ApplicationUser?>(existingUser));
-
-        _users.UpdateAsync(Arg.Any<ApplicationUser>())
-            .Returns(Task.FromResult(IdentityResult.Success));
 
         var fakePayload = new GoogleJsonWebSignature.Payload
         {
@@ -132,16 +137,13 @@ public sealed class GoogleOAuthIdempotencyTests
             _users, _jwtOptions, _googleOptions,
             _subscriptions, fakePayload);
 
-        var result = await sut.GoogleLoginAsync(new GoogleLoginRequest { IdToken = "fake" });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sut.GoogleLoginAsync(new GoogleLoginRequest { IdToken = "fake" }));
+        Assert.Contains("already exists", ex.Message);
 
-        // UserId must be the EXISTING user's id — no new account created
-        Assert.Equal(Guid.Parse(existingUser.Id), result.UserId);
-        // Username must be preserved — not nulled out or replaced
-        Assert.Equal("testuser", result.Username);
-        // No duplicate account was created
+        // Critically: no UpdateAsync (silent linking) and no CreateAsync (duplicate).
+        await _users.DidNotReceive().UpdateAsync(Arg.Any<ApplicationUser>());
         await _users.DidNotReceive().CreateAsync(Arg.Any<ApplicationUser>());
-        // GoogleId was linked to the existing account
-        await _users.Received(1).UpdateAsync(Arg.Is<ApplicationUser>(u => u.GoogleId == fakePayload.Subject));
     }
 
     // ── Test infrastructure ──────────────────────────────────────────────────
@@ -163,6 +165,9 @@ public sealed class GoogleOAuthIdempotencyTests
             : base(users, jwtOptions, googleOptions, subscriptions,
                    Substitute.For<IEmailService>(),
                    Substitute.For<ISmsService>(),
+                   new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+                       .AddInMemoryCollection(new Dictionary<string, string?> { ["App:FrontendUrl"] = "https://test" })
+                       .Build(),
                    Substitute.For<ILogger<AuthService>>())
         {
             _fakePayload = fakePayload;
@@ -170,6 +175,32 @@ public sealed class GoogleOAuthIdempotencyTests
 
         protected override Task<GoogleJsonWebSignature.Payload> ValidateGoogleTokenAsync(string idToken)
             => Task.FromResult(_fakePayload);
+    }
+
+    /// <summary>
+    /// Minimal async-capable IQueryable wrapping a live List, so its contents can
+    /// mutate between calls (used to simulate user creation between Google login attempts).
+    /// </summary>
+    private sealed class AsyncListQuery<T> : IQueryable<T>, IAsyncEnumerable<T>
+    {
+        private readonly List<T> _items;
+        private readonly IQueryable<T> _q;
+
+        public AsyncListQuery(List<T> items)
+        {
+            _items = items;
+            _q = items.AsQueryable();
+        }
+
+        public Type ElementType => _q.ElementType;
+        public Expression Expression => _q.Expression;
+        IQueryProvider IQueryable.Provider => new AsyncQueryProvider<T>(_q.Provider);
+
+        IEnumerator<T> IEnumerable<T>.GetEnumerator() => _items.GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
+
+        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+            => new AsyncEnumerator<T>(_items.GetEnumerator());
     }
 
     /// <summary>

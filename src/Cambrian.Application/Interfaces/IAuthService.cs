@@ -40,4 +40,15 @@ public interface IAuthService
     /// Complete an email change by verifying the token that was sent to the new email address.
     /// </summary>
     Task VerifyEmailChangeAsync(string token);
+
+    /// <summary>
+    /// Send (or re-send) an initial email verification link to the authenticated user's
+    /// current email address. Idempotent — overwrites any pending token.
+    /// </summary>
+    Task SendEmailVerificationAsync(ClaimsPrincipal principal);
+
+    /// <summary>
+    /// Complete the initial email verification by validating the token from the sent link.
+    /// </summary>
+    Task VerifyEmailAsync(string token);
 }

@@ -24,6 +24,7 @@ public class WalletController : BaseController
         return OkResponse(balance);
     }
 
+    [Authorize(Policy = "VerifiedEmail")]
     [HttpPost("withdraw")]
     public async Task<IActionResult> Withdraw([FromBody] WithdrawRequest request)
     {
