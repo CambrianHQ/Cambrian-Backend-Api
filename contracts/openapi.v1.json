@@ -894,94 +894,6 @@
         }
       }
     },
-    "/ai-discovery/tracks/{id}": {
-      "get": {
-        "tags": [
-          "AiDiscovery"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/ai-discovery/tracks/{id}/licenses": {
-      "get": {
-        "tags": [
-          "AiDiscovery"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/ai-discovery/tracks/{id}/preview": {
-      "get": {
-        "tags": [
-          "AiDiscovery"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/ai-discovery/creators/{id}": {
-      "get": {
-        "tags": [
-          "AiDiscovery"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/analytics/track": {
       "post": {
         "tags": [
@@ -5024,29 +4936,6 @@
             "description": "OK"
           }
         }
-      }
-    },
-    "/images/{**key}": {
-      "get": {
-        "tags": [
-          "ImageProxy"
-        ],
-        "parameters": [
-          {
-            "name": "key",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "summary": "Server-side image proxy — fetches images from object storage by key (catch-all path)."
       }
     },
     "/licenses/{licenseId}": {
