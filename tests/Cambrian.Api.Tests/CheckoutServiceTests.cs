@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Cambrian.Application.DTOs.Checkout;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
@@ -18,18 +19,24 @@ public sealed class CheckoutServiceTests
 
     public CheckoutServiceTests()
     {
-        var config = Substitute.For<IConfiguration>();
-        config["App:FrontendUrl"].Returns("http://localhost:5173");
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                ["Checkout:RequireSubscription"] = "false"
+            })
+            .Build();
         var purchases = Substitute.For<IPurchaseRepository>();
         purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
         var library = Substitute.For<ILibraryRepository>();
         var wallet = Substitute.For<IWalletRepository>();
         var licenseService = Substitute.For<ILicenseService>();
         var transactions = Substitute.For<ITransactionManager>();
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
         var logger = Substitute.For<ILogger<CheckoutService>>();
-        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, transactions, Substitute.For<IEmailService>(), config, users, logger);
+        _sut = new CheckoutService(_gateway, _tracks, purchases, library, wallet, licenseService, transactions, Substitute.For<IEmailService>(), subscriptions, config, users, logger);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
@@ -198,5 +205,101 @@ public sealed class CheckoutServiceTests
 
         Assert.Equal("https://stripe.test/session-123", result.CheckoutUrl);
         Assert.Equal("created", result.Status);
+    }
+
+    private static CheckoutService BuildGatedSut(ISubscriptionRepository subscriptions, ITrackRepository? tracks = null)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                ["Checkout:RequireSubscription"] = "true"
+            })
+            .Build();
+        var purchases = Substitute.For<IPurchaseRepository>();
+        purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        return new CheckoutService(
+            Substitute.For<IPaymentGateway>(),
+            tracks ?? Substitute.For<ITrackRepository>(),
+            purchases,
+            Substitute.For<ILibraryRepository>(),
+            Substitute.For<IWalletRepository>(),
+            Substitute.For<ILicenseService>(),
+            Substitute.For<ITransactionManager>(),
+            Substitute.For<IEmailService>(),
+            subscriptions,
+            config,
+            users,
+            Substitute.For<ILogger<CheckoutService>>());
+    }
+
+    [Fact]
+    public async Task CreateCheckout_ThrowsForbidden_WhenNoActiveSubscription()
+    {
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        subscriptions.GetActiveAsync(Arg.Any<string>()).Returns((Subscription?)null);
+        var tracks = Substitute.For<ITrackRepository>();
+        var trackId = Guid.NewGuid();
+        tracks.GetByIdAsync(trackId).Returns(new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" });
+        var sut = BuildGatedSut(subscriptions, tracks);
+
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
+            sut.CreateCheckoutAsync(new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "standard" }, MakeUser()));
+
+        Assert.Equal("subscription_required", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateCheckout_Proceeds_WhenSubscriptionActive()
+    {
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        subscriptions.GetActiveAsync(Arg.Any<string>())
+            .Returns(new Subscription { UserId = "user-1", Plan = "paid", Status = "active" });
+        var tracks = Substitute.For<ITrackRepository>();
+        var trackId = Guid.NewGuid();
+        tracks.GetByIdAsync(trackId).Returns(new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" });
+        var gateway = Substitute.For<IPaymentGateway>();
+        gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns("https://stripe.test/checkout");
+        // Build manually to inject specific gateway
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                ["Checkout:RequireSubscription"] = "true"
+            })
+            .Build();
+        var purchases = Substitute.For<IPurchaseRepository>();
+        purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        var sut = new CheckoutService(gateway, tracks, purchases, Substitute.For<ILibraryRepository>(),
+            Substitute.For<IWalletRepository>(), Substitute.For<ILicenseService>(),
+            Substitute.For<ITransactionManager>(), Substitute.For<IEmailService>(),
+            subscriptions, config, users, Substitute.For<ILogger<CheckoutService>>());
+
+        // Should not throw — proceeds past the gate to the gateway call
+        await sut.CreateCheckoutAsync(new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "standard" }, MakeUser());
+
+        await gateway.Received(1).CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task CreateCheckout_Proceeds_WhenGateDisabled()
+    {
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        subscriptions.GetActiveAsync(Arg.Any<string>()).Returns((Subscription?)null);
+        var tracks = Substitute.For<ITrackRepository>();
+        var trackId = Guid.NewGuid();
+        tracks.GetByIdAsync(trackId).Returns(new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" });
+        // _sut already has gate disabled — just confirm no ForbiddenException
+        _tracks.GetByIdAsync(trackId).Returns(new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" });
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns("https://stripe.test/checkout");
+
+        // Should not throw
+        await _sut.CreateCheckoutAsync(new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "standard" }, MakeUser());
     }
 }

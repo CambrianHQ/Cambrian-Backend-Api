@@ -48,8 +48,13 @@ public sealed class CopyrightBuyoutTests
         ILicenseService? licenseService = null,
         IPaymentGateway? gateway = null)
     {
-        var config = Substitute.For<IConfiguration>();
-        config["App:FrontendUrl"].Returns("http://localhost:5173");
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                ["Checkout:RequireSubscription"] = "false"
+            })
+            .Build();
         tracks ??= Substitute.For<ITrackRepository>();
         purchases ??= Substitute.For<IPurchaseRepository>();
         purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
@@ -64,7 +69,8 @@ public sealed class CopyrightBuyoutTests
 
         return new CheckoutService(
             gateway, tracks, purchases, library, wallet,
-            licenseService, Substitute.For<ITransactionManager>(), Substitute.For<IEmailService>(), config,
+            licenseService, Substitute.For<ITransactionManager>(), Substitute.For<IEmailService>(),
+            Substitute.For<ISubscriptionRepository>(), config,
             Substitute.For<UserManager<ApplicationUser>>(Substitute.For<IUserStore<ApplicationUser>>(), null, null, null, null, null, null, null, null),
             Substitute.For<ILogger<CheckoutService>>());
     }

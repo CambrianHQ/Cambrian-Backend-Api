@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Checkout;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Pricing;
 using Cambrian.Domain.Constants;
@@ -21,6 +22,8 @@ public class CheckoutService : ICheckoutService
     private readonly ILicenseService _licenseService;
     private readonly ITransactionManager _transactions;
     private readonly IEmailService _email;
+    private readonly ISubscriptionRepository _subscriptions;
+    private readonly IConfiguration _config;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<CheckoutService> _logger;
     private readonly string _frontendUrl;
@@ -34,6 +37,7 @@ public class CheckoutService : ICheckoutService
         ILicenseService licenseService,
         ITransactionManager transactions,
         IEmailService email,
+        ISubscriptionRepository subscriptions,
         IConfiguration configuration,
         UserManager<ApplicationUser> users,
         ILogger<CheckoutService> logger)
@@ -46,6 +50,8 @@ public class CheckoutService : ICheckoutService
         _licenseService = licenseService;
         _transactions = transactions;
         _email = email;
+        _subscriptions = subscriptions;
+        _config = configuration;
         _users = users;
         _logger = logger;
         _frontendUrl = configuration["App:FrontendUrl"]
@@ -71,6 +77,14 @@ public class CheckoutService : ICheckoutService
         var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
             throw new UnauthorizedAccessException("User is not authenticated.");
+
+        var requireSub = _config.GetValue<bool>("Checkout:RequireSubscription", true);
+        if (requireSub)
+        {
+            var activeSub = await _subscriptions.GetActiveAsync(userId);
+            if (activeSub is null || activeSub.Status != "active")
+                throw new ForbiddenException("subscription_required");
+        }
 
         if (string.Equals(track.CreatorId, userId, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("You cannot purchase your own track.");
