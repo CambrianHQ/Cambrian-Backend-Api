@@ -108,10 +108,6 @@ public class CheckoutService : ICheckoutService
             _ => (int)(track.Price * 100)
         };
 
-        // ── INVARIANT: checkout amount must be positive ──
-        if (amountCents <= 0)
-            throw new InvalidOperationException("Track price must be greater than zero to start checkout.");
-
         var userEmail = user.FindFirstValue(ClaimTypes.Email)
                      ?? user.FindFirstValue("email");
 

@@ -456,15 +456,13 @@ app.Use(async (context, next) =>
 
 app.UseCors();
 
-// Serve static files — block direct access to uploaded audio only.
-// Images (avatars, banners, covers, creator-profiles) must be publicly accessible.
+// Serve static files — block direct access to uploaded audio
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
         var path = ctx.File.PhysicalPath ?? "";
-        // Only block audio/track files — allow all image paths through
-        if (path.Contains("uploads") && (path.Contains("audio") || path.Contains("tracks")))
+        if (path.Contains("uploads") && !path.Contains("covers"))
         {
             ctx.Context.Response.StatusCode = StatusCodes.Status403Forbidden;
             ctx.Context.Response.ContentLength = 0;

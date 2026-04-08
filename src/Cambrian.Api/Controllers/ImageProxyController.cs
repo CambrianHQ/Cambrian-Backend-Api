@@ -6,15 +6,17 @@ using Microsoft.Extensions.Caching.Memory;
 namespace Cambrian.Api.Controllers;
 
 /// <summary>
-/// Proxies image requests through the backend so that R2/S3 objects are served
+/// Proxies image requests through the backend so that S3/Supabase objects are served
 /// with proper CORS headers. This eliminates the need for bucket-level CORS
-/// configuration on Cloudflare R2.
+/// configuration on the storage provider.
 ///
 /// Paths:
 ///   GET /images/covers/{creatorId}/{file}
 ///   GET /images/avatars/{file}
 ///   GET /images/banners/{file}
 ///   GET /images/creator-profiles/{file}
+///   GET /images/creator-covers/{file}
+///   GET /images/images/{file}
 /// </summary>
 [Route("images")]
 [AllowAnonymous]

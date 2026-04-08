@@ -101,26 +101,10 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, audioUserId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        _logger.LogInformation("StreamAudio: streaming trackId={TrackId} via backend proxy", trackId);
+        _logger.LogInformation("StreamAudio: redirecting trackId={TrackId} to signed storage URL", trackId);
 
-        // Always proxy audio through the backend to avoid CORS issues with R2/S3.
-        // The browser's <audio> element follows redirects but cross-origin R2 URLs
-        // lack CORS headers, causing playback to fail silently.
-        StorageFile? file;
-        try
-        {
-            file = await _storage.OpenReadAsync(track.AudioUrl);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "StreamAudio: storage error for trackId={TrackId} key={Key}", trackId, track.AudioUrl);
-            return NotFoundResponse("audio_unavailable");
-        }
-
-        if (file is null)
-            return NotFoundResponse("audio_unavailable");
-
-        return File(file.Stream, file.ContentType, enableRangeProcessing: true);
+        var signedUrl = _storage.GenerateSignedUrl(track.AudioUrl);
+        return Redirect(signedUrl);
     }
 
     [Authorize]

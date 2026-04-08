@@ -13,7 +13,6 @@ public class PurchaseService : IPurchaseService
     private readonly IInvoiceRepository _invoiceRepo;
     private readonly ILicenseService _licenseService;
     private readonly IPaymentGateway _gateway;
-    private readonly ITransactionManager _transactions;
     private readonly ILogger<PurchaseService> _logger;
 
     public PurchaseService(
@@ -23,7 +22,6 @@ public class PurchaseService : IPurchaseService
         IInvoiceRepository invoiceRepo,
         ILicenseService licenseService,
         IPaymentGateway gateway,
-        ITransactionManager transactions,
         ILogger<PurchaseService> logger)
     {
         _purchases = purchases;
@@ -32,7 +30,6 @@ public class PurchaseService : IPurchaseService
         _invoiceRepo = invoiceRepo;
         _licenseService = licenseService;
         _gateway = gateway;
-        _transactions = transactions;
         _logger = logger;
     }
 
@@ -104,85 +101,68 @@ public class PurchaseService : IPurchaseService
             _ => (int)Math.Round(track.Price * 100, MidpointRounding.AwayFromZero)
         };
 
-        // ── INVARIANT: purchase amount must be positive ──
-        if (amountCents <= 0)
-            throw new InvalidOperationException("Track price must be greater than zero to complete a purchase.");
-
-        // ── Wrap fulfillment in a transaction so purchase + library + invoice + license are atomic ──
-        await using var txHandle = await _transactions.BeginTransactionAsync();
-        try
+        // Create purchase record
+        var purchase = new Purchase
         {
-            // Create purchase record
-            var purchase = new Purchase
-            {
-                Id = Guid.NewGuid(),
-                BuyerId = userId,
-                TrackId = trackId,
-                AmountCents = amountCents,
-                LicenseType = request.LicenseType ?? "non-exclusive",
-                PaymentMethod = request.PaymentMethod,
-                UsageType = request.UsageType ?? "personal",
-                Status = "completed",
-                StripeSessionId = request.StripeSessionId,
-                CreatedAt = DateTime.UtcNow
-            };
-            await _purchases.AddAsync(purchase);
+            Id = Guid.NewGuid(),
+            BuyerId = userId,
+            TrackId = trackId,
+            AmountCents = amountCents,
+            LicenseType = request.LicenseType ?? "non-exclusive",
+            PaymentMethod = request.PaymentMethod,
+            UsageType = request.UsageType ?? "personal",
+            Status = "completed",
+            StripeSessionId = request.StripeSessionId,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _purchases.AddAsync(purchase);
 
-            // Auto-add to library
-            await _library.AddAsync(new LibraryItem
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                TrackId = trackId,
-                PurchaseId = purchase.Id,
-                Title = track.Title,
-                Artist = track.Creator?.DisplayName ?? "Unknown",
-                AudioUrl = track.AudioUrl,
-                SavedAt = DateTime.UtcNow
-            });
-
-            // Auto-create invoice
-            var invoice = new Invoice
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                PurchaseId = purchase.Id,
-                AmountCents = purchase.AmountCents,
-                Currency = "usd",
-                Status = "paid",
-                IssuedAt = DateTime.UtcNow,
-                PaidAt = DateTime.UtcNow
-            };
-            await _invoiceRepo.AddAsync(invoice);
-
-            // Issue license certificate
-            await _licenseService.IssueCertificateAsync(
-                purchase.Id,
-                track.CambrianTrackId,
-                userId,
-                track.CreatorId,
-                purchase.LicenseType ?? "non-exclusive",
-                purchase.UsageType);
-
-            await _transactions.CommitAsync();
-
-            return new PurchaseResponse
-            {
-                Id = purchase.Id.ToString(),
-                TrackId = purchase.TrackId.ToString(),
-                TrackTitle = track.Title,
-                AmountCents = purchase.AmountCents,
-                LicenseType = purchase.LicenseType ?? "non-exclusive",
-                Status = purchase.Status,
-                CreatedAt = purchase.CreatedAt,
-                CompletedAt = DateTime.UtcNow
-            };
-        }
-        catch
+        // Auto-add to library
+        await _library.AddAsync(new LibraryItem
         {
-            await _transactions.RollbackAsync();
-            throw;
-        }
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TrackId = trackId,
+            Title = track.Title,
+            Artist = track.Creator?.DisplayName ?? "Unknown",
+            AudioUrl = track.AudioUrl,
+            SavedAt = DateTime.UtcNow
+        });
+
+        // Auto-create invoice
+        var invoice = new Invoice
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            PurchaseId = purchase.Id,
+            AmountCents = purchase.AmountCents,
+            Currency = "usd",
+            Status = "paid",
+            IssuedAt = DateTime.UtcNow,
+            PaidAt = DateTime.UtcNow
+        };
+        await _invoiceRepo.AddAsync(invoice);
+
+        // Issue license certificate
+        await _licenseService.IssueCertificateAsync(
+            purchase.Id,
+            track.CambrianTrackId,
+            userId,
+            track.CreatorId,
+            purchase.LicenseType ?? "non-exclusive",
+            purchase.UsageType);
+
+        return new PurchaseResponse
+        {
+            Id = purchase.Id.ToString(),
+            TrackId = purchase.TrackId.ToString(),
+            TrackTitle = track.Title,
+            AmountCents = purchase.AmountCents,
+            LicenseType = purchase.LicenseType ?? "non-exclusive",
+            Status = purchase.Status,
+            CreatedAt = purchase.CreatedAt,
+            CompletedAt = DateTime.UtcNow
+        };
     }
 
     public async Task<IReadOnlyCollection<PurchaseResponse>> GetByBuyerAsync(string userId)
