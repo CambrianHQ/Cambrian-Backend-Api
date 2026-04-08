@@ -1,5 +1,7 @@
 using Cambrian.Application.Configuration;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Pricing;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Cambrian.Domain.Enums;
 using Cambrian.Persistence;
@@ -19,7 +21,6 @@ public class StripeWebhookService : IWebhookService
     private const string EventInvoicePaymentFailed = "invoice.payment_failed";
     private const string EventChargeRefunded = "charge.refunded";
     private const string EventChargeDisputeCreated = "charge.dispute.created";
-    private const string StatusCompleted = "completed";
     private readonly CambrianDbContext _db;
     private readonly ILicenseService _licenseService;
     private readonly IEmailService _email;
@@ -311,7 +312,7 @@ public class StripeWebhookService : IWebhookService
             var purchase = await _db.Purchases.FindAsync(purchaseId);
             if (purchase is not null)
             {
-                purchase.Status = StatusCompleted;
+                purchase.Status = PurchaseStatuses.Completed;
                 purchase.UpdatedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync();
                 _logger.LogInformation("PURCHASE_TIMELINE: Purchase {PurchaseId} marked completed via legacy path", purchaseId);
@@ -439,9 +440,9 @@ public class StripeWebhookService : IWebhookService
         if (existingPurchase is not null)
         {
             _logger.LogInformation("Duplicate purchase skipped for user {UserId} track {TrackId}", userId, trackId);
-            if (existingPurchase.Status != StatusCompleted)
+            if (existingPurchase.Status != PurchaseStatuses.Completed)
             {
-                existingPurchase.Status = StatusCompleted;
+                existingPurchase.Status = PurchaseStatuses.Completed;
                 existingPurchase.CompletedAt = DateTime.UtcNow;
                 existingPurchase.UpdatedAt = DateTime.UtcNow;
                 existingPurchase.StripeSessionId ??= stripeSessionId;
@@ -499,7 +500,7 @@ public class StripeWebhookService : IWebhookService
             PaymentMethod = "stripe",
             LicenseType = licenseType,
             UsageType = usageType,
-            Status = StatusCompleted,
+            Status = PurchaseStatuses.Completed,
             StripeSessionId = stripeSessionId,
             CompletedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -539,9 +540,8 @@ public class StripeWebhookService : IWebhookService
                 ? TierManifest.For(creatorUser.CreatorTier).FeeRate
                 : TierManifest.Free.FeeRate;
             var grossCents = amountTotal.Value;
-            // Floor at 0: a corrupted TierManifest with feeRate > 1 would otherwise
-            // produce a negative credit and silently debit the creator's wallet.
-            var creatorCents = Math.Max(0L, (long)Math.Floor(grossCents * (1 - platformFeeRate)));
+            // Single source of truth: CreatorEarningsCalculator.
+            var creatorCents = CreatorEarningsCalculator.ComputeCreatorCents(grossCents, platformFeeRate);
 
             if (creatorCents > 0)
             {
@@ -822,7 +822,7 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        purchase.Status = "refunded";
+        purchase.Status = PurchaseStatuses.Refunded;
         purchase.UpdatedAt = DateTime.UtcNow;
 
         // Remove library access
@@ -870,7 +870,8 @@ public class StripeWebhookService : IWebhookService
                     var feeRate = creatorUser is not null
                         ? TierManifest.For(creatorUser.CreatorTier).FeeRate
                         : TierManifest.Free.FeeRate;
-                    clawbackCents = (long)Math.Floor(purchase.AmountCents * (1 - feeRate));
+                    // Single source of truth: must match the credit math the original sale used.
+                    clawbackCents = CreatorEarningsCalculator.ComputeCreatorCents(purchase.AmountCents, feeRate);
                     _logger.LogWarning(
                         "Refund clawback: no original credit transaction found for purchase {PurchaseId}; computed {Cents}c from purchase amount.",
                         purchase.Id, clawbackCents);
@@ -956,7 +957,7 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        purchase.Status = "disputed";
+        purchase.Status = PurchaseStatuses.Disputed;
         purchase.UpdatedAt = DateTime.UtcNow;
 
         // SECURITY: Claw back creator wallet credit on dispute.

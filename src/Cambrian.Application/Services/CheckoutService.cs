@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Pricing;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
@@ -79,7 +81,7 @@ public class CheckoutService : ICheckoutService
         var duplicate = existingPurchases
             .FirstOrDefault(p => p.TrackId == trackId
                               && p.LicenseType == request.LicenseType
-                              && p.Status == "completed");
+                              && p.Status == PurchaseStatuses.Completed);
         if (duplicate is not null)
             throw new InvalidOperationException("You already own this license for this track.");
 
@@ -206,9 +208,9 @@ public class CheckoutService : ICheckoutService
         if (existingPurchase is not null)
         {
             // Already fulfilled — ensure it's marked completed
-            if (existingPurchase.Status != "completed")
+            if (existingPurchase.Status != PurchaseStatuses.Completed)
             {
-                existingPurchase.Status = "completed";
+                existingPurchase.Status = PurchaseStatuses.Completed;
                 await _purchases.UpdateAsync(existingPurchase);
             }
 
@@ -299,7 +301,7 @@ public class CheckoutService : ICheckoutService
                 PaymentMethod = "stripe",
                 LicenseType = licenseType,
                 UsageType = usageType,
-                Status = "completed",
+                Status = PurchaseStatuses.Completed,
                 StripeSessionId = sessionId,
                 CompletedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow
@@ -337,9 +339,10 @@ public class CheckoutService : ICheckoutService
                     ? TierManifest.For(creatorUser.CreatorTier).FeeRate
                     : TierManifest.Free.FeeRate;
                 var grossCents = session.AmountTotal.Value;
-                // Floor at 0: a corrupted TierManifest with feeRate > 1 would otherwise
-                // produce a negative credit and silently debit the creator's wallet.
-                var creatorCents = Math.Max(0L, (long)Math.Floor(grossCents * (1 - platformFeeRate)));
+                // Single source of truth: see CreatorEarningsCalculator. Floors at 0
+                // and uses per-purchase Math.Floor so the dashboard total matches the
+                // sum of WalletTransaction credits.
+                var creatorCents = CreatorEarningsCalculator.ComputeCreatorCents(grossCents, platformFeeRate);
 
                 if (creatorCents > 0)
                 {
