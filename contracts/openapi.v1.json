@@ -131,6 +131,19 @@
         }
       }
     },
+    "/admin/storage-diagnostics": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Admin diagnostic — checks object-storage configuration and connectivity."
+      }
+    },
     "/admin/audit": {
       "get": {
         "tags": [
@@ -5013,6 +5026,29 @@
         }
       }
     },
+    "/images/{**key}": {
+      "get": {
+        "tags": [
+          "ImageProxy"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Server-side image proxy — fetches images from object storage by key (catch-all path)."
+      }
+    },
     "/licenses/{licenseId}": {
       "get": {
         "tags": [
@@ -5131,6 +5167,29 @@
             "description": "OK"
           }
         }
+      }
+    },
+    "/licenses/verify/{licenseId}": {
+      "get": {
+        "tags": [
+          "Licenses"
+        ],
+        "parameters": [
+          {
+            "name": "licenseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Publicly verify that a license certificate exists and is valid."
       }
     },
     "/payments/checkout": {
