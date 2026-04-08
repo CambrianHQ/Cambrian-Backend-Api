@@ -1,5 +1,6 @@
 using Cambrian.Application.DTOs.Admin;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -30,8 +31,8 @@ public class AdminRepository : IAdminRepository
         var totalUsers = await _users.Users.CountAsync();
         var activeCreators = await _users.Users.CountAsync(u => u.Role == "Creator" || u.VerifiedCreator);
         var tracksUploaded = await _db.Tracks.CountAsync();
-        var licensesSold = await _db.Purchases.CountAsync(p => p.Status == "completed");
-        var totalRevenue = await _db.Purchases.Where(p => p.Status == "completed").SumAsync(p => (double)p.AmountCents) / 100.0;
+        var licensesSold = await _db.Purchases.CountAsync(p => p.Status == PurchaseStatuses.Completed);
+        var totalRevenue = await _db.Purchases.Where(p => p.Status == PurchaseStatuses.Completed).SumAsync(p => (double)p.AmountCents) / 100.0;
         var pendingPayouts = await _db.Payouts.Where(p => p.Status == "pending").SumAsync(p => p.AmountCents) / 100.0;
 
         return new AdminDashboardSummary

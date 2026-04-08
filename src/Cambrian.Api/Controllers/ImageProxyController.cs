@@ -40,6 +40,12 @@ public class ImageProxyController : BaseController
         _cache = cache;
     }
 
+    // Hidden from Swagger / OpenAPI: this is a server-side catch-all proxy
+    // (path uses "{**key}" syntax) that Swashbuckle and openapi generators
+    // do not represent cleanly. The contract validators have explicit
+    // [ApiExplorerSettings(IgnoreApi = true)] support so this stays out of
+    // both the architecture-compliance check and the breaking-change diff.
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpGet("{**key}")]
     [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
     public async Task<IActionResult> GetImage(string key)
