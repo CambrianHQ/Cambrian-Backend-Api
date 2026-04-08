@@ -880,6 +880,18 @@ public class StripeWebhookService : IWebhookService
 
             if (!string.IsNullOrEmpty(clawbackUserId) && clawbackCents > 0)
             {
+                // Concurrency guard: under default ReadCommitted isolation, two refund
+                // webhooks for two different purchases by the same creator could both
+                // observe the same `currentBalance` and both proceed to debit, still
+                // pushing the wallet negative. Take a row-level lock on the creator's
+                // user row so any other refund/dispute clawback for the same creator
+                // serializes behind us. The lock is released on outer-tx commit/rollback.
+                if (_db.Database.IsRelational())
+                {
+                    await _db.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT 1 FROM \"AspNetUsers\" WHERE \"Id\" = {clawbackUserId} FOR UPDATE");
+                }
+
                 // Underflow guard: if the creator has already withdrawn the credit
                 // (or their balance is otherwise lower than the clawback), debit only
                 // what is actually present and emit a [RECONCILE] log so finance can
@@ -973,6 +985,15 @@ public class StripeWebhookService : IWebhookService
 
             if (disputeCredit is not null)
             {
+                // Concurrency guard: serialize concurrent dispute/refund clawbacks for
+                // the same creator via a row-level lock on AspNetUsers, so the balance
+                // read below cannot race with another in-flight clawback transaction.
+                if (_db.Database.IsRelational())
+                {
+                    await _db.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT 1 FROM \"AspNetUsers\" WHERE \"Id\" = {disputeCredit.UserId} FOR UPDATE");
+                }
+
                 // Underflow guard — never push the wallet below 0. Surface the shortfall
                 // for manual recovery via [RECONCILE] log.
                 var owedCents = disputeCredit.AmountCents;
