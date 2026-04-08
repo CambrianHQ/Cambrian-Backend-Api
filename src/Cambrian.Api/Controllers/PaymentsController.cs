@@ -22,6 +22,7 @@ public class PaymentsController : BaseController
         _purchaseService = purchaseService;
     }
 
+    [Authorize(Policy = "VerifiedEmail")]
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(PaymentCheckoutRequest request)
     {
@@ -46,6 +47,7 @@ public class PaymentsController : BaseController
         return OkResponse(await _payments.GetResultAsync(status, trackId));
     }
 
+    [Authorize(Policy = "VerifiedEmail")]
     [HttpPost("process")]
     public async Task<IActionResult> Process(PaymentProcessRequest request)
     {
@@ -56,6 +58,7 @@ public class PaymentsController : BaseController
 
     // --- Purchases (merged from /purchases/* OpenAPI routes) ---
 
+    [Authorize(Policy = "VerifiedEmail")]
     [HttpPost("/purchases")]
     public async Task<IActionResult> CreatePurchase(PurchaseCreateRequest request)
     {

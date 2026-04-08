@@ -92,6 +92,18 @@ public class ApplicationUser : IdentityUser
     /// <summary>UTC expiry of the email change token (24 hours from issuance).</summary>
     public DateTime? EmailChangeTokenExpiry { get; set; }
 
+    // ── Initial email verification (separate from email-change above) ──
+
+    /// <summary>
+    /// SHA-256 hash (64 hex chars) of the initial email verification token sent on
+    /// registration. Null when no verification is pending. Cleared after successful
+    /// verification.
+    /// </summary>
+    public string? EmailVerificationToken { get; set; }
+
+    /// <summary>UTC expiry of the email verification token (24 hours from issuance).</summary>
+    public DateTime? EmailVerificationTokenExpiry { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();

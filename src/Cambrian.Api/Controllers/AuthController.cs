@@ -613,6 +613,47 @@ public class AuthController : BaseController
     }
 
     /// <summary>
+    /// Re-send the initial email verification link to the authenticated user's email.
+    /// (The first link is sent automatically on registration.)
+    /// </summary>
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPost("send-verification-email")]
+    public async Task<IActionResult> SendVerificationEmail()
+    {
+        try
+        {
+            await _auth.SendEmailVerificationAsync(User);
+            return MessageResponse("Verification email sent.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErrorResponse(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Complete the initial email verification by validating the link token.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("/auth/verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return ErrorResponse("Verification token is required.");
+
+        try
+        {
+            await _auth.VerifyEmailAsync(token);
+            return MessageResponse("Email verified successfully. You can now access all features.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErrorResponse(ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Update the current user's display name.
     /// </summary>
     [Authorize]

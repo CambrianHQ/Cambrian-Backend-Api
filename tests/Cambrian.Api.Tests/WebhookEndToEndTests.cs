@@ -162,6 +162,7 @@ public sealed class WebhookEndToEndTests : IClassFixture<CambrianApiFixture>
         var client = CreateClient();
         var payload = $$"""
         {
+            "id": "evt_wh_sub_{{Guid.NewGuid():N}}",
             "type": "checkout.session.completed",
             "data": {
                 "object": {

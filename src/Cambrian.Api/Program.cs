@@ -168,11 +168,26 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
             ValidIssuer = jwt.Issuer,
             ValidAudience = jwt.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
-            ClockSkew = TimeSpan.FromMinutes(2)
+            // Tightened from 2 minutes — expired tokens were valid for 120s after expiry,
+            // giving an attacker a wide replay window. 30s tolerates clock drift between
+            // Render's nodes without meaningfully extending token lifetime.
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // "VerifiedEmail" — applied via [Authorize(Policy = "VerifiedEmail")] on
+    // high-stakes write endpoints (Upload, Checkout, Payouts, ApiKeys, Wallet)
+    // so an unverified registration cannot trigger purchases or payouts.
+    // The claim is set in AuthService.GenerateJwt from ApplicationUser.EmailVerified.
+    options.AddPolicy("VerifiedEmail", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+            ctx.User.HasClaim(c => c.Type == "email_verified" && c.Value == "true"));
+    });
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddControllers();
 
@@ -459,7 +474,15 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.UseRateLimiter();
-app.UseMiddleware<DevAuthMiddleware>();
+
+// DevAuthMiddleware grants admin via "Bearer test-audit-token" for local audits.
+// It MUST never be reachable from non-Development pipelines, even though the middleware
+// itself short-circuits on env check — defense in depth.
+if (app.Environment.IsDevelopment())
+{
+    app.UseMiddleware<DevAuthMiddleware>();
+}
+
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseAuthorization();
