@@ -16,19 +16,19 @@ public sealed class BillingTierTests
         var normalized = tier?.ToLowerInvariant() ?? "";
         return normalized switch
         {
-            "paid" => (499, "Paid Listener"),
-            "creator" or "pro" => (1499, "Pro Creator"),
+            "paid" => (999, "Buyer Subscription"),
+            "creator" or "pro" => (999, "Pro Creator"),
             _ => (0, "")
         };
     }
 
     [Theory]
-    [InlineData("paid", 499, "Paid Listener")]
-    [InlineData("Paid", 499, "Paid Listener")]
-    [InlineData("PAID", 499, "Paid Listener")]
-    [InlineData("creator", 1499, "Pro Creator")]
-    [InlineData("Creator", 1499, "Pro Creator")]
-    [InlineData("CREATOR", 1499, "Pro Creator")]
+    [InlineData("paid", 999, "Buyer Subscription")]
+    [InlineData("Paid", 999, "Buyer Subscription")]
+    [InlineData("PAID", 999, "Buyer Subscription")]
+    [InlineData("creator", 999, "Pro Creator")]
+    [InlineData("Creator", 999, "Pro Creator")]
+    [InlineData("CREATOR", 999, "Pro Creator")]
     public void ValidTiers_MapToCorrectPricing(string tier, int expectedCents, string expectedName)
     {
         var (cents, name) = MapTier(tier);

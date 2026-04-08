@@ -106,7 +106,9 @@ public class AuthService : IAuthService
             Username = needsUsername ? null : user.UserName,
             DisplayName = user.DisplayName,
             PhoneNumber = user.PhoneNumber,
-            IsNewUser = isNewUser
+            IsNewUser = isNewUser,
+            HasPassword = !string.IsNullOrEmpty(user.PasswordHash),
+            GoogleLinked = !string.IsNullOrEmpty(user.GoogleId)
         };
     }
 
@@ -182,7 +184,9 @@ public class AuthService : IAuthService
             DisplayName = user.DisplayName,
             PhoneNumber = user.PhoneNumber,
             IsNewUser = true,  // just registered, no custom username yet
-            WelcomeEmailFailed = welcomeEmailFailed
+            WelcomeEmailFailed = welcomeEmailFailed,
+            HasPassword = !string.IsNullOrEmpty(user.PasswordHash),
+            GoogleLinked = !string.IsNullOrEmpty(user.GoogleId)
         };
     }
 
@@ -235,7 +239,9 @@ public class AuthService : IAuthService
             Tier = tier.ToLowerInvariant(),
             Role = profile.Role ?? "User",
             DisplayName = user.DisplayName,
-            PhoneNumber = user.PhoneNumber
+            PhoneNumber = user.PhoneNumber,
+            HasPassword = !string.IsNullOrEmpty(user.PasswordHash),
+            GoogleLinked = !string.IsNullOrEmpty(user.GoogleId)
         };
     }
 
@@ -748,7 +754,9 @@ public class AuthService : IAuthService
             Username = needsUsername ? null : user.UserName,
             DisplayName = user.DisplayName,
             PhoneNumber = user.PhoneNumber,
-            IsNewUser = isNewGoogleUser
+            IsNewUser = isNewGoogleUser,
+            HasPassword = !string.IsNullOrEmpty(user.PasswordHash),
+            GoogleLinked = !string.IsNullOrEmpty(user.GoogleId)
         };
     }
 

@@ -23,7 +23,7 @@ public sealed class PurchaseServiceTests
             .Returns(new CheckoutSessionInfo { SessionId = "sess_test", Status = "paid" });
 
         _sut = new PurchaseService(_purchases, _tracks, _library, _invoices,
-            Substitute.For<ILicenseService>(), _gateway, Substitute.For<ITransactionManager>(), Substitute.For<ILogger<PurchaseService>>());
+            Substitute.For<ILicenseService>(), _gateway, Substitute.For<ILogger<PurchaseService>>());
     }
 
     private Track MakeTrack(Guid? id = null) => new()
