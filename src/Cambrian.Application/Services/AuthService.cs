@@ -147,16 +147,24 @@ public class AuthService : IAuthService
             _logger.LogWarning(ex, "Failed to send welcome email to {Email} — non-critical", user.Email);
         }
 
-        // Send initial email verification link (non-critical — user can re-request later)
+        // Send initial email verification link (non-critical — user can re-request later
+        // via POST /auth/send-verification-email). The email is sent through Resend / SMTP /
+        // Console depending on environment, each of which can throw a different exception
+        // family on transient failure. We catch the realistic operational exceptions here
+        // so registration is never blocked by an email-provider hiccup, but deliberately
+        // do NOT swallow truly fatal errors (OutOfMemoryException, etc.) — those propagate.
         try
         {
             await IssueAndSendVerificationLinkAsync(user);
         }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Failed to send initial email verification to {Email} — non-critical", user.Email);
-        }
-        catch (CryptographicException ex)
+        catch (Exception ex) when (
+            ex is InvalidOperationException
+            or CryptographicException
+            or System.Net.Http.HttpRequestException
+            or System.Net.Sockets.SocketException
+            or System.IO.IOException
+            or TimeoutException
+            or TaskCanceledException)
         {
             _logger.LogWarning(ex, "Failed to send initial email verification to {Email} — non-critical", user.Email);
         }
