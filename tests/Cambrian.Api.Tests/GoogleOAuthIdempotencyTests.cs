@@ -166,7 +166,7 @@ public sealed class GoogleOAuthIdempotencyTests
             : base(users, jwtOptions, googleOptions, subscriptions,
                    Substitute.For<IEmailService>(),
                    Substitute.For<ISmsService>(),
-                   new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+                   new ConfigurationBuilder()
                        .AddInMemoryCollection(new Dictionary<string, string?> { ["App:FrontendUrl"] = "https://test" })
                        .Build(),
                    Substitute.For<ILogger<AuthService>>())
