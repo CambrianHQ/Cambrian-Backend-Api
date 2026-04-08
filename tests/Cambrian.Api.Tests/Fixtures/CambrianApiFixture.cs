@@ -39,6 +39,7 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
                 ["Jwt:Key"] = TestJwtKey,
                 ["Jwt:Issuer"] = TestJwtIssuer,
                 ["Jwt:Audience"] = TestJwtAudience,
+                ["Checkout:RequireSubscription"] = "false",
             });
         });
 

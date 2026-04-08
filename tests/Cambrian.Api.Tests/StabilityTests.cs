@@ -301,8 +301,13 @@ public sealed class StabilityTests
     {
         tracks = Substitute.For<ITrackRepository>();
         gateway = Substitute.For<IPaymentGateway>();
-        var config = Substitute.For<IConfiguration>();
-        config["App:FrontendUrl"].Returns("http://localhost:5173");
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                ["Checkout:RequireSubscription"] = "false"
+            })
+            .Build();
         var purchases = Substitute.For<IPurchaseRepository>();
         purchases.GetByBuyerIdAsync(Arg.Any<string>()).Returns(new List<Purchase>());
         var store = Substitute.For<IUserStore<ApplicationUser>>();
@@ -311,7 +316,7 @@ public sealed class StabilityTests
         return new CheckoutService(gateway, tracks, purchases,
             Substitute.For<ILibraryRepository>(), Substitute.For<IWalletRepository>(),
             Substitute.For<ILicenseService>(), Substitute.For<ITransactionManager>(),
-            Substitute.For<IEmailService>(), config, users,
+            Substitute.For<IEmailService>(), Substitute.For<ISubscriptionRepository>(), config, users,
             Substitute.For<ILogger<CheckoutService>>());
     }
 
@@ -353,8 +358,13 @@ public sealed class StabilityTests
         var tracks = Substitute.For<ITrackRepository>();
         var purchases = Substitute.For<IPurchaseRepository>();
         var gateway = Substitute.For<IPaymentGateway>();
-        var config = Substitute.For<IConfiguration>();
-        config["App:FrontendUrl"].Returns("http://localhost:5173");
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                ["Checkout:RequireSubscription"] = "false"
+            })
+            .Build();
         var store = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
 
@@ -368,7 +378,7 @@ public sealed class StabilityTests
         var sut = new CheckoutService(gateway, tracks, purchases,
             Substitute.For<ILibraryRepository>(), Substitute.For<IWalletRepository>(),
             Substitute.For<ILicenseService>(), Substitute.For<ITransactionManager>(),
-            Substitute.For<IEmailService>(), config, users,
+            Substitute.For<IEmailService>(), Substitute.For<ISubscriptionRepository>(), config, users,
             Substitute.For<ILogger<CheckoutService>>());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
