@@ -218,6 +218,29 @@ public class UploadService : IUploadService
                 string.IsNullOrWhiteSpace(imgMime) ? "image/jpeg" : imgMime);
         }
 
+        // ── INVARIANT: Track title is required ──
+        if (string.IsNullOrWhiteSpace(request.Title))
+            throw new ArgumentException("Track title is required.");
+
+        // ── Price range validation ($0.50 – $50,000) ──
+        const int MinPriceCents = 50;        // $0.50
+        const int MaxPriceCents = 5_000_000; // $50,000
+
+        static void ValidatePrice(decimal? dollars, string fieldName, int minCents, int maxCents)
+        {
+            if (!dollars.HasValue) return;
+            var cents = (int)Math.Round(dollars.Value * 100, MidpointRounding.AwayFromZero);
+            if (cents > 0 && cents < minCents)
+                throw new ArgumentException($"{fieldName} must be at least ${minCents / 100m:F2}.");
+            if (cents > maxCents)
+                throw new ArgumentException($"{fieldName} must not exceed ${maxCents / 100m:F2}.");
+        }
+
+        ValidatePrice(request.Price, "Price", MinPriceCents, MaxPriceCents);
+        ValidatePrice(request.NonExclusivePrice, "Non-exclusive price", MinPriceCents, MaxPriceCents);
+        ValidatePrice(request.ExclusivePrice, "Exclusive price", MinPriceCents, MaxPriceCents);
+        ValidatePrice(request.CopyrightBuyoutPrice, "Copyright buyout price", MinPriceCents, MaxPriceCents);
+
         // Derive cents from the dedicated price fields when provided,
         // otherwise fall back to the generic Price so tracks uploaded via the
         // single-price form still display correctly on the marketplace.
