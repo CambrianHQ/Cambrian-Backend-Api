@@ -477,7 +477,16 @@ public class StripeWebhookService : IWebhookService
 
         // ── Create completed Purchase ──
         // Stripe AmountTotal is long. Purchase.AmountCents is int (~$21.4M ceiling).
-        // Refuse to silently truncate — mark as dead-letter for manual review.
+        // Refuse to silently truncate.
+        //
+        // Throw rather than return: a `return` here would let ProcessEventAsync
+        // mark the webhook event as "completed" and ack 200 to Stripe — the buyer
+        // would have paid but the purchase row, library item, license, and creator
+        // credit would all be missing, and the failure would not appear in the
+        // webhook ledger for operators to find. Throwing causes the outer handler
+        // to mark the event as "failed", roll back the transaction, and re-throw
+        // (Stripe receives 500 → retries within its 3-day window → operators see
+        // the [DEAD-LETTER] log and can intervene before the retry budget runs out).
         var rawAmount = amountTotal ?? 0;
         if (rawAmount > int.MaxValue || rawAmount < 0)
         {
@@ -486,7 +495,9 @@ public class StripeWebhookService : IWebhookService
                 + "refusing to truncate. User={UserId} Track={TrackId} Session={SessionId}. "
                 + "Manual reconciliation + refund required.",
                 rawAmount, userId, trackId, stripeSessionId);
-            return;
+            throw new InvalidOperationException(
+                $"Stripe purchase amount {rawAmount}c is out of range (>int.MaxValue or negative). "
+                + $"Session={stripeSessionId}. Manual reconciliation required.");
         }
         var safeAmountCents = (int)rawAmount;
         _logger.LogInformation("PURCHASE_TIMELINE: Creating purchase userId:{UserId} trackId:{TrackId} license:{LicenseType} amount:{AmountCents}c sessionId:{SessionId}",
