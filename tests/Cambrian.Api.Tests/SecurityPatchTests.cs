@@ -370,8 +370,11 @@ public sealed class SecurityPatchTests
             var sms = Substitute.For<ISmsService>();
             var google = Options.Create(new GoogleSettings { ClientId = "g-client-id" });
             var logger = Substitute.For<ILogger<AuthService>>();
+            var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["App:FrontendUrl"] = "https://test" })
+                .Build();
 
-            Sut = new AuthService(Users, jwtOpts, google, subs, Email, sms, logger);
+            Sut = new AuthService(Users, jwtOpts, google, subs, Email, sms, config, logger);
         }
 
         public ClaimsPrincipal MakeUserPrincipal(string userId) =>

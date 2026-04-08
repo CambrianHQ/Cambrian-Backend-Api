@@ -276,12 +276,26 @@ public class CheckoutService : ICheckoutService
             }
 
             // ── Create Purchase record ──
+            // Stripe AmountTotal is long. Purchase.AmountCents is int (~$21.4M ceiling).
+            // Refuse to silently truncate — fail the confirm so the buyer is not charged
+            // for an unfulfilled purchase. Stripe will retry / manual reconciliation handles
+            // the rare overflow case.
+            var sessionRawAmount = session.AmountTotal ?? 0;
+            if (sessionRawAmount > int.MaxValue || sessionRawAmount < 0)
+            {
+                _logger.LogError(
+                    "[CHECKOUT-OVERFLOW] Session {SessionId} amount {Amount}c exceeds int.MaxValue or is negative — refusing to fulfill.",
+                    sessionId, sessionRawAmount);
+                await _transactions.RollbackAsync();
+                return new CheckoutConfirmResponse { Status = "failed", SessionId = sessionId };
+            }
+
             var purchase = new Purchase
             {
                 Id = Guid.NewGuid(),
                 BuyerId = userId,
                 TrackId = trackId,
-                AmountCents = (int)(session.AmountTotal ?? 0),
+                AmountCents = (int)sessionRawAmount,
                 PaymentMethod = "stripe",
                 LicenseType = licenseType,
                 UsageType = usageType,
@@ -323,7 +337,9 @@ public class CheckoutService : ICheckoutService
                     ? TierManifest.For(creatorUser.CreatorTier).FeeRate
                     : TierManifest.Free.FeeRate;
                 var grossCents = session.AmountTotal.Value;
-                var creatorCents = (long)Math.Floor(grossCents * (1 - platformFeeRate));
+                // Floor at 0: a corrupted TierManifest with feeRate > 1 would otherwise
+                // produce a negative credit and silently debit the creator's wallet.
+                var creatorCents = Math.Max(0L, (long)Math.Floor(grossCents * (1 - platformFeeRate)));
 
                 if (creatorCents > 0)
                 {

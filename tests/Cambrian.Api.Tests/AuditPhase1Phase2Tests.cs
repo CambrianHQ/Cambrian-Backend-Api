@@ -56,9 +56,12 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
         var subscriptions = Substitute.For<ISubscriptionRepository>();
         var sms = Substitute.For<ISmsService>();
         var authLogger = Substitute.For<ILogger<AuthService>>();
+        var authConfig = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["App:FrontendUrl"] = "https://test" })
+            .Build();
 
         _authService = new AuthService(
-            _users, jwtOptions, googleOptions, subscriptions, _emailService, sms, authLogger);
+            _users, jwtOptions, googleOptions, subscriptions, _emailService, sms, authConfig, authLogger);
     }
 
     public void Dispose() => _db.Dispose();

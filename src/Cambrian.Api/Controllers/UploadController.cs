@@ -32,7 +32,7 @@ public class UploadController : BaseController
         _logger = logger;
     }
 
-    [Authorize]
+    [Authorize(Policy = "VerifiedEmail")]
     [RequireCreatorTier]
     [RequireUsername]
     [HttpPost("upload")]

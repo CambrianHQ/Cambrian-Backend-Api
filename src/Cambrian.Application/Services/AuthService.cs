@@ -25,6 +25,7 @@ public class AuthService : IAuthService
     private readonly IEmailService _email;
     private readonly ISmsService _sms;
     private readonly ILogger<AuthService> _logger;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration _config;
 
     /// <summary>How long a password reset code is valid.</summary>
     private static readonly TimeSpan ResetCodeLifetime = TimeSpan.FromMinutes(15);
@@ -44,6 +45,7 @@ public class AuthService : IAuthService
         ISubscriptionRepository subscriptions,
         IEmailService email,
         ISmsService sms,
+        Microsoft.Extensions.Configuration.IConfiguration config,
         ILogger<AuthService> logger)
     {
         _users = users;
@@ -52,6 +54,7 @@ public class AuthService : IAuthService
         _subscriptions = subscriptions;
         _email = email;
         _sms = sms;
+        _config = config;
         _logger = logger;
 
         var hasClientId = !string.IsNullOrWhiteSpace(_googleSettings.ClientId);
@@ -142,6 +145,16 @@ public class AuthService : IAuthService
         {
             welcomeEmailFailed = true;
             _logger.LogWarning(ex, "Failed to send welcome email to {Email} — non-critical", user.Email);
+        }
+
+        // Send initial email verification link (non-critical — user can re-request later)
+        try
+        {
+            await IssueAndSendVerificationLinkAsync(user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send initial email verification to {Email} — non-critical", user.Email);
         }
 
         var token = GenerateJwt(user);
@@ -427,6 +440,81 @@ public class AuthService : IAuthService
         await _users.UpdateAsync(user);
     }
 
+    /// <inheritdoc />
+    public async Task SendEmailVerificationAsync(ClaimsPrincipal principal)
+    {
+        var user = await GetRequiredUser(principal);
+
+        if (user.EmailVerified)
+            throw new InvalidOperationException("Email is already verified.");
+
+        if (string.IsNullOrEmpty(user.Email))
+            throw new InvalidOperationException("Account has no email address on file.");
+
+        await IssueAndSendVerificationLinkAsync(user);
+    }
+
+    /// <inheritdoc />
+    public async Task VerifyEmailAsync(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("Invalid or expired verification token.");
+
+        // Token format: "{userId}.{randomBytes}" — same shape as VerifyEmailChange.
+        var dotIndex = token.IndexOf('.');
+        if (dotIndex <= 0)
+            throw new InvalidOperationException("Invalid or expired verification token.");
+
+        var userId = token[..dotIndex];
+        var tokenHash = HashResetCode(token);
+
+        var user = await _users.FindByIdAsync(userId);
+
+        if (user is null
+            || user.EmailVerificationToken is null
+            || user.EmailVerificationTokenExpiry is null
+            || user.EmailVerificationTokenExpiry <= DateTime.UtcNow
+            || !string.Equals(user.EmailVerificationToken, tokenHash, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Invalid or expired verification token.");
+        }
+
+        user.EmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.EmailVerificationTokenExpiry = null;
+        await _users.UpdateAsync(user);
+
+        _logger.LogInformation("Email verified for user hash:{UserHash}", HashUserId(user.Id));
+    }
+
+    /// <summary>
+    /// Generate a verification token, store its hash, and email the link to the user.
+    /// Used both for the initial registration send and for re-sends.
+    /// </summary>
+    private async Task IssueAndSendVerificationLinkAsync(ApplicationUser user)
+    {
+        var rawBytes = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+        var plaintext = $"{user.Id}.{rawBytes}";
+        user.EmailVerificationToken = HashResetCode(plaintext);
+        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+        await _users.UpdateAsync(user);
+
+        var frontendUrl = _config["App:FrontendUrl"]?.TrimEnd('/') ?? "";
+        var link = $"{frontendUrl}/auth/verify-email?token={Uri.EscapeDataString(plaintext)}";
+
+        var html = $"""
+            <h2>Verify your Cambrian email</h2>
+            <p>Hi {System.Net.WebUtility.HtmlEncode(user.DisplayName ?? user.Email ?? "there")},</p>
+            <p>Please verify your email address to unlock uploads, payouts, and API key creation.</p>
+            <p><a href="{link}">Verify email</a></p>
+            <p>This link expires in 24 hours. If you did not create a Cambrian account, you can ignore this email.</p>
+            """;
+        await _email.SendAsync(user.Email!, "Cambrian — Verify your email", html);
+    }
+
     // -- Helpers --
 
     private async Task<ApplicationUser> GetRequiredUser(ClaimsPrincipal principal)
@@ -524,6 +612,9 @@ public class AuthService : IAuthService
             new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
             new(ClaimTypes.Role, user.Role ?? "User"),
             new("tier", (user.Tier ?? "free").ToLowerInvariant()),
+            // email_verified claim — the "VerifiedEmail" authorization policy reads this.
+            // Using a string ("true"/"false") so it survives standard JWT serialization.
+            new("email_verified", user.EmailVerified ? "true" : "false"),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -567,14 +658,29 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Google login attempt for {Email}", email);
 
-        // First try to find by email. Also try by GoogleId in case the stored email
-        // differs from the Google-returned email (e.g. changed on Google's side).
-        var user = await _users.FindByEmailAsync(email)
-                   ?? await _users.Users.FirstOrDefaultAsync(u => u.GoogleId == payload.Subject);
+        // Look up by GoogleId FIRST — that's the only authoritative match.
+        // If a local account exists with the same email but no GoogleId, refuse to
+        // silently link them: an attacker who controls a Gmail address matching a
+        // local account could otherwise hijack it just by signing in with Google.
+        // Linking must be an explicit action by an already-authenticated user.
+        var user = await _users.Users.FirstOrDefaultAsync(u => u.GoogleId == payload.Subject);
 
         var accountCreated = false;
         if (user is null)
         {
+            // No GoogleId match. Check whether the email is already taken by a
+            // non-Google account — if so, refuse the login with an instructive error.
+            var existingByEmail = await _users.FindByEmailAsync(email);
+            if (existingByEmail is not null)
+            {
+                _logger.LogWarning(
+                    "Google login refused: email {Email} is already registered locally; user must sign in with their existing credentials and link Google from settings.",
+                    email);
+                throw new InvalidOperationException(
+                    "An account with this email already exists. Sign in with your password, then link Google from your account settings.");
+            }
+
+            // Brand-new user — provision a Google-only account.
             accountCreated = true;
             user = new ApplicationUser
             {
@@ -599,17 +705,6 @@ public class AuthService : IAuthService
             }
 
             _logger.LogInformation("Google registration success: User={UserId} Email={Email}", user.Id, user.Email);
-        }
-        else
-        {
-            // Link Google identity to existing account if not already linked
-            if (string.IsNullOrEmpty(user.GoogleId))
-            {
-                user.GoogleId = payload.Subject;
-                user.AuthProvider ??= "Google";
-                await _users.UpdateAsync(user);
-                _logger.LogInformation("Google identity linked to existing account: User={UserId}", user.Id);
-            }
         }
 
         var sub = await _subscriptions.GetActiveAsync(user.Id);

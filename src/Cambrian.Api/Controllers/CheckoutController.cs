@@ -23,7 +23,7 @@ public class CheckoutController : BaseController
     /// Create a Stripe Checkout session for a track purchase.
     /// Returns { checkoutUrl } for redirect to Stripe.
     /// </summary>
-    [Authorize]
+    [Authorize(Policy = "VerifiedEmail")]
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(CheckoutRequest request)
     {

@@ -44,7 +44,10 @@ public sealed class Phase1SecurityTests
         var sms = Substitute.For<ISmsService>();
         var googleOptions = Options.Create(new GoogleSettings { ClientId = "test-google-client-id" });
         var logger = Substitute.For<ILogger<AuthService>>();
-        _sut = new AuthService(_users, _jwtOptions, googleOptions, _subscriptions, _email, sms, logger);
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["App:FrontendUrl"] = "https://test" })
+            .Build();
+        _sut = new AuthService(_users, _jwtOptions, googleOptions, _subscriptions, _email, sms, config, logger);
     }
 
     private static ClaimsPrincipal MakeUser(string userId = "user-1") =>
