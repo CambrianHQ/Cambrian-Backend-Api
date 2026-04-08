@@ -152,8 +152,11 @@ public class CreatorProfileController : BaseController
 
     // ───── Upsert profile (bio, niche, social links, stats toggles) ─────
 
+    // [RequireCreatorTier] removed (issue #73): the frontend treats every signed-in
+    // user as a creator, so profile-management endpoints accept any authenticated
+    // account. [RequireUsername] still gates these because a slug-routed profile
+    // page is meaningless without a username.
     [Authorize]
-    [RequireCreatorTier]
     [RequireUsername]
     [HttpPut("me")]
     public async Task<IActionResult> UpsertProfile([FromBody] UpsertCreatorProfileRequest body)
@@ -223,8 +226,8 @@ public class CreatorProfileController : BaseController
 
     // ───── Partial update: toggle showEarnings / showDownloadStats ─────
 
+    // [RequireCreatorTier] removed (issue #73): all signed-in users are creators.
     [Authorize]
-    [RequireCreatorTier]
     [HttpPatch("me/settings")]
     public async Task<IActionResult> PatchSettings([FromBody] PatchProfileSettingsRequest body)
     {
@@ -236,8 +239,8 @@ public class CreatorProfileController : BaseController
 
     // ───── Upload banner image ─────
 
+    // [RequireCreatorTier] removed (issue #73): all signed-in users are creators.
     [Authorize]
-    [RequireCreatorTier]
     [HttpPost("me/cover-image-upload")]
     [HttpPost("me/banner")]
     [RequestSizeLimit(10 * 1024 * 1024)]
@@ -285,8 +288,8 @@ public class CreatorProfileController : BaseController
 
     // ───── Upload profile image ─────
 
+    // [RequireCreatorTier] removed (issue #73): all signed-in users are creators.
     [Authorize]
-    [RequireCreatorTier]
     [HttpPost("me/profile-image-upload")]
     [HttpPost("me/avatar")]
     [HttpPost("/settings/profile/avatar")]
@@ -348,8 +351,11 @@ public class CreatorProfileController : BaseController
 
     // ───── Collections: create ─────
 
+    // [RequireCreatorTier] removed (issue #73): the frontend treats every signed-in
+    // user as a creator, so profile-management endpoints accept any authenticated
+    // account. [RequireUsername] still gates these because a slug-routed profile
+    // page is meaningless without a username.
     [Authorize]
-    [RequireCreatorTier]
     [RequireUsername]
     [HttpPost("me/collections")]
     public async Task<IActionResult> CreateCollection([FromBody] UpsertCollectionRequest body)
@@ -369,8 +375,11 @@ public class CreatorProfileController : BaseController
 
     // ───── Collections: update ─────
 
+    // [RequireCreatorTier] removed (issue #73): the frontend treats every signed-in
+    // user as a creator, so profile-management endpoints accept any authenticated
+    // account. [RequireUsername] still gates these because a slug-routed profile
+    // page is meaningless without a username.
     [Authorize]
-    [RequireCreatorTier]
     [RequireUsername]
     [HttpPut("me/collections/{collectionId}")]
     public async Task<IActionResult> UpdateCollection(Guid collectionId, [FromBody] UpsertCollectionRequest body)
@@ -391,8 +400,11 @@ public class CreatorProfileController : BaseController
 
     // ───── Collections: delete ─────
 
+    // [RequireCreatorTier] removed (issue #73): the frontend treats every signed-in
+    // user as a creator, so profile-management endpoints accept any authenticated
+    // account. [RequireUsername] still gates these because a slug-routed profile
+    // page is meaningless without a username.
     [Authorize]
-    [RequireCreatorTier]
     [RequireUsername]
     [HttpDelete("me/collections/{collectionId}")]
     public async Task<IActionResult> DeleteCollection(Guid collectionId)
@@ -408,8 +420,11 @@ public class CreatorProfileController : BaseController
 
     // ───── Pinned tracks: update pinned track order ─────
 
+    // [RequireCreatorTier] removed (issue #73): the frontend treats every signed-in
+    // user as a creator, so profile-management endpoints accept any authenticated
+    // account. [RequireUsername] still gates these because a slug-routed profile
+    // page is meaningless without a username.
     [Authorize]
-    [RequireCreatorTier]
     [RequireUsername]
     [HttpPut("me/pinned-tracks")]
     public async Task<IActionResult> UpdatePinnedTracks([FromBody] UpdatePinnedTracksRequest body)

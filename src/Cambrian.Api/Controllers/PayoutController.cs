@@ -7,9 +7,12 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cambrian.Api.Controllers;
 
+// [RequireCreatorTier] removed from class level (issue #73). It is re-applied
+// per-method to every action EXCEPT the two earnings endpoints, so an account
+// with Role = "User" can read its earnings dashboard. Money-moving actions
+// (request, connect, disconnect, dashboard) still require Creator role.
 [Route("payouts")]
 [Authorize]
-[RequireCreatorTier]
 [RequireUsername]
 [EnableRateLimiting("auth")]
 public class PayoutController : BaseController
@@ -23,6 +26,7 @@ public class PayoutController : BaseController
         _connect = connect;
     }
 
+    [RequireCreatorTier]
     [HttpPost("connect-stripe")]
     public async Task<IActionResult> ConnectStripe()
     {
@@ -31,6 +35,7 @@ public class PayoutController : BaseController
         return OkResponse(result);
     }
 
+    [RequireCreatorTier]
     [HttpGet("connect-status")]
     public async Task<IActionResult> ConnectStatus()
     {
@@ -39,6 +44,7 @@ public class PayoutController : BaseController
         return OkResponse(status);
     }
 
+    [RequireCreatorTier]
     [HttpGet("stripe-dashboard")]
     public async Task<IActionResult> StripeDashboard()
     {
@@ -47,6 +53,7 @@ public class PayoutController : BaseController
         return OkResponse(new { url });
     }
 
+    [RequireCreatorTier]
     [HttpGet("account")]
     public async Task<IActionResult> Account()
     {
@@ -55,6 +62,7 @@ public class PayoutController : BaseController
         return OkResponse(new { connected = status.Connected, status = status.Status });
     }
 
+    [RequireCreatorTier]
     [HttpPost("connect")]
     public async Task<IActionResult> Connect()
     {
@@ -63,6 +71,7 @@ public class PayoutController : BaseController
         return OkResponse(result);
     }
 
+    [RequireCreatorTier]
     [HttpDelete("disconnect")]
     public async Task<IActionResult> DisconnectDelete()
     {
@@ -71,9 +80,11 @@ public class PayoutController : BaseController
         return MessageResponse("Stripe account disconnected.");
     }
 
+    [RequireCreatorTier]
     [HttpPost("disconnect")]
     public Task<IActionResult> DisconnectPost() => DisconnectDelete();
 
+    // No [RequireCreatorTier] — issue #73 carve-out.
     [HttpGet("earnings")]
     public async Task<IActionResult> PayoutsEarnings()
     {
@@ -82,6 +93,7 @@ public class PayoutController : BaseController
         return OkResponse(earnings);
     }
 
+    [RequireCreatorTier]
     [Authorize(Policy = "VerifiedEmail")]
     [HttpPost("request")]
     public async Task<IActionResult> RequestPayout(PayoutRequest request)
@@ -91,6 +103,7 @@ public class PayoutController : BaseController
         return OkResponse(result);
     }
 
+    [RequireCreatorTier]
     [HttpGet("history")]
     public async Task<IActionResult> History([FromQuery] int take = 50)
     {
@@ -99,12 +112,14 @@ public class PayoutController : BaseController
         return OkResponse(history);
     }
 
+    [RequireCreatorTier]
     [HttpPost("settings")]
     public IActionResult CreateSettings([FromBody] PayoutSettingsRequest? request = null)
     {
         return MessageResponse("Payout settings saved.");
     }
 
+    [RequireCreatorTier]
     [HttpPut("settings")]
     public IActionResult UpdateSettings([FromBody] PayoutSettingsRequest? request = null)
     {
@@ -117,6 +132,7 @@ public class PayoutController : BaseController
         public string? Schedule { get; set; }
     }
 
+    // No [RequireCreatorTier] — alias for the carve-out endpoint above.
     [HttpGet("/earnings")]
     public Task<IActionResult> Earnings() => PayoutsEarnings();
 }
