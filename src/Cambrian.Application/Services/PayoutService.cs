@@ -1,5 +1,7 @@
 using Cambrian.Application.DTOs.Payouts;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Pricing;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
@@ -55,14 +57,15 @@ public class PayoutService : IPayoutService
         foreach (var track in tracks)
         {
             var tp = await _purchases.GetByTrackIdAsync(track.Id);
-            allPurchases.AddRange(tp.Where(p => p.Status == "completed"));
+            allPurchases.AddRange(tp.Where(p => p.Status == PurchaseStatuses.Completed));
         }
 
         var grossCents = allPurchases.Sum(p => p.AmountCents);
         var totalGross = grossCents / 100m;
-        // Use per-purchase floor to match wallet credit calculation in CheckoutService,
-        // so the displayed earnings always equal the withdrawable wallet balance.
-        var totalEarnedCents = allPurchases.Sum(p => (long)Math.Floor(p.AmountCents * (1 - platformFeeRate)));
+        // Single source of truth: CreatorEarningsCalculator. Per-purchase floor matches
+        // the wallet credit math used at sale time, so available == withdrawable.
+        var totalEarnedCents = allPurchases.Sum(p =>
+            CreatorEarningsCalculator.ComputeCreatorCents(p.AmountCents, platformFeeRate));
         var totalEarned = totalEarnedCents / 100m;
         var totalPlatformFee = Math.Round(totalGross - totalEarned, 2);
 

@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Cambrian.Application.DTOs.Library;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -31,7 +32,7 @@ public class LibraryService : ILibraryService
         // Cross-reference with purchases to mark purchased items
         var purchases = await _purchases.GetByBuyerIdAsync(userId);
         var completedPurchases = purchases
-            .Where(p => p.Status == "completed")
+            .Where(p => p.Status == PurchaseStatuses.Completed)
             .GroupBy(p => p.TrackId)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.CreatedAt).First());
 
@@ -95,7 +96,7 @@ public class LibraryService : ILibraryService
         var purchases = await _purchases.GetByBuyerIdAsync(userId);
 
         return purchases
-            .Where(p => p.Status == "completed")
+            .Where(p => p.Status == PurchaseStatuses.Completed)
             .Select(p => p.TrackId.ToString())
             .Distinct()
             .ToList();
