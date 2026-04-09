@@ -134,6 +134,15 @@ internal static class StartupExtensions
                     break;
                 }
                 Console.WriteLine($"[Startup] S3 endpoint={endpoint}, bucket={bucket}");
+                // Named HttpClient used by S3ObjectStorage to fetch via presigned URLs.
+                // Reads go through this HttpClient because AWSSDK.S3 3.7.305 mis-signs direct
+                // HTTP calls against path-prefixed S3 endpoints (Supabase /storage/v1/s3/...).
+                // The SDK's presigned URL generator produces correct SigV4 query signatures,
+                // so we keep the SDK for signing and use HttpClient for transport.
+                builder.Services.AddHttpClient("SupabaseStorage", c =>
+                {
+                    c.Timeout = TimeSpan.FromSeconds(30);
+                });
                 builder.Services.AddSingleton<IObjectStorage, S3ObjectStorage>();
                 break;
             default:
