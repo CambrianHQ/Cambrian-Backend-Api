@@ -2,21 +2,20 @@ using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
 /// <summary>
-/// Proxies image requests through the backend so that S3/Supabase objects are served
+/// Proxies image requests through the backend so that R2/S3 objects are served
 /// with proper CORS headers. This eliminates the need for bucket-level CORS
-/// configuration on the storage provider.
+/// configuration on Cloudflare R2.
 ///
 /// Paths:
 ///   GET /images/covers/{creatorId}/{file}
 ///   GET /images/avatars/{file}
 ///   GET /images/banners/{file}
 ///   GET /images/creator-profiles/{file}
-///   GET /images/creator-covers/{file}
-///   GET /images/images/{file}
 /// </summary>
 [Route("images")]
 [AllowAnonymous]
@@ -24,6 +23,7 @@ public class ImageProxyController : BaseController
 {
     private readonly IObjectStorage _storage;
     private readonly IMemoryCache _cache;
+    private readonly ILogger<ImageProxyController> _logger;
 
     // Only allow image-like object keys — block path traversal and non-image paths.
     private static readonly HashSet<string> AllowedPrefixes = new(StringComparer.OrdinalIgnoreCase)
@@ -36,17 +36,17 @@ public class ImageProxyController : BaseController
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"
     };
 
-    public ImageProxyController(IObjectStorage storage, IMemoryCache cache)
+    public ImageProxyController(IObjectStorage storage, IMemoryCache cache, ILogger<ImageProxyController> logger)
     {
         _storage = storage;
         _cache = cache;
+        _logger = logger;
     }
 
-    // Hidden from Swagger / OpenAPI: this is a server-side catch-all proxy
-    // (path uses "{**key}" syntax) that Swashbuckle and openapi generators
-    // do not represent cleanly. The contract validators have explicit
-    // [ApiExplorerSettings(IgnoreApi = true)] support so this stays out of
-    // both the architecture-compliance check and the breaking-change diff.
+    // Internal infrastructure endpoint — CDN-style image proxy, not part of the
+    // public API contract. Hidden from Swagger/OpenAPI so the contract validator
+    // and breaking-change detector both ignore the catch-all route template
+    // (OpenAPI cannot cleanly represent ASP.NET Core's {**key} catch-all).
     [ApiExplorerSettings(IgnoreApi = true)]
     [HttpGet("{**key}")]
     [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
@@ -75,7 +75,22 @@ public class ImageProxyController : BaseController
         if (Request.Headers.IfNoneMatch.ToString() == etag)
             return StatusCode(304);
 
-        var file = await _storage.OpenReadAsync(key);
+        StorageFile? file;
+        try
+        {
+            file = await _storage.OpenReadAsync(key);
+        }
+        catch (Exception ex)
+        {
+            // Defensive: S3ObjectStorage already swallows exceptions and returns null,
+            // but if anything else throws (e.g. a future implementation), we must not
+            // surface a 500 to the client for an image request. Log and 404.
+            _logger.LogError(ex,
+                "[STORAGE-DIAG] ImageProxy OpenReadAsync threw: type={ExceptionType} key={Key} message={Message}",
+                ex.GetType().FullName, key, ex.Message);
+            return NotFoundResponse("Image not found.");
+        }
+
         if (file is null)
             return NotFoundResponse("Image not found.");
 

@@ -694,6 +694,18 @@
         }
       }
     },
+    "/admin/storage-diagnostics": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/ai/playlist": {
       "get": {
         "tags": [
@@ -4787,6 +4799,28 @@
         }
       }
     },
+    "/health/storage-probe": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/invoices": {
       "get": {
         "tags": [
@@ -5076,6 +5110,9 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "404": {
+            "description": "License not found."
           }
         },
         "summary": "Publicly verify that a license certificate exists and is valid."
