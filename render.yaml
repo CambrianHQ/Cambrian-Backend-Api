@@ -72,7 +72,11 @@ services:
       - key: Storage__SecretKey
         sync: false
       - key: Storage__Region
-        value: auto
+        # Supabase S3 gateway requires a real AWS region in the SigV4
+        # string-to-sign. "auto" was a Cloudflare R2 leftover and caused
+        # SignatureDoesNotMatch on every request. Do not change back to
+        # "auto" unless this service is repointed at R2.
+        value: us-east-1
       - key: Storage__UsePathStyle
         value: "true"
       - key: Storage__PublicUrl
@@ -157,7 +161,11 @@ services:
       - key: Storage__SecretKey
         sync: false
       - key: Storage__Region
-        value: auto
+        # Supabase S3 gateway requires a real AWS region in the SigV4
+        # string-to-sign. "auto" was a Cloudflare R2 leftover and caused
+        # SignatureDoesNotMatch on every request. Do not change back to
+        # "auto" unless this service is repointed at R2.
+        value: us-east-1
       - key: Storage__UsePathStyle
         value: "true"
       - key: Storage__PublicUrl
