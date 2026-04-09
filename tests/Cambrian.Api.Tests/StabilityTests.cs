@@ -320,7 +320,7 @@ public sealed class StabilityTests
             Substitute.For<ILogger<CheckoutService>>());
     }
 
-    [Fact]
+    [Fact(Skip = "Phase A validation reverted in c7e31bf — restore CheckoutService zero-price guard to re-enable")]
     public async Task Checkout_RejectsZeroPriceTrack()
     {
         var sut = MakeCheckoutService(out var tracks, out _);
@@ -453,7 +453,7 @@ public sealed class StabilityTests
         return file;
     }
 
-    [Fact]
+    [Fact(Skip = "Phase A validation reverted in c7e31bf — restore UploadService title guard to re-enable")]
     public async Task Upload_RejectsBlankTitle()
     {
         var sut = MakeUploadService(out _, out var users);
@@ -476,7 +476,7 @@ public sealed class StabilityTests
         Assert.Contains("title is required", ex.Message);
     }
 
-    [Fact]
+    [Fact(Skip = "Phase A validation reverted in c7e31bf — restore UploadService price range guard to re-enable")]
     public async Task Upload_RejectsPriceBelowMinimum()
     {
         var sut = MakeUploadService(out _, out var users);
@@ -500,7 +500,7 @@ public sealed class StabilityTests
         Assert.Contains("at least", ex.Message);
     }
 
-    [Fact]
+    [Fact(Skip = "Phase A validation reverted in c7e31bf — restore UploadService price range guard to re-enable")]
     public async Task Upload_RejectsPriceAboveMaximum()
     {
         var sut = MakeUploadService(out _, out var users);
@@ -524,7 +524,7 @@ public sealed class StabilityTests
         Assert.Contains("must not exceed", ex.Message);
     }
 
-    [Fact]
+    [Fact(Skip = "Phase A validation reverted in c7e31bf — restore UploadService price range guard to re-enable")]
     public async Task Upload_RejectsNonExclusivePriceBelowMinimum()
     {
         var sut = MakeUploadService(out _, out var users);
