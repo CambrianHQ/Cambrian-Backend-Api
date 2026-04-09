@@ -123,10 +123,11 @@ public sealed class S3ObjectStorage : IObjectStorage
 
     public async Task<StorageFile?> OpenReadAsync(string key)
     {
+        var normalised = NormaliseKey(key);
         try
         {
-            var normalised = NormaliseKey(key);
-            _logger.LogDebug("S3 OpenRead: key={Key}", normalised);
+            _logger.LogDebug("S3 OpenRead: key={Key} bucket={Bucket} endpoint={Endpoint}",
+                normalised, _options.Bucket, _options.Endpoint);
             var response = await _client.GetObjectAsync(_options.Bucket, normalised);
             return new StorageFile
             {
@@ -137,14 +138,93 @@ public sealed class S3ObjectStorage : IObjectStorage
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            _logger.LogDebug("S3 not found: key={Key}", NormaliseKey(key));
+            _logger.LogInformation(
+                "[STORAGE-DIAG] S3 OpenRead NotFound: bucket={Bucket} key={Key} errorCode={ErrorCode} requestId={RequestId}",
+                _options.Bucket, normalised, ex.ErrorCode, ex.RequestId);
             return null;
         }
         catch (AmazonS3Exception ex)
         {
-            _logger.LogError(ex, "S3 error: {StatusCode} {ErrorCode} key={Key}", ex.StatusCode, ex.ErrorCode, NormaliseKey(key));
-            throw;
+            // Surface the exact S3 failure shape so production can tell us which layer is broken:
+            //   AccessDenied / InvalidAccessKeyId / SignatureDoesNotMatch  -> credentials/signing
+            //   PermanentRedirect / AuthorizationHeaderMalformed           -> endpoint/region config
+            //   NoSuchBucket                                               -> bucket name wrong
+            _logger.LogError(ex,
+                "[STORAGE-DIAG] S3 OpenRead AmazonS3Exception: statusCode={StatusCode} errorCode={ErrorCode} errorType={ErrorType} requestId={RequestId} bucket={Bucket} endpoint={Endpoint} usePathStyle={UsePathStyle} region={Region} key={Key} message={Message}",
+                ex.StatusCode, ex.ErrorCode, ex.ErrorType, ex.RequestId,
+                _options.Bucket, _options.Endpoint, _options.UsePathStyle, _options.Region,
+                normalised, ex.Message);
+            return null;
         }
+        catch (Exception ex)
+        {
+            // Non-S3 exception: timeout, DNS, SSL handshake, socket reset, TaskCanceled, etc.
+            _logger.LogError(ex,
+                "[STORAGE-DIAG] S3 OpenRead unexpected exception: type={ExceptionType} message={Message} innerType={InnerType} innerMessage={InnerMessage} bucket={Bucket} endpoint={Endpoint} key={Key}",
+                ex.GetType().FullName, ex.Message,
+                ex.InnerException?.GetType().FullName, ex.InnerException?.Message,
+                _options.Bucket, _options.Endpoint, normalised);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Runtime storage probe: HeadBucket + optional HeadObject.
+    /// Lets startup / diagnostic endpoints prove whether this backend process
+    /// can actually authenticate to Supabase storage, independent of any GetObject call.
+    /// Returns a structured result instead of throwing.
+    /// </summary>
+    public async Task<StorageProbeResult> ProbeAsync(string? sampleKey = null)
+    {
+        var result = new StorageProbeResult
+        {
+            Bucket = _options.Bucket,
+            Endpoint = _options.Endpoint,
+            Region = _options.Region,
+            UsePathStyle = _options.UsePathStyle,
+        };
+
+        try
+        {
+            var head = await _client.GetBucketLocationAsync(_options.Bucket);
+            result.HeadBucketOk = true;
+            result.BucketLocation = head.Location?.Value;
+        }
+        catch (AmazonS3Exception ex)
+        {
+            result.HeadBucketOk = false;
+            result.HeadBucketError = $"{ex.StatusCode} {ex.ErrorCode}: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            result.HeadBucketOk = false;
+            result.HeadBucketError = $"{ex.GetType().Name}: {ex.Message}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(sampleKey))
+        {
+            var normalised = NormaliseKey(sampleKey);
+            result.SampleKey = normalised;
+            try
+            {
+                var meta = await _client.GetObjectMetadataAsync(_options.Bucket, normalised);
+                result.HeadObjectOk = true;
+                result.SampleLength = meta.ContentLength;
+                result.SampleContentType = meta.Headers.ContentType;
+            }
+            catch (AmazonS3Exception ex)
+            {
+                result.HeadObjectOk = false;
+                result.HeadObjectError = $"{ex.StatusCode} {ex.ErrorCode}: {ex.Message}";
+            }
+            catch (Exception ex)
+            {
+                result.HeadObjectOk = false;
+                result.HeadObjectError = $"{ex.GetType().Name}: {ex.Message}";
+            }
+        }
+
+        return result;
     }
 
     public async Task DeleteAsync(string key)
