@@ -43,6 +43,11 @@ public class ImageProxyController : BaseController
         _logger = logger;
     }
 
+    // Internal infrastructure endpoint — CDN-style image proxy, not part of the
+    // public API contract. Hidden from Swagger/OpenAPI so the contract validator
+    // and breaking-change detector both ignore the catch-all route template
+    // (OpenAPI cannot cleanly represent ASP.NET Core's {**key} catch-all).
+    [ApiExplorerSettings(IgnoreApi = true)]
     [HttpGet("{**key}")]
     [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
     public async Task<IActionResult> GetImage(string key)
