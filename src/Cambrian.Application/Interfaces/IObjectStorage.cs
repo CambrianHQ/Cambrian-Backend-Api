@@ -34,6 +34,43 @@ public interface IObjectStorage
     Task<StorageFile?> OpenReadAsync(string key);
 
     Task DeleteAsync(string key);
+
+    /// <summary>
+    /// Runtime diagnostic probe. Implementations that talk to a remote store
+    /// should attempt HeadBucket (and optional HeadObject if <paramref name="sampleKey"/>
+    /// is provided) and return a structured result describing success or failure.
+    /// Local implementations return a trivial success.
+    /// Never throws — failures are reported in the returned object.
+    /// </summary>
+    Task<StorageProbeResult> ProbeAsync(string? sampleKey = null)
+        => Task.FromResult(new StorageProbeResult
+        {
+            HeadBucketOk = true,
+            Bucket = "(local)",
+            Endpoint = "(local)",
+        });
+}
+
+/// <summary>
+/// Structured result of a storage probe — surfaces the exact failure layer
+/// (credentials, endpoint, bucket, object) without throwing.
+/// </summary>
+public sealed class StorageProbeResult
+{
+    public string? Bucket { get; set; }
+    public string? Endpoint { get; set; }
+    public string? Region { get; set; }
+    public bool UsePathStyle { get; set; }
+
+    public bool HeadBucketOk { get; set; }
+    public string? HeadBucketError { get; set; }
+    public string? BucketLocation { get; set; }
+
+    public string? SampleKey { get; set; }
+    public bool? HeadObjectOk { get; set; }
+    public string? HeadObjectError { get; set; }
+    public long? SampleLength { get; set; }
+    public string? SampleContentType { get; set; }
 }
 
 /// <summary>
