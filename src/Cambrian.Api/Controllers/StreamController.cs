@@ -76,11 +76,15 @@ public class StreamController : BaseController
     }
 
     /// <summary>
-    /// Redirects to a pre-signed storage URL for the track audio.
-    /// The CDN (R2/S3) handles Range requests natively, giving Safari/iOS
-    /// proper 206 Partial Content without any server-side buffering.
-    /// Open to anonymous users — this is the marketplace discovery/preview model.
-    /// Full-quality downloads require a verified purchase (see DownloadController).
+    /// Proxies audio from storage (R2/S3/local) to the client with full HTTP Range
+    /// support. Safari's &lt;audio&gt; element and iOS AVPlayer both probe for range
+    /// support with a small initial Range request and refuse to play when the
+    /// response is missing Content-Length or Content-Range — they surface this as
+    /// "Unable to load audio file, may be unavailable or corrupted". We forward the
+    /// client's Range header to the origin so S3/R2 returns a 206 Partial Content
+    /// response with the right headers, and we echo those headers back to the
+    /// client. Open to anonymous users — this is the marketplace discovery/preview
+    /// model. Full-quality downloads require a verified purchase (see DownloadController).
     /// </summary>
     [AllowAnonymous]
     [HttpGet("{trackId}/audio")]
@@ -101,16 +105,66 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, audioUserId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        _logger.LogInformation("StreamAudio: streaming trackId={TrackId} via backend proxy", trackId);
+        var rangeHeader = Request.Headers.Range.ToString();
+        var hasRange = !string.IsNullOrWhiteSpace(rangeHeader);
+
+        _logger.LogInformation(
+            "StreamAudio: streaming trackId={TrackId} via backend proxy range={Range}",
+            trackId, hasRange ? rangeHeader : "(none)");
 
         // Always proxy audio through the backend to avoid CORS issues with R2/S3.
         // The browser's <audio> element follows redirects but cross-origin R2 URLs
         // lack CORS headers, causing playback to fail silently.
-        var file = await _storage.OpenReadAsync(track.AudioUrl);
+        //
+        // Call the single-arg overload when no Range header is present so callers
+        // (and tests) that only stub the no-range signature keep working; the
+        // two-arg overload is only used when the client actually sent a Range.
+        var file = hasRange
+            ? await _storage.OpenReadAsync(track.AudioUrl, rangeHeader)
+            : await _storage.OpenReadAsync(track.AudioUrl);
         if (file is null)
             return NotFoundResponse("Audio file not found on storage.");
 
-        return File(file.Stream, file.ContentType, enableRangeProcessing: true);
+        // If the storage layer returned a seekable stream (e.g. LocalObjectStorage
+        // in development) let ASP.NET Core handle range processing — it emits the
+        // correct Content-Length / Content-Range / 206 headers automatically.
+        //
+        // Deliberately NOT wrapping `file` in `using` on this path: FileStreamResult
+        // takes ownership of the underlying stream and disposes it after writing
+        // the response. Disposing `file` here would close the stream before the
+        // framework reads it. LocalObjectStorage's StorageFile has no OwnedResource,
+        // so there is nothing else to clean up on the seekable branch.
+        if (file.Stream.CanSeek)
+        {
+            Response.Headers["Accept-Ranges"] = "bytes";
+            return File(file.Stream, file.ContentType, enableRangeProcessing: true);
+        }
+
+        // Non-seekable stream (S3/R2 HTTP proxy). We own the lifetime of `file`
+        // here: write the response manually so Content-Length, Accept-Ranges, and
+        // — for 206 — Content-Range are all present (without these, Safari and
+        // iOS AVPlayer refuse to play), then let the using-block dispose both the
+        // stream and the owned HttpResponseMessage on normal completion or on
+        // exception (e.g. client disconnect mid-transfer).
+        using (file)
+        {
+            Response.Headers["Accept-Ranges"] = "bytes";
+            Response.ContentType = file.ContentType;
+
+            if (file.IsPartialContent)
+            {
+                Response.StatusCode = StatusCodes.Status206PartialContent;
+                if (!string.IsNullOrEmpty(file.ContentRange))
+                    Response.Headers["Content-Range"] = file.ContentRange;
+            }
+
+            if (file.Length.HasValue && file.Length.Value >= 0)
+                Response.ContentLength = file.Length.Value;
+
+            await file.Stream.CopyToAsync(Response.Body, HttpContext.RequestAborted);
+        }
+
+        return new EmptyResult();
     }
 
     [Authorize]
