@@ -13,22 +13,21 @@ namespace Cambrian.Infrastructure.Storage;
 /// Supabase Storage's S3 gateway).
 ///
 /// <para>
-/// <b>Why reads and deletes go through HttpClient instead of the SDK directly:</b>
+/// <b>Why every verb goes through HttpClient instead of the SDK directly:</b>
 /// AWSSDK.S3 3.7.305 mis-signs direct HTTP requests against path-prefixed S3
-/// endpoints such as Supabase's <c>/storage/v1/s3</c> gateway. Every GET/HEAD/
-/// DELETE comes back with <c>SignatureDoesNotMatch</c> regardless of credentials
-/// or <c>AuthenticationRegion</c>. The SDK's presigned-URL generator, however,
-/// produces correct SigV4 query signatures for the exact same endpoint — this
-/// was verified end-to-end by fetching a presigned URL with <c>HttpClient</c>
-/// and getting 200 OK with the expected content length.
+/// endpoints such as Supabase's <c>/storage/v1/s3</c> gateway. Every
+/// GET/HEAD/DELETE/PUT issued by <c>PutObjectAsync</c>, <c>GetObjectAsync</c>,
+/// etc. comes back with <c>SignatureDoesNotMatch</c> regardless of credentials,
+/// <c>AuthenticationRegion</c>, or <c>DisablePayloadSigning</c>. The SDK's
+/// presigned-URL generator, however, produces correct SigV4 query signatures
+/// for the exact same endpoint — this was verified end-to-end by fetching a
+/// presigned URL with <c>HttpClient</c> and getting 200 OK with the expected
+/// content length, and again by PUTting a file via presigned URL.
 /// </para>
 /// <para>
 /// The fix: keep the SDK for signing only. Generate a short-lived presigned URL
-/// for each read/delete and run the actual HTTP request through an injected
-/// <see cref="IHttpClientFactory"/>. Uploads still use
-/// <see cref="IAmazonS3.PutObjectAsync"/> with <c>DisablePayloadSigning = true</c>
-/// because that path already works (the PUT payload hash is sent as
-/// <c>UNSIGNED-PAYLOAD</c>, which Supabase accepts).
+/// for every read/write/delete and run the actual HTTP request through an
+/// injected <see cref="IHttpClientFactory"/>.
 /// </para>
 /// </summary>
 public sealed class S3ObjectStorage : IObjectStorage
@@ -70,18 +69,73 @@ public sealed class S3ObjectStorage : IObjectStorage
     {
         var normalised = NormaliseKey(key);
         _logger.LogDebug("S3 upload: key={Key}, contentType={ContentType}", normalised, contentType);
-        var request = new PutObjectRequest
+
+        // See class-level remarks: the SDK's PutObjectAsync mis-signs requests
+        // against Supabase's path-prefixed S3 gateway (SignatureDoesNotMatch).
+        // Generate a presigned PUT URL and upload via HttpClient instead —
+        // the presigned-URL generator produces correct SigV4 query signatures.
+        string presignedUrl;
+        try
         {
-            BucketName = _options.Bucket,
-            Key = normalised,
-            InputStream = file,
-            ContentType = contentType,
-            // Cloudflare R2 does not support STREAMING-AWS4-HMAC-SHA256-PAYLOAD
-            // (chunked transfer encoding with signed payloads).  Disabling payload
-            // signing makes the SDK send an unsigned payload hash instead, which R2 accepts.
-            DisablePayloadSigning = true,
-        };
-        await _client.PutObjectAsync(request);
+            presignedUrl = _client.GetPreSignedURL(new GetPreSignedUrlRequest
+            {
+                BucketName = _options.Bucket,
+                Key = normalised,
+                Expires = DateTime.UtcNow.AddMinutes(15),
+                Verb = HttpVerb.PUT,
+                ContentType = contentType,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "[STORAGE-DIAG] S3 Upload presign failed: bucket={Bucket} key={Key} message={Message}",
+                _options.Bucket, normalised, ex.Message);
+            throw;
+        }
+
+        try
+        {
+            var http = _httpClientFactory.CreateClient(HttpClientName);
+            using var req = new HttpRequestMessage(HttpMethod.Put, presignedUrl)
+            {
+                Content = new StreamContent(file),
+            };
+            // Content-Type MUST match the value used when the URL was signed,
+            // otherwise Supabase/S3 will reject with SignatureDoesNotMatch.
+            req.Content.Headers.ContentType =
+                System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+
+            using var resp = await http.SendAsync(req);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                string body = string.Empty;
+                try { body = await resp.Content.ReadAsStringAsync(); } catch { /* best-effort */ }
+                _logger.LogError(
+                    "[STORAGE-DIAG] S3 Upload non-success: status={Status} bucket={Bucket} endpoint={Endpoint} region={Region} usePathStyle={UsePathStyle} key={Key} body={Body}",
+                    (int)resp.StatusCode, _options.Bucket, _options.Endpoint, _options.Region, _options.UsePathStyle,
+                    normalised, body.Length > 500 ? body[..500] : body);
+                throw new InvalidOperationException(
+                    $"S3 upload failed: {(int)resp.StatusCode} {resp.StatusCode}");
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex,
+                "[STORAGE-DIAG] S3 Upload HttpRequestException: bucket={Bucket} key={Key} message={Message} innerType={InnerType} innerMessage={InnerMessage}",
+                _options.Bucket, normalised, ex.Message,
+                ex.InnerException?.GetType().FullName, ex.InnerException?.Message);
+            throw;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(ex,
+                "[STORAGE-DIAG] S3 Upload timeout/canceled: bucket={Bucket} key={Key} message={Message}",
+                _options.Bucket, normalised, ex.Message);
+            throw;
+        }
+
         _logger.LogDebug("S3 upload complete: key={Key}", normalised);
 
         // Return just the key — callers use GetPublicUrl / GenerateSignedUrl to build URLs.
