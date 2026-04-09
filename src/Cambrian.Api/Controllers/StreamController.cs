@@ -128,16 +128,25 @@ public class StreamController : BaseController
         // If the storage layer returned a seekable stream (e.g. LocalObjectStorage
         // in development) let ASP.NET Core handle range processing — it emits the
         // correct Content-Length / Content-Range / 206 headers automatically.
+        //
+        // Deliberately NOT wrapping `file` in `using` on this path: FileStreamResult
+        // takes ownership of the underlying stream and disposes it after writing
+        // the response. Disposing `file` here would close the stream before the
+        // framework reads it. LocalObjectStorage's StorageFile has no OwnedResource,
+        // so there is nothing else to clean up on the seekable branch.
         if (file.Stream.CanSeek)
         {
             Response.Headers["Accept-Ranges"] = "bytes";
             return File(file.Stream, file.ContentType, enableRangeProcessing: true);
         }
 
-        // Non-seekable stream (S3/R2 HTTP proxy). Write the response manually so
-        // that Content-Length, Accept-Ranges, and — for 206 — Content-Range are
-        // all present. Without these, Safari and iOS AVPlayer refuse to play.
-        try
+        // Non-seekable stream (S3/R2 HTTP proxy). We own the lifetime of `file`
+        // here: write the response manually so Content-Length, Accept-Ranges, and
+        // — for 206 — Content-Range are all present (without these, Safari and
+        // iOS AVPlayer refuse to play), then let the using-block dispose both the
+        // stream and the owned HttpResponseMessage on normal completion or on
+        // exception (e.g. client disconnect mid-transfer).
+        using (file)
         {
             Response.Headers["Accept-Ranges"] = "bytes";
             Response.ContentType = file.ContentType;
@@ -153,10 +162,6 @@ public class StreamController : BaseController
                 Response.ContentLength = file.Length.Value;
 
             await file.Stream.CopyToAsync(Response.Body, HttpContext.RequestAborted);
-        }
-        finally
-        {
-            file.Dispose();
         }
 
         return new EmptyResult();
