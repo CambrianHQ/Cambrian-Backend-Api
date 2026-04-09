@@ -202,7 +202,9 @@ public sealed class S3ObjectStorage : IObjectStorage
         return _client.GetPreSignedURL(request);
     }
 
-    public async Task<StorageFile?> OpenReadAsync(string key)
+    public Task<StorageFile?> OpenReadAsync(string key) => OpenReadAsync(key, null);
+
+    public async Task<StorageFile?> OpenReadAsync(string key, string? rangeHeader)
     {
         var normalised = NormaliseKey(key);
         string presignedUrl;
@@ -228,13 +230,40 @@ public sealed class S3ObjectStorage : IObjectStorage
         try
         {
             var http = _httpClientFactory.CreateClient(HttpClientName);
-            resp = await http.GetAsync(presignedUrl, HttpCompletionOption.ResponseHeadersRead);
+            using var req = new HttpRequestMessage(HttpMethod.Get, presignedUrl);
+
+            // Forward the client's Range header to the origin so S3/R2 returns a
+            // 206 Partial Content response with Content-Range + partial Content-Length.
+            // This is essential for Safari and iOS AVPlayer, both of which probe for
+            // range support with a small initial Range request and refuse to play
+            // when the response lacks Content-Length / Content-Range.
+            if (!string.IsNullOrWhiteSpace(rangeHeader) &&
+                !req.Headers.TryAddWithoutValidation("Range", rangeHeader))
+            {
+                _logger.LogDebug(
+                    "[STORAGE-DIAG] S3 OpenRead ignoring malformed Range header: {Range}",
+                    rangeHeader);
+            }
+
+            resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
 
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 _logger.LogInformation(
                     "[STORAGE-DIAG] S3 OpenRead NotFound: bucket={Bucket} key={Key}",
                     _options.Bucket, normalised);
+                resp.Dispose();
+                return null;
+            }
+
+            // 416 Range Not Satisfiable comes back when the client asks for a range
+            // outside the object size. Surface it as "not found" so the controller
+            // can return a sensible error without crashing.
+            if (resp.StatusCode == System.Net.HttpStatusCode.RequestedRangeNotSatisfiable)
+            {
+                _logger.LogInformation(
+                    "[STORAGE-DIAG] S3 OpenRead RangeNotSatisfiable: bucket={Bucket} key={Key} range={Range}",
+                    _options.Bucket, normalised, rangeHeader);
                 resp.Dispose();
                 return null;
             }
@@ -255,6 +284,16 @@ public sealed class S3ObjectStorage : IObjectStorage
             var contentType = resp.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
             var length = resp.Content.Headers.ContentLength;
 
+            var isPartial = resp.StatusCode == System.Net.HttpStatusCode.PartialContent;
+            string? contentRangeHeader = null;
+            long? totalLength = length;
+            if (resp.Content.Headers.ContentRange is { } cr)
+            {
+                contentRangeHeader = cr.ToString();
+                if (cr.Length.HasValue)
+                    totalLength = cr.Length;
+            }
+
             // Transfer ownership of the HttpResponseMessage to the StorageFile —
             // disposing the StorageFile will dispose both the stream and the response.
             var owned = resp;
@@ -263,7 +302,10 @@ public sealed class S3ObjectStorage : IObjectStorage
             {
                 Stream = stream,
                 ContentType = contentType,
-                Length = length ?? 0,
+                Length = length,
+                TotalLength = totalLength,
+                IsPartialContent = isPartial,
+                ContentRange = contentRangeHeader,
                 OwnedResource = owned,
             };
         }
