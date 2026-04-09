@@ -83,5 +83,16 @@ public sealed class StorageFile : IDisposable
     public string ContentType { get; init; } = "application/octet-stream";
     public long? Length { get; init; }
 
-    public void Dispose() => Stream.Dispose();
+    /// <summary>
+    /// Optional extra resource whose lifetime is bound to this StorageFile
+    /// (e.g. the HttpResponseMessage backing the Stream). Disposed together
+    /// with the stream so callers don't need to know about the transport.
+    /// </summary>
+    public IDisposable? OwnedResource { get; init; }
+
+    public void Dispose()
+    {
+        Stream.Dispose();
+        OwnedResource?.Dispose();
+    }
 }
