@@ -345,6 +345,153 @@ public sealed class SecurityPatchTests
         Assert.IsType<FileStreamResult>(result);
     }
 
+    /// <summary>
+    /// REGRESSION — when the client sends a Range header and the storage backend
+    /// returns a non-seekable partial-content stream (the real S3/R2 production
+    /// path), StreamAudio must write a 206 Partial Content response with the
+    /// exact Accept-Ranges, Content-Range, Content-Length, and Content-Type
+    /// headers that Safari's &lt;audio&gt; element and iOS AVPlayer require to
+    /// play the file. Without these headers both clients surface
+    /// "Unable to load audio file, may be unavailable or corrupted".
+    /// </summary>
+    [Fact]
+    public async Task C4_StreamAudio_Emits206_WhenRangeHeaderPresent_AndStreamIsNonSeekable()
+    {
+        var fix = new C4StreamFixture();
+        var trackId = Guid.NewGuid();
+
+        fix.Tracks.GetByIdAsync(trackId).Returns(new Track
+        {
+            Id = trackId,
+            Title = "Ranged Beat",
+            AudioUrl = "tracks/ranged.mp3",
+            Visibility = "public",
+            CreatorId = "creator-1"
+        });
+
+        // Non-seekable stream wrapping an MP3 byte fragment — models the
+        // HttpContent stream returned by S3ObjectStorage for a 206 response.
+        var body = new byte[] { 0xFF, 0xFB, 0x90, 0x00 };
+        var nonSeekable = new NonSeekableStream(new MemoryStream(body));
+
+        fix.Storage
+            .OpenReadAsync("tracks/ranged.mp3", "bytes=0-3")
+            .Returns(new StorageFile
+            {
+                Stream = nonSeekable,
+                ContentType = "audio/mpeg",
+                Length = 4,
+                TotalLength = 1024,
+                IsPartialContent = true,
+                ContentRange = "bytes 0-3/1024"
+            });
+
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers["Range"] = "bytes=0-3";
+        ctx.Response.Body = new MemoryStream();
+        fix.Controller.ControllerContext = new ControllerContext { HttpContext = ctx };
+
+        var result = await fix.Controller.StreamAudio(trackId.ToString());
+
+        Assert.IsType<EmptyResult>(result);
+        Assert.Equal(StatusCodes.Status206PartialContent, ctx.Response.StatusCode);
+        Assert.Equal("bytes 0-3/1024", ctx.Response.Headers["Content-Range"].ToString());
+        Assert.Equal("bytes", ctx.Response.Headers["Accept-Ranges"].ToString());
+        Assert.Equal("audio/mpeg", ctx.Response.ContentType);
+        Assert.Equal(4, ctx.Response.ContentLength);
+        Assert.Equal(body, ((MemoryStream)ctx.Response.Body).ToArray());
+
+        // Ensure the storage-level range call actually happened — if anyone
+        // accidentally drops Range forwarding in the controller or storage
+        // layer, this assertion fails loudly.
+        await fix.Storage.Received(1).OpenReadAsync("tracks/ranged.mp3", "bytes=0-3");
+    }
+
+    /// <summary>
+    /// REGRESSION — when the client sends a Range header on a public track but
+    /// the storage backend returns a non-partial (full 200 OK) response with a
+    /// non-seekable stream, StreamAudio must still emit Content-Length and
+    /// Accept-Ranges so Safari/iOS can begin playback.
+    /// </summary>
+    [Fact]
+    public async Task C4_StreamAudio_Emits200WithContentLength_WhenNoRangeHeader_AndStreamIsNonSeekable()
+    {
+        var fix = new C4StreamFixture();
+        var trackId = Guid.NewGuid();
+
+        fix.Tracks.GetByIdAsync(trackId).Returns(new Track
+        {
+            Id = trackId,
+            Title = "Full Beat",
+            AudioUrl = "tracks/full.mp3",
+            Visibility = "public",
+            CreatorId = "creator-1"
+        });
+
+        var body = new byte[] { 0xFF, 0xFB, 0x90, 0x00, 0x11, 0x22 };
+        var nonSeekable = new NonSeekableStream(new MemoryStream(body));
+
+        fix.Storage
+            .OpenReadAsync("tracks/full.mp3")
+            .Returns(new StorageFile
+            {
+                Stream = nonSeekable,
+                ContentType = "audio/mpeg",
+                Length = 6,
+                TotalLength = 6,
+                IsPartialContent = false,
+                ContentRange = null
+            });
+
+        var ctx = new DefaultHttpContext();
+        ctx.Response.Body = new MemoryStream();
+        fix.Controller.ControllerContext = new ControllerContext { HttpContext = ctx };
+
+        var result = await fix.Controller.StreamAudio(trackId.ToString());
+
+        Assert.IsType<EmptyResult>(result);
+        Assert.Equal(StatusCodes.Status200OK, ctx.Response.StatusCode);
+        Assert.Equal("bytes", ctx.Response.Headers["Accept-Ranges"].ToString());
+        Assert.Equal("audio/mpeg", ctx.Response.ContentType);
+        Assert.Equal(6, ctx.Response.ContentLength);
+        Assert.False(ctx.Response.Headers.ContainsKey("Content-Range"));
+        Assert.Equal(body, ((MemoryStream)ctx.Response.Body).ToArray());
+    }
+
+    /// <summary>
+    /// Minimal non-seekable stream wrapper used to model the HttpContent stream
+    /// returned by S3ObjectStorage — a forward-only network stream whose
+    /// <see cref="Stream.CanSeek"/> is false. Delegates all reads to the inner
+    /// stream and rejects every other operation.
+    /// </summary>
+    private sealed class NonSeekableStream : Stream
+    {
+        private readonly Stream _inner;
+        public NonSeekableStream(Stream inner) => _inner = inner;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count)
+            => _inner.Read(buffer, offset, count);
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => _inner.ReadAsync(buffer, offset, count, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _inner.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────
     // C2 · Email change without confirmation
     // ──────────────────────────────────────────────────────────────

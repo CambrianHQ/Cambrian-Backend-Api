@@ -51,13 +51,25 @@ public class BaseController : ControllerBase
     /// <summary>
     /// Convert a relative URL (e.g. /uploads/key) to an absolute URL so the
     /// frontend on a different origin can fetch the file correctly.
-    /// Already-absolute URLs (S3/R2 pre-signed) are returned unchanged.
+    /// Already-absolute http(s) URLs (S3/R2 pre-signed) are returned unchanged.
     /// </summary>
+    /// <remarks>
+    /// IMPORTANT: do NOT use <c>Uri.TryCreate(url, UriKind.Absolute, out _)</c>
+    /// as the "already absolute?" check. On Linux, that call returns
+    /// <c>true</c> for Unix-style paths like <c>/stream/abc/audio</c> — the
+    /// runtime parses them as <c>file:///stream/abc/audio</c>. On Windows it
+    /// correctly returns <c>false</c>. Using it here caused production
+    /// (Linux) to short-circuit and return relative paths, which the
+    /// frontend then resolved against its own origin instead of the API
+    /// origin, producing 404s on every track image and audio stream.
+    /// Detect "already absolute" by explicit http(s):// prefix instead.
+    /// </remarks>
     protected string ResolveAbsoluteUrl(string? url)
     {
         if (string.IsNullOrEmpty(url))
             return url ?? "";
-        if (Uri.TryCreate(url, UriKind.Absolute, out _))
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return url;
         // Request may be null in unit tests — return relative path as-is
         if (Request is null)
