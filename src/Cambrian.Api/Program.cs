@@ -490,6 +490,35 @@ app.MapMcp();
 await app.RunMigrationsAsync();
 await app.SeedDataAsync();
 
+// ── Storage probe (runs once at boot) ──
+// Proves whether THIS backend process can authenticate against Supabase/S3
+// using the Storage__* env vars loaded at startup. Lets Render deploy logs
+// reveal credential/endpoint/region issues immediately, before any user
+// hits an image or stream endpoint.
+try
+{
+    using var probeScope = app.Services.CreateScope();
+    var storage = probeScope.ServiceProvider.GetRequiredService<IObjectStorage>();
+    var probe = await storage.ProbeAsync();
+    if (probe.HeadBucketOk)
+    {
+        app.Logger.LogInformation(
+            "[STORAGE-DIAG] Startup HeadBucket OK: bucket={Bucket} endpoint={Endpoint} region={Region} location={BucketLocation}",
+            probe.Bucket, probe.Endpoint, probe.Region, probe.BucketLocation);
+    }
+    else
+    {
+        app.Logger.LogError(
+            "[STORAGE-DIAG] Startup HeadBucket FAILED: bucket={Bucket} endpoint={Endpoint} region={Region} error={Error}",
+            probe.Bucket, probe.Endpoint, probe.Region, probe.HeadBucketError);
+    }
+}
+catch (Exception ex)
+{
+    // Probe itself must never crash startup — it exists to diagnose, not to gate boot.
+    app.Logger.LogError(ex, "[STORAGE-DIAG] Startup probe threw unexpectedly.");
+}
+
 // ── Activity backfill (idempotent — safe on every startup) ──
 try
 {
