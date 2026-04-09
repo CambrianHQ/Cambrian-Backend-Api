@@ -1,10 +1,17 @@
 using Cambrian.Api.Common;
 using Cambrian.Application.Interfaces;
 using Cambrian.Api.Tools;
-using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+
+// Type alias so LicensesController doesn't import Cambrian.Domain.Entities
+// directly — the architecture policy forbids controllers from depending on
+// domain entities (see governance/backend-policy.v1.json — dto-required).
+// ApplicationUser is only reached here because ASP.NET Core Identity's
+// UserManager<T> generic parameter is the identity user type; the controller
+// treats it as opaque and only reads display names.
+using ApplicationUser = Cambrian.Domain.Entities.ApplicationUser;
 
 namespace Cambrian.Api.Controllers;
 
