@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cambrian API Explorer</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css"
+    />
+    <style>
+      :root {
+        --bg: #0b0d12;
+        --panel: #11141c;
+        --border: #1e232c;
+        --text: #e6e9ef;
+        --muted: #96a0b1;
+        --accent: #7fb7ff;
+        --warn-bg: #152030;
+        --warn-border: #1e2a3d;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .cambrian-header {
+        padding: 1.25rem 2rem;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+      }
+      .cambrian-header h1 {
+        margin: 0 0 0.25rem 0;
+        font-size: 1.4rem;
+        letter-spacing: -0.01em;
+      }
+      .cambrian-header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .cambrian-header a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .cambrian-header a:hover {
+        text-decoration: underline;
+      }
+      .cambrian-auth {
+        padding: 0.75rem 2rem;
+        background: var(--warn-bg);
+        border-bottom: 1px solid var(--warn-border);
+        color: #c5d3e8;
+        font-size: 0.85rem;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .cambrian-auth label {
+        white-space: nowrap;
+      }
+      .cambrian-auth input {
+        flex: 1 1 360px;
+        min-width: 0;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.4rem 0.6rem;
+        font-family: ui-monospace, "SF Mono", Consolas, monospace;
+        font-size: 0.85rem;
+      }
+      .cambrian-auth input::placeholder {
+        color: #556074;
+      }
+      .cambrian-auth button {
+        background: var(--accent);
+        color: #0b1220;
+        border: 0;
+        border-radius: 4px;
+        padding: 0.4rem 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 0.85rem;
+      }
+      .cambrian-auth button.secondary {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+      }
+      .cambrian-auth .status {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .cambrian-auth .status.active {
+        color: #7fe5a0;
+      }
+      .cambrian-auth code {
+        background: var(--bg);
+        padding: 0.1rem 0.35rem;
+        border-radius: 3px;
+        color: #f0d98c;
+        font-size: 0.8rem;
+      }
+      #swagger-ui {
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cambrian-header">
+      <h1>Cambrian API Explorer</h1>
+      <p>
+        Interactive reference for the public V1 API. See the
+        <a href="./quickstart.md">5-minute quickstart</a> to get set up, or skip
+        straight to the tutorials on
+        <a href="./tutorials/add-licensed-music-to-ai-video.md">AI video</a>,
+        <a href="./tutorials/build-music-aware-mcp-agent.md">MCP agents</a>, and
+        <a href="./tutorials/license-music-programmatically.md">programmatic licensing</a>.
+      </p>
+    </header>
+    <div class="cambrian-auth">
+      <label for="apiKey">
+        <code>X-API-Key</code>
+      </label>
+      <input
+        id="apiKey"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder="cbr_… (paste your key; it stays in this browser)"
+      />
+      <button id="saveKey" type="button">Save</button>
+      <button id="clearKey" type="button" class="secondary">Clear</button>
+      <span id="keyStatus" class="status">no key set &mdash; authenticated endpoints will return 401</span>
+      <span style="flex: 1 0 100%; color: var(--muted); font-size: 0.78rem; line-height: 1.4">
+        Key is stored in <code>localStorage</code> under
+        <code>cambrian.apiKey</code> and attached to every request as the
+        <code>X-API-Key</code> header. Create a key at
+        <a href="https://cambrianmusic.com/dashboard/api-keys" target="_blank" rel="noreferrer">
+          cambrianmusic.com/dashboard/api-keys </a>.
+      </span>
+    </div>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+    <script>
+      // ── Key management ───────────────────────────────────────
+      const KEY_STORAGE = "cambrian.apiKey";
+      const keyInput = document.getElementById("apiKey");
+      const keyStatus = document.getElementById("keyStatus");
+
+      function currentKey() {
+        return localStorage.getItem(KEY_STORAGE) || "";
+      }
+      function refreshStatus() {
+        const k = currentKey();
+        if (k) {
+          keyStatus.textContent = `key set (${k.slice(0, 8)}…${k.slice(-4)})`;
+          keyStatus.classList.add("active");
+        } else {
+          keyStatus.textContent = "no key set — authenticated endpoints will return 401";
+          keyStatus.classList.remove("active");
+        }
+      }
+      keyInput.value = currentKey();
+      refreshStatus();
+
+      document.getElementById("saveKey").addEventListener("click", () => {
+        const v = keyInput.value.trim();
+        if (v) localStorage.setItem(KEY_STORAGE, v);
+        else localStorage.removeItem(KEY_STORAGE);
+        refreshStatus();
+      });
+      document.getElementById("clearKey").addEventListener("click", () => {
+        localStorage.removeItem(KEY_STORAGE);
+        keyInput.value = "";
+        refreshStatus();
+      });
+
+      // ── Swagger UI setup ─────────────────────────────────────
+      // Hosted explorer — point at the live API spec.
+      // CORS is enabled on api.cambrianmusic.com so the browser can fetch it directly.
+      //
+      // To use this against a local dev backend, change LIVE_SPEC_URL to
+      //   http://localhost:10000/openapi.json
+      // and serve this file from any static server (a file:// URL works too).
+      const LIVE_SPEC_URL = "https://api.cambrianmusic.com/openapi.json";
+
+      window.onload = () => {
+        window.ui = SwaggerUIBundle({
+          url: LIVE_SPEC_URL,
+          dom_id: "#swagger-ui",
+          deepLinking: true,
+          presets: [SwaggerUIBundle.presets.apis],
+          layout: "BaseLayout",
+          tryItOutEnabled: true,
+          persistAuthorization: true,
+          displayOperationId: false,
+          filter: true,
+          docExpansion: "list",
+          defaultModelsExpandDepth: 0,
+          // Attach the API key to every outgoing Try-It-Out request if one is
+          // set. This works across all endpoints regardless of whether the
+          // spec declares an ApiKey security scheme — the header just gets
+          // added on the wire. Empty headers are omitted.
+          requestInterceptor: (req) => {
+            const key = currentKey();
+            if (key) {
+              req.headers = req.headers || {};
+              req.headers["X-API-Key"] = key;
+            }
+            return req;
+          },
+        });
+      };
+    </script>
+  </body>
+</html>
