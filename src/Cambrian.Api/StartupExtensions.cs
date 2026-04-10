@@ -803,8 +803,8 @@ internal static class StartupExtensions
             }
             Console.WriteLine($"[Seed] {tracks.Count} tracks created across 5 creators");
 
-            // Write placeholder cover art images for local dev
-            EnsureSeedCoverArt(app, tracks);
+            // Write placeholder cover art + audio for dev (local) and staging (S3/R2)
+            await EnsureSeedMediaAsync(app, tracks);
 
             // ── 5. Purchases + library items (realistic flows) ──
             var purchaseData = new List<(ApplicationUser Buyer, Track Track, string LicenseType, string UsageType, int AmountCents, string Status)>
@@ -999,37 +999,136 @@ internal static class StartupExtensions
     }
 
     /// <summary>
-    /// Write small placeholder cover-art images to the local uploads directory
-    /// so that seed tracks have visible artwork during development.
-    /// Only runs when using "local" storage provider.
+    /// Ensure placeholder cover images and audio files exist for seed tracks.
+    /// Local storage: writes to disk. S3/R2 storage: uploads via IObjectStorage.
+    /// Idempotent — skips files that already exist.
     /// </summary>
-    private static void EnsureSeedCoverArt(WebApplication app, IEnumerable<Track> tracks)
+    private static async Task EnsureSeedMediaAsync(WebApplication app, IEnumerable<Track> tracks)
     {
         var storageProvider = app.Configuration["Storage:Provider"] ?? "local";
-        if (!string.Equals(storageProvider, "local", StringComparison.OrdinalIgnoreCase))
-            return;
 
-        var basePath = app.Configuration["Storage:LocalPath"] ?? "wwwroot/uploads";
-        var coversDir = Path.Combine(app.Environment.ContentRootPath, basePath, "covers");
-        Directory.CreateDirectory(coversDir);
+        if (string.Equals(storageProvider, "local", StringComparison.OrdinalIgnoreCase))
+        {
+            EnsureSeedMediaLocal(app, tracks);
+            return;
+        }
+
+        // ── S3/R2 path: upload placeholders via IObjectStorage ──
+        using var scope = app.Services.CreateScope();
+        var storage = scope.ServiceProvider.GetRequiredService<IObjectStorage>();
 
         // Minimal valid 1×1 white-pixel JPEG (107 bytes)
-        var placeholder = Convert.FromBase64String(
+        var jpegPlaceholder = Convert.FromBase64String(
             "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////"
             + "2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB"
             + "/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/a"
             + "AAwDAQACEQMRAD8AKwA//9k=");
 
+        // Minimal valid MP3 frame: MPEG1 Layer 3, 128kbps, 44100Hz, ~0.026s of silence (417 bytes)
+        var mp3Placeholder = Convert.FromBase64String(
+            "//uQxAAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7kMQPAAADSAAAAABMQU1FMy4x"
+            + "MDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==");
+
+        var uploaded = 0;
+        var skipped = 0;
+
         foreach (var track in tracks)
         {
-            if (string.IsNullOrWhiteSpace(track.CoverArtUrl)) continue;
-            var fileName = Path.GetFileName(track.CoverArtUrl);
-            var filePath = Path.Combine(coversDir, fileName);
-            if (!File.Exists(filePath))
-                File.WriteAllBytes(filePath, placeholder);
+            // Upload cover art
+            if (!string.IsNullOrWhiteSpace(track.CoverArtUrl))
+            {
+                var existing = await storage.OpenReadAsync(track.CoverArtUrl);
+                if (existing is not null)
+                {
+                    existing.Dispose();
+                    skipped++;
+                }
+                else
+                {
+                    using var coverStream = new MemoryStream(jpegPlaceholder);
+                    await storage.UploadAsync(coverStream, track.CoverArtUrl, "image/jpeg");
+                    uploaded++;
+                }
+            }
+
+            // Upload audio
+            if (!string.IsNullOrWhiteSpace(track.AudioUrl))
+            {
+                var existing = await storage.OpenReadAsync(track.AudioUrl);
+                if (existing is not null)
+                {
+                    existing.Dispose();
+                    skipped++;
+                }
+                else
+                {
+                    using var audioStream = new MemoryStream(mp3Placeholder);
+                    await storage.UploadAsync(audioStream, track.AudioUrl, "audio/mpeg");
+                    uploaded++;
+                }
+            }
         }
 
-        Console.WriteLine($"[Seed] Placeholder cover art written to {coversDir}");
+        Console.WriteLine($"[Seed] S3 placeholder media: {uploaded} uploaded, {skipped} already existed");
+    }
+
+    /// <summary>
+    /// Write placeholder media to local disk for development.
+    /// </summary>
+    private static void EnsureSeedMediaLocal(WebApplication app, IEnumerable<Track> tracks)
+    {
+        var basePath = app.Configuration["Storage:LocalPath"] ?? "wwwroot/uploads";
+        var coversDir = Path.Combine(app.Environment.ContentRootPath, basePath, "covers");
+        var tracksDir = Path.Combine(app.Environment.ContentRootPath, basePath, "tracks");
+        Directory.CreateDirectory(coversDir);
+        Directory.CreateDirectory(tracksDir);
+
+        // Minimal valid 1×1 white-pixel JPEG (107 bytes)
+        var jpegPlaceholder = Convert.FromBase64String(
+            "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////"
+            + "2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB"
+            + "/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/a"
+            + "AAwDAQACEQMRAD8AKwA//9k=");
+
+        // Minimal valid MP3 frame (silent)
+        var mp3Placeholder = Convert.FromBase64String(
+            "//uQxAAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7kMQPAAADSAAAAABMQU1FMy4x"
+            + "MDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
+            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==");
+
+        foreach (var track in tracks)
+        {
+            if (!string.IsNullOrWhiteSpace(track.CoverArtUrl))
+            {
+                var fileName = Path.GetFileName(track.CoverArtUrl);
+                var filePath = Path.Combine(coversDir, fileName);
+                if (!File.Exists(filePath))
+                    File.WriteAllBytes(filePath, jpegPlaceholder);
+            }
+
+            if (!string.IsNullOrWhiteSpace(track.AudioUrl))
+            {
+                var fileName = Path.GetFileName(track.AudioUrl);
+                var filePath = Path.Combine(tracksDir, fileName);
+                if (!File.Exists(filePath))
+                    File.WriteAllBytes(filePath, mp3Placeholder);
+            }
+        }
+
+        Console.WriteLine($"[Seed] Placeholder media written to {basePath}");
     }
 
     /// <summary>
