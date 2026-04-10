@@ -66,7 +66,7 @@ services:
       - key: Storage__Endpoint
         sync: false
       - key: Storage__Bucket
-        value: cambrian-audio-staging
+        value: cambrian-audio-prod
       - key: Storage__AccessKey
         sync: false
       - key: Storage__SecretKey

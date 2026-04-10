@@ -32,9 +32,9 @@ public class SubscriptionService : ISubscriptionService
             },
             new()
             {
-                Name = "Paid",
-                PriceCents = 499,
-                Features = ["Everything in Free", "Unlimited downloads", "Offline listening", "Priority support"]
+                Name = "Buyer",
+                PriceCents = 999,
+                Features = ["Purchase track licenses", "Download purchased tracks", "PDF license certificates", "Personal and commercial use"]
             },
             new()
             {

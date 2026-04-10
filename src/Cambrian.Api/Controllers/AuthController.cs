@@ -19,7 +19,6 @@ public class AuthController : BaseController
     private readonly IAuthService _auth;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly ICreatorIdentityRepository _creators;
-    private readonly ICreatorProfileRepository _profiles;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ITransactionManager _tx;
     private readonly ILogger<AuthController> _logger;
@@ -31,12 +30,11 @@ public class AuthController : BaseController
         "developers", "embed", "sync", "pricing", "about"
     };
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, ILogger<AuthController> logger)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
         _creators = creators;
-        _profiles = profiles;
         _userManager = userManager;
         _tx = tx;
         _logger = logger;
@@ -209,10 +207,6 @@ public class AuthController : BaseController
 
         var username = needsUsername ? null : user!.UserName;
 
-        // Load canonical profile data from CreatorProfile + Creator tables
-        var creatorProfile = await _profiles.GetByUserIdAsync(profile.UserId);
-        var creatorIdentity = await _creators.GetByUserIdAsync(profile.UserId);
-
         return OkResponse(new
         {
             token = freshToken ?? Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
@@ -233,15 +227,7 @@ public class AuthController : BaseController
             subscriptionStatus = profile.SubscriptionStatus,
             subscriptionEndDate = profile.SubscriptionEndDate,
             platformFeePercent = profile.PlatformFeePercent,
-            contractVersion = profile.ContractVersion,
-            // Profile fields — canonical source is CreatorProfile, fallback to ApplicationUser
-            bio = creatorProfile?.Bio ?? user?.Bio ?? "",
-            profileImageUrl = ResolveImageUrl(creatorProfile?.ProfileImageUrl ?? user?.ProfileImageUrl),
-            coverImageUrl = ResolveImageUrl(creatorProfile?.BannerImageUrl ?? user?.CoverImageUrl),
-            socialLinks = creatorProfile?.SocialLinks,
-            slug = creatorProfile?.Slug,
-            niche = creatorProfile?.Niche,
-            creatorId = creatorIdentity?.Id
+            contractVersion = profile.ContractVersion
         });
     }
 
@@ -550,8 +536,8 @@ public class AuthController : BaseController
             tier = profile.Tier,
             role = profile.Role,
             bio = user?.Bio,
-            profileImageUrl = ResolveImageUrl(user?.ProfileImageUrl),
-            coverImageUrl = ResolveImageUrl(user?.CoverImageUrl),
+            profileImageUrl = user?.ProfileImageUrl,
+            coverImageUrl = user?.CoverImageUrl,
             subscription = new
             {
                 creatorTier = currentTierConfig.DisplayName,
@@ -610,6 +596,47 @@ public class AuthController : BaseController
 
         await _auth.VerifyEmailChangeAsync(token);
         return MessageResponse("Email address updated successfully.");
+    }
+
+    /// <summary>
+    /// Re-send the initial email verification link to the authenticated user's email.
+    /// (The first link is sent automatically on registration.)
+    /// </summary>
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPost("send-verification-email")]
+    public async Task<IActionResult> SendVerificationEmail()
+    {
+        try
+        {
+            await _auth.SendEmailVerificationAsync(User);
+            return MessageResponse("Verification email sent.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErrorResponse(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Complete the initial email verification by validating the link token.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("/auth/verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return ErrorResponse("Verification token is required.");
+
+        try
+        {
+            await _auth.VerifyEmailAsync(token);
+            return MessageResponse("Email verified successfully. You can now access all features.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErrorResponse(ex.Message);
+        }
     }
 
     /// <summary>

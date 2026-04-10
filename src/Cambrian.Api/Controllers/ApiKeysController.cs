@@ -21,6 +21,7 @@ public class ApiKeysController : BaseController
     /// Create a new API key. The raw key is returned ONCE in the response and never stored —
     /// store it securely immediately.
     /// </summary>
+    [Authorize(Policy = "VerifiedEmail")]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateApiKeyRequest request)
     {

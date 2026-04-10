@@ -392,7 +392,10 @@ internal static class StartupExtensions
             DisplayName = AdminRole,
             Role = AdminRole,
             Tier = "creator",
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            // Seeded admins must be pre-verified or the new VerifiedEmail policy
+            // will lock them out of upload/payouts/api-key endpoints.
+            EmailVerified = true
         };
         var result = await userManager.CreateAsync(admin, password);
         if (!result.Succeeded)
@@ -483,6 +486,9 @@ internal static class StartupExtensions
                         Tier = "creator",
                         CreatorTier = creatorTier,
                         EmailConfirmed = true,
+                        // Seeded demo users must be pre-verified — the VerifiedEmail policy
+                        // gates upload/checkout/payouts/api-keys.
+                        EmailVerified = true,
                         SubscriptionStatus = creatorTier == Domain.Enums.CreatorTier.Pro ? "Active" : "Inactive"
                     };
                     var createResult = await userManager.CreateAsync(user, demoPassword);
@@ -627,6 +633,7 @@ internal static class StartupExtensions
                 Tier = "free",
                 CreatorTier = Domain.Enums.CreatorTier.Free,
                 EmailConfirmed = true,
+                EmailVerified = true,
                 SubscriptionStatus = "Inactive"
             }, demoPassword);
 
@@ -639,6 +646,7 @@ internal static class StartupExtensions
                 Tier = "paid",
                 CreatorTier = Domain.Enums.CreatorTier.Free,
                 EmailConfirmed = true,
+                EmailVerified = true,
                 SubscriptionStatus = "Active"
             }, demoPassword);
 
@@ -652,6 +660,7 @@ internal static class StartupExtensions
                 Tier = "paid",
                 CreatorTier = Domain.Enums.CreatorTier.Free,
                 EmailConfirmed = true,
+                EmailVerified = true,
                 SubscriptionStatus = "Active"
             }, demoPassword);
 
@@ -665,6 +674,7 @@ internal static class StartupExtensions
                 Tier = "creator",
                 CreatorTier = Domain.Enums.CreatorTier.Free,
                 EmailConfirmed = true,
+                EmailVerified = true,
                 SubscriptionStatus = "Inactive"
             }, demoPassword);
 

@@ -1,5 +1,6 @@
 using Cambrian.Application.DTOs.Payments;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -101,7 +102,7 @@ public class PaymentService : IPaymentService
             "[LEGACY-PATH] ProcessAsync only marks purchase status — library/license creation is handled by Stripe webhook or CheckoutService.ConfirmAsync. PurchaseId={PurchaseId} UserId={UserId}",
             purchase.Id, userId);
 
-        purchase.Status = "completed";
+        purchase.Status = PurchaseStatuses.Completed;
         purchase.PaymentMethod = request.PaymentMethodId ?? "stripe";
         await _purchases.UpdateAsync(purchase);
     }

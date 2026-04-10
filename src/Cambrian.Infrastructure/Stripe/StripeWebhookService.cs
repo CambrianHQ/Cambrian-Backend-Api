@@ -1,5 +1,7 @@
 using Cambrian.Application.Configuration;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Pricing;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Cambrian.Domain.Enums;
 using Cambrian.Persistence;
@@ -19,7 +21,6 @@ public class StripeWebhookService : IWebhookService
     private const string EventInvoicePaymentFailed = "invoice.payment_failed";
     private const string EventChargeRefunded = "charge.refunded";
     private const string EventChargeDisputeCreated = "charge.dispute.created";
-    private const string StatusCompleted = "completed";
     private readonly CambrianDbContext _db;
     private readonly ILicenseService _licenseService;
     private readonly IEmailService _email;
@@ -123,26 +124,31 @@ public class StripeWebhookService : IWebhookService
         string? stripePaymentIntentId = null,
         string? payload = null)
     {
-        var normalizedEventId = eventId ?? $"no-id-{Guid.NewGuid():N}";
-
-        // ── Step 2: Idempotency — skip ONLY already-completed events ──
-        // Failed/processing events are retried so Stripe gets correct delivery guarantees.
-        if (!string.IsNullOrWhiteSpace(eventId))
+        // ── Step 2: Idempotency — REQUIRE an event ID. ──
+        // Without an EventId we cannot dedupe; processing the same event twice would
+        // create duplicate Purchases and double-credit creator wallets. Reject so Stripe
+        // retries until a legitimate signed event with an ID arrives. (Signature
+        // verification has already passed at this point, so this only blocks malformed
+        // or hand-crafted traffic.)
+        if (string.IsNullOrWhiteSpace(eventId))
         {
-            var alreadyCompleted = await _db.StripeWebhookEvents
-                .AnyAsync(e => e.EventId == eventId && e.Status == "completed");
-
-            if (alreadyCompleted)
-            {
-                _logger.LogInformation("Skipping already-completed Stripe webhook event {EventId}", eventId);
-                return;
-            }
-        }
-        else
-        {
-            _logger.LogWarning(
-                "Stripe webhook received without an event ID; idempotency unavailable for {EventType}",
+            _logger.LogError(
+                "Stripe webhook rejected: signed event missing EventId for {EventType}. " +
+                "Idempotency requires an EventId — refusing to process to avoid double-fulfillment.",
                 eventType);
+            throw new InvalidOperationException(
+                "Stripe webhook rejected: event has no EventId; cannot guarantee idempotency.");
+        }
+
+        var normalizedEventId = eventId;
+
+        var alreadyCompleted = await _db.StripeWebhookEvents
+            .AnyAsync(e => e.EventId == eventId && e.Status == "completed");
+
+        if (alreadyCompleted)
+        {
+            _logger.LogInformation("Skipping already-completed Stripe webhook event {EventId}", eventId);
+            return;
         }
 
         // ── Step 3: Begin transaction FIRST — event row and all business effects commit atomically ──
@@ -151,9 +157,8 @@ public class StripeWebhookService : IWebhookService
             : null;
 
         // Upsert: if a previous attempt left a "failed" row, update it; otherwise insert fresh.
-        var existingRow = !string.IsNullOrWhiteSpace(eventId)
-            ? await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == normalizedEventId)
-            : null;
+        var existingRow = await _db.StripeWebhookEvents
+            .FirstOrDefaultAsync(e => e.EventId == normalizedEventId);
 
         StripeWebhookEvent webhookEvent;
         if (existingRow is not null)
@@ -307,7 +312,7 @@ public class StripeWebhookService : IWebhookService
             var purchase = await _db.Purchases.FindAsync(purchaseId);
             if (purchase is not null)
             {
-                purchase.Status = StatusCompleted;
+                purchase.Status = PurchaseStatuses.Completed;
                 purchase.UpdatedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync();
                 _logger.LogInformation("PURCHASE_TIMELINE: Purchase {PurchaseId} marked completed via legacy path", purchaseId);
@@ -435,9 +440,9 @@ public class StripeWebhookService : IWebhookService
         if (existingPurchase is not null)
         {
             _logger.LogInformation("Duplicate purchase skipped for user {UserId} track {TrackId}", userId, trackId);
-            if (existingPurchase.Status != StatusCompleted)
+            if (existingPurchase.Status != PurchaseStatuses.Completed)
             {
-                existingPurchase.Status = StatusCompleted;
+                existingPurchase.Status = PurchaseStatuses.Completed;
                 existingPurchase.CompletedAt = DateTime.UtcNow;
                 existingPurchase.UpdatedAt = DateTime.UtcNow;
                 existingPurchase.StripeSessionId ??= stripeSessionId;
@@ -471,18 +476,42 @@ public class StripeWebhookService : IWebhookService
         }
 
         // ── Create completed Purchase ──
+        // Stripe AmountTotal is long. Purchase.AmountCents is int (~$21.4M ceiling).
+        // Refuse to silently truncate.
+        //
+        // Throw rather than return: a `return` here would let ProcessEventAsync
+        // mark the webhook event as "completed" and ack 200 to Stripe — the buyer
+        // would have paid but the purchase row, library item, license, and creator
+        // credit would all be missing, and the failure would not appear in the
+        // webhook ledger for operators to find. Throwing causes the outer handler
+        // to mark the event as "failed", roll back the transaction, and re-throw
+        // (Stripe receives 500 → retries within its 3-day window → operators see
+        // the [DEAD-LETTER] log and can intervene before the retry budget runs out).
+        var rawAmount = amountTotal ?? 0;
+        if (rawAmount > int.MaxValue || rawAmount < 0)
+        {
+            _logger.LogError(
+                "[DEAD-LETTER] Stripe purchase amount {Amount}c exceeds int.MaxValue or is negative; "
+                + "refusing to truncate. User={UserId} Track={TrackId} Session={SessionId}. "
+                + "Manual reconciliation + refund required.",
+                rawAmount, userId, trackId, stripeSessionId);
+            throw new InvalidOperationException(
+                $"Stripe purchase amount {rawAmount}c is out of range (>int.MaxValue or negative). "
+                + $"Session={stripeSessionId}. Manual reconciliation required.");
+        }
+        var safeAmountCents = (int)rawAmount;
         _logger.LogInformation("PURCHASE_TIMELINE: Creating purchase userId:{UserId} trackId:{TrackId} license:{LicenseType} amount:{AmountCents}c sessionId:{SessionId}",
-            userId, trackId, licenseType, (int)(amountTotal ?? 0), stripeSessionId);
+            userId, trackId, licenseType, safeAmountCents, stripeSessionId);
         var purchase = new Purchase
         {
             Id = Guid.NewGuid(),
             BuyerId = userId,
             TrackId = trackId,
-            AmountCents = (int)(amountTotal ?? 0),
+            AmountCents = safeAmountCents,
             PaymentMethod = "stripe",
             LicenseType = licenseType,
             UsageType = usageType,
-            Status = StatusCompleted,
+            Status = PurchaseStatuses.Completed,
             StripeSessionId = stripeSessionId,
             CompletedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -522,7 +551,8 @@ public class StripeWebhookService : IWebhookService
                 ? TierManifest.For(creatorUser.CreatorTier).FeeRate
                 : TierManifest.Free.FeeRate;
             var grossCents = amountTotal.Value;
-            var creatorCents = (long)Math.Floor(grossCents * (1 - platformFeeRate));
+            // Single source of truth: CreatorEarningsCalculator.
+            var creatorCents = CreatorEarningsCalculator.ComputeCreatorCents(grossCents, platformFeeRate);
 
             if (creatorCents > 0)
             {
@@ -803,7 +833,7 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        purchase.Status = "refunded";
+        purchase.Status = PurchaseStatuses.Refunded;
         purchase.UpdatedAt = DateTime.UtcNow;
 
         // Remove library access
@@ -851,7 +881,8 @@ public class StripeWebhookService : IWebhookService
                     var feeRate = creatorUser is not null
                         ? TierManifest.For(creatorUser.CreatorTier).FeeRate
                         : TierManifest.Free.FeeRate;
-                    clawbackCents = (long)Math.Floor(purchase.AmountCents * (1 - feeRate));
+                    // Single source of truth: must match the credit math the original sale used.
+                    clawbackCents = CreatorEarningsCalculator.ComputeCreatorCents(purchase.AmountCents, feeRate);
                     _logger.LogWarning(
                         "Refund clawback: no original credit transaction found for purchase {PurchaseId}; computed {Cents}c from purchase amount.",
                         purchase.Id, clawbackCents);
@@ -860,19 +891,54 @@ public class StripeWebhookService : IWebhookService
 
             if (!string.IsNullOrEmpty(clawbackUserId) && clawbackCents > 0)
             {
-                _db.WalletTransactions.Add(new WalletTransaction
+                // Concurrency guard: under default ReadCommitted isolation, two refund
+                // webhooks for two different purchases by the same creator could both
+                // observe the same `currentBalance` and both proceed to debit, still
+                // pushing the wallet negative. Take a row-level lock on the creator's
+                // user row so any other refund/dispute clawback for the same creator
+                // serializes behind us. The lock is released on outer-tx commit/rollback.
+                if (_db.Database.IsRelational())
                 {
-                    Id = Guid.NewGuid(),
-                    UserId = clawbackUserId,
-                    AmountCents = -clawbackCents,
-                    Type = "debit",
-                    Description = $"Refund clawback: {purchase.Id}",
-                    RelatedPurchaseId = purchase.Id,
-                    CreatedAt = DateTime.UtcNow
-                });
-                _logger.LogInformation(
-                    "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for refunded purchase {PurchaseId}",
-                    clawbackCents, clawbackUserId, purchase.Id);
+                    await _db.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT 1 FROM \"AspNetUsers\" WHERE \"Id\" = {clawbackUserId} FOR UPDATE");
+                }
+
+                // Underflow guard: if the creator has already withdrawn the credit
+                // (or their balance is otherwise lower than the clawback), debit only
+                // what is actually present and emit a [RECONCILE] log so finance can
+                // recover the shortfall manually. We never push the wallet below 0.
+                var currentBalance = await _db.WalletTransactions
+                    .Where(w => w.UserId == clawbackUserId)
+                    .SumAsync(w => w.AmountCents);
+
+                var effectiveClawback = Math.Min(clawbackCents, Math.Max(0L, currentBalance));
+                var shortfall = clawbackCents - effectiveClawback;
+
+                if (shortfall > 0)
+                {
+                    _logger.LogError(
+                        "[RECONCILE] Refund clawback shortfall for purchase {PurchaseId}: " +
+                        "owed {Owed}c, balance {Balance}c, debiting {Effective}c, shortfall {Shortfall}c. " +
+                        "Manual recovery required for creator {CreatorId}.",
+                        purchase.Id, clawbackCents, currentBalance, effectiveClawback, shortfall, clawbackUserId);
+                }
+
+                if (effectiveClawback > 0)
+                {
+                    _db.WalletTransactions.Add(new WalletTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = clawbackUserId,
+                        AmountCents = -effectiveClawback,
+                        Type = "debit",
+                        Description = $"Refund clawback: {purchase.Id}",
+                        RelatedPurchaseId = purchase.Id,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                    _logger.LogInformation(
+                        "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for refunded purchase {PurchaseId}",
+                        effectiveClawback, clawbackUserId, purchase.Id);
+                }
             }
         }
 
@@ -914,7 +980,7 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
-        purchase.Status = "disputed";
+        purchase.Status = PurchaseStatuses.Disputed;
         purchase.UpdatedAt = DateTime.UtcNow;
 
         // SECURITY: Claw back creator wallet credit on dispute.
@@ -930,19 +996,49 @@ public class StripeWebhookService : IWebhookService
 
             if (disputeCredit is not null)
             {
-                _db.WalletTransactions.Add(new WalletTransaction
+                // Concurrency guard: serialize concurrent dispute/refund clawbacks for
+                // the same creator via a row-level lock on AspNetUsers, so the balance
+                // read below cannot race with another in-flight clawback transaction.
+                if (_db.Database.IsRelational())
                 {
-                    Id = Guid.NewGuid(),
-                    UserId = disputeCredit.UserId,
-                    AmountCents = -disputeCredit.AmountCents,
-                    Type = "debit",
-                    Description = $"Dispute clawback: {purchase.Id}",
-                    RelatedPurchaseId = purchase.Id,
-                    CreatedAt = DateTime.UtcNow
-                });
-                _logger.LogInformation(
-                    "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for disputed purchase {PurchaseId}",
-                    disputeCredit.AmountCents, disputeCredit.UserId, purchase.Id);
+                    await _db.Database.ExecuteSqlInterpolatedAsync(
+                        $"SELECT 1 FROM \"AspNetUsers\" WHERE \"Id\" = {disputeCredit.UserId} FOR UPDATE");
+                }
+
+                // Underflow guard — never push the wallet below 0. Surface the shortfall
+                // for manual recovery via [RECONCILE] log.
+                var owedCents = disputeCredit.AmountCents;
+                var currentBalance = await _db.WalletTransactions
+                    .Where(w => w.UserId == disputeCredit.UserId)
+                    .SumAsync(w => w.AmountCents);
+                var effectiveClawback = Math.Min(owedCents, Math.Max(0L, currentBalance));
+                var shortfall = owedCents - effectiveClawback;
+
+                if (shortfall > 0)
+                {
+                    _logger.LogError(
+                        "[RECONCILE] Dispute clawback shortfall for purchase {PurchaseId}: " +
+                        "owed {Owed}c, balance {Balance}c, debiting {Effective}c, shortfall {Shortfall}c. " +
+                        "Manual recovery required for creator {CreatorId}.",
+                        purchase.Id, owedCents, currentBalance, effectiveClawback, shortfall, disputeCredit.UserId);
+                }
+
+                if (effectiveClawback > 0)
+                {
+                    _db.WalletTransactions.Add(new WalletTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = disputeCredit.UserId,
+                        AmountCents = -effectiveClawback,
+                        Type = "debit",
+                        Description = $"Dispute clawback: {purchase.Id}",
+                        RelatedPurchaseId = purchase.Id,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                    _logger.LogInformation(
+                        "Wallet clawback: debited {AmountCents}c from creator {CreatorId} for disputed purchase {PurchaseId}",
+                        effectiveClawback, disputeCredit.UserId, purchase.Id);
+                }
             }
         }
 

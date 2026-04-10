@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -517,8 +518,11 @@ public sealed class SecurityPatchTests
             var sms = Substitute.For<ISmsService>();
             var google = Options.Create(new GoogleSettings { ClientId = "g-client-id" });
             var logger = Substitute.For<ILogger<AuthService>>();
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["App:FrontendUrl"] = "https://test" })
+                .Build();
 
-            Sut = new AuthService(Users, jwtOpts, google, subs, Email, sms, logger);
+            Sut = new AuthService(Users, jwtOpts, google, subs, Email, sms, config, logger);
         }
 
         public ClaimsPrincipal MakeUserPrincipal(string userId) =>

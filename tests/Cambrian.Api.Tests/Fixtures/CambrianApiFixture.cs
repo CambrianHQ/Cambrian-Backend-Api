@@ -39,6 +39,7 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
                 ["Jwt:Key"] = TestJwtKey,
                 ["Jwt:Issuer"] = TestJwtIssuer,
                 ["Jwt:Audience"] = TestJwtAudience,
+                ["Checkout:RequireSubscription"] = "false",
             });
         });
 
@@ -89,7 +90,12 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
 
     // ----- Helpers -----
 
-    /// <summary>Register a new user and return the JWT token.</summary>
+    /// <summary>
+    /// Register a new user and return the JWT token. Newly-registered users are
+    /// automatically marked email-verified so existing tests that hit endpoints
+    /// gated by the "VerifiedEmail" policy continue to work without per-test
+    /// verification ceremony.
+    /// </summary>
     public async Task<string> RegisterUserAsync(
         string email = "test@cambrian.com",
         string password = "Test1234!@")
@@ -106,19 +112,59 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         var json = await res.Content.ReadFromJsonAsync<JsonElement>();
         // Auth endpoints now return ApiResponse envelope: { success, data: { token, ... } }
         var data = json.GetProperty("data");
+        var token = data.GetProperty("token").GetString()!;
+
+        // Mirror the production verification flow for tests: mark the user as
+        // verified directly in the DB. The returned token still has the original
+        // email_verified=false claim — callers needing a fresh token (e.g.
+        // CreateAuthenticatedClientAsync) should re-login.
+        await MarkUserEmailVerifiedAsync(email);
+
+        return token;
+    }
+
+    /// <summary>Login an existing user and return the JWT token.</summary>
+    public async Task<string> LoginUserAsync(
+        string email = "test@cambrian.com",
+        string password = "Test1234!@")
+    {
+        var client = CreateClient();
+        var res = await client.PostAsJsonAsync("/auth/login", new { email, password });
+        res.EnsureSuccessStatusCode();
+
+        var json = await res.Content.ReadFromJsonAsync<JsonElement>();
+        var data = json.GetProperty("data");
         return data.GetProperty("token").GetString()!;
     }
 
-    /// <summary>Register + return an HttpClient with the Bearer token pre-set.</summary>
+    /// <summary>
+    /// Register + return an HttpClient whose Bearer token has the email_verified
+    /// claim set, so it can hit endpoints gated by the "VerifiedEmail" policy.
+    /// </summary>
     public async Task<HttpClient> CreateAuthenticatedClientAsync(
         string email = "test@cambrian.com",
         string password = "Test1234!@")
     {
-        var token = await RegisterUserAsync(email, password);
+        await RegisterUserAsync(email, password);
+        // Re-login so the JWT carries the freshly set email_verified=true claim.
+        var token = await LoginUserAsync(email, password);
         var client = CreateClient();
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", token);
         return client;
+    }
+
+    /// <summary>Mark a user's EmailVerified flag in the DB (test verification shortcut).</summary>
+    public async Task MarkUserEmailVerifiedAsync(string email)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user is not null && !user.EmailVerified)
+        {
+            user.EmailVerified = true;
+            await db.SaveChangesAsync();
+        }
     }
 
     /// <summary>Seed a track into the database and return its id.</summary>
