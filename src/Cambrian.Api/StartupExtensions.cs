@@ -580,8 +580,13 @@ internal static class StartupExtensions
             var existing = await flagRepo.GetByNameAsync("creator_storefront");
             if (existing is null)
             {
-                await flagRepo.UpsertAsync("creator_storefront", enabled: false);
-                Console.WriteLine("[Seed] Feature flag 'creator_storefront' created (disabled)");
+                await flagRepo.UpsertAsync("creator_storefront", enabled: true);
+                Console.WriteLine("[Seed] Feature flag 'creator_storefront' created (enabled)");
+            }
+            else if (!existing.Enabled)
+            {
+                await flagRepo.UpsertAsync("creator_storefront", enabled: true);
+                Console.WriteLine("[Seed] Feature flag 'creator_storefront' enabled");
             }
         }
         catch (Exception ex)
