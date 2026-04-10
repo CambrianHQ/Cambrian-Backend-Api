@@ -1028,17 +1028,14 @@ internal static class StartupExtensions
             + "/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/a"
             + "AAwDAQACEQMRAD8AKwA//9k=");
 
-        // Minimal valid MP3 frame: MPEG1 Layer 3, 128kbps, 44100Hz, ~0.026s of silence (417 bytes)
-        var mp3Placeholder = Convert.FromBase64String(
-            "//uQxAAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
-            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
-            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
-            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
-            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7kMQPAAADSAAAAABMQU1FMy4x"
-            + "MDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
-            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
-            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
-            + "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==");
+        // Minimal valid MP3: single MPEG1 Layer3 frame, 128kbps, 44100Hz, ~26ms silence.
+        // Built directly to avoid base64 encoding issues.
+        var mp3Placeholder = new byte[417];
+        mp3Placeholder[0] = 0xFF; // Sync byte 1
+        mp3Placeholder[1] = 0xFB; // Sync byte 2 + MPEG1, Layer3, no CRC
+        mp3Placeholder[2] = 0x90; // 128kbps, 44100Hz
+        mp3Placeholder[3] = 0x00; // Padding=0, Stereo
+        // Remaining bytes are zero (silence)
 
         var uploaded = 0;
         var skipped = 0;
