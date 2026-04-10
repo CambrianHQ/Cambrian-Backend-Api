@@ -39,7 +39,7 @@ public sealed class BillingService : IBillingService
         var tier = request.Tier?.ToLowerInvariant() ?? "";
         var (amountCents, planName) = tier switch
         {
-            "paid" => (499, "Paid Listener"),
+            "paid" => (999, "Buyer Subscription"),
             "creator" or "pro" => (TierManifest.Pro.PriceCents, TierManifest.Pro.DisplayName),
             _ => (0, "")
         };

@@ -514,6 +514,8 @@ public sealed class S3ObjectStorage : IObjectStorage
             var idx = key.IndexOf(bucketPath, StringComparison.OrdinalIgnoreCase);
             if (idx >= 0)
                 return key[(idx + bucketPath.Length)..];
+            // Bucket not in path (e.g. r2.dev public URLs): extract the path component
+            return new Uri(key).AbsolutePath.TrimStart('/');
         }
         // Strip /uploads/ prefix (local storage format)
         if (key.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))

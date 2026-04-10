@@ -26,4 +26,10 @@ public class AuthResponse
 
     /// <summary>True when the welcome email failed to send during registration.</summary>
     public bool WelcomeEmailFailed { get; set; }
+
+    /// <summary>True when the user has a password set (false for Google-only accounts).</summary>
+    public bool HasPassword { get; set; }
+
+    /// <summary>True when the user has a Google account linked.</summary>
+    public bool GoogleLinked { get; set; }
 }

@@ -18,7 +18,7 @@
 | Identity | ASP.NET Core Identity + JWT Bearer | 8.0.12 / System.IdentityModel.Tokens.Jwt 8.3.1 |
 | OAuth | Google OAuth (ID token flow) | Google.Apis.Auth 1.73.0 |
 | Payments | Stripe Connect Express | stripe.net 46.2.0 |
-| Object Storage | AWS S3 / Cloudflare R2 / MinIO / local | AWSSDK.S3 3.7.305 |
+| Object Storage | Supabase Storage (S3-compatible) / local | AWSSDK.S3 3.7.305 |
 | Email | SMTP or Resend (console in dev) | MailKit 4.15.1 |
 | PDF | QuestPDF | 2026.2.3 |
 | Password Hashing | BCrypt | BCrypt.Net-Next 4.0.3 |
@@ -578,7 +578,7 @@ Unrecognized `clientReferenceId` or missing track → logs `[DEAD-LETTER]` warni
 
 ---
 
-## 7. Object Storage (S3 / R2 / Local)
+## 7. Object Storage (Supabase / Local)
 
 **Interface:** `IObjectStorage` (`src/Cambrian.Application/Interfaces/IObjectStorage.cs`)
 
@@ -595,22 +595,21 @@ Task DeleteAsync(string key);
 | Provider | Class | When Used |
 |----------|-------|-----------|
 | `local` | `LocalObjectStorage` | Development. Files under `wwwroot/uploads/`. |
-| `s3` | `S3ObjectStorage` | AWS S3 or any S3-compatible storage. |
-| `r2` | `S3ObjectStorage` (same class, region=`auto`) | Cloudflare R2. |
+| `s3` | `S3ObjectStorage` | Production/Staging — Supabase Storage (S3-compatible API). |
 
-**Production requirement:** `Storage:Provider` must be `s3` or `r2`. Startup throws if `local` is used in Production.
+**Production requirement:** `Storage:Provider` must be `s3`. Startup throws if `local` is used in Production.
 
 ### Configuration Keys
 
 | Key | Env Var | Notes |
 |-----|---------|-------|
-| `Storage:Provider` | `Storage__Provider` | `local`, `s3`, or `r2` |
-| `Storage:Endpoint` | `Storage__Endpoint` | S3/R2 endpoint URL |
+| `Storage:Provider` | `Storage__Provider` | `local` or `s3` |
+| `Storage:Endpoint` | `Storage__Endpoint` | Supabase S3 endpoint URL |
 | `Storage:Bucket` | `Storage__Bucket` | Bucket name |
-| `Storage:AccessKey` | `Storage__AccessKey` | S3 access key ID |
-| `Storage:SecretKey` | `Storage__SecretKey` | S3 secret access key |
-| `Storage:Region` | `Storage__Region` | `auto` for R2; AWS region for S3 |
-| `Storage:UsePathStyle` | `Storage__UsePathStyle` | `true` for MinIO/R2 |
+| `Storage:AccessKey` | `Storage__AccessKey` | Supabase storage access key ID |
+| `Storage:SecretKey` | `Storage__SecretKey` | Supabase storage secret key |
+| `Storage:Region` | `Storage__Region` | Supabase storage region (e.g. `us-east-1`) |
+| `Storage:UsePathStyle` | `Storage__UsePathStyle` | `true` for Supabase |
 | `Storage:PublicUrl` | `Storage__PublicUrl` | Base URL for public file access |
 | `Storage:LocalPath` | `Storage__LocalPath` | Dev only: `wwwroot/uploads` |
 
@@ -628,7 +627,7 @@ Task DeleteAsync(string key);
 2. Server looks up `Track.AudioUrl` (S3 key)
 3. Server calls `IObjectStorage.GenerateSignedUrl(key)` → presigned URL
 4. Server returns HTTP `302 Redirect` to presigned URL
-5. Client (or CDN) fetches audio directly from S3/R2 with Range request support
+5. Client (or CDN) fetches audio directly from Supabase Storage with Range request support
 6. Server never buffers audio data
 
 ### Upload Flow (Presigned URL)
@@ -953,18 +952,6 @@ Active flags (seeded in `20260323030051_SeedCreatorIdentityFeatureFlags`):
 | `sales_ticker` | Real-time sales notifications |
 
 Evaluation: deterministic hash of `(userId, flagName)` checked against `RolloutPercentage`. Same user always gets same result for a given percentage.
-
-### 10.10 Git Workflow — Branch & PR Policy
-
-> ⚠️ **Never push or merge directly to `main`.** All changes must go through a pull request.
-
-| Rule | Detail |
-|------|--------|
-| **Feature branches** | Create a branch off `main` for every change (naming: `fix/description` or `feat/description`) |
-| **PR target** | All PRs target `staging` first for deployment verification |
-| **No direct main pushes** | `main` is updated only by merging a tested `staging` PR |
-| **PR flow** | Branch → PR to `staging` → verify on staging environment → PR/merge to `main` |
-| **AI assistants** | Must create a feature branch and open a PR to `staging` — never commit directly to `main` or `staging` |
 
 ---
 

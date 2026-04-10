@@ -32,7 +32,7 @@ public class UploadController : BaseController
         _logger = logger;
     }
 
-    [Authorize]
+    [Authorize(Policy = "VerifiedEmail")]
     [RequireCreatorTier]
     [RequireUsername]
     [HttpPost("upload")]
@@ -95,36 +95,6 @@ public class UploadController : BaseController
         };
 
         await using var stream = file.OpenReadStream();
-
-        // SECURITY: Validate image magic bytes to prevent disguised file uploads
-        var imgMagic = new Dictionary<string, byte[][]>
-        {
-            [".jpg"] = [new byte[] { 0xFF, 0xD8, 0xFF }],
-            [".jpeg"] = [new byte[] { 0xFF, 0xD8, 0xFF }],
-            [".png"] = [new byte[] { 0x89, 0x50, 0x4E, 0x47 }],
-            [".webp"] = [System.Text.Encoding.ASCII.GetBytes("RIFF")]
-        };
-        if (imgMagic.TryGetValue(ext, out var signatures))
-        {
-            var headerBuf = new byte[12];
-            var bytesRead = await stream.ReadAsync(headerBuf);
-            stream.Position = 0;
-            var matched = false;
-            foreach (var sig in signatures)
-            {
-                if (bytesRead >= sig.Length && headerBuf.AsSpan(0, sig.Length).SequenceEqual(sig))
-                {
-                    matched = true;
-                    // WebP: also verify "WEBP" at offset 8
-                    if (ext == ".webp" && (bytesRead < 12 || !headerBuf.AsSpan(8, 4).SequenceEqual(System.Text.Encoding.ASCII.GetBytes("WEBP"))))
-                        matched = false;
-                    break;
-                }
-            }
-            if (!matched)
-                return ErrorResponse("File content does not match expected image format. The file may be corrupted or disguised.");
-        }
-
         await _storage.UploadAsync(stream, key, contentType);
         var url = _storage.GenerateSignedUrl(key);
 

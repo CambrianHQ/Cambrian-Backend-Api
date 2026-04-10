@@ -131,6 +131,19 @@
         }
       }
     },
+    "/admin/storage-diagnostics": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Admin diagnostic — checks object-storage configuration and connectivity."
+      }
+    },
     "/admin/audit": {
       "get": {
         "tags": [
@@ -2137,6 +2150,77 @@
           }
         },
         "summary": "Complete email change via verification token."
+      }
+    },
+    "/auth/send-verification-email": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Re-send the initial email verification link to the authenticated user."
+      }
+    },
+    "/auth/verify-email": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Complete initial email verification via the link token."
       }
     },
     "/auth/display-name": {
@@ -5031,7 +5115,7 @@
             "description": "License not found."
           }
         },
-        "summary": "Publicly verify a license certificate."
+        "summary": "Publicly verify that a license certificate exists and is valid."
       }
     },
     "/payments/checkout": {

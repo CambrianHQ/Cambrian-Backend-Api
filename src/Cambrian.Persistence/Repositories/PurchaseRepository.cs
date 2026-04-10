@@ -1,4 +1,5 @@
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -76,14 +77,14 @@ public class PurchaseRepository : IPurchaseRepository
             .AnyAsync(p =>
                 p.BuyerId == userId &&
                 p.TrackId == trackId &&
-                p.Status == "completed");
+                p.Status == PurchaseStatuses.Completed);
     }
 
     public async Task<Dictionary<Guid, int>> GetCompletedCountsByTrackIdsAsync(IEnumerable<Guid> trackIds)
     {
         var trackIdSet = trackIds.ToHashSet();
         return await _db.Purchases
-            .Where(p => trackIdSet.Contains(p.TrackId) && p.Status == "completed")
+            .Where(p => trackIdSet.Contains(p.TrackId) && p.Status == PurchaseStatuses.Completed)
             .GroupBy(p => p.TrackId)
             .Select(g => new { TrackId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.TrackId, x => x.Count);

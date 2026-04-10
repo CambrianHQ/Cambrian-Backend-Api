@@ -1,7 +1,10 @@
 using System.Security.Claims;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Checkout;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Pricing;
+using Cambrian.Domain.Constants;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
@@ -19,6 +22,8 @@ public class CheckoutService : ICheckoutService
     private readonly ILicenseService _licenseService;
     private readonly ITransactionManager _transactions;
     private readonly IEmailService _email;
+    private readonly ISubscriptionRepository _subscriptions;
+    private readonly IConfiguration _config;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<CheckoutService> _logger;
     private readonly string _frontendUrl;
@@ -32,6 +37,7 @@ public class CheckoutService : ICheckoutService
         ILicenseService licenseService,
         ITransactionManager transactions,
         IEmailService email,
+        ISubscriptionRepository subscriptions,
         IConfiguration configuration,
         UserManager<ApplicationUser> users,
         ILogger<CheckoutService> logger)
@@ -44,6 +50,8 @@ public class CheckoutService : ICheckoutService
         _licenseService = licenseService;
         _transactions = transactions;
         _email = email;
+        _subscriptions = subscriptions;
+        _config = configuration;
         _users = users;
         _logger = logger;
         _frontendUrl = configuration["App:FrontendUrl"]
@@ -70,6 +78,14 @@ public class CheckoutService : ICheckoutService
         if (string.IsNullOrEmpty(userId))
             throw new UnauthorizedAccessException("User is not authenticated.");
 
+        var requireSub = _config.GetValue<bool>("Checkout:RequireSubscription", true);
+        if (requireSub)
+        {
+            var activeSub = await _subscriptions.GetActiveAsync(userId);
+            if (activeSub is null || activeSub.Status != "active")
+                throw new ForbiddenException("subscription_required");
+        }
+
         if (string.Equals(track.CreatorId, userId, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("You cannot purchase your own track.");
 
@@ -79,7 +95,7 @@ public class CheckoutService : ICheckoutService
         var duplicate = existingPurchases
             .FirstOrDefault(p => p.TrackId == trackId
                               && p.LicenseType == request.LicenseType
-                              && p.Status == "completed");
+                              && p.Status == PurchaseStatuses.Completed);
         if (duplicate is not null)
             throw new InvalidOperationException("You already own this license for this track.");
 
@@ -91,10 +107,6 @@ public class CheckoutService : ICheckoutService
             "copyright_buyout" => track.CopyrightBuyoutPriceCents > 0 ? track.CopyrightBuyoutPriceCents : (track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : (int)(track.Price * 100)),
             _ => (int)(track.Price * 100)
         };
-
-        // ── INVARIANT: checkout amount must be positive ──
-        if (amountCents <= 0)
-            throw new InvalidOperationException("Track price must be greater than zero to start checkout.");
 
         var userEmail = user.FindFirstValue(ClaimTypes.Email)
                      ?? user.FindFirstValue("email");
@@ -210,9 +222,9 @@ public class CheckoutService : ICheckoutService
         if (existingPurchase is not null)
         {
             // Already fulfilled — ensure it's marked completed
-            if (existingPurchase.Status != "completed")
+            if (existingPurchase.Status != PurchaseStatuses.Completed)
             {
-                existingPurchase.Status = "completed";
+                existingPurchase.Status = PurchaseStatuses.Completed;
                 await _purchases.UpdateAsync(existingPurchase);
             }
 
@@ -280,16 +292,30 @@ public class CheckoutService : ICheckoutService
             }
 
             // ── Create Purchase record ──
+            // Stripe AmountTotal is long. Purchase.AmountCents is int (~$21.4M ceiling).
+            // Refuse to silently truncate — fail the confirm so the buyer is not charged
+            // for an unfulfilled purchase. Stripe will retry / manual reconciliation handles
+            // the rare overflow case.
+            var sessionRawAmount = session.AmountTotal ?? 0;
+            if (sessionRawAmount > int.MaxValue || sessionRawAmount < 0)
+            {
+                _logger.LogError(
+                    "[CHECKOUT-OVERFLOW] Session {SessionId} amount {Amount}c exceeds int.MaxValue or is negative — refusing to fulfill.",
+                    sessionId, sessionRawAmount);
+                await _transactions.RollbackAsync();
+                return new CheckoutConfirmResponse { Status = "failed", SessionId = sessionId };
+            }
+
             var purchase = new Purchase
             {
                 Id = Guid.NewGuid(),
                 BuyerId = userId,
                 TrackId = trackId,
-                AmountCents = (int)(session.AmountTotal ?? 0),
+                AmountCents = (int)sessionRawAmount,
                 PaymentMethod = "stripe",
                 LicenseType = licenseType,
                 UsageType = usageType,
-                Status = "completed",
+                Status = PurchaseStatuses.Completed,
                 StripeSessionId = sessionId,
                 CompletedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow
@@ -327,7 +353,10 @@ public class CheckoutService : ICheckoutService
                     ? TierManifest.For(creatorUser.CreatorTier).FeeRate
                     : TierManifest.Free.FeeRate;
                 var grossCents = session.AmountTotal.Value;
-                var creatorCents = (long)Math.Floor(grossCents * (1 - platformFeeRate));
+                // Single source of truth: see CreatorEarningsCalculator. Floors at 0
+                // and uses per-purchase Math.Floor so the dashboard total matches the
+                // sum of WalletTransaction credits.
+                var creatorCents = CreatorEarningsCalculator.ComputeCreatorCents(grossCents, platformFeeRate);
 
                 if (creatorCents > 0)
                 {

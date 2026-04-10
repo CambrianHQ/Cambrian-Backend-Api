@@ -168,11 +168,26 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
             ValidIssuer = jwt.Issuer,
             ValidAudience = jwt.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
-            ClockSkew = TimeSpan.FromMinutes(2)
+            // Tightened from 2 minutes — expired tokens were valid for 120s after expiry,
+            // giving an attacker a wide replay window. 30s tolerates clock drift between
+            // Render's nodes without meaningfully extending token lifetime.
+            ClockSkew = TimeSpan.FromSeconds(30)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // "VerifiedEmail" — applied via [Authorize(Policy = "VerifiedEmail")] on
+    // high-stakes write endpoints (Upload, Checkout, Payouts, ApiKeys, Wallet)
+    // so an unverified registration cannot trigger purchases or payouts.
+    // The claim is set in AuthService.GenerateJwt from ApplicationUser.EmailVerified.
+    options.AddPolicy("VerifiedEmail", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+            ctx.User.HasClaim(c => c.Type == "email_verified" && c.Value == "true"));
+    });
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddControllers();
 
@@ -436,20 +451,44 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-XSS-Protection"] = "0";
     if (!app.Environment.IsDevelopment())
         context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+
+    // Cross-Origin-Resource-Policy: emit "cross-origin" on image and audio
+    // responses so clients that bypass the Vercel image proxy (production CDN
+    // setups, third-party embeds, MCP/AI consumers) don't hit Opaque Response
+    // Blocking. Set via OnStarting so the Content-Type is populated by the
+    // time we inspect it. Also covers 302 redirect responses from /stream/*.
+    context.Response.OnStarting(() =>
+    {
+        var contentType = context.Response.ContentType;
+        var path = context.Request.Path.Value ?? string.Empty;
+
+        var isMedia =
+            (contentType is not null && (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                                      || contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)))
+            || path.StartsWith("/images/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/stream/", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/uploads/covers/", StringComparison.OrdinalIgnoreCase);
+
+        if (isMedia)
+        {
+            context.Response.Headers["Cross-Origin-Resource-Policy"] = "cross-origin";
+        }
+
+        return Task.CompletedTask;
+    });
+
     await next();
 });
 
 app.UseCors();
 
-// Serve static files — block direct access to uploaded audio only.
-// Images (avatars, banners, covers, creator-profiles) must be publicly accessible.
+// Serve static files — block direct access to uploaded audio
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
         var path = ctx.File.PhysicalPath ?? "";
-        // Only block audio/track files — allow all image paths through
-        if (path.Contains("uploads") && (path.Contains("audio") || path.Contains("tracks")))
+        if (path.Contains("uploads") && !path.Contains("covers"))
         {
             ctx.Context.Response.StatusCode = StatusCodes.Status403Forbidden;
             ctx.Context.Response.ContentLength = 0;
@@ -459,7 +498,15 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.UseRateLimiter();
-app.UseMiddleware<DevAuthMiddleware>();
+
+// DevAuthMiddleware grants admin via "Bearer test-audit-token" for local audits.
+// It MUST never be reachable from non-Development pipelines, even though the middleware
+// itself short-circuits on env check — defense in depth.
+if (app.Environment.IsDevelopment())
+{
+    app.UseMiddleware<DevAuthMiddleware>();
+}
+
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseAuthorization();
