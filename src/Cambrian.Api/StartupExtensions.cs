@@ -617,7 +617,11 @@ internal static class StartupExtensions
             // Skip if already seeded (check for sentinel track)
             if (await db.Tracks.AnyAsync(t => t.CambrianTrackId == "CAMB-TRK-SEED0001"))
             {
-                Console.WriteLine("[Seed] Staging data already present — skipping");
+                Console.WriteLine("[Seed] Staging data already present — ensuring media placeholders exist");
+                var existingTracks = await db.Tracks
+                    .Where(t => t.CambrianTrackId.StartsWith("CAMB-TRK-SEED"))
+                    .ToListAsync();
+                await EnsureSeedMediaAsync(app, existingTracks);
                 return;
             }
 
