@@ -160,9 +160,15 @@ public class CreatorProfileController : BaseController
     {
         var userId = GetRequiredUserId()!;
 
+        // Auto-derive slug from the creator's username when not explicitly provided.
         var slug = body.Slug?.Trim().ToLowerInvariant() ?? "";
         if (string.IsNullOrWhiteSpace(slug))
-            return ErrorResponse("Slug is required.");
+        {
+            var creator = await _creators.GetByUserIdAsync(userId);
+            slug = creator?.Username?.Trim().ToLowerInvariant() ?? "";
+        }
+        if (string.IsNullOrWhiteSpace(slug))
+            return ErrorResponse("Slug is required. Set a username first via POST /auth/set-username.");
 
         if (slug.Length < 3 || slug.Length > 100)
             return ErrorResponse("Slug must be between 3 and 100 characters.");

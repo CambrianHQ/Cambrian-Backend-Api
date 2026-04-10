@@ -197,11 +197,17 @@ public class StreamController : BaseController
         public string? Title { get; set; }
     }
 
+    public class StreamStopRequest
+    {
+        public string? StreamId { get; set; }
+    }
+
     [Authorize]
     [HttpPost("stop")]
-    public async Task<IActionResult> Stop([FromQuery] string? streamId = null)
+    public async Task<IActionResult> Stop([FromBody] StreamStopRequest? body = null, [FromQuery] string? streamId = null)
     {
-        if (string.IsNullOrWhiteSpace(streamId) || !Guid.TryParse(streamId, out var sid))
+        var rawStreamId = body?.StreamId ?? streamId;
+        if (string.IsNullOrWhiteSpace(rawStreamId) || !Guid.TryParse(rawStreamId, out var sid))
             return ErrorResponse("streamId must be a valid GUID.");
 
         var session = await _streams.GetByIdAsync(sid);
