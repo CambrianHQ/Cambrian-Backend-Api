@@ -617,10 +617,11 @@ internal static class StartupExtensions
             // Skip if already seeded (check for sentinel track)
             if (await db.Tracks.AnyAsync(t => t.CambrianTrackId == "CAMB-TRK-SEED0001"))
             {
-                Console.WriteLine("[Seed] Staging data already present — ensuring media placeholders exist");
+                app.Logger.LogWarning("[Seed] Staging data already present — ensuring media placeholders exist");
                 var existingTracks = await db.Tracks
                     .Where(t => t.CambrianTrackId.StartsWith("CAMB-TRK-SEED"))
                     .ToListAsync();
+                app.Logger.LogWarning("[Seed] Found {Count} seed tracks for media check", existingTracks.Count);
                 await EnsureSeedMediaAsync(app, existingTracks);
                 return;
             }
@@ -945,9 +946,7 @@ internal static class StartupExtensions
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Seed] Staging data error: {ex.Message}");
-            if (ex.InnerException is not null)
-                Console.WriteLine($"[Seed]   Inner: {ex.InnerException.Message}");
+            app.Logger.LogError(ex, "[Seed] Staging data error: {Message}", ex.Message);
         }
     }
 
@@ -1010,6 +1009,7 @@ internal static class StartupExtensions
     private static async Task EnsureSeedMediaAsync(WebApplication app, IEnumerable<Track> tracks)
     {
         var storageProvider = app.Configuration["Storage:Provider"] ?? "local";
+        app.Logger.LogWarning("[Seed] EnsureSeedMediaAsync: provider={Provider}", storageProvider);
 
         if (string.Equals(storageProvider, "local", StringComparison.OrdinalIgnoreCase))
         {
@@ -1042,45 +1042,63 @@ internal static class StartupExtensions
 
         var uploaded = 0;
         var skipped = 0;
+        var errors = 0;
 
         foreach (var track in tracks)
         {
             // Upload cover art
             if (!string.IsNullOrWhiteSpace(track.CoverArtUrl))
             {
-                var existing = await storage.OpenReadAsync(track.CoverArtUrl);
-                if (existing is not null)
+                try
                 {
-                    existing.Dispose();
-                    skipped++;
+                    var existing = await storage.OpenReadAsync(track.CoverArtUrl);
+                    if (existing is not null)
+                    {
+                        existing.Dispose();
+                        skipped++;
+                    }
+                    else
+                    {
+                        using var coverStream = new MemoryStream(jpegPlaceholder);
+                        await storage.UploadAsync(coverStream, track.CoverArtUrl, "image/jpeg");
+                        uploaded++;
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    using var coverStream = new MemoryStream(jpegPlaceholder);
-                    await storage.UploadAsync(coverStream, track.CoverArtUrl, "image/jpeg");
-                    uploaded++;
+                    app.Logger.LogError(ex, "[Seed] Failed to seed cover: key={Key}", track.CoverArtUrl);
+                    errors++;
                 }
             }
 
             // Upload audio
             if (!string.IsNullOrWhiteSpace(track.AudioUrl))
             {
-                var existing = await storage.OpenReadAsync(track.AudioUrl);
-                if (existing is not null)
+                try
                 {
-                    existing.Dispose();
-                    skipped++;
+                    var existing = await storage.OpenReadAsync(track.AudioUrl);
+                    if (existing is not null)
+                    {
+                        existing.Dispose();
+                        skipped++;
+                    }
+                    else
+                    {
+                        using var audioStream = new MemoryStream(mp3Placeholder);
+                        await storage.UploadAsync(audioStream, track.AudioUrl, "audio/mpeg");
+                        uploaded++;
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    using var audioStream = new MemoryStream(mp3Placeholder);
-                    await storage.UploadAsync(audioStream, track.AudioUrl, "audio/mpeg");
-                    uploaded++;
+                    app.Logger.LogError(ex, "[Seed] Failed to seed audio: key={Key}", track.AudioUrl);
+                    errors++;
                 }
             }
         }
 
-        Console.WriteLine($"[Seed] S3 placeholder media: {uploaded} uploaded, {skipped} already existed");
+        app.Logger.LogWarning("[Seed] S3 placeholder media: {Uploaded} uploaded, {Skipped} already existed, {Errors} errors",
+            uploaded, skipped, errors);
     }
 
     /// <summary>
