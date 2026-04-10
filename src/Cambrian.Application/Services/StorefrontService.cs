@@ -46,16 +46,11 @@ public sealed class StorefrontService : IStorefrontService
         // Resolve creator UUID for dual-FK track lookup
         var creatorUuid = await _creators.GetCreatorIdForUserAsync(profile.UserId);
 
-        // Fetch storefront-safe tracks, collections, and stats in parallel
-        var tracksTask = _tracks.GetStorefrontTracksAsync(profile.UserId, creatorUuid);
-        var collectionsTask = _profiles.GetCollectionsAsync(profile.UserId);
-        var purchasesTask = _purchases.GetByCreatorIdAsync(profile.UserId, creatorUuid);
-
-        await Task.WhenAll(tracksTask, collectionsTask, purchasesTask);
-
-        var tracks = tracksTask.Result;
-        var collections = collectionsTask.Result;
-        var purchases = purchasesTask.Result;
+        // EF Core does not support concurrent operations on a single DbContext,
+        // so these must run sequentially — not via Task.WhenAll.
+        var tracks = await _tracks.GetStorefrontTracksAsync(profile.UserId, creatorUuid);
+        var collections = await _profiles.GetCollectionsAsync(profile.UserId);
+        var purchases = await _purchases.GetByCreatorIdAsync(profile.UserId, creatorUuid);
 
         // Resolve creator fee rate
         var creator = await _users.FindByIdAsync(profile.UserId);
