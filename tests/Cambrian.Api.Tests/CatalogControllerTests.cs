@@ -4,6 +4,7 @@ using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -124,6 +125,42 @@ public sealed class CatalogControllerTests
         Assert.True(envelope.Success);
         Assert.Single(envelope.Data);
         Assert.Equal(50, envelope.PageSize);
+    }
+
+    [Fact]
+    public async Task Catalog_NormalizesAbsoluteBackendImageUrls_WithoutDoubleProxying()
+    {
+        var trackId = Guid.NewGuid().ToString();
+        _catalog.GetCatalogPagedAsync(1, 50, null, null, null, null, null, null, null).Returns(new PagedResult<TrackResponse>
+        {
+            Items = new List<TrackResponse>
+            {
+                new()
+                {
+                    Id = trackId,
+                    Title = "Beat 1",
+                    CoverArtUrl = "https://old-api.example.com/images/covers/user-1/beat.jpg"
+                }
+            },
+            Page = 1,
+            PageSize = 50,
+            TotalCount = 1
+        });
+
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+        _controller.ControllerContext.HttpContext.Request.Scheme = "https";
+        _controller.ControllerContext.HttpContext.Request.Host = new HostString("api.example.com");
+
+        var result = await _controller.Catalog(new CatalogQueryRequest());
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var envelope = Assert.IsType<CatalogPageResponse>(ok.Value);
+        var item = Assert.Single(envelope.Data);
+        Assert.Equal("https://api.example.com/images/covers/user-1/beat.jpg", item.CoverArtUrl);
+        Assert.DoesNotContain("/images/images/", item.CoverArtUrl, StringComparison.OrdinalIgnoreCase);
     }
 
     // ── GetTrack ──
