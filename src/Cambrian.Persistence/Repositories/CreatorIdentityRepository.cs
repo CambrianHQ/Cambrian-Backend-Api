@@ -88,9 +88,12 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .Select(p => p.ProfileImageUrl)
             .FirstOrDefaultAsync();
 
+        var artistName = creator.DisplayName ?? creator.Username;
         // Dual-FK query: match CreatorUuid (new) OR CreatorId (legacy string FK)
         var legacyUserId = creator.UserId;
-        var tracks = await _db.Tracks
+        // Project directly to the API DTO so stale databases missing newer Track columns
+        // like PrimaryGenre/Subgenre do not fail this storefront query.
+        return await _db.Tracks
             .AsNoTracking()
             .Where(t => (t.CreatorUuid == creatorId || t.CreatorId == legacyUserId)
                         && t.Visibility == "public"
@@ -99,34 +102,33 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .OrderByDescending(t => t.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(t => new TrackResponse
+            {
+                Id = t.Id.ToString(),
+                CambrianTrackId = t.CambrianTrackId,
+                Title = t.Title,
+                Description = t.Description,
+                Genre = t.Genre ?? "",
+                Price = t.Price,
+                NonExclusivePrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
+                ExclusivePrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price,
+                CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents > 0
+                    ? t.CopyrightBuyoutPriceCents / 100m
+                    : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price),
+                ExclusiveSold = t.ExclusiveSold,
+                Status = t.Status ?? "available",
+                IsCopyrightTransferred = t.CopyrightOwnerId != null,
+                LicenseType = t.LicenseType,
+                Duration = t.Duration,
+                AudioUrl = t.AudioUrl,
+                CoverArtUrl = t.CoverArtUrl,
+                CreatorId = t.CreatorId,
+                Artist = artistName,
+                CreatorSlug = creator.Username,
+                CreatorProfileImageUrl = profileImageUrl,
+                CreatedAt = t.CreatedAt,
+            })
             .ToListAsync();
-
-        return tracks.Select(t => new TrackResponse
-        {
-            Id = t.Id.ToString(),
-            CambrianTrackId = t.CambrianTrackId,
-            Title = t.Title,
-            Description = t.Description,
-            Genre = t.Genre ?? "",
-            Price = (decimal)t.Price,
-            NonExclusivePrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : (decimal)t.Price,
-            ExclusivePrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : (decimal)t.Price,
-            CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents > 0
-                ? t.CopyrightBuyoutPriceCents / 100m
-                : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : (decimal)t.Price),
-            ExclusiveSold = t.ExclusiveSold,
-            Status = t.Status ?? "available",
-            IsCopyrightTransferred = t.CopyrightOwnerId != null,
-            LicenseType = t.LicenseType,
-            Duration = t.Duration,
-            AudioUrl = t.AudioUrl,
-            CoverArtUrl = t.CoverArtUrl,
-            CreatorId = t.CreatorId,
-            Artist = creator.DisplayName ?? creator.Username,
-            CreatorSlug = creator.Username,
-            CreatorProfileImageUrl = profileImageUrl,
-            CreatedAt = t.CreatedAt,
-        }).ToList();
     }
 
     public async Task<bool> IsUsernameTakenAsync(string normalizedUsername, Guid? excludeCreatorId = null)
