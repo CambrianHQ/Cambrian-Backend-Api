@@ -735,11 +735,12 @@ public class AuthService : IAuthService
 
         var needsUsername = string.IsNullOrWhiteSpace(user.UserName)
                             || string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
-        var isCreatorOrAdmin = string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase);
-        // Only flag as new user if the account was JUST created — not if Google was linked
-        // to an existing email-registered account (which would incorrectly re-trigger onboarding).
-        var isNewGoogleUser = accountCreated && needsUsername && !isCreatorOrAdmin;
+        // Flag as new user when the account was JUST created and still needs a username.
+        // accountCreated already prevents re-triggering onboarding for existing accounts
+        // that later sign in via Google. The previous !isCreatorOrAdmin guard was wrong
+        // because new Google users are assigned Role="Creator" at line 714, so isNewGoogleUser
+        // was always false — blocking the onboarding redirect for every Google signup.
+        var isNewGoogleUser = accountCreated && needsUsername;
 
         _logger.LogInformation("Google login success: User={UserId} Tier={Tier} IsNew={IsNew} AccountCreated={Created}", user.Id, resolvedTier, isNewGoogleUser, accountCreated);
 
