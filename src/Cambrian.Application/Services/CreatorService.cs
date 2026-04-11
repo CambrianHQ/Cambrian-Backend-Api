@@ -17,6 +17,7 @@ public class CreatorService : ICreatorService
     private readonly IStreamRepository _streams;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ICreatorIdentityRepository _creators;
+    private readonly ICreatorProfileRepository _profiles;
     private readonly ILogger<CreatorService> _logger;
 
     public CreatorService(
@@ -27,6 +28,7 @@ public class CreatorService : ICreatorService
         IStreamRepository streams,
         UserManager<ApplicationUser> users,
         ICreatorIdentityRepository creators,
+        ICreatorProfileRepository profiles,
         ILogger<CreatorService> logger)
     {
         _tracks = tracks;
@@ -36,17 +38,19 @@ public class CreatorService : ICreatorService
         _streams = streams;
         _users = users;
         _creators = creators;
+        _profiles = profiles;
         _logger = logger;
     }
 
     public async Task<IReadOnlyCollection<TrackResponse>> GetTracksAsync(string userId, int page, int pageSize)
     {
         var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
-        var tracks = await _tracks.GetByCreatorIdAsync(userId, creatorUuid);
+        var tracks = await _tracks.GetCreatorTrackSummariesAsync(userId, creatorUuid);
         _logger.LogInformation("Creator dashboard: User={UserId} tracks={Count}", userId, tracks.Count);
 
         // Resolve creator's actual fee rate from TierManifest
         var creator = await _users.FindByIdAsync(userId);
+        var profile = await _profiles.GetByUserIdAsync(userId);
         var feeRate = creator is not null
             ? TierManifest.For(creator.CreatorTier).FeeRate
             : TierManifest.Free.FeeRate;
@@ -60,31 +64,45 @@ public class CreatorService : ICreatorService
                 var legacyPriceDollars = t.Price;
                 var nonExPrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : legacyPriceDollars;
                 var exPrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : legacyPriceDollars;
+                var buyoutPrice = t.CopyrightBuyoutPriceCents > 0 ? t.CopyrightBuyoutPriceCents / 100m : exPrice;
 
                 return new TrackResponse
                 {
                     Id = t.Id.ToString(),
+                    CambrianTrackId = t.CambrianTrackId,
                     Title = t.Title,
-                    Genre = t.Subgenre ?? t.Genre ?? t.PrimaryGenre ?? "",
-                    PrimaryGenre = t.PrimaryGenre,
-                    Subgenre = t.Subgenre,
+                    Description = t.Description,
+                    Genre = t.Genre ?? "",
+                    PrimaryGenre = null,
+                    Subgenre = t.Genre,
+                    Mood = t.Mood,
+                    Tempo = t.Tempo,
+                    Tags = t.Tags,
+                    Instrumental = t.Instrumental,
+                    Visibility = t.Visibility,
                     Price = t.Price,
                     NonExclusivePrice = nonExPrice,
                     ExclusivePrice = exPrice,
+                    CopyrightBuyoutPrice = buyoutPrice,
                     PlatformFeePercent = feeRate,
                     NonExclusivePlatformFee = Math.Round(nonExPrice * feeRate, 2),
                     NonExclusiveCreatorEarnings = Math.Round(nonExPrice * (1 - feeRate), 2),
                     ExclusivePlatformFee = Math.Round(exPrice * feeRate, 2),
                     ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - feeRate), 2),
+                    CopyrightBuyoutPlatformFee = Math.Round(buyoutPrice * feeRate, 2),
+                    CopyrightBuyoutCreatorEarnings = Math.Round(buyoutPrice * (1 - feeRate), 2),
                     AudioUrl = t.AudioUrl ?? "",
                     CoverArtUrl = t.CoverArtUrl,
-                    CreatorSlug = t.CreatorEntity?.Username,
-                    CreatorProfileImageUrl = t.CreatorEntity?.ProfileImageUrl,
-                    Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
-                        ? t.CreatorEntity.DisplayName
-                        : t.CreatorEntity?.Username
-                          ?? t.Creator?.DisplayName
-                          ?? "Unknown Artist",
+                    ExclusiveSold = t.ExclusiveSold,
+                    Status = t.Status,
+                    IsCopyrightTransferred = string.Equals(t.Status, "copyright_transferred", StringComparison.OrdinalIgnoreCase),
+                    LicenseType = t.LicenseType,
+                    Duration = t.Duration,
+                    CreatorId = userId,
+                    CreatorSlug = profile?.Slug,
+                    CreatorProfileImageUrl = profile?.ProfileImageUrl,
+                    Artist = creator?.DisplayName ?? creator?.UserName ?? "Unknown Artist",
+                    CreatedAt = t.CreatedAt,
                 };
             })
             .ToList();
@@ -93,7 +111,7 @@ public class CreatorService : ICreatorService
     public async Task<object> GetRevenueAsync(string userId)
     {
         var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
-        var tracks = await _tracks.GetByCreatorIdAsync(userId, creatorUuid);
+        var tracks = await _tracks.GetDashboardTrackSummariesAsync(userId, creatorUuid);
         var trackIds = tracks.Select(t => t.Id).ToHashSet();
 
         var allPurchases = new List<Domain.Entities.Purchase>();
