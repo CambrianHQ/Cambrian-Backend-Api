@@ -4,6 +4,7 @@ using Cambrian.Infrastructure.Email;
 using Cambrian.Infrastructure.Options;
 using Cambrian.Infrastructure.Sms;
 using Cambrian.Infrastructure.Storage;
+using Cambrian.Infrastructure.Stripe;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -194,6 +195,19 @@ internal static class StartupExtensions
         }
     }
 
+    public static void AddPaymentGateway(this WebApplicationBuilder builder)
+    {
+        var stripeKey = builder.Configuration["Stripe:SecretKey"] ?? "";
+        if (builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(stripeKey))
+        {
+            Console.WriteLine("[Startup] Stripe:SecretKey not set — using development payment gateway.");
+            builder.Services.AddSingleton<IPaymentGateway, DevelopmentPaymentGateway>();
+            return;
+        }
+
+        builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
+    }
+
     /// <summary>Configure CORS origin matching including Vercel/Cloudflare previews.</summary>
     public static void AddCorsPolicy(this WebApplicationBuilder builder)
     {
@@ -330,7 +344,7 @@ internal static class StartupExtensions
             throw new InvalidOperationException(
                 "Stripe:SecretKey must be configured in Production. Payment endpoints require a live key.");
         else
-            Console.WriteLine("[INFO] Stripe:SecretKey not set — payment endpoints will return mock responses.");
+            Console.WriteLine("[INFO] Stripe:SecretKey not set — Development uses a local payment gateway; other non-production environments require explicit Stripe config.");
 
         // Validate webhook secret is configured in production to prevent signature bypass
         var webhookSecret = builder.Configuration["Stripe:WebhookSecret"] ?? "";

@@ -13,4 +13,10 @@ public interface IDebugService
 
     /// <summary>Finds completed purchases that have no matching library item.</summary>
     Task<object> RunConsistencyCheckAsync();
+
+    /// <summary>Returns recent console email/SMS deliveries captured in non-production.</summary>
+    Task<object> GetRecentLocalDeliveriesAsync(int limit = 25, string? recipient = null, string? kind = null);
+
+    /// <summary>Returns the latest locally captured password reset delivery.</summary>
+    Task<object?> GetLatestLocalPasswordResetAsync(string? email = null, string? phoneNumber = null);
 }

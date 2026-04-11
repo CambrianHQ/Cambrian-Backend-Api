@@ -167,6 +167,28 @@ public sealed class PaymentsControllerTests
             }));
     }
 
+    [Fact]
+    public async Task GetPurchases_ReturnsOk_WithBuyerPurchases()
+    {
+        SetupUser("buyer-1");
+        _purchaseService.GetByBuyerAsync("buyer-1").Returns(new[]
+        {
+            new PurchaseResponse
+            {
+                Id = Guid.NewGuid().ToString(),
+                TrackId = Guid.NewGuid().ToString(),
+                Status = "completed",
+                LicenseType = "non-exclusive",
+                AmountCents = 2999
+            }
+        });
+
+        var result = await _controller.GetPurchases();
+
+        Assert.IsType<OkObjectResult>(result);
+        await _purchaseService.Received(1).GetByBuyerAsync("buyer-1");
+    }
+
     // ── CreditCreator ──
 
     [Fact]
