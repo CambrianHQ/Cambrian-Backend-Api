@@ -19,3 +19,10 @@ public class TrackStatsDto
     public int Plays { get; set; }
     public long EarnedCents { get; set; }
 }
+
+public class CreatorDashboardTrackSummary
+{
+    public Guid Id { get; set; }
+    public string Title { get; set; } = "";
+    public string? CoverArtUrl { get; set; }
+}

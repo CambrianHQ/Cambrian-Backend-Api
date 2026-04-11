@@ -38,9 +38,13 @@ public sealed class RoleAccessMatrixTests : IClassFixture<CambrianApiFixture>
         using var creator = await CreateCreatorClientAsync();
         using var admin = await CreateAdminClientAsync();
 
-        var userResponse = await user.PostAsync("/upload", new MultipartFormDataContent());
-        var creatorResponse = await creator.PostAsync("/upload", new MultipartFormDataContent());
-        var adminResponse = await admin.PostAsync("/upload", new MultipartFormDataContent());
+        using var userContent = BuildValidUploadRequest();
+        using var creatorContent = BuildValidUploadRequest();
+        using var adminContent = BuildValidUploadRequest();
+
+        var userResponse = await user.PostAsync("/upload", userContent);
+        var creatorResponse = await creator.PostAsync("/upload", creatorContent);
+        var adminResponse = await admin.PostAsync("/upload", adminContent);
 
         Assert.Equal(HttpStatusCode.Forbidden, userResponse.StatusCode);
         Assert.DoesNotContain(creatorResponse.StatusCode, new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden });
@@ -122,5 +126,17 @@ public sealed class RoleAccessMatrixTests : IClassFixture<CambrianApiFixture>
             email: $"matrix-admin-{seed}@cambrian.com",
             password: "Test1234!@",
             role: "Admin");
+    }
+
+    private static MultipartFormDataContent BuildValidUploadRequest()
+    {
+        var content = new MultipartFormDataContent();
+        content.Add(new StringContent("Matrix Upload"), "Title");
+
+        var audio = new ByteArrayContent(new byte[] { 0xFF, 0xFB, 0x90, 0x00 });
+        audio.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("audio/mpeg");
+        content.Add(audio, "Audio", "matrix-test.mp3");
+
+        return content;
     }
 }

@@ -1,4 +1,5 @@
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.DTOs.Creator;
 using Cambrian.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -99,6 +100,20 @@ public class TrackRepository : ITrackRepository
             .Include(t => t.CreatorEntity)
             .Where(t => t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
             .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<CreatorDashboardTrackSummary>> GetDashboardTrackSummariesAsync(string creatorId, Guid? creatorUuid = null)
+    {
+        return await _db.Tracks
+            .Where(t => t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+            .OrderByDescending(t => t.CreatedAt)
+            .Select(t => new CreatorDashboardTrackSummary
+            {
+                Id = t.Id,
+                Title = t.Title,
+                CoverArtUrl = t.CoverArtUrl,
+            })
             .ToListAsync();
     }
 

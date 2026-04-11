@@ -28,6 +28,7 @@ public sealed class OpenApiEndpointCoverageTests : IClassFixture<CambrianApiFixt
         HttpStatusCode.NotFound,
         HttpStatusCode.MethodNotAllowed,
         HttpStatusCode.Conflict,
+        HttpStatusCode.ServiceUnavailable,
         HttpStatusCode.UnsupportedMediaType,
         HttpStatusCode.PaymentRequired,
         HttpStatusCode.UnprocessableEntity,

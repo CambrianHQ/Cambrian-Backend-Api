@@ -143,7 +143,7 @@ public class CreatorService : ICreatorService
 
         // Load creator tracks for per-track breakdown
         var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
-        var tracks = await _tracks.GetByCreatorIdAsync(userId, creatorUuid);
+        var tracks = await _tracks.GetDashboardTrackSummariesAsync(userId, creatorUuid);
         var trackIds = tracks.Select(t => t.Id).ToList();
 
         // Plays = COUNT(*) FROM StreamSessions WHERE TrackId IN (creator tracks)
