@@ -13,6 +13,12 @@ public class EditTrackRequest
     [MaxLength(60)]
     public string? Genre { get; set; }
 
+    [MaxLength(60)]
+    public string? PrimaryGenre { get; set; }
+
+    [MaxLength(60)]
+    public string? Subgenre { get; set; }
+
     [MaxLength(50)]
     public string? Mood { get; set; }
 

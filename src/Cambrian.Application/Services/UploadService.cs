@@ -1,8 +1,10 @@
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Catalog;
+using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
@@ -14,6 +16,7 @@ public class UploadService : IUploadService
     private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<UploadService> _logger;
     private readonly ICreatorIdentityRepository _creators;
+    private readonly ICreatorProfileRepository? _profiles;
 
     /// <summary>Allowed audio file extensions (lowercase, with dot).</summary>
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -120,13 +123,20 @@ public class UploadService : IUploadService
         return false;
     }
 
-    public UploadService(IObjectStorage storage, ITrackRepository tracks, UserManager<ApplicationUser> users, ILogger<UploadService> logger, ICreatorIdentityRepository creators)
+    public UploadService(
+        IObjectStorage storage,
+        ITrackRepository tracks,
+        UserManager<ApplicationUser> users,
+        ILogger<UploadService> logger,
+        ICreatorIdentityRepository creators,
+        ICreatorProfileRepository? profiles = null)
     {
         _storage = storage;
         _tracks = tracks;
         _users = users;
         _logger = logger;
         _creators = creators;
+        _profiles = profiles;
     }
 
     public async Task<UploadTrackResponse> Upload(UploadTrackRequest request)
@@ -186,37 +196,9 @@ public class UploadService : IUploadService
             key,
             string.IsNullOrWhiteSpace(request.Audio.ContentType) ? "audio/mpeg" : request.Audio.ContentType);
 
-        // ── Optional cover art upload ──
         string? coverArtUrl = null;
         if (request.CoverArt is not null && request.CoverArt.Length > 0)
-        {
-            if (request.CoverArt.Length > MaxCoverArtSizeBytes)
-                throw new ArgumentException(
-                    $"Cover art size ({request.CoverArt.Length / (1024 * 1024)} MB) exceeds the {MaxCoverArtSizeBytes / (1024 * 1024)} MB limit.");
-
-            var imgExt = Path.GetExtension(request.CoverArt.FileName)?.ToLowerInvariant() ?? "";
-            if (!AllowedImageExtensions.Contains(imgExt))
-                throw new ArgumentException(
-                    $"Cover art type '{imgExt}' is not allowed. Accepted: {string.Join(", ", AllowedImageExtensions)}");
-
-            // SECURITY: Require Content-Type for images (no empty bypass)
-            var imgMime = request.CoverArt.ContentType?.ToLowerInvariant() ?? "";
-            if (string.IsNullOrEmpty(imgMime) || !AllowedImageMimeTypes.Contains(imgMime))
-                throw new ArgumentException(
-                    $"Cover art MIME type '{imgMime}' is not allowed.");
-
-            var coverKey = $"covers/{request.CreatorId}/{Guid.NewGuid()}{imgExt}";
-            await using var coverStream = request.CoverArt.OpenReadStream();
-
-            // SECURITY: Validate image magic bytes
-            if (!ValidateMagicBytes(coverStream, imgExt, ImageMagicBytes))
-                throw new ArgumentException(
-                    $"Cover art content does not match expected format for '{imgExt}'. The file may be corrupted or disguised.");
-            coverArtUrl = await _storage.UploadAsync(
-                coverStream,
-                coverKey,
-                string.IsNullOrWhiteSpace(imgMime) ? "image/jpeg" : imgMime);
-        }
+            coverArtUrl = await UploadCoverArtAsync(request.CreatorId!, request.CoverArt);
 
         // Derive cents from the dedicated price fields when provided,
         // otherwise fall back to the generic Price so tracks uploaded via the
@@ -234,7 +216,6 @@ public class UploadService : IUploadService
             CambrianTrackId = TrackIdDto.Generate(),
             Title = request.Title,
             Description = request.Description,
-            Genre = request.Genre,
             Price = request.Price ?? 0,
             LicenseType = request.LicenseType ?? "streaming",
             AudioUrl = audioUrl,
@@ -257,8 +238,11 @@ public class UploadService : IUploadService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList()
         };
+        ApplyGenreFields(track, request.PrimaryGenre, request.Subgenre, request.Genre);
 
         await _tracks.AddAsync(track);
+
+        var linkedCollection = await AssignTrackToCollectionAsync(request, track);
 
         // ── Increment upload count ──
         creator.UploadCount += 1;
@@ -271,7 +255,127 @@ public class UploadService : IUploadService
         {
             TrackId = track.Id.ToString(),
             Title = track.Title,
-            CambrianTrackId = track.CambrianTrackId ?? ""
+            CambrianTrackId = track.CambrianTrackId ?? "",
+            Genre = GetCanonicalGenre(track),
+            PrimaryGenre = track.PrimaryGenre,
+            Subgenre = track.Subgenre,
+            CoverArtUrl = track.CoverArtUrl,
+            CollectionId = linkedCollection?.Id,
+            CollectionTitle = linkedCollection?.Title,
+            CollectionTrackIds = linkedCollection?.TrackIds ?? Array.Empty<string>(),
         };
+    }
+
+    public async Task<string> UploadCoverArtAsync(string creatorId, IFormFile coverArt)
+    {
+        if (string.IsNullOrWhiteSpace(creatorId))
+            throw new ArgumentException("CreatorId is required.");
+
+        if (coverArt is null || coverArt.Length <= 0)
+            throw new ArgumentException("Cover art file is required.");
+
+        if (coverArt.Length > MaxCoverArtSizeBytes)
+            throw new ArgumentException(
+                $"Cover art size ({coverArt.Length / (1024 * 1024)} MB) exceeds the {MaxCoverArtSizeBytes / (1024 * 1024)} MB limit.");
+
+        var imgExt = Path.GetExtension(coverArt.FileName)?.ToLowerInvariant() ?? "";
+        if (!AllowedImageExtensions.Contains(imgExt))
+            throw new ArgumentException(
+                $"Cover art type '{imgExt}' is not allowed. Accepted: {string.Join(", ", AllowedImageExtensions)}");
+
+        var imgMime = coverArt.ContentType?.ToLowerInvariant() ?? "";
+        if (string.IsNullOrEmpty(imgMime) || !AllowedImageMimeTypes.Contains(imgMime))
+            throw new ArgumentException(
+                $"Cover art MIME type '{imgMime}' is not allowed.");
+
+        var coverKey = $"covers/{creatorId}/{Guid.NewGuid()}{imgExt}";
+        await using var coverStream = coverArt.OpenReadStream();
+
+        if (!ValidateMagicBytes(coverStream, imgExt, ImageMagicBytes))
+            throw new ArgumentException(
+                $"Cover art content does not match expected format for '{imgExt}'. The file may be corrupted or disguised.");
+
+        return await _storage.UploadAsync(
+            coverStream,
+            coverKey,
+            string.IsNullOrWhiteSpace(imgMime) ? "image/jpeg" : imgMime);
+    }
+
+    private async Task<TrackCollectionDto?> AssignTrackToCollectionAsync(UploadTrackRequest request, Track track)
+    {
+        if (string.IsNullOrWhiteSpace(request.AlbumAssignmentType))
+            return null;
+
+        if (_profiles is null)
+            throw new InvalidOperationException("Album assignment requires creator profile storage.");
+
+        var assignmentType = request.AlbumAssignmentType.Trim().ToLowerInvariant();
+        var trackId = track.Id.ToString();
+
+        if (assignmentType == "existing")
+        {
+            if (!request.CollectionId.HasValue)
+                throw new ArgumentException("CollectionId is required when AlbumAssignmentType is 'existing'.");
+
+            var owner = await _profiles.GetCollectionOwnerAsync(request.CollectionId.Value);
+            if (!string.Equals(owner, request.CreatorId, StringComparison.Ordinal))
+                throw new InvalidOperationException("You can only add tracks to your own album.");
+
+            var existing = await _profiles.GetCollectionByIdAsync(request.CollectionId.Value)
+                ?? throw new InvalidOperationException("Selected album was not found.");
+
+            return await _profiles.UpdateCollectionAsync(
+                request.CollectionId.Value,
+                request.CreatorId!,
+                null,
+                null,
+                null,
+                AppendTrackId(existing.TrackIds, trackId));
+        }
+
+        if (assignmentType == "new")
+        {
+            if (string.IsNullOrWhiteSpace(request.NewAlbumTitle))
+                throw new ArgumentException("NewAlbumTitle is required when AlbumAssignmentType is 'new'.");
+
+            return await _profiles.AddCollectionAsync(
+                request.CreatorId!,
+                request.NewAlbumTitle.Trim(),
+                NormalizeNullableText(request.NewAlbumDescription),
+                null,
+                trackId);
+        }
+
+        throw new ArgumentException("AlbumAssignmentType must be 'existing' or 'new'.");
+    }
+
+    private static void ApplyGenreFields(Track track, string? primaryGenre, string? subgenre, string? legacyGenre)
+    {
+        var normalizedPrimary = NormalizeNullableText(primaryGenre);
+        var normalizedSubgenre = NormalizeNullableText(subgenre);
+        var normalizedLegacy = NormalizeNullableText(legacyGenre);
+
+        track.PrimaryGenre = normalizedPrimary;
+        track.Subgenre = normalizedSubgenre ?? normalizedLegacy;
+        track.Genre = track.Subgenre ?? track.PrimaryGenre ?? normalizedLegacy;
+    }
+
+    private static string? NormalizeNullableText(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string GetCanonicalGenre(Track track) =>
+        track.Subgenre ?? track.Genre ?? track.PrimaryGenre ?? string.Empty;
+
+    private static string AppendTrackId(IEnumerable<string> existingTrackIds, string trackId)
+    {
+        var orderedIds = existingTrackIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .ToList();
+
+        if (!orderedIds.Contains(trackId, StringComparer.OrdinalIgnoreCase))
+            orderedIds.Add(trackId);
+
+        return string.Join(",", orderedIds);
     }
 }

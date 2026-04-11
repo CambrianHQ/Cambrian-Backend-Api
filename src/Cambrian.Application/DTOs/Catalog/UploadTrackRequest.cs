@@ -20,6 +20,12 @@ public class UploadTrackRequest
     [MaxLength(60)]
     public string? Genre { get; set; }
 
+    [MaxLength(60)]
+    public string? PrimaryGenre { get; set; }
+
+    [MaxLength(60)]
+    public string? Subgenre { get; set; }
+
     public decimal? Price { get; set; }
 
     [MaxLength(200)]
@@ -33,6 +39,17 @@ public class UploadTrackRequest
     public decimal? ExclusivePrice { get; set; }
 
     public decimal? CopyrightBuyoutPrice { get; set; }
+
+    [MaxLength(20)]
+    public string? AlbumAssignmentType { get; set; }
+
+    public Guid? CollectionId { get; set; }
+
+    [MaxLength(200)]
+    public string? NewAlbumTitle { get; set; }
+
+    [MaxLength(2000)]
+    public string? NewAlbumDescription { get; set; }
 
     public string? CreatorId { get; set; }
 }

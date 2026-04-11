@@ -10,8 +10,8 @@ namespace Cambrian.Api.Middleware;
 
 /// <summary>
 /// Action filter that verifies the authenticated user has Role == "Creator" (or "Admin").
-/// Reads the role claim from the JWT first (no DB call). Falls back to
-/// UserManager only for legacy tokens that lack the claim.
+/// Reads the role claim from the JWT first, but reconciles against the current database
+/// value so recently-promoted creators are not blocked by stale session tokens.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class RequireCreatorTierAttribute : Attribute, IAsyncActionFilter
@@ -26,22 +26,28 @@ public class RequireCreatorTierAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        // Fast path: read role from JWT claim
-        var role = context.HttpContext.User.FindFirstValue(ClaimTypes.Role);
+        var userManager = context.HttpContext.RequestServices
+            .GetRequiredService<UserManager<ApplicationUser>>();
 
-        // Fall back to DB for legacy tokens missing the role claim
-        if (string.IsNullOrEmpty(role))
+        // Fast path: trust an explicit Creator/Admin claim.
+        var claimedRole = context.HttpContext.User.FindFirstValue(ClaimTypes.Role);
+        if (string.Equals(claimedRole, "Creator", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(claimedRole, "Admin", StringComparison.OrdinalIgnoreCase))
         {
-            var userManager = context.HttpContext.RequestServices
-                .GetRequiredService<UserManager<ApplicationUser>>();
-            var user = await userManager.FindByIdAsync(userId);
-            if (user is null)
-            {
-                context.Result = new UnauthorizedResult();
-                return;
-            }
-            role = user.Role;
+            await next();
+            return;
         }
+
+        // Reconcile with the database so users promoted after token issuance
+        // can immediately enter creator flows without a forced re-login.
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null)
+        {
+            context.Result = new UnauthorizedResult();
+            return;
+        }
+
+        var role = user.Role;
 
         if (!string.Equals(role, "Creator", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
