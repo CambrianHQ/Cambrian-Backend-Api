@@ -1,0 +1,15 @@
+{
+  "name": "cambrian-email-pro-upgrade",
+  "private": true,
+  "type": "module",
+  "description": "One-off script: email all users letting them know their account was upgraded to Pro for life.",
+  "scripts": {
+    "dry-run": "node send-pro-upgrade-email.mjs",
+    "send": "node send-pro-upgrade-email.mjs --send",
+    "test-batch": "node send-pro-upgrade-email.mjs --send --limit=5"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "resend": "^4.0.1"
+  }
+}
