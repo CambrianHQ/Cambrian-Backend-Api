@@ -1,0 +1,207 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "title": "Cambrian — Chaos Experiment Observability",
+  "uid": "cambrian-chaos",
+  "description": "Track active chaos experiments, measure impact on availability, latency, and dependency health, and verify clean recovery.",
+  "tags": ["cambrian", "chaos", "resilience"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "annotations": {
+    "list": [
+      {
+        "name": "Chaos Experiments",
+        "datasource": { "uid": "${DS_PROMETHEUS}" },
+        "enable": true,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "expr": "ALERTS{alertname=~\"chaos_.*\"}",
+        "titleFormat": "{{experiment}}",
+        "textFormat": "Phase: {{phase}}"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "experiment",
+        "type": "custom",
+        "query": "none,db-latency,redis-down,stripe-timeout,storage-503,network-partition",
+        "current": { "text": "none", "value": "none" },
+        "includeAll": false
+      },
+      {
+        "name": "phase",
+        "type": "custom",
+        "query": "before,during,after",
+        "current": { "text": "during", "value": "during" },
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Active Experiment",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "none": { "text": "None", "color": "green" } } },
+            { "type": "regex", "options": { "pattern": ".+", "result": { "color": "red" } } }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "expr": "cambrian_chaos_experiment_active",
+          "legendFormat": "{{experiment}}",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ],
+      "options": { "textMode": "name" }
+    },
+    {
+      "type": "stat",
+      "title": "Current Phase",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "cambrian_chaos_phase_info",
+          "legendFormat": "{{phase}}",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ],
+      "options": { "textMode": "name" }
+    },
+    {
+      "type": "stat",
+      "title": "Request Success Rate",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.8 },
+              { "color": "green", "value": 0.99 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\",status_code=~\"5..\"}[1m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\"}[1m])), 1))",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Recovery Time",
+      "description": "Time from experiment end to success rate returning above 99%",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "cambrian_chaos_recovery_seconds",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Success Rate — Before / During / After",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\",status_code=~\"5..\"}[1m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\"}[1m])), 1))",
+          "legendFormat": "success rate",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency — Before / During / After",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"cambrian-api\"}[1m])))",
+          "legendFormat": "p50",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"cambrian-api\"}[1m])))",
+          "legendFormat": "p95",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"cambrian-api\"}[1m])))",
+          "legendFormat": "p99",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Dependency Errors during Experiment",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_client_request_duration_seconds_count{job=\"cambrian-api\",status_code=~\"5..\",server_address=~\".*stripe.*\"}[1m]))",
+          "legendFormat": "Stripe 5xx",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "sum(rate(http_client_request_duration_seconds_count{job=\"cambrian-api\",status_code=~\"5..\",server_address=~\".*supabase.*|.*s3.*|.*r2.*\"}[1m]))",
+          "legendFormat": "Storage 5xx",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "sum(rate(db_client_operation_duration_seconds_count{job=\"cambrian-api\",error=\"true\"}[1m]))",
+          "legendFormat": "DB errors",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "DB Error Rate during Experiment",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum(rate(db_client_operation_duration_seconds_count{job=\"cambrian-api\",error=\"true\"}[1m]))",
+          "legendFormat": "errors / sec",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Storage Error Rate during Experiment",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_client_request_duration_seconds_count{job=\"cambrian-api\",status_code=~\"5..\",server_address=~\".*supabase.*|.*s3.*|.*r2.*\"}[1m]))",
+          "legendFormat": "storage 5xx / sec",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    }
+  ]
+}
