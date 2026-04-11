@@ -1,0 +1,4 @@
+# Generated audio files — large binaries, do not commit
+audio/generated/
+
+# Generated metadata is committed for reference; regenerate with scripts

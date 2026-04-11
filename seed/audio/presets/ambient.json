@@ -1,0 +1,6 @@
+{
+  "genre": "ambient",
+  "bpm_range": [60, 85],
+  "duration_range": [150, 300],
+  "moods": ["ethereal", "calm", "cinematic", "meditative", "dreamy"]
+}
