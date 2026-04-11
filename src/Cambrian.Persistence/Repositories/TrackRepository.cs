@@ -117,6 +117,38 @@ public class TrackRepository : ITrackRepository
             .ToListAsync();
     }
 
+    public async Task<List<CreatorTrackSummary>> GetCreatorTrackSummariesAsync(string creatorId, Guid? creatorUuid = null)
+    {
+        return await _db.Tracks
+            .Where(t => t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+            .OrderByDescending(t => t.CreatedAt)
+            .Select(t => new CreatorTrackSummary
+            {
+                Id = t.Id,
+                CambrianTrackId = t.CambrianTrackId,
+                Title = t.Title,
+                Description = t.Description,
+                Genre = t.Genre,
+                Mood = t.Mood,
+                Tempo = t.Tempo,
+                Tags = t.Tags.ToList(),
+                Instrumental = t.Instrumental,
+                Visibility = t.Visibility,
+                Price = t.Price,
+                NonExclusivePriceCents = t.NonExclusivePriceCents,
+                ExclusivePriceCents = t.ExclusivePriceCents,
+                CopyrightBuyoutPriceCents = t.CopyrightBuyoutPriceCents,
+                ExclusiveSold = t.ExclusiveSold,
+                Status = t.Status,
+                LicenseType = t.LicenseType,
+                Duration = t.Duration,
+                AudioUrl = t.AudioUrl,
+                CoverArtUrl = t.CoverArtUrl,
+                CreatedAt = t.CreatedAt,
+            })
+            .ToListAsync();
+    }
+
     public async Task<List<Track>> GetStorefrontTracksAsync(string creatorId, Guid? creatorUuid = null)
     {
         return await _db.Tracks

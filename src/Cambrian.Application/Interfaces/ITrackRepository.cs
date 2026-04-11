@@ -22,6 +22,8 @@ public interface ITrackRepository
 
     Task<List<CreatorDashboardTrackSummary>> GetDashboardTrackSummariesAsync(string creatorId, Guid? creatorUuid = null);
 
+    Task<List<CreatorTrackSummary>> GetCreatorTrackSummariesAsync(string creatorId, Guid? creatorUuid = null);
+
     /// <summary>
     /// Returns public storefront-safe tracks for a creator: not deleted, not hidden,
     /// not draft/private, not copyright-transferred. Ordered by creation date descending.
