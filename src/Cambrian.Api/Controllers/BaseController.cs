@@ -101,6 +101,17 @@ public class BaseController : ControllerBase
         {
             if (Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri))
             {
+                // Some legacy rows already store a fully-qualified backend image path.
+                // Keep those on the current API origin instead of proxying them again.
+                if (uri.AbsolutePath.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase) ||
+                    uri.AbsolutePath.StartsWith("/images/", StringComparison.OrdinalIgnoreCase))
+                {
+                    var normalizedPath = string.IsNullOrEmpty(uri.Query)
+                        ? uri.AbsolutePath
+                        : $"{uri.AbsolutePath}{uri.Query}";
+                    return ResolveAbsoluteUrl(normalizedPath);
+                }
+
                 var key = uri.AbsolutePath.TrimStart('/');
                 // Strip bucket-name prefix. R2/S3 URLs have the path /{bucket}/{key}.
                 // If the first segment isn't a known image prefix, it's the bucket name.
