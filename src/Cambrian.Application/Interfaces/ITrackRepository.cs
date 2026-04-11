@@ -1,4 +1,5 @@
 using Cambrian.Domain.Entities;
+using Cambrian.Application.DTOs.Creator;
 
 namespace Cambrian.Application.Interfaces;
 
@@ -18,6 +19,8 @@ public interface ITrackRepository
     Task<Track?> GetByCambrianTrackIdAsync(string cambrianTrackId);
 
     Task<List<Track>> GetByCreatorIdAsync(string creatorId, Guid? creatorUuid = null);
+
+    Task<List<CreatorDashboardTrackSummary>> GetDashboardTrackSummariesAsync(string creatorId, Guid? creatorUuid = null);
 
     /// <summary>
     /// Returns public storefront-safe tracks for a creator: not deleted, not hidden,

@@ -1,6 +1,7 @@
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Cambrian.Api.Controllers;
 
@@ -36,6 +37,16 @@ public class WebhookController : BaseController
         {
             _logger.LogError(ex, "EVENT: StripeWebhookFailed — invalid signature");
             return StatusCode(400, "Invalid webhook signature.");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "EVENT: StripeWebhookFailed — invalid JSON payload");
+            return StatusCode(400, "Invalid webhook payload.");
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogError(ex, "EVENT: StripeWebhookFailed — missing required payload fields");
+            return StatusCode(400, "Invalid webhook payload.");
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("signature verification"))
         {

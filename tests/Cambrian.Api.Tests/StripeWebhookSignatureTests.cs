@@ -35,10 +35,12 @@ public sealed class StripeWebhookSignatureTests : IClassFixture<SignedStripeWebh
 
         var payload = $$"""
         {
+            "object": "event",
             "id": "evt_signed_{{Guid.NewGuid():N}}",
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "object": "checkout.session",
                     "id": "cs_signed_{{Guid.NewGuid():N}}",
                     "client_reference_id": "{{buyerId}}:{{trackId}}:non-exclusive",
                     "amount_total": 2999
@@ -75,10 +77,12 @@ public sealed class StripeWebhookSignatureTests : IClassFixture<SignedStripeWebh
     {
         const string payload = """
         {
+            "object": "event",
             "id": "evt_invalid_sig",
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "object": "checkout.session",
                     "id": "cs_invalid_sig"
                 }
             }
