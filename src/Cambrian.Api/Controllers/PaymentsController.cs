@@ -67,6 +67,14 @@ public class PaymentsController : BaseController
         return CreatedResponse(result, "Purchase completed.");
     }
 
+    [HttpGet("/purchases")]
+    public async Task<IActionResult> GetPurchases()
+    {
+        var userId = GetRequiredUserId()!;
+        var result = await _purchaseService.GetByBuyerAsync(userId);
+        return OkResponse(result);
+    }
+
     [Authorize(Roles = "Admin")]
     [HttpPost("/purchases/credit-creator")]
     public async Task<IActionResult> CreditCreator(CreditCreatorRequest request)

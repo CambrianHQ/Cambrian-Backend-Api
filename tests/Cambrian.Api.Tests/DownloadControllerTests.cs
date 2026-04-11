@@ -111,6 +111,11 @@ public sealed class DownloadControllerTests
             AudioUrl = "tracks/beat.mp3",
             CreatorId = "c1"
         });
+        _storage.OpenReadAsync("tracks/beat.mp3").Returns(new StorageFile
+        {
+            Stream = new MemoryStream(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }),
+            ContentType = "audio/mpeg"
+        });
         _storage.GenerateDownloadUrl(Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/signed-download");
         _licenses.GetByBuyerAndTrackAsync(Arg.Any<string>(), Arg.Any<string>())
@@ -121,6 +126,34 @@ public sealed class DownloadControllerTests
         var ok = Assert.IsType<OkObjectResult>(result);
         // Envelope contains { url, expiresAt }
         Assert.NotNull(ok.Value);
+    }
+
+    [Fact]
+    public async Task Download_UsesStorageContentType_ForSignedUrlFilename()
+    {
+        var trackId = Guid.NewGuid();
+        SetupUser();
+        _entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
+        _tracks.GetByIdAsync(trackId).Returns(new Track
+        {
+            Id = trackId,
+            Title = "Beat",
+            AudioUrl = "tracks/legacy-seed.mp3",
+            CreatorId = "c1"
+        });
+        _storage.OpenReadAsync("tracks/legacy-seed.mp3").Returns(new StorageFile
+        {
+            Stream = new MemoryStream(new byte[] { 0x52, 0x49, 0x46, 0x46 }),
+            ContentType = "audio/wav"
+        });
+        _storage.GenerateDownloadUrl(Arg.Any<string>(), Arg.Any<string>())
+            .Returns("https://cdn.test/signed-download");
+        _licenses.GetByBuyerAndTrackAsync(Arg.Any<string>(), Arg.Any<string>())
+            .Returns((LicenseCertificate?)null);
+
+        await _controller.Download(trackId.ToString());
+
+        _storage.Received(1).GenerateDownloadUrl("tracks/legacy-seed.mp3", "Beat.wav");
     }
 
     // ── DownloadFile (binary stream) ──
@@ -147,6 +180,31 @@ public sealed class DownloadControllerTests
         var result = await _controller.DownloadFile(trackId.ToString());
 
         Assert.IsType<FileStreamResult>(result);
+    }
+
+    [Fact]
+    public async Task DownloadFile_UsesStorageContentType_ForDownloadExtension()
+    {
+        var trackId = Guid.NewGuid();
+        SetupUser();
+        _entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
+        _tracks.GetByIdAsync(trackId).Returns(new Track
+        {
+            Id = trackId,
+            Title = "Beat",
+            AudioUrl = "tracks/legacy-seed.mp3",
+            CreatorId = "c1"
+        });
+        _storage.OpenReadAsync("tracks/legacy-seed.mp3").Returns(new StorageFile
+        {
+            Stream = new MemoryStream(new byte[] { 0x52, 0x49, 0x46, 0x46 }),
+            ContentType = "audio/wav"
+        });
+
+        var result = Assert.IsType<FileStreamResult>(await _controller.DownloadFile(trackId.ToString()));
+
+        Assert.Equal("audio/wav", result.ContentType);
+        Assert.Equal("Beat.wav", result.FileDownloadName);
     }
 
     // ── SignedUrl ──

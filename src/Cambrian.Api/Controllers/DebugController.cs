@@ -14,11 +14,13 @@ namespace Cambrian.Api.Controllers;
 public class DebugController : BaseController
 {
     private readonly IDebugService _debug;
+    private readonly IWebHostEnvironment _env;
     private readonly ILogger<DebugController> _logger;
 
-    public DebugController(IDebugService debug, ILogger<DebugController> logger)
+    public DebugController(IDebugService debug, IWebHostEnvironment env, ILogger<DebugController> logger)
     {
         _debug = debug;
+        _env = env;
         _logger = logger;
     }
 
@@ -60,4 +62,29 @@ public class DebugController : BaseController
         var result = await _debug.RunConsistencyCheckAsync();
         return OkResponse(result);
     }
+
+    [HttpGet("dev/deliveries")]
+    public async Task<IActionResult> RecentLocalDeliveries([FromQuery] int limit = 25, [FromQuery] string? recipient = null, [FromQuery] string? kind = null)
+    {
+        if (!AllowLocalDiagnostics())
+            return NotFound();
+
+        return OkResponse(await _debug.GetRecentLocalDeliveriesAsync(limit, recipient, kind));
+    }
+
+    [HttpGet("dev/password-reset")]
+    public async Task<IActionResult> LatestPasswordReset([FromQuery] string? email = null, [FromQuery] string? phoneNumber = null)
+    {
+        if (!AllowLocalDiagnostics())
+            return NotFound();
+
+        var result = await _debug.GetLatestLocalPasswordResetAsync(email, phoneNumber);
+        if (result is null)
+            return NotFoundResponse("No local password reset delivery found.");
+
+        return OkResponse(result);
+    }
+
+    private bool AllowLocalDiagnostics()
+        => _env.IsDevelopment() || string.Equals(_env.EnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase);
 }

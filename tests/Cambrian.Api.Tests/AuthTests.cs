@@ -199,6 +199,44 @@ public sealed class AuthTests
     }
 
     [Fact]
+    public async Task RegisterAsync_MapsListenerRole_ToUser()
+    {
+        _users.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
+            .Returns(IdentityResult.Success);
+
+        var result = await _sut.RegisterAsync(new RegisterRequest
+        {
+            Email = "listener@test.com",
+            Password = "StrongPassword123!",
+            Role = "Listener"
+        });
+
+        await _users.Received(1).CreateAsync(
+            Arg.Is<ApplicationUser>(u => u.Role == "User"),
+            Arg.Any<string>());
+        Assert.Equal("User", result.Role);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_MapsCreatorRole_ToCreator()
+    {
+        _users.CreateAsync(Arg.Any<ApplicationUser>(), Arg.Any<string>())
+            .Returns(IdentityResult.Success);
+
+        var result = await _sut.RegisterAsync(new RegisterRequest
+        {
+            Email = "creator@test.com",
+            Password = "StrongPassword123!",
+            Role = "creator"
+        });
+
+        await _users.Received(1).CreateAsync(
+            Arg.Is<ApplicationUser>(u => u.Role == "Creator"),
+            Arg.Any<string>());
+        Assert.Equal("Creator", result.Role);
+    }
+
+    [Fact]
     public async Task LoginAsync_JwtContainsCorrectClaims()
     {
         var userId = Guid.NewGuid().ToString();
