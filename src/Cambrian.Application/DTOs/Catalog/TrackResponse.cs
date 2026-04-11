@@ -16,6 +16,10 @@ public class TrackResponse
 
     public string Genre { get; set; } = string.Empty;
 
+    public string? PrimaryGenre { get; set; }
+
+    public string? Subgenre { get; set; }
+
     /// <summary>Mood tag for search filtering (e.g. happy, dark, chill, energetic).</summary>
     public string? Mood { get; set; }
 

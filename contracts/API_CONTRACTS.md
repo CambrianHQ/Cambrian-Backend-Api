@@ -484,10 +484,11 @@ Upload an image to object storage and receive back its URL. Use the URL to updat
 | duration | string? | — | Filter by duration range |
 | sort | string? | — | Sort order |
 
-**Response (200): `PagedResult<TrackResponse>`**
+**Response (200): paginated catalog envelope**
 ```json
 {
-  "items": [
+  "success": true,
+  "data": [
     {
       "id": "guid-string",
       "cambrianTrackId": "CAMB-TRK-A1B2C3D4",

@@ -9,14 +9,17 @@ namespace Cambrian.Infrastructure.Email;
 public sealed class ConsoleEmailService : IEmailService
 {
     private readonly ILogger<ConsoleEmailService> _logger;
+    private readonly ILocalDeliveryDebugStore _debugStore;
 
-    public ConsoleEmailService(ILogger<ConsoleEmailService> logger)
+    public ConsoleEmailService(ILogger<ConsoleEmailService> logger, ILocalDeliveryDebugStore debugStore)
     {
         _logger = logger;
+        _debugStore = debugStore;
     }
 
     public Task SendAsync(string to, string subject, string htmlBody)
     {
+        _debugStore.CaptureEmail(to, subject, htmlBody);
         _logger.LogInformation(
             "[Email] To: {To} | Subject: {Subject}\n{Body}",
             to, subject, htmlBody);
@@ -25,6 +28,7 @@ public sealed class ConsoleEmailService : IEmailService
 
     public Task SendPasswordResetAsync(string to, string code)
     {
+        _debugStore.CaptureEmail(to, "Cambrian — Password Reset Code", code: code, kind: "password_reset");
         // SECURITY: Only log that a code was sent, never the code itself
         _logger.LogInformation("[Email] Password reset code sent to {To}", to);
         return Task.CompletedTask;
@@ -32,6 +36,7 @@ public sealed class ConsoleEmailService : IEmailService
 
     public Task SendVerificationCodeAsync(string to, string code)
     {
+        _debugStore.CaptureEmail(to, "Cambrian — Verification Code", code: code, kind: "verification_code");
         _logger.LogInformation("[Email] Verification code sent to {To}", to);
         return Task.CompletedTask;
     }

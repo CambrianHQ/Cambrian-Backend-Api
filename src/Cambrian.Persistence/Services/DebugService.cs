@@ -7,11 +7,13 @@ namespace Cambrian.Persistence.Services;
 public class DebugService : IDebugService
 {
     private readonly CambrianDbContext _db;
+    private readonly ILocalDeliveryDebugStore _localDeliveries;
     private readonly ILogger<DebugService> _logger;
 
-    public DebugService(CambrianDbContext db, ILogger<DebugService> logger)
+    public DebugService(CambrianDbContext db, ILocalDeliveryDebugStore localDeliveries, ILogger<DebugService> logger)
     {
         _db = db;
+        _localDeliveries = localDeliveries;
         _logger = logger;
     }
 
@@ -165,4 +167,10 @@ public class DebugService : IDebugService
             healthy = orphaned.Count == 0
         };
     }
+
+    public Task<object> GetRecentLocalDeliveriesAsync(int limit = 25, string? recipient = null, string? kind = null)
+        => Task.FromResult<object>(_localDeliveries.GetRecent(limit, recipient, kind));
+
+    public Task<object?> GetLatestLocalPasswordResetAsync(string? email = null, string? phoneNumber = null)
+        => Task.FromResult<object?>(_localDeliveries.GetLatestPasswordReset(email, phoneNumber));
 }

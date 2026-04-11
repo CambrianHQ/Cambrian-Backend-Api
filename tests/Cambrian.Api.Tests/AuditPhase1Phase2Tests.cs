@@ -244,7 +244,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    private ApplicationUser MakeUserWithResetCode(string code = "ABCD1234")
+    private ApplicationUser MakeUserWithResetCode(string code = "123456")
     {
         return new ApplicationUser
         {
@@ -260,7 +260,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
     [Fact]
     public async Task VerifyCodeAsync_IncrementsAttemptCount_OnWrongCode()
     {
-        var user = MakeUserWithResetCode("ABCD1234");
+        var user = MakeUserWithResetCode("123456");
         _users.FindByEmailAsync("user@test.com").Returns(user);
 
         ApplicationUser? saved = null;
@@ -270,7 +270,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
             _authService.VerifyCodeAsync(new VerifyCodeRequest
             {
                 Email = "user@test.com",
-                Code = "WRONGCOD"
+                Code = "000000"
             }));
 
         Assert.NotNull(saved);
@@ -280,7 +280,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
     [Fact]
     public async Task VerifyCodeAsync_AppliesLockout_AfterMaxAttempts()
     {
-        var user = MakeUserWithResetCode("ABCD1234");
+        var user = MakeUserWithResetCode("123456");
         user.PasswordResetAttemptCount = 4; // one more wrong = lockout
         _users.FindByEmailAsync("user@test.com").Returns(user);
 
@@ -291,7 +291,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
             _authService.VerifyCodeAsync(new VerifyCodeRequest
             {
                 Email = "user@test.com",
-                Code = "WRONGCOD"
+                Code = "000000"
             }));
 
         Assert.NotNull(saved);
@@ -304,7 +304,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
     [Fact]
     public async Task VerifyCodeAsync_RejectsImmediately_WhenLockedOut()
     {
-        var user = MakeUserWithResetCode("ABCD1234");
+        var user = MakeUserWithResetCode("123456");
         user.PasswordResetLockedUntil = DateTime.UtcNow.AddMinutes(10); // active lockout
         _users.FindByEmailAsync("user@test.com").Returns(user);
 
@@ -312,7 +312,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
             _authService.VerifyCodeAsync(new VerifyCodeRequest
             {
                 Email = "user@test.com",
-                Code = "ABCD1234" // even correct code rejected during lockout
+                Code = "123456" // even correct code rejected during lockout
             }));
 
         // Must not call UpdateAsync during active lockout (no DB write)
@@ -322,14 +322,14 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
     [Fact]
     public async Task VerifyCodeAsync_Succeeds_WithCorrectCode()
     {
-        var user = MakeUserWithResetCode("ABCD1234");
+        var user = MakeUserWithResetCode("123456");
         _users.FindByEmailAsync("user@test.com").Returns(user);
 
         // Should not throw
         await _authService.VerifyCodeAsync(new VerifyCodeRequest
         {
             Email = "user@test.com",
-            Code = "abcd1234" // case-insensitive
+            Code = "123456"
         });
     }
 
@@ -337,21 +337,21 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
     public async Task VerifyCodeAsync_ErrorMessageDoesNotRevealLockoutState()
     {
         // Both lockout-rejection and wrong-code should produce the same error message
-        var lockedUser = MakeUserWithResetCode("ABCD1234");
+        var lockedUser = MakeUserWithResetCode("123456");
         lockedUser.PasswordResetLockedUntil = DateTime.UtcNow.AddMinutes(5);
         _users.FindByEmailAsync("locked@test.com").Returns(lockedUser);
 
-        var wrongCodeUser = MakeUserWithResetCode("ABCD1234");
+        var wrongCodeUser = MakeUserWithResetCode("123456");
         _users.FindByEmailAsync("wrong@test.com").Returns(wrongCodeUser);
         await _users.UpdateAsync(Arg.Any<ApplicationUser>());
 
         var exLocked = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _authService.VerifyCodeAsync(new VerifyCodeRequest
-                { Email = "locked@test.com", Code = "ABCD1234" }));
+                { Email = "locked@test.com", Code = "123456" }));
 
         var exWrong = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _authService.VerifyCodeAsync(new VerifyCodeRequest
-                { Email = "wrong@test.com", Code = "WRONGCOD" }));
+                { Email = "wrong@test.com", Code = "000000" }));
 
         // Both produce the same generic message — no "locked" vs "wrong" enumeration leak
         Assert.Equal(exLocked.Message, exWrong.Message);
@@ -390,7 +390,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
             _authService.VerifyCodeAsync(new VerifyCodeRequest
             {
                 Email = "nobody@test.com",
-                Code = "ABCD1234"
+                Code = "123456"
             }));
 
         // Must not reveal that account doesn't exist

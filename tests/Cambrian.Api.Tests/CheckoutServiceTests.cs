@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Cambrian.Application.DTOs.Checkout;
+using Cambrian.Application.DTOs.Licenses;
 using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
@@ -207,6 +208,28 @@ public sealed class CheckoutServiceTests
         Assert.Equal("created", result.Status);
     }
 
+    [Fact]
+    public async Task CreateCheckout_UsesCheckoutSuccessRoute_ForStripeRedirect()
+    {
+        var trackId = Guid.NewGuid();
+        var track = new Track { Id = trackId, Title = "Beat", Price = 10, CreatorId = "c1" };
+        _tracks.GetByIdAsync(trackId).Returns(track);
+        _gateway.CreateCheckoutSessionAsync(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns("https://stripe.test/session-123");
+
+        await _sut.CreateCheckoutAsync(
+            new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "standard" },
+            MakeUser());
+
+        await _gateway.Received(1).CreateCheckoutSessionAsync(
+            Arg.Any<int>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Is<string?>(url => url == $"http://localhost:5173/checkout/success?trackId={trackId}&session_id={{CHECKOUT_SESSION_ID}}"),
+            Arg.Any<string?>(),
+            Arg.Any<string?>());
+    }
+
     private static CheckoutService BuildGatedSut(ISubscriptionRepository subscriptions, ITrackRepository? tracks = null)
     {
         var config = new ConfigurationBuilder()
@@ -301,5 +324,73 @@ public sealed class CheckoutServiceTests
 
         // Should not throw
         await _sut.CreateCheckoutAsync(new CheckoutRequest { TrackId = trackId.ToString(), LicenseType = "standard" }, MakeUser());
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_CreatesInvoice_ForPaidCheckout()
+    {
+        var trackId = Guid.NewGuid();
+        var purchaseId = Guid.Empty;
+        var invoiceRepo = Substitute.For<IInvoiceRepository>();
+        var gateway = Substitute.For<IPaymentGateway>();
+        gateway.GetCheckoutSessionAsync("cs_test_paid").Returns(new CheckoutSessionInfo
+        {
+            SessionId = "cs_test_paid",
+            Status = "paid",
+            ClientReferenceId = $"user-1:{trackId}:non-exclusive:personal",
+            AmountTotal = 2999
+        });
+
+        var tracks = Substitute.For<ITrackRepository>();
+        tracks.GetByIdAsync(trackId).Returns(new Track
+        {
+            Id = trackId,
+            CambrianTrackId = "CAMB-TRK-1234",
+            Title = "Beat",
+            Price = 29.99m,
+            CreatorId = "creator-1",
+            AudioUrl = "tracks/beat.wav"
+        });
+
+        var purchases = Substitute.For<IPurchaseRepository>();
+        purchases.GetByStripeSessionIdAsync("cs_test_paid").Returns((Purchase?)null);
+        purchases.GetByBuyerIdAsync("user-1").Returns(new List<Purchase>());
+        purchases.AddAsync(Arg.Do<Purchase>(purchase => purchaseId = purchase.Id)).Returns(Task.CompletedTask);
+
+        var library = Substitute.For<ILibraryRepository>();
+        library.GetByUserAndTrackAsync("user-1", trackId).Returns((LibraryItem?)null);
+
+        var wallet = Substitute.For<IWalletRepository>();
+        var licenseService = Substitute.For<ILicenseService>();
+        var licenseId = Guid.NewGuid();
+        licenseService.IssueCertificateAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
+            .Returns(new LicenseCertificateDto { LicenseId = licenseId.ToString() });
+
+        var transactions = Substitute.For<ITransactionManager>();
+        transactions.BeginTransactionAsync().Returns(Substitute.For<IAsyncDisposable>());
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                ["Checkout:RequireSubscription"] = "false"
+            })
+            .Build();
+        var subscriptions = Substitute.For<ISubscriptionRepository>();
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        var logger = Substitute.For<ILogger<CheckoutService>>();
+        var sut = new CheckoutService(gateway, tracks, purchases, library, wallet, licenseService, transactions,
+            Substitute.For<IEmailService>(), subscriptions, config, users, logger, invoiceRepo);
+
+        var result = await sut.ConfirmAsync("cs_test_paid", "user-1");
+
+        Assert.Equal("paid", result.Status);
+        Assert.NotEqual(Guid.Empty, purchaseId);
+        await invoiceRepo.Received(1).AddAsync(Arg.Is<Invoice>(invoice =>
+            invoice.UserId == "user-1" &&
+            invoice.PurchaseId == purchaseId &&
+            invoice.AmountCents == 2999 &&
+            invoice.Status == "paid"));
     }
 }

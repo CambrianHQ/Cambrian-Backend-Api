@@ -154,6 +154,7 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         Assert.True(collData.TryGetProperty("id", out _), "Missing 'id'");
         Assert.True(collData.TryGetProperty("title", out _), "Missing 'title'");
         Assert.True(collData.TryGetProperty("description", out _), "Missing 'description'");
+        Assert.True(collData.TryGetProperty("coverImageUrl", out _), "Missing 'coverImageUrl'");
         Assert.True(collData.TryGetProperty("trackIds", out _), "Missing 'trackIds'");
         Assert.True(collData.TryGetProperty("createdAt", out _), "Missing 'createdAt'");
         Assert.True(collData.TryGetProperty("updatedAt", out _), "Missing 'updatedAt'");
@@ -169,6 +170,102 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         var items = listJson.GetProperty("data");
         Assert.Equal(JsonValueKind.Array, items.ValueKind);
         Assert.True(items.GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task Collections_CreateAndUpdate_PersistCoverImageUrl()
+    {
+        var email = $"creator-coll-cover-{Guid.NewGuid():N}@test.com";
+        var password = "Test1234!@";
+        var client = await CreateCreatorClientAsync(email, password);
+
+        var slug = $"collcover-{Guid.NewGuid():N}"[..20];
+        (await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            bio = "Collections test",
+            showEarnings = false,
+            showDownloadStats = false,
+        })).EnsureSuccessStatusCode();
+
+        var createRes = await client.PostAsJsonAsync("/creator-profile/me/collections", new
+        {
+            title = "Cover Album",
+            description = "Best beats",
+            coverImageUrl = "covers/albums/original-cover.jpg",
+            trackIds = "",
+        });
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+
+        var created = (await createRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Contains("/images/covers/albums/original-cover.jpg", created.GetProperty("coverImageUrl").GetString());
+
+        var collectionId = created.GetProperty("id").GetString();
+        var updateRes = await client.PutAsJsonAsync($"/creator-profile/me/collections/{collectionId}", new
+        {
+            title = "Cover Album",
+            description = "Best beats",
+            coverImageUrl = "covers/albums/updated-cover.jpg",
+            trackIds = ""
+        });
+        updateRes.EnsureSuccessStatusCode();
+
+        var updated = (await updateRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Contains("/images/covers/albums/updated-cover.jpg", updated.GetProperty("coverImageUrl").GetString());
+
+        var publicClient = _fixture.CreateClient();
+        var listRes = await publicClient.GetAsync($"/creator-profile/{slug}/collections");
+        listRes.EnsureSuccessStatusCode();
+        var collections = (await listRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Contains("/images/covers/albums/updated-cover.jpg", collections[0].GetProperty("coverImageUrl").GetString());
+    }
+
+    [Fact]
+    public async Task Collections_Create_CreatorWithoutUsername_ReturnsCreated()
+    {
+        var email = $"creator-coll-nouser-{Guid.NewGuid():N}@test.com";
+        var password = "Test1234!@";
+
+        await _fixture.RegisterUserAsync(email, password);
+        await _fixture.SetUserRoleAsync(email, "Creator");
+
+        var token = await _fixture.LoginUserAsync(email, password);
+        var client = _fixture.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var createRes = await client.PostAsJsonAsync("/creator-profile/me/collections", new
+        {
+            title = "Upload Flow Album",
+            description = "Created before username setup",
+            trackIds = "",
+        });
+
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task Collections_Create_AllowsStaleTokenAfterCreatorPromotion()
+    {
+        var email = $"creator-coll-stale-{Guid.NewGuid():N}@test.com";
+        var password = "Test1234!@";
+
+        var staleToken = await _fixture.RegisterUserAsync(email, password);
+        await _fixture.SetUserRoleAsync(email, "Creator");
+        await _fixture.SetUsernameAsync(email, $"u{Guid.NewGuid():N}"[..12]);
+
+        var client = _fixture.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", staleToken);
+
+        var createRes = await client.PostAsJsonAsync("/creator-profile/me/collections", new
+        {
+            title = "Stale Token Album",
+            description = "Created after promotion",
+            trackIds = "",
+        });
+
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
     }
 
     [Fact]

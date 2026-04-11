@@ -1,0 +1,6 @@
+node_modules/
+package-lock.json
+sent.log
+failed.log
+.env
+recipients.test.txt

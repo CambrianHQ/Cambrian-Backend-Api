@@ -1,0 +1,124 @@
+{
+  "creators": [
+    {
+      "displayName": "EchoPulse",
+      "genre": "Ambient",
+      "bio": "Crafting immersive atmospheric soundscapes for film, games, and meditation.",
+      "albums": [
+        {
+          "title": "Celestial Drift",
+          "theme": "Meditation and cinematic ambience",
+          "tracks": [
+            { "title": "Starlight Horizon", "nonExclusivePrice": 29, "exclusivePrice": 499 },
+            { "title": "Nebula Dreams", "nonExclusivePrice": 29, "exclusivePrice": 499 }
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "NeonVortex",
+      "genre": "EDM",
+      "bio": "High-energy festival and club production with bright synth leads and big drops.",
+      "albums": [
+        {
+          "title": "Electric Pulse",
+          "theme": "Festival nights and dance floors",
+          "tracks": [
+            { "title": "Midnight Drop", "nonExclusivePrice": 39, "exclusivePrice": 699 },
+            { "title": "Bassline Surge", "nonExclusivePrice": 39, "exclusivePrice": 699 }
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "UrbanCipher",
+      "genre": "Hip-Hop",
+      "bio": "Modern beat-maker blending punchy drums, smoky samples, and flexible rap instrumentals.",
+      "albums": [
+        {
+          "title": "Concrete Signals",
+          "theme": "Urban storytelling and late-night rhythm",
+          "tracks": [
+            { "title": "After Hours Loop", "nonExclusivePrice": 29, "exclusivePrice": 549 },
+            { "title": "Subway Static", "nonExclusivePrice": 29, "exclusivePrice": 549 }
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "OrionScores",
+      "genre": "Cinematic",
+      "bio": "Trailer-scale orchestral writing for film, teaser campaigns, and dramatic reveals.",
+      "albums": [
+        {
+          "title": "Signal to Stars",
+          "theme": "Epic trailers and orchestral motion",
+          "tracks": [
+            { "title": "Titan March", "nonExclusivePrice": 49, "exclusivePrice": 899 },
+            { "title": "Final Ascent", "nonExclusivePrice": 49, "exclusivePrice": 899 }
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "LoFiHarbor",
+      "genre": "Lo-Fi",
+      "bio": "Dusty keys, soft drums, and mellow textures built for study sessions and chill streams.",
+      "albums": [
+        {
+          "title": "Rain Window",
+          "theme": "Study, focus, and relaxation",
+          "tracks": [
+            { "title": "Notebook Glow", "nonExclusivePrice": 19, "exclusivePrice": 349 },
+            { "title": "Coffee Static", "nonExclusivePrice": 19, "exclusivePrice": 349 }
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "CircuitReverb",
+      "genre": "Rock",
+      "bio": "Guitar-heavy AI band with cinematic hooks, gritty riffs, and punchy alt-rock energy.",
+      "albums": [
+        {
+          "title": "Voltage Anthem",
+          "theme": "Arena hooks and guitar-forward energy",
+          "tracks": [
+            { "title": "Redline Echo", "nonExclusivePrice": 35, "exclusivePrice": 649 },
+            { "title": "Nightdrive Riot", "nonExclusivePrice": 35, "exclusivePrice": 649 }
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "BlueRoom Collective",
+      "genre": "Jazz",
+      "bio": "Smooth jazz ensemble focused on lounge textures, improvisation, and tasteful swing.",
+      "albums": [
+        {
+          "title": "Velvet Interlude",
+          "theme": "Lounge sessions and warm improvisation",
+          "tracks": [
+            { "title": "Glass Piano", "nonExclusivePrice": 24, "exclusivePrice": 459 },
+            { "title": "Moonlit Brass", "nonExclusivePrice": 24, "exclusivePrice": 459 }
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "Aureate Ensemble",
+      "genre": "Classical",
+      "bio": "Orchestral and chamber writing with a focus on elegance, emotion, and grand melodic arcs.",
+      "albums": [
+        {
+          "title": "Ivory and Sky",
+          "theme": "Symphonic and chamber storytelling",
+          "tracks": [
+            { "title": "Winter Adagio", "nonExclusivePrice": 29, "exclusivePrice": 599 },
+            { "title": "Crown of Strings", "nonExclusivePrice": 29, "exclusivePrice": 599 }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -242,6 +242,8 @@ schemas.TrackResponse = {
     name: { type: 'string', description: 'Alias for title.' },
     description: { type: 'string', nullable: true },
     genre: { type: 'string', nullable: true },
+    primaryGenre: { type: 'string', nullable: true },
+    subgenre: { type: 'string', nullable: true },
     mood: { type: 'string', nullable: true },
     tempo: { type: 'string', nullable: true },
     tags: { type: 'array', items: { type: 'string' } },
@@ -523,6 +525,8 @@ schemas.EditTrackRequest = {
     title: { type: 'string', nullable: true },
     description: { type: 'string', nullable: true },
     genre: { type: 'string', nullable: true },
+    primaryGenre: { type: 'string', nullable: true },
+    subgenre: { type: 'string', nullable: true },
     mood: { type: 'string', nullable: true },
     tempo: { type: 'string', nullable: true },
     tags: { type: 'string', nullable: true, description: 'Comma-separated tags.' },
@@ -530,6 +534,33 @@ schemas.EditTrackRequest = {
     exclusivePriceCents: { type: 'integer', nullable: true },
     copyrightBuyoutPriceCents: { type: 'integer', nullable: true }
   }
+};
+
+schemas.UploadTrackResponse = {
+  type: 'object',
+  properties: {
+    trackId: { type: 'string', format: 'uuid' },
+    title: { type: 'string' },
+    cambrianTrackId: { type: 'string' },
+    genre: { type: 'string', nullable: true },
+    primaryGenre: { type: 'string', nullable: true },
+    subgenre: { type: 'string', nullable: true },
+    coverArtUrl: { type: 'string', nullable: true },
+    collectionId: { type: 'string', nullable: true },
+    collectionTitle: { type: 'string', nullable: true }
+  }
+};
+
+schemas.UpdateTrackCoverArtRequest = {
+  type: 'object',
+  properties: {
+    coverArt: {
+      type: 'string',
+      format: 'binary',
+      description: 'Replacement cover art image file.'
+    }
+  },
+  required: ['coverArt']
 };
 
 // Upgrade tier request (admin)
@@ -987,7 +1018,96 @@ paths['/creator/tracks/{trackId}'] = {
     }],
     requestBody: jsonRequestBody('EditTrackRequest'),
     responses: {
-      '200': jsonResponseInline(envelopeRef('TrackResponse')),
+      '200': jsonResponseInline(envelopeOf({
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          cambrianTrackId: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string', nullable: true },
+          genre: { type: 'string', nullable: true },
+          primaryGenre: { type: 'string', nullable: true },
+          subgenre: { type: 'string', nullable: true },
+          mood: { type: 'string', nullable: true },
+          tempo: { type: 'string', nullable: true },
+          tags: { type: 'array', items: { type: 'string' } },
+          coverArtUrl: { type: 'string', nullable: true },
+          nonExclusivePriceCents: { type: 'integer' },
+          exclusivePriceCents: { type: 'integer' },
+          copyrightBuyoutPriceCents: { type: 'integer' },
+          collectionId: { type: 'string', nullable: true },
+          collectionTitle: { type: 'string', nullable: true }
+        }
+      })),
+      '403': { description: 'Not the track owner.' },
+      '404': { description: 'Track not found.' }
+    }
+  },
+  delete: {
+    tags: ['Creator'],
+    summary: 'Delete a creator-owned track and remove dangling collection links.',
+    security: [{ Bearer: [] }],
+    parameters: [{
+      name: 'trackId',
+      in: 'path',
+      required: true,
+      schema: { type: 'string', format: 'uuid' }
+    }],
+    responses: {
+      '200': jsonResponseInline(envelopeOf({
+        type: 'object',
+        properties: {
+          deleted: { type: 'boolean' },
+          trackId: { type: 'string', format: 'uuid' },
+          cambrianTrackId: { type: 'string' }
+        }
+      })),
+      '403': { description: 'Not the track owner.' },
+      '404': { description: 'Track not found.' }
+    }
+  }
+};
+
+paths['/creator/tracks/{trackId}/cover-art'] = {
+  put: {
+    tags: ['Creator'],
+    summary: 'Replace cover art for an existing creator-owned track.',
+    security: [{ Bearer: [] }],
+    parameters: [{
+      name: 'trackId',
+      in: 'path',
+      required: true,
+      schema: { type: 'string', format: 'uuid' }
+    }],
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          schema: { $ref: '#/components/schemas/UpdateTrackCoverArtRequest' }
+        }
+      }
+    },
+    responses: {
+      '200': jsonResponseInline(envelopeOf({
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          cambrianTrackId: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string', nullable: true },
+          genre: { type: 'string', nullable: true },
+          primaryGenre: { type: 'string', nullable: true },
+          subgenre: { type: 'string', nullable: true },
+          mood: { type: 'string', nullable: true },
+          tempo: { type: 'string', nullable: true },
+          tags: { type: 'array', items: { type: 'string' } },
+          coverArtUrl: { type: 'string', nullable: true },
+          nonExclusivePriceCents: { type: 'integer' },
+          exclusivePriceCents: { type: 'integer' },
+          copyrightBuyoutPriceCents: { type: 'integer' },
+          collectionId: { type: 'string', nullable: true },
+          collectionTitle: { type: 'string', nullable: true }
+        }
+      })),
       '403': { description: 'Not the track owner.' },
       '404': { description: 'Track not found.' }
     }

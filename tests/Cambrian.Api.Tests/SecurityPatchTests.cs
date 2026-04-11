@@ -94,6 +94,12 @@ public sealed class SecurityPatchTests
 
         fix.Entitlement.CanDownloadAsync("user-1", trackId).Returns(true);
         fix.Tracks.GetByIdAsync(trackId).Returns(track);
+        fix.Storage.OpenReadAsync("tracks/beat.mp3").Returns(new StorageFile
+        {
+            Stream = new MemoryStream(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }),
+            ContentType = "audio/mpeg",
+            Length = 4
+        });
         fix.Storage.GenerateDownloadUrl(Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/file.mp3");
         fix.Licenses.GetByBuyerAndTrackAsync(Arg.Any<string>(), Arg.Any<string>())

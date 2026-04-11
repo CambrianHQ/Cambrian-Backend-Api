@@ -1,0 +1,30 @@
+name: Cambrian Resilience Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Target API base URL"
+        required: false
+        default: ""
+
+jobs:
+  resilience-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D68
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run resilience smoke test
+        env:
+          BASE_URL: ${{ inputs.base_url != '' && inputs.base_url || secrets.STAGING_API_URL }}
+        run: k6 run loadtests/resilience.js

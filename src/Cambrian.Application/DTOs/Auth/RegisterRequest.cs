@@ -17,8 +17,11 @@ public class RegisterRequest
     [MaxLength(100)]
     public string? DisplayName { get; set; }
 
-    /// <summary>Optional role: "creator" to register as a free creator. Defaults to consumer.</summary>
-    [RegularExpression("^(user|creator)$", ErrorMessage = "Role must be 'user' or 'creator'.")]
+    /// <summary>
+    /// Optional role. Accepts "listener" (preferred), legacy "user", or "creator".
+    /// Defaults to listener when omitted.
+    /// </summary>
+    [RegularExpression("(?i)^(listener|user|creator)$", ErrorMessage = "Role must be 'listener' or 'creator'.")]
     public string? Role { get; set; }
 
     /// <summary>Optional phone number for account recovery and notifications.</summary>

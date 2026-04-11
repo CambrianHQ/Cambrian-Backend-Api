@@ -9,6 +9,6 @@ public class VerifyCodeRequest
     public string? PhoneNumber { get; set; }
 
     [Required]
-    [StringLength(8, MinimumLength = 8)]
+    [RegularExpression(@"^\d{6}$", ErrorMessage = "Code must be a 6-digit number.")]
     public string Code { get; set; } = string.Empty;
 }

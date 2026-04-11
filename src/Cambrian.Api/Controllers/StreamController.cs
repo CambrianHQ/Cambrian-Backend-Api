@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -63,15 +64,17 @@ public class StreamController : BaseController
         if (track is null)
             return NotFoundResponse("Track not found.");
 
-        if (string.IsNullOrEmpty(track.AudioUrl))
-            return ErrorResponse("Track has no audio file configured.");
-
         // C4: enforce visibility via shared policy — single source of truth.
         var streamUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, streamUserId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        var streamUrl = _storage.GenerateSignedUrl(track.AudioUrl);
+        var (audioKey, audioFile) = await OpenPlayableAudioAsync(track);
+        audioFile?.Dispose();
+        if (string.IsNullOrEmpty(audioKey))
+            return NotFoundResponse("Audio file not found.");
+
+        var streamUrl = _storage.GenerateSignedUrl(audioKey);
         return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl) });
     }
 
@@ -97,9 +100,6 @@ public class StreamController : BaseController
         if (track is null)
             return NotFoundResponse("Track not found.");
 
-        if (string.IsNullOrEmpty(track.AudioUrl))
-            return ErrorResponse("Track has no audio file configured.");
-
         // C4: enforce visibility via shared policy (anonymous users allowed for public tracks).
         var audioUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, audioUserId, User.IsInRole("Admin")))
@@ -119,9 +119,7 @@ public class StreamController : BaseController
         // Call the single-arg overload when no Range header is present so callers
         // (and tests) that only stub the no-range signature keep working; the
         // two-arg overload is only used when the client actually sent a Range.
-        var file = hasRange
-            ? await _storage.OpenReadAsync(track.AudioUrl, rangeHeader)
-            : await _storage.OpenReadAsync(track.AudioUrl);
+        var (_, file) = await OpenPlayableAudioAsync(track, hasRange ? rangeHeader : null);
         if (file is null)
             return NotFoundResponse("Audio file not found on storage.");
 
@@ -184,11 +182,62 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, userId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        if (string.IsNullOrEmpty(track.AudioUrl))
-            return ErrorResponse("Track has no audio file configured.");
+        var (_, audioFile) = await OpenPlayableAudioAsync(track);
+        if (audioFile is null)
+            return NotFoundResponse("Audio file not found.");
+        audioFile.Dispose();
 
         var session = await _streams.StartAsync(parsedTrackId, userId);
         return OkResponse(new { streamId = session.Id.ToString(), status = "started" });
+    }
+
+    private async Task<(string? AudioKey, StorageFile? File)> OpenPlayableAudioAsync(Track track, string? rangeHeader = null)
+    {
+        foreach (var candidate in GetAudioCandidates(track))
+        {
+            var file = string.IsNullOrWhiteSpace(rangeHeader)
+                ? await _storage.OpenReadAsync(candidate)
+                : await _storage.OpenReadAsync(candidate, rangeHeader);
+
+            if (file is not null)
+            {
+                if (!string.Equals(track.AudioUrl, candidate, StringComparison.Ordinal))
+                {
+                    _logger.LogInformation(
+                        "StreamAudio: using seeded fallback audio key for trackId={TrackId} key={AudioKey}",
+                        track.Id, candidate);
+                }
+
+                return (candidate, file);
+            }
+        }
+
+        return (null, null);
+    }
+
+    private static IEnumerable<string> GetAudioCandidates(Track track)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var configured = track.AudioUrl?.Trim();
+        if (!string.IsNullOrWhiteSpace(configured) && seen.Add(configured))
+            yield return configured;
+
+        var seededFallback = BuildSeedFallbackAudioKey(track.CambrianTrackId);
+        if (!string.IsNullOrWhiteSpace(seededFallback) && seen.Add(seededFallback))
+            yield return seededFallback;
+    }
+
+    private static string? BuildSeedFallbackAudioKey(string? cambrianTrackId)
+    {
+        if (string.IsNullOrWhiteSpace(cambrianTrackId)
+            || !cambrianTrackId.StartsWith("CAMB-TRK-", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var slug = cambrianTrackId["CAMB-TRK-".Length..].Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(slug) ? null : $"tracks/demo-{slug}.mp3";
     }
 
     public class StreamStartRequest
