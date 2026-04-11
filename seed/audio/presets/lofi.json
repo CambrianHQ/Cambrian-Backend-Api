@@ -1,0 +1,6 @@
+{
+  "genre": "lofi",
+  "bpm_range": [70, 95],
+  "duration_range": [120, 210],
+  "moods": ["chill", "mellow", "nostalgic", "relaxed", "warm"]
+}

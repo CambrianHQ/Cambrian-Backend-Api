@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cambrian Demo Catalog",
+  "type": "object",
+  "required": ["creators"],
+  "properties": {
+    "creators": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slug", "displayName", "genre", "bio", "albums"],
+        "properties": {
+          "slug": { "type": "string" },
+          "displayName": { "type": "string" },
+          "genre": { "type": "string" },
+          "bio": { "type": "string" },
+          "avatarUrl": { "type": "string" },
+          "bannerUrl": { "type": "string" },
+          "albums": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["slug", "title", "releaseDate", "tracks"],
+              "properties": {
+                "slug": { "type": "string" },
+                "title": { "type": "string" },
+                "genre": { "type": "string" },
+                "releaseDate": { "type": "string", "format": "date" },
+                "artworkUrl": { "type": "string" },
+                "tracks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "slug",
+                      "title",
+                      "audioPath",
+                      "durationSeconds",
+                      "nonExclusivePrice",
+                      "exclusivePrice"
+                    ],
+                    "properties": {
+                      "slug": { "type": "string" },
+                      "title": { "type": "string" },
+                      "audioPath": { "type": "string" },
+                      "waveformPath": { "type": "string" },
+                      "durationSeconds": { "type": "number" },
+                      "bpm": { "type": "number" },
+                      "key": { "type": "string" },
+                      "mood": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      },
+                      "nonExclusivePrice": { "type": "number" },
+                      "exclusivePrice": { "type": "number" },
+                      "isDemo": { "type": "boolean", "default": true },
+                      "sourceType": {
+                        "type": "string",
+                        "enum": ["procedural", "ai-generated", "curated"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "genre": "trap",
+  "bpm_range": [130, 160],
+  "duration_range": [120, 210],
+  "moods": ["dark", "aggressive", "moody", "hype", "atmospheric"]
+}

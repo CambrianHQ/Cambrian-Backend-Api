@@ -1,0 +1,6 @@
+{
+  "genre": "edm",
+  "bpm_range": [120, 140],
+  "duration_range": [150, 270],
+  "moods": ["energetic", "uplifting", "intense", "euphoric", "driving"]
+}
