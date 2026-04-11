@@ -38,7 +38,13 @@ public class TrackRepository : ITrackRepository
             .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public");
 
         if (!string.IsNullOrWhiteSpace(genre))
-            query = query.Where(t => t.Genre != null && t.Genre.ToLower() == genre.ToLower());
+        {
+            var normalizedGenre = genre.ToLower();
+            query = query.Where(t =>
+                (t.Subgenre != null && t.Subgenre.ToLower() == normalizedGenre) ||
+                (t.PrimaryGenre != null && t.PrimaryGenre.ToLower() == normalizedGenre) ||
+                (t.Genre != null && t.Genre.ToLower() == normalizedGenre));
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(t => t.Title.ToLower().Contains(search.ToLower()));
@@ -116,7 +122,13 @@ public class TrackRepository : ITrackRepository
             .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public");
 
         if (!string.IsNullOrWhiteSpace(genre))
-            query = query.Where(t => t.Genre != null && t.Genre.ToLower() == genre.ToLower());
+        {
+            var normalizedGenre = genre.ToLower();
+            query = query.Where(t =>
+                (t.Subgenre != null && t.Subgenre.ToLower() == normalizedGenre) ||
+                (t.PrimaryGenre != null && t.PrimaryGenre.ToLower() == normalizedGenre) ||
+                (t.Genre != null && t.Genre.ToLower() == normalizedGenre));
+        }
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(t => t.Title.ToLower().Contains(search.ToLower()));
         if (!string.IsNullOrWhiteSpace(mood))

@@ -13,6 +13,12 @@ public class Track
 
     public string? Genre { get; set; }
 
+    /// <summary>Top-level genre taxonomy label (e.g. Hip-Hop, Electronic, Cinematic).</summary>
+    public string? PrimaryGenre { get; set; }
+
+    /// <summary>Leaf genre taxonomy label used for the canonical genre alias.</summary>
+    public string? Subgenre { get; set; }
+
     /// <summary>Mood tag for search filtering (e.g. happy, dark, chill, energetic).</summary>
     public string? Mood { get; set; }
 

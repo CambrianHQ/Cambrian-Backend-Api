@@ -65,7 +65,9 @@ public class CreatorService : ICreatorService
                 {
                     Id = t.Id.ToString(),
                     Title = t.Title,
-                    Genre = t.Genre ?? "",
+                    Genre = t.Subgenre ?? t.Genre ?? t.PrimaryGenre ?? "",
+                    PrimaryGenre = t.PrimaryGenre,
+                    Subgenre = t.Subgenre,
                     Price = t.Price,
                     NonExclusivePrice = nonExPrice,
                     ExclusivePrice = exPrice,
