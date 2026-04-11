@@ -33,9 +33,9 @@ public interface ICreatorProfileRepository
 
     Task<string?> GetCollectionOwnerAsync(Guid id);
 
-    Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string trackIds);
+    Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string? coverImageUrl, string trackIds);
 
-    Task<TrackCollectionDto> UpdateCollectionAsync(Guid id, string creatorId, string? title, string? description, string? trackIds);
+    Task<TrackCollectionDto> UpdateCollectionAsync(Guid id, string creatorId, string? title, string? description, string? coverImageUrl, string? trackIds);
 
     Task DeleteCollectionAsync(Guid id);
 }

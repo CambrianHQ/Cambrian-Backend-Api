@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Cambrian.Api.Contracts.Catalog;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -51,24 +52,26 @@ public class CatalogController : BaseController
     }
 
     [HttpGet("catalog")]
-    public async Task<IActionResult> Catalog(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50,
-        [FromQuery] string? genre = null,
-        [FromQuery] string? search = null,
-        [FromQuery] string? sort = null,
-        [FromQuery] string? mood = null,
-        [FromQuery] string? tempo = null,
-        [FromQuery] bool? instrumental = null,
-        [FromQuery] string? duration = null)
+    [ProducesResponseType(typeof(CatalogPageResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CatalogPageResponse>> Catalog([FromQuery] CatalogQueryRequest query)
     {
-        if (page < 1) page = 1;
-        if (pageSize is < 1 or > 100) pageSize = 50;
-        var cacheKey = $"catalog:paged:{page}:{pageSize}:{genre}:{search}:{sort}:{mood}:{tempo}:{instrumental}:{duration}";
+        query.Page = Math.Max(query.Page, 1);
+        query.PageSize = query.PageSize is < 1 or > 100 ? 50 : query.PageSize;
+
+        var cacheKey = $"catalog:paged:{query.Page}:{query.PageSize}:{query.Genre}:{query.Search}:{query.Sort}:{query.Mood}:{query.Tempo}:{query.Instrumental}:{query.Duration}";
         var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            return await _catalog.GetCatalogPagedAsync(page, pageSize, genre, search, sort, mood, tempo, instrumental, duration);
+            return await _catalog.GetCatalogPagedAsync(
+                query.Page,
+                query.PageSize,
+                query.Genre,
+                query.Search,
+                query.Sort,
+                query.Mood,
+                query.Tempo,
+                query.Instrumental,
+                query.Duration);
         });
         ResolveTrackUrls(result!.Items);
         return Ok(ToPaginatedEnvelope(result));
@@ -79,16 +82,15 @@ public class CatalogController : BaseController
     /// so existing clients are unaffected, and pagination metadata is added as
     /// sibling fields.
     /// </summary>
-    private static object ToPaginatedEnvelope<T>(PagedResult<T> paged) => new
+    private static CatalogPageResponse ToPaginatedEnvelope(PagedResult<TrackResponse> paged) => new()
     {
-        success = true,
-        data = paged.Items,
-        page = paged.Page,
-        pageSize = paged.PageSize,
-        totalCount = paged.TotalCount,
-        totalPages = paged.TotalPages,
-        hasNextPage = paged.HasNextPage,
-        hasPreviousPage = paged.HasPreviousPage
+        Data = paged.Items,
+        Page = paged.Page,
+        PageSize = paged.PageSize,
+        TotalCount = paged.TotalCount,
+        TotalPages = paged.TotalPages,
+        HasNextPage = paged.HasNextPage,
+        HasPreviousPage = paged.HasPreviousPage
     };
 
     [HttpGet("tracks/{trackId}")]

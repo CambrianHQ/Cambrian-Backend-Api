@@ -173,7 +173,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return entity?.CreatorId;
     }
 
-    public async Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string trackIds)
+    public async Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string? coverImageUrl, string trackIds)
     {
         var collection = new TrackCollection
         {
@@ -181,6 +181,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             CreatorId = creatorId,
             Title = title,
             Description = description,
+            CoverImageUrl = coverImageUrl,
             TrackIds = trackIds,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -190,13 +191,14 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return MapCollectionToDto(collection);
     }
 
-    public async Task<TrackCollectionDto> UpdateCollectionAsync(Guid id, string creatorId, string? title, string? description, string? trackIds)
+    public async Task<TrackCollectionDto> UpdateCollectionAsync(Guid id, string creatorId, string? title, string? description, string? coverImageUrl, string? trackIds)
     {
         var existing = await _db.TrackCollections.FindAsync(id);
         if (existing is null) throw new KeyNotFoundException("Collection not found.");
 
         if (title is not null) existing.Title = title;
         existing.Description = description ?? existing.Description;
+        if (coverImageUrl is not null) existing.CoverImageUrl = coverImageUrl;
         if (trackIds is not null) existing.TrackIds = trackIds;
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();

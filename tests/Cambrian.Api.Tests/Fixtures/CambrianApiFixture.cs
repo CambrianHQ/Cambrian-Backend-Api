@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Tests.Fixtures;
 
@@ -19,7 +20,7 @@ namespace Cambrian.Api.Tests.Fixtures;
 /// Shared test server using in-memory SQLite.
 /// Replaces Postgres, Stripe, and R2 with test stubs.
 /// </summary>
-public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
+public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private const string TestJwtKey = "cambrian-test-key-1234567890-abcdef";
     private const string TestJwtIssuer = "cambrian-test-issuer";
@@ -27,20 +28,36 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
 
     private SqliteConnection _connection = null!;
 
+    protected virtual bool UseTestWebhookService => true;
+
+    protected virtual IReadOnlyDictionary<string, string?> CreateTestConfigurationOverrides() =>
+        new Dictionary<string, string?>();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureLogging(logging =>
+        {
+            logging.ClearProviders();
+        });
 
         // Provide required secrets so Program.cs startup validation passes
         builder.ConfigureAppConfiguration((_, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>
             {
                 ["Jwt:Key"] = TestJwtKey,
                 ["Jwt:Issuer"] = TestJwtIssuer,
                 ["Jwt:Audience"] = TestJwtAudience,
                 ["Checkout:RequireSubscription"] = "false",
-            });
+            };
+
+            foreach (var pair in CreateTestConfigurationOverrides())
+            {
+                settings[pair.Key] = pair.Value;
+            }
+
+            config.AddInMemoryCollection(settings);
         });
 
         builder.ConfigureServices(services =>
@@ -67,11 +84,14 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
             services.RemoveAll<IObjectStorage>();
             services.AddSingleton<IObjectStorage, FakeObjectStorage>();
 
-            // ---------- Replace webhook service with test version ----------
-            // Bypasses Stripe signature verification while preserving all
-            // business logic via StripeWebhookService.ProcessEventAsync.
-            services.RemoveAll<IWebhookService>();
-            services.AddScoped<IWebhookService, TestWebhookService>();
+            if (UseTestWebhookService)
+            {
+                // ---------- Replace webhook service with test version ----------
+                // Bypasses Stripe signature verification while preserving all
+                // business logic via StripeWebhookService.ProcessEventAsync.
+                services.RemoveAll<IWebhookService>();
+                services.AddScoped<IWebhookService, TestWebhookService>();
+            }
         });
     }
 
@@ -154,6 +174,27 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         return client;
     }
 
+    public async Task<HttpClient> CreateRoleClientAsync(
+        string email,
+        string password,
+        string role,
+        string? username = null)
+    {
+        await RegisterUserAsync(email, password);
+        await SetUserRoleAsync(email, role);
+
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            await SetUsernameAsync(email, username);
+        }
+
+        var token = await LoginUserAsync(email, password);
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
     /// <summary>Mark a user's EmailVerified flag in the DB (test verification shortcut).</summary>
     public async Task MarkUserEmailVerifiedAsync(string email)
     {
@@ -207,6 +248,21 @@ public sealed class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncL
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
         var user = await db.Users.FirstAsync(u => u.Email == email);
         user.Role = role;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task SetUsernameAsync(string email, string username)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == email);
+        user.UserName = username;
+        user.NormalizedUserName = username.ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(user.DisplayName))
+        {
+            user.DisplayName = username;
+        }
+
         await db.SaveChangesAsync();
     }
 

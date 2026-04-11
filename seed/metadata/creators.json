@@ -1,0 +1,149 @@
+[
+  {
+    "slug": "echobeats",
+    "displayName": "Echobeats",
+    "genre": "Ambient",
+    "bio": "Demo creator producing ambient music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "blazeverse",
+    "displayName": "Blazeverse",
+    "genre": "Ambient",
+    "bio": "Demo creator producing ambient music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "echosynth",
+    "displayName": "Echosynth",
+    "genre": "Ambient",
+    "bio": "Demo creator producing ambient music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "shadeverse",
+    "displayName": "Shadeverse",
+    "genre": "Ambient",
+    "bio": "Demo creator producing ambient music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "soniccraft",
+    "displayName": "Soniccraft",
+    "genre": "Ambient",
+    "bio": "Demo creator producing ambient music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "cloudaudio",
+    "displayName": "Cloudaudio",
+    "genre": "Lo-fi",
+    "bio": "Demo creator producing lo-fi music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "fluxverse",
+    "displayName": "Fluxverse",
+    "genre": "Lo-fi",
+    "bio": "Demo creator producing lo-fi music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "cyanflow",
+    "displayName": "Cyanflow",
+    "genre": "Lo-fi",
+    "bio": "Demo creator producing lo-fi music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "voidverse",
+    "displayName": "Voidverse",
+    "genre": "Lo-fi",
+    "bio": "Demo creator producing lo-fi music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "orbitflow",
+    "displayName": "Orbitflow",
+    "genre": "Lo-fi",
+    "bio": "Demo creator producing lo-fi music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "zensynth",
+    "displayName": "Zensynth",
+    "genre": "EDM",
+    "bio": "Demo creator producing edm music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "novabeats",
+    "displayName": "Novabeats",
+    "genre": "EDM",
+    "bio": "Demo creator producing edm music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "zenkeys",
+    "displayName": "Zenkeys",
+    "genre": "EDM",
+    "bio": "Demo creator producing edm music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "pixelcraft",
+    "displayName": "Pixelcraft",
+    "genre": "EDM",
+    "bio": "Demo creator producing edm music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "drifttone",
+    "displayName": "Drifttone",
+    "genre": "Cinematic",
+    "bio": "Demo creator producing cinematic music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "emberwave",
+    "displayName": "Emberwave",
+    "genre": "Cinematic",
+    "bio": "Demo creator producing cinematic music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "terraverse",
+    "displayName": "Terraverse",
+    "genre": "Cinematic",
+    "bio": "Demo creator producing cinematic music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "driftpulse",
+    "displayName": "Driftpulse",
+    "genre": "Trap",
+    "bio": "Demo creator producing trap music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "zenverse",
+    "displayName": "Zenverse",
+    "genre": "Trap",
+    "bio": "Demo creator producing trap music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "voidaudio",
+    "displayName": "Voidaudio",
+    "genre": "Trap",
+    "bio": "Demo creator producing trap music.",
+    "demoOnly": true
+  },
+  {
+    "slug": "pulseverse",
+    "displayName": "Pulseverse",
+    "genre": "Trap",
+    "bio": "Demo creator producing trap music.",
+    "demoOnly": true
+  }
+]

@@ -54,11 +54,19 @@ public class DownloadController : BaseController
 
         _logger.LogInformation("Download requested: trackId={TrackId}", trackId);
 
+        // Prefer the stored content type when available so legacy mislabeled keys
+        // still download with the correct extension on signed-URL backends.
+        string? contentType = null;
+        using (var probe = await _storage.OpenReadAsync(track.AudioUrl))
+        {
+            if (probe is null)
+                return NotFoundResponse($"Audio file not found on storage. audioUrl={track.AudioUrl}");
+
+            contentType = probe.ContentType;
+        }
+
         // Build a user-friendly filename from the track title
-        var ext = Path.GetExtension(track.AudioUrl);
-        if (string.IsNullOrWhiteSpace(ext)) ext = ".mp3";
-        var safeTitle = FilenameHelper.SanitizeFilename(track.Title ?? "track");
-        var filename = $"{safeTitle}{ext}";
+        var filename = BuildDownloadFilename(track.Title, track.AudioUrl, contentType);
 
         // Generate a URL with Content-Disposition: attachment so the browser
         // triggers a real "Save As" download instead of playing the audio inline.
@@ -103,9 +111,7 @@ public class DownloadController : BaseController
             return NotFoundResponse($"Audio file not found on storage. audioUrl={track.AudioUrl}");
 
         // Build a user-friendly filename from the track title
-        var ext = Path.GetExtension(track.AudioUrl) ?? ".mp3";
-        var safeTitle = FilenameHelper.SanitizeFilename(track.Title ?? "track");
-        var fileName = $"{safeTitle}{ext}";
+        var fileName = BuildDownloadFilename(track.Title, track.AudioUrl, file.ContentType);
 
         Response.Headers["Cache-Control"] = "private, no-store";
         return File(file.Stream, file.ContentType, fileName, enableRangeProcessing: true);
@@ -139,6 +145,34 @@ public class DownloadController : BaseController
             signedUrl = ResolveAbsoluteUrl($"/download/{trackId}/file");
 
         return OkResponse(new { signedUrl, expiresAt = DateTime.UtcNow.AddMinutes(15) });
+    }
+
+    private static string BuildDownloadFilename(string? title, string? audioUrl, string? contentType = null)
+    {
+        var safeTitle = FilenameHelper.SanitizeFilename(title ?? "track");
+        var extension = GetPreferredAudioExtension(audioUrl, contentType);
+        return $"{safeTitle}{extension}";
+    }
+
+    private static string GetPreferredAudioExtension(string? audioUrl, string? contentType)
+    {
+        var normalizedContentType = contentType?.Split(';', 2)[0].Trim().ToLowerInvariant();
+        var extensionFromContentType = normalizedContentType switch
+        {
+            "audio/wav" or "audio/x-wav" or "audio/wave" or "audio/vnd.wave" or "audio/x-pn-wav" => ".wav",
+            "audio/mpeg" or "audio/mp3" => ".mp3",
+            "audio/flac" => ".flac",
+            "audio/aac" => ".aac",
+            "audio/ogg" => ".ogg",
+            "audio/mp4" or "audio/x-m4a" => ".m4a",
+            _ => null
+        };
+
+        if (!string.IsNullOrWhiteSpace(extensionFromContentType))
+            return extensionFromContentType;
+
+        var extensionFromUrl = Path.GetExtension(audioUrl ?? string.Empty);
+        return string.IsNullOrWhiteSpace(extensionFromUrl) ? ".mp3" : extensionFromUrl.ToLowerInvariant();
     }
 
 }

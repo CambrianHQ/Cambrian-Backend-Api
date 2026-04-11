@@ -114,13 +114,17 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
+        var resolvedRole = string.Equals(request.Role?.Trim(), "creator", StringComparison.OrdinalIgnoreCase)
+            ? "Creator"
+            : "User";
+
         var user = new ApplicationUser
         {
             Email = request.Email,
             UserName = request.Email,
             DisplayName = request.DisplayName ?? request.Email.Split('@')[0],
             Tier = "free",
-            Role = "Creator",
+            Role = resolvedRole,
             CreatorTier = CreatorTier.Free,
             PhoneNumber = request.PhoneNumber,
             EmailVerified = false  // H1: requires email verification flow
@@ -260,13 +264,9 @@ public class AuthService : IAuthService
         if (user is null)
             return; // silent
 
-        // Generate a cryptographically random 8-character alphanumeric code
-        // (32^8 = ~1.1 trillion combinations vs 900K for 6-digit numeric)
-        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // excludes ambiguous chars: 0/O, 1/I
-        var codeChars = new char[8];
-        for (var i = 0; i < codeChars.Length; i++)
-            codeChars[i] = chars[RandomNumberGenerator.GetInt32(chars.Length)];
-        var code = new string(codeChars);
+        // Generate a cryptographically random 6-digit numeric code so the backend,
+        // email copy, and UI entry flow all use the same contract.
+        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
 
         user.PasswordResetCode = HashResetCode(code);
         user.PasswordResetCodeExpiry = DateTime.UtcNow.Add(ResetCodeLifetime);
@@ -583,8 +583,7 @@ public class AuthService : IAuthService
             throw new InvalidOperationException(InvalidOrExpiredCode);
         }
 
-        // Generated codes are always uppercase — normalize so mobile autocorrect doesn't penalise users.
-        var normalizedCode = code.Trim().ToUpperInvariant();
+        var normalizedCode = code.Trim();
         if (!string.Equals(user.PasswordResetCode, HashResetCode(normalizedCode), StringComparison.Ordinal))
         {
             user.PasswordResetAttemptCount++;

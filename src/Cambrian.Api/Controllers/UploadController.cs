@@ -46,6 +46,8 @@ public class UploadController : BaseController
         try
         {
             var result = await _upload.Upload(request);
+            if (!string.IsNullOrWhiteSpace(result.CoverArtUrl))
+                result.CoverArtUrl = ResolveImageUrl(result.CoverArtUrl);
             _logger.LogInformation("EVENT: UploadCompleted userId:{UserId} trackId:{TrackId} title:{Title}", userId, result, request.Title);
 
             // Invalidate catalog cache so the new track appears immediately

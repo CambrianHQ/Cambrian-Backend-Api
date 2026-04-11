@@ -936,7 +936,8 @@ namespace Cambrian.Persistence.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("Genre")
-                        .HasColumnType("text");
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
 
                     b.Property<bool>("Instrumental")
                         .HasColumnType("boolean");
@@ -947,6 +948,10 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<string>("Mood")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PrimaryGenre")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
 
                     b.Property<int>("NonExclusivePriceCents")
                         .HasColumnType("integer");
@@ -963,6 +968,10 @@ namespace Cambrian.Persistence.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasDefaultValue("available");
+
+                    b.Property<string>("Subgenre")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
 
                     b.Property<string>("Tags")
                         .IsRequired()

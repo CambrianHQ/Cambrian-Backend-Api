@@ -1,0 +1,17 @@
+{
+  "name": "cambrian-backend-tools",
+  "private": true,
+  "type": "module",
+  "description": "Dev tooling for Cambrian Backend API — contract validation, Postman export, etc.",
+  "scripts": {
+    "start:backend": "powershell -ExecutionPolicy Bypass -File scripts/start-backend.ps1 -UseExistingBuild",
+    "export:postman": "node tools/export-postman/export-postman.mjs",
+    "seed:catalog": "node seed/scripts/build-demo-catalog.mjs",
+    "validate:contracts": "node scripts/validate-contracts.cjs",
+    "check:drift": "node scripts/check-contract-drift.cjs"
+  },
+  "devDependencies": {
+    "openapi-to-postmanv2": "^4.23.0",
+    "yaml": "^1.10.2"
+  }
+}

@@ -11,6 +11,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Stripe;
 using Stripe.Checkout;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Cambrian.Infrastructure.Stripe;
@@ -76,42 +78,136 @@ public class StripeWebhookService : IWebhookService
                 + "Stripe-Signature header is missing. All webhook requests must be signed.");
         }
 
-        var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
-        eventType = stripeEvent.Type;
-        eventId = stripeEvent.Id;
-        clientReferenceId = null;
-        amountTotal = null;
+        try
+        {
+            var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
+            eventType = stripeEvent.Type;
+            eventId = stripeEvent.Id;
+            clientReferenceId = null;
+            amountTotal = null;
 
-        if (eventType == EventTypes.CheckoutSessionCompleted)
-        {
-            var session = stripeEvent.Data.Object as Session;
-            clientReferenceId = session?.ClientReferenceId;
-            amountTotal = session?.AmountTotal;
-            stripeSessionId = session?.Id;
+            if (eventType == EventTypes.CheckoutSessionCompleted)
+            {
+                var session = stripeEvent.Data.Object as Session;
+                clientReferenceId = session?.ClientReferenceId;
+                amountTotal = session?.AmountTotal;
+                stripeSessionId = session?.Id;
+            }
+            else if (eventType == EventSubscriptionDeleted)
+            {
+                var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
+                stripeCustomerId = sub?.CustomerId;
+            }
+            else if (eventType == EventInvoicePaymentFailed)
+            {
+                var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
+                stripeCustomerId = invoice?.CustomerId;
+            }
+            else if (eventType == EventChargeRefunded)
+            {
+                var charge = stripeEvent.Data.Object as Charge;
+                stripePaymentIntentId = charge?.PaymentIntentId;
+            }
+            else if (eventType == EventChargeDisputeCreated)
+            {
+                var dispute = stripeEvent.Data.Object as Dispute;
+                stripePaymentIntentId = dispute?.Charge?.PaymentIntentId ?? dispute?.PaymentIntentId;
+            }
         }
-        else if (eventType == EventSubscriptionDeleted)
+        catch (NullReferenceException ex)
         {
-            var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
-            stripeCustomerId = sub?.CustomerId;
-        }
-        else if (eventType == EventInvoicePaymentFailed)
-        {
-            var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
-            stripeCustomerId = invoice?.CustomerId;
-        }
-        else if (eventType == EventChargeRefunded)
-        {
-            var charge = stripeEvent.Data.Object as Charge;
-            stripePaymentIntentId = charge?.PaymentIntentId;
-        }
-        else if (eventType == EventChargeDisputeCreated)
-        {
-            var dispute = stripeEvent.Data.Object as Dispute;
-            stripePaymentIntentId = dispute?.Charge?.PaymentIntentId ?? dispute?.PaymentIntentId;
+            _logger.LogWarning(ex,
+                "Stripe webhook event deserialization failed after signature verification. Falling back to minimal JSON parsing.");
+
+            ValidateStripeSignature(payload, signature, _webhookSecret);
+            (eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId)
+                = ParseSignedEventFallback(payload);
         }
 
         _logger.LogInformation("Stripe webhook verified: {EventType} {EventId}", eventType, eventId);
         await ProcessEventAsync(eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId, payload);
+    }
+
+    private static void ValidateStripeSignature(string payload, string signatureHeader, string secret)
+    {
+        var timestamp = 0L;
+        var signatures = new List<string>();
+
+        foreach (var segment in signatureHeader.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var kv = segment.Split('=', 2);
+            if (kv.Length != 2)
+                continue;
+
+            if (string.Equals(kv[0], "t", StringComparison.OrdinalIgnoreCase) && long.TryParse(kv[1], out var parsed))
+                timestamp = parsed;
+            else if (string.Equals(kv[0], "v1", StringComparison.OrdinalIgnoreCase))
+                signatures.Add(kv[1]);
+        }
+
+        if (timestamp <= 0 || signatures.Count == 0)
+            throw new InvalidOperationException("Stripe webhook signature verification failed. Signature header is malformed.");
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (Math.Abs(now - timestamp) > 300)
+            throw new InvalidOperationException("Stripe webhook signature verification failed. Signature timestamp is outside the allowed tolerance.");
+
+        var signedPayload = $"{timestamp}.{payload}";
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+        var expected = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(signedPayload))).ToLowerInvariant();
+        var expectedBytes = Encoding.ASCII.GetBytes(expected);
+
+        foreach (var candidate in signatures)
+        {
+            var candidateBytes = Encoding.ASCII.GetBytes(candidate);
+            if (candidateBytes.Length == expectedBytes.Length &&
+                CryptographicOperations.FixedTimeEquals(candidateBytes, expectedBytes))
+            {
+                return;
+            }
+        }
+
+        throw new InvalidOperationException("Stripe webhook signature verification failed. No matching v1 signature was found.");
+    }
+
+    private static (string? EventId, string EventType, string? ClientReferenceId, long? AmountTotal,
+        string? StripeCustomerId, string? StripeSessionId, string? StripePaymentIntentId)
+        ParseSignedEventFallback(string payload)
+    {
+        using var doc = JsonDocument.Parse(payload);
+        var root = doc.RootElement;
+
+        var eventType = root.GetProperty("type").GetString()
+            ?? throw new JsonException("Webhook payload is missing type.");
+        var eventId = root.TryGetProperty("id", out var eventIdProp) ? eventIdProp.GetString() : null;
+
+        string? clientReferenceId = null;
+        long? amountTotal = null;
+        string? stripeCustomerId = null;
+        string? stripeSessionId = null;
+        string? stripePaymentIntentId = null;
+
+        if (root.TryGetProperty("data", out var data) && data.TryGetProperty("object", out var obj))
+        {
+            if (eventType == EventTypes.CheckoutSessionCompleted)
+            {
+                clientReferenceId = obj.TryGetProperty("client_reference_id", out var refProp) ? refProp.GetString() : null;
+                amountTotal = obj.TryGetProperty("amount_total", out var amountProp) && amountProp.ValueKind == JsonValueKind.Number
+                    ? amountProp.GetInt64()
+                    : null;
+                stripeSessionId = obj.TryGetProperty("id", out var sessionProp) ? sessionProp.GetString() : null;
+            }
+            else if (eventType is EventSubscriptionDeleted or EventInvoicePaymentFailed)
+            {
+                stripeCustomerId = obj.TryGetProperty("customer", out var customerProp) ? customerProp.GetString() : null;
+            }
+            else if (eventType is EventChargeRefunded or EventChargeDisputeCreated)
+            {
+                stripePaymentIntentId = obj.TryGetProperty("payment_intent", out var piProp) ? piProp.GetString() : null;
+            }
+        }
+
+        return (eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId);
     }
 
     internal async Task ProcessEventAsync(

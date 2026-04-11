@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cambrian.Api.Middleware;
+using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -110,6 +111,7 @@ public class CreatorProfileController : BaseController
             if (!string.IsNullOrEmpty(t.CoverArtUrl))
                 t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
         }
+        ResolveCollectionImageUrls(storefront.Collections);
         return OkResponse(storefront);
     }
 
@@ -349,6 +351,7 @@ public class CreatorProfileController : BaseController
         if (profile is null) return NotFoundResponse("Creator not found.");
 
         var collections = await _profiles.GetCollectionsAsync(profile.UserId);
+        ResolveCollectionImageUrls(collections);
         return OkResponse(collections);
     }
 
@@ -356,7 +359,6 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
-    [RequireUsername]
     [HttpPost("me/collections")]
     public async Task<IActionResult> CreateCollection([FromBody] UpsertCollectionRequest body)
     {
@@ -369,7 +371,8 @@ public class CreatorProfileController : BaseController
             return ErrorResponse("One or more tracks do not belong to you.");
 
         var saved = await _profiles.AddCollectionAsync(userId, body.Title.Trim(),
-            body.Description?.Trim(), body.TrackIds ?? "");
+            body.Description?.Trim(), body.CoverImageUrl?.Trim(), body.TrackIds ?? "");
+        ResolveCollectionImageUrl(saved);
         return CreatedResponse(saved);
     }
 
@@ -377,7 +380,6 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
-    [RequireUsername]
     [HttpPut("me/collections/{collectionId}")]
     public async Task<IActionResult> UpdateCollection(Guid collectionId, [FromBody] UpsertCollectionRequest body)
     {
@@ -391,7 +393,8 @@ public class CreatorProfileController : BaseController
             return ErrorResponse("One or more tracks do not belong to you.");
 
         var saved = await _profiles.UpdateCollectionAsync(collectionId, userId,
-            body.Title?.Trim(), body.Description?.Trim(), body.TrackIds);
+            body.Title?.Trim(), body.Description?.Trim(), body.CoverImageUrl?.Trim(), body.TrackIds);
+        ResolveCollectionImageUrl(saved);
         return OkResponse(saved);
     }
 
@@ -399,7 +402,6 @@ public class CreatorProfileController : BaseController
 
     [Authorize]
     [RequireCreatorTier]
-    [RequireUsername]
     [HttpDelete("me/collections/{collectionId}")]
     public async Task<IActionResult> DeleteCollection(Guid collectionId)
     {
@@ -526,5 +528,17 @@ public class CreatorProfileController : BaseController
         };
         await _storage.UploadAsync(stream, key, contentType);
         return _storage.GetPublicUrl(key);
+    }
+
+    private void ResolveCollectionImageUrls(IEnumerable<TrackCollectionDto> collections)
+    {
+        foreach (var collection in collections)
+            ResolveCollectionImageUrl(collection);
+    }
+
+    private void ResolveCollectionImageUrl(TrackCollectionDto collection)
+    {
+        if (!string.IsNullOrWhiteSpace(collection.CoverImageUrl))
+            collection.CoverImageUrl = ResolveImageUrl(collection.CoverImageUrl);
     }
 }

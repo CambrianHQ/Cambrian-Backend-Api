@@ -1,0 +1,22 @@
+[
+  {
+    "id": "demo-ambient-001",
+    "genre": "ambient",
+    "bpm": 62,
+    "durationSeconds": 266,
+    "mood": "ethereal",
+    "audioPath": "audio\\generated\\ambient\\demo-ambient-001.wav",
+    "sourceType": "procedural",
+    "demoOnly": true
+  },
+  {
+    "id": "demo-ambient-002",
+    "genre": "ambient",
+    "bpm": 77,
+    "durationSeconds": 216,
+    "mood": "calm",
+    "audioPath": "audio\\generated\\ambient\\demo-ambient-002.wav",
+    "sourceType": "procedural",
+    "demoOnly": true
+  }
+]

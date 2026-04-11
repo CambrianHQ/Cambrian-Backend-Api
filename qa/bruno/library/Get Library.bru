@@ -1,0 +1,13 @@
+meta {
+  name: Get Library
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/library
+}
+
+headers {
+  Authorization: Bearer {{authToken}}
+}

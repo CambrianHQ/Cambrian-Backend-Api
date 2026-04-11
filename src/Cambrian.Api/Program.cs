@@ -5,6 +5,7 @@ using Cambrian.Api;
 using Cambrian.Api.Common;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.Configuration;
+using Cambrian.Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Cambrian.Application.Interfaces;
@@ -29,6 +30,17 @@ if (args.Contains("--generate"))
     return;
 }
 // --- END TEMPORARY ---
+
+// CLI: `dotnet run -- --seed` — run migrations + seed, then exit.
+// Useful for CI/CD pipelines and manual staging environment setup.
+if (args.Contains("--seed"))
+{
+    var seedApp = builder.Build();
+    await seedApp.RunMigrationsAsync();
+    await seedApp.SeedDataAsync();
+    Console.WriteLine("[CLI] Seed complete — exiting.");
+    return;
+}
 
 const string TestingEnvironment = "Testing";
 
@@ -316,6 +328,7 @@ builder.Services.AddScoped<ILicenseService, LicenseService>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
 builder.Services.AddScoped<IDebugService, Cambrian.Persistence.Services.DebugService>();
 builder.Services.AddScoped<IHealthService, Cambrian.Persistence.Services.HealthService>();
+builder.Services.AddSingleton<ILocalDeliveryDebugStore, LocalDeliveryDebugStore>();
 
 // Anti-drift: single source of truth services
 builder.Services.AddScoped<IEntitlementService, EntitlementService>();
@@ -362,7 +375,7 @@ builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
 builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 
 // Infrastructure
-builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
+builder.AddPaymentGateway();
 builder.AddStorageProvider();
 builder.AddEmailProvider();
 builder.AddSmsProvider();
@@ -498,6 +511,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.UseRateLimiter();
+app.UseMiddleware<VerifiedEmailForbiddenResponseMiddleware>();
 
 // DevAuthMiddleware grants admin via "Bearer test-audit-token" for local audits.
 // It MUST never be reachable from non-Development pipelines, even though the middleware

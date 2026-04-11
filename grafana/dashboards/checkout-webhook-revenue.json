@@ -1,0 +1,200 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "title": "Cambrian — Checkout / Webhook / Revenue",
+  "uid": "cambrian-checkout-revenue",
+  "description": "Purchase flow, webhook processing, creator payouts, and revenue metrics.",
+  "tags": ["cambrian", "checkout", "webhook", "revenue"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-3h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Checkout Success Rate",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.8 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_checkout_completed_total[5m])) / clamp_min(sum(rate(cambrian_checkout_started_total[5m])), 1)",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Webhook Duplicate Rate",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.05 },
+              { "color": "red", "value": 0.2 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_webhook_duplicate_total[5m])) / clamp_min(sum(rate(cambrian_webhook_processed_total[5m])), 1)",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Library Grants / min",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_library_grant_total[5m])) * 60",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Signed URLs Issued / min",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_stream_signed_url_issued_total[5m])) * 60",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Checkout Funnel",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_checkout_started_total[5m])) * 60",
+          "legendFormat": "started / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "sum(rate(cambrian_checkout_completed_total[5m])) * 60",
+          "legendFormat": "completed / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "sum(rate(cambrian_checkout_failed_total[5m])) * 60",
+          "legendFormat": "failed / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Webhook Processing",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_webhook_processed_total[5m])) * 60",
+          "legendFormat": "processed / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "sum(rate(cambrian_webhook_duplicate_total[5m])) * 60",
+          "legendFormat": "duplicates / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "sum(rate(cambrian_webhook_failed_total[5m])) * 60",
+          "legendFormat": "failed / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Uploads",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_upload_completed_total[5m])) * 60",
+          "legendFormat": "completed / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "sum(rate(cambrian_upload_failed_total[5m])) * 60",
+          "legendFormat": "failed / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Stripe API Latency",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_client_request_duration_seconds_bucket{job=\"cambrian-api\",server_address=~\".*stripe.*\"}[5m])))",
+          "legendFormat": "p50",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_client_request_duration_seconds_bucket{job=\"cambrian-api\",server_address=~\".*stripe.*\"}[5m])))",
+          "legendFormat": "p95",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Payout Activity",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_payout_created_total[5m])) * 60",
+          "legendFormat": "created / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        },
+        {
+          "expr": "sum(rate(cambrian_payout_approved_total[5m])) * 60",
+          "legendFormat": "approved / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Streaming Activity",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum(rate(cambrian_stream_signed_url_issued_total[5m])) * 60",
+          "legendFormat": "signed URLs / min",
+          "datasource": { "uid": "${DS_PROMETHEUS}" }
+        }
+      ]
+    }
+  ]
+}

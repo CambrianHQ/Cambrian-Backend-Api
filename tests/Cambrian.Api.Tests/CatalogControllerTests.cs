@@ -1,4 +1,5 @@
 using Cambrian.Api.Common;
+using Cambrian.Api.Contracts.Catalog;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.Interfaces;
@@ -90,7 +91,7 @@ public sealed class CatalogControllerTests
     {
         _catalog.GetCatalogPagedAsync(1, 50, null, null, null, null, null, null, null).Returns(EmptyPaged(1, 50));
 
-        await _controller.Catalog(pageSize: 0);
+        await _controller.Catalog(new CatalogQueryRequest { PageSize = 0 });
 
         await _catalog.Received(1).GetCatalogPagedAsync(1, 50, null, null, null, null, null, null, null);
     }
@@ -100,9 +101,29 @@ public sealed class CatalogControllerTests
     {
         _catalog.GetCatalogPagedAsync(1, 50, null, null, "newest", null, null, null, null).Returns(EmptyPaged(1, 50));
 
-        await _controller.Catalog(sort: "newest");
+        await _controller.Catalog(new CatalogQueryRequest { Sort = "newest" });
 
         await _catalog.Received(1).GetCatalogPagedAsync(1, 50, null, null, "newest", null, null, null, null);
+    }
+
+    [Fact]
+    public async Task Catalog_ReturnsTypedPaginatedEnvelope()
+    {
+        _catalog.GetCatalogPagedAsync(1, 50, null, null, null, null, null, null, null).Returns(new PagedResult<TrackResponse>
+        {
+            Items = new List<TrackResponse> { new() { Id = Guid.NewGuid().ToString(), Title = "Beat 1" } },
+            Page = 1,
+            PageSize = 50,
+            TotalCount = 1
+        });
+
+        var result = await _controller.Catalog(new CatalogQueryRequest());
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var envelope = Assert.IsType<CatalogPageResponse>(ok.Value);
+        Assert.True(envelope.Success);
+        Assert.Single(envelope.Data);
+        Assert.Equal(50, envelope.PageSize);
     }
 
     // ── GetTrack ──

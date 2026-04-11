@@ -4,6 +4,7 @@ using Cambrian.Infrastructure.Email;
 using Cambrian.Infrastructure.Options;
 using Cambrian.Infrastructure.Sms;
 using Cambrian.Infrastructure.Storage;
+using Cambrian.Infrastructure.Stripe;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -194,6 +195,19 @@ internal static class StartupExtensions
         }
     }
 
+    public static void AddPaymentGateway(this WebApplicationBuilder builder)
+    {
+        var stripeKey = builder.Configuration["Stripe:SecretKey"] ?? "";
+        if (builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(stripeKey))
+        {
+            Console.WriteLine("[Startup] Stripe:SecretKey not set — using development payment gateway.");
+            builder.Services.AddSingleton<IPaymentGateway, DevelopmentPaymentGateway>();
+            return;
+        }
+
+        builder.Services.AddSingleton<IPaymentGateway, StripeFacade>();
+    }
+
     /// <summary>Configure CORS origin matching including Vercel/Cloudflare previews.</summary>
     public static void AddCorsPolicy(this WebApplicationBuilder builder)
     {
@@ -212,7 +226,7 @@ internal static class StartupExtensions
             ? new[] { "https://cambrianmusic.com", "https://www.cambrianmusic.com" }
             : Array.Empty<string>();
         var stagingOrigins = builder.Environment.EnvironmentName == "Staging"
-            ? new[] { "https://staging.cambrianmusic.com", "https://api-staging.cambrianmusic.com" }
+            ? new[] { "https://staging.cambrianmusic.com", "https://api-staging.cambrianmusic.com", "https://cambrian-git-staging-loganbryanxs-projects.vercel.app" }
             : Array.Empty<string>();
 
         var allOrigins = defaultOrigins
@@ -268,12 +282,24 @@ internal static class StartupExtensions
                 foreach (var m in pending)
                     Console.WriteLine($"  - {m}");
             }
+
             await db.Database.MigrateAsync();
+
+            var remaining = (await db.Database.GetPendingMigrationsAsync()).ToList();
+            if (remaining.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "Database schema is still behind after migration attempt. Remaining pending migrations: "
+                    + string.Join(", ", remaining));
+            }
+
             Console.WriteLine("[Startup] Database migrations applied successfully");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Startup] Migration error: {ex.Message}");
+            app.Logger.LogCritical(ex,
+                "Database migration failed. Refusing to start with a stale schema because runtime queries may reference columns that do not exist yet.");
+            throw;
         }
     }
 
@@ -330,7 +356,7 @@ internal static class StartupExtensions
             throw new InvalidOperationException(
                 "Stripe:SecretKey must be configured in Production. Payment endpoints require a live key.");
         else
-            Console.WriteLine("[INFO] Stripe:SecretKey not set — payment endpoints will return mock responses.");
+            Console.WriteLine("[INFO] Stripe:SecretKey not set — Development uses a local payment gateway; other non-production environments require explicit Stripe config.");
 
         // Validate webhook secret is configured in production to prevent signature bypass
         var webhookSecret = builder.Configuration["Stripe:WebhookSecret"] ?? "";
@@ -625,6 +651,12 @@ internal static class StartupExtensions
                 app.Logger.LogWarning("[Seed] Staging data already present — ensuring media placeholders exist");
                 var existingTracks = await db.Tracks
                     .Where(t => t.CambrianTrackId.StartsWith("CAMB-TRK-SEED"))
+                    .Select(t => new SeedMediaTrackRef
+                    {
+                        CambrianTrackId = t.CambrianTrackId,
+                        CoverArtUrl = t.CoverArtUrl,
+                        AudioUrl = t.AudioUrl
+                    })
                     .ToListAsync();
                 app.Logger.LogWarning("[Seed] Found {Count} seed tracks for media check", existingTracks.Count);
                 await EnsureSeedMediaAsync(app, existingTracks);
@@ -814,7 +846,12 @@ internal static class StartupExtensions
             Console.WriteLine($"[Seed] {tracks.Count} tracks created across 5 creators");
 
             // Write placeholder cover art + audio for dev (local) and staging (S3/R2)
-            await EnsureSeedMediaAsync(app, tracks);
+            await EnsureSeedMediaAsync(app, tracks.Select(t => new SeedMediaTrackRef
+            {
+                CambrianTrackId = t.CambrianTrackId,
+                CoverArtUrl = t.CoverArtUrl,
+                AudioUrl = t.AudioUrl
+            }));
 
             // ── 5. Purchases + library items (realistic flows) ──
             var purchaseData = new List<(ApplicationUser Buyer, Track Track, string LicenseType, string UsageType, int AmountCents, string Status)>
@@ -1011,7 +1048,14 @@ internal static class StartupExtensions
     /// Local storage: writes to disk. S3/R2 storage: uploads via IObjectStorage.
     /// Idempotent — skips files that already exist.
     /// </summary>
-    private static async Task EnsureSeedMediaAsync(WebApplication app, IEnumerable<Track> tracks)
+    private sealed class SeedMediaTrackRef
+    {
+        public string CambrianTrackId { get; init; } = "";
+        public string? CoverArtUrl { get; init; }
+        public string? AudioUrl { get; init; }
+    }
+
+    private static async Task EnsureSeedMediaAsync(WebApplication app, IEnumerable<SeedMediaTrackRef> tracks)
     {
         var storageProvider = app.Configuration["Storage:Provider"] ?? "local";
         app.Logger.LogWarning("[Seed] EnsureSeedMediaAsync: provider={Provider}", storageProvider);
@@ -1106,7 +1150,7 @@ internal static class StartupExtensions
     /// <summary>
     /// Write placeholder media to local disk for development.
     /// </summary>
-    private static void EnsureSeedMediaLocal(WebApplication app, IEnumerable<Track> tracks)
+    private static void EnsureSeedMediaLocal(WebApplication app, IEnumerable<SeedMediaTrackRef> tracks)
     {
         var basePath = app.Configuration["Storage:LocalPath"] ?? "wwwroot/uploads";
         var coversDir = Path.Combine(app.Environment.ContentRootPath, basePath, "covers");

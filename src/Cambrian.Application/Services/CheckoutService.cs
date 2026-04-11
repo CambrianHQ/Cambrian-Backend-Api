@@ -26,6 +26,7 @@ public class CheckoutService : ICheckoutService
     private readonly IConfiguration _config;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ILogger<CheckoutService> _logger;
+    private readonly IInvoiceRepository? _invoices;
     private readonly string _frontendUrl;
 
     public CheckoutService(
@@ -40,7 +41,8 @@ public class CheckoutService : ICheckoutService
         ISubscriptionRepository subscriptions,
         IConfiguration configuration,
         UserManager<ApplicationUser> users,
-        ILogger<CheckoutService> logger)
+        ILogger<CheckoutService> logger,
+        IInvoiceRepository? invoices = null)
     {
         _gateway = gateway;
         _tracks = tracks;
@@ -54,6 +56,7 @@ public class CheckoutService : ICheckoutService
         _config = configuration;
         _users = users;
         _logger = logger;
+        _invoices = invoices;
         _frontendUrl = configuration["App:FrontendUrl"]
             ?? throw new InvalidOperationException("App:FrontendUrl must be configured. Checkout redirects require a valid frontend URL.");
     }
@@ -113,7 +116,7 @@ public class CheckoutService : ICheckoutService
 
         // Build redirect URLs that match the frontend routes
         var encodedTrackId = Uri.EscapeDataString(request.TrackId);
-        var successUrl = $"{_frontendUrl}/marketplace?view=success&trackId={encodedTrackId}&session_id={{CHECKOUT_SESSION_ID}}";
+        var successUrl = $"{_frontendUrl}/checkout/success?trackId={encodedTrackId}&session_id={{CHECKOUT_SESSION_ID}}";
         var cancelUrl = $"{_frontendUrl}/marketplace";
 
         var url = await _gateway.CreateCheckoutSessionAsync(
@@ -321,6 +324,21 @@ public class CheckoutService : ICheckoutService
                 CreatedAt = DateTime.UtcNow
             };
             await _purchases.AddAsync(purchase);
+
+            if (_invoices is not null)
+            {
+                await _invoices.AddAsync(new Invoice
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    PurchaseId = purchase.Id,
+                    AmountCents = purchase.AmountCents,
+                    Currency = "usd",
+                    Status = "paid",
+                    IssuedAt = DateTime.UtcNow,
+                    PaidAt = DateTime.UtcNow
+                });
+            }
 
             // ── Add to library (idempotent) ──
             var existingLib = await _library.GetByUserAndTrackAsync(userId, trackId);

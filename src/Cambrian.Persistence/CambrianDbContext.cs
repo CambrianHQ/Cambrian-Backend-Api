@@ -65,6 +65,9 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(t => t.CambrianTrackId).IsUnique();
             e.Property(t => t.Visibility).HasMaxLength(20).HasDefaultValue("public");
             e.Property(t => t.Status).HasMaxLength(30).HasDefaultValue("available");
+            e.Property(t => t.Genre).HasMaxLength(60);
+            e.Property(t => t.PrimaryGenre).HasMaxLength(60);
+            e.Property(t => t.Subgenre).HasMaxLength(60);
             e.Property(t => t.Mood).HasMaxLength(50);
             e.Property(t => t.Tempo).HasMaxLength(30);
             e.HasOne(t => t.Creator)
