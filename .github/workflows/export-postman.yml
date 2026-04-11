@@ -1,0 +1,33 @@
+name: Export Postman Collection
+
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - "contracts/**"
+      - "tools/export-postman/**"
+      - ".github/workflows/export-postman.yml"
+  workflow_dispatch:
+
+jobs:
+  export-postman:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - run: npm run export:postman
+
+      - name: Upload Postman artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cambrian-postman
+          path: |
+            postman/generated/*.json
+            postman/environments/*.json

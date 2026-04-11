@@ -340,11 +340,21 @@ dotnet restore Cambrian.sln
 # 4. Build the solution
 dotnet build Cambrian.sln --configuration Release
 
-# 5. Run the API
-dotnet run --project src/Cambrian.Api
+# 5. Start the API
+npm run start:backend
 ```
 
-The API will be available at `http://localhost:8080`. Swagger UI is served at `http://localhost:8080/swagger`.
+`npm run start:backend` uses [`scripts/start-backend.ps1`](scripts/start-backend.ps1) to start the backend with development-safe defaults. It prefers an existing compiled build, enables staging/demo seeding by default for local development, and binds to `http://127.0.0.1:5055` unless that port is already in use, in which case it automatically selects the next open port.
+
+Useful local checks:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:5055/health
+```
+
+Swagger UI is typically available at `http://127.0.0.1:5055/swagger`.
+
+Demo account reference: [`docs/demo-accounts.md`](docs/demo-accounts.md)
 
 ---
 
