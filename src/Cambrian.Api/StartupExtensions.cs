@@ -226,7 +226,7 @@ internal static class StartupExtensions
             ? new[] { "https://cambrianmusic.com", "https://www.cambrianmusic.com" }
             : Array.Empty<string>();
         var stagingOrigins = builder.Environment.EnvironmentName == "Staging"
-            ? new[] { "https://staging.cambrianmusic.com", "https://api-staging.cambrianmusic.com" }
+            ? new[] { "https://staging.cambrianmusic.com", "https://api-staging.cambrianmusic.com", "https://cambrian-git-staging-loganbryanxs-projects.vercel.app" }
             : Array.Empty<string>();
 
         var allOrigins = defaultOrigins
