@@ -318,15 +318,32 @@ public class TrackRepository : ITrackRepository
     private static bool IsMissingTrackTaxonomyColumn(Exception ex)
     {
         var message = ex.ToString();
-        return message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) &&
-               (message.Contains("PrimaryGenre", StringComparison.OrdinalIgnoreCase) ||
-                message.Contains("Subgenre", StringComparison.OrdinalIgnoreCase));
+        var missingColumnMessage =
+            message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("no such column", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("no column named", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("invalid column name", StringComparison.OrdinalIgnoreCase);
+
+        var taxonomyColumnMessage =
+            message.Contains("PrimaryGenre", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Subgenre", StringComparison.OrdinalIgnoreCase);
+
+        return missingColumnMessage && taxonomyColumnMessage;
     }
 
     public async Task AddAsync(Track track)
     {
         _db.Tracks.Add(track);
-        await _db.SaveChangesAsync();
+
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
+        {
+            await InsertLegacyCompatibleTrackAsync(track);
+            _db.Entry(track).State = EntityState.Detached;
+        }
     }
 
     public async Task UpdateAsync(Track track)
@@ -349,21 +366,165 @@ public class TrackRepository : ITrackRepository
             trackedEntry.Property(t => t.Tags).IsModified = true;
         }
 
-        await _db.SaveChangesAsync();
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
+        {
+            await UpdateLegacyCompatibleTrackAsync(track);
+            trackedEntry.State = EntityState.Detached;
+        }
     }
 
     public async Task DeleteAsync(Guid id)
     {
-        var track = await _db.Tracks.FindAsync(id);
-
-        if (track is not null)
+        if (!_db.Database.IsRelational())
         {
-            // Creator deletes must preserve historical purchase/library references.
-            track.Visibility = "hidden";
-            track.Status = "removed";
-            await _db.SaveChangesAsync();
+            var inMemoryTrack = await _db.Tracks.FindAsync(id);
+            if (inMemoryTrack is not null)
+            {
+                inMemoryTrack.Visibility = "hidden";
+                inMemoryTrack.Status = "removed";
+                await _db.SaveChangesAsync();
+            }
+
+            return;
         }
+
+        var trackedEntry = _db.ChangeTracker
+            .Entries<Track>()
+            .FirstOrDefault(e => e.Entity.Id == id);
+
+        if (trackedEntry is not null)
+        {
+            trackedEntry.Entity.Visibility = "hidden";
+            trackedEntry.Entity.Status = "removed";
+            trackedEntry.State = EntityState.Unchanged;
+        }
+
+        // Creator deletes must preserve historical purchase/library references.
+        await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"Tracks\" SET \"Visibility\" = {"hidden"}, \"Status\" = {"removed"} WHERE \"Id\" = {NormalizeGuid(id)}");
     }
+
+    private async Task InsertLegacyCompatibleTrackAsync(Track track)
+    {
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Tracks" (
+                "Id",
+                "CambrianTrackId",
+                "Title",
+                "Description",
+                "Genre",
+                "Mood",
+                "Tempo",
+                "Instrumental",
+                "Price",
+                "Duration",
+                "LicenseType",
+                "AudioUrl",
+                "CoverArtUrl",
+                "NonExclusivePriceCents",
+                "ExclusivePriceCents",
+                "CopyrightBuyoutPriceCents",
+                "ExclusiveSold",
+                "Status",
+                "CopyrightOwnerId",
+                "CopyrightTransferredAt",
+                "OriginalCreatorId",
+                "Visibility",
+                "CreatedAt",
+                "CreatorId",
+                "CreatorUuid",
+                "Tags",
+                "UseCase",
+                "TrendingScore"
+            )
+            VALUES (
+                {NormalizeGuid(track.Id)},
+                {track.CambrianTrackId},
+                {track.Title},
+                {track.Description},
+                {track.Genre},
+                {track.Mood},
+                {track.Tempo},
+                {track.Instrumental},
+                {track.Price},
+                {track.Duration},
+                {track.LicenseType},
+                {track.AudioUrl},
+                {track.CoverArtUrl},
+                {track.NonExclusivePriceCents},
+                {track.ExclusivePriceCents},
+                {track.CopyrightBuyoutPriceCents},
+                {track.ExclusiveSold},
+                {track.Status},
+                {track.CopyrightOwnerId},
+                {track.CopyrightTransferredAt},
+                {track.OriginalCreatorId},
+                {track.Visibility},
+                {track.CreatedAt},
+                {track.CreatorId},
+                {NormalizeGuid(track.CreatorUuid)},
+                {SerializeTags(track.Tags)},
+                {track.UseCase},
+                {track.TrendingScore}
+            )
+            """);
+    }
+
+    private async Task UpdateLegacyCompatibleTrackAsync(Track track)
+    {
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE "Tracks"
+            SET
+                "CambrianTrackId" = {track.CambrianTrackId},
+                "Title" = {track.Title},
+                "Description" = {track.Description},
+                "Genre" = {track.Genre},
+                "Mood" = {track.Mood},
+                "Tempo" = {track.Tempo},
+                "Instrumental" = {track.Instrumental},
+                "Price" = {track.Price},
+                "Duration" = {track.Duration},
+                "LicenseType" = {track.LicenseType},
+                "AudioUrl" = {track.AudioUrl},
+                "CoverArtUrl" = {track.CoverArtUrl},
+                "NonExclusivePriceCents" = {track.NonExclusivePriceCents},
+                "ExclusivePriceCents" = {track.ExclusivePriceCents},
+                "CopyrightBuyoutPriceCents" = {track.CopyrightBuyoutPriceCents},
+                "ExclusiveSold" = {track.ExclusiveSold},
+                "Status" = {track.Status},
+                "CopyrightOwnerId" = {track.CopyrightOwnerId},
+                "CopyrightTransferredAt" = {track.CopyrightTransferredAt},
+                "OriginalCreatorId" = {track.OriginalCreatorId},
+                "Visibility" = {track.Visibility},
+                "CreatedAt" = {track.CreatedAt},
+                "CreatorId" = {track.CreatorId},
+                "CreatorUuid" = {NormalizeGuid(track.CreatorUuid)},
+                "Tags" = {SerializeTags(track.Tags)},
+                "UseCase" = {track.UseCase},
+                "TrendingScore" = {track.TrendingScore}
+            WHERE "Id" = {NormalizeGuid(track.Id)}
+            """);
+    }
+
+    private static string SerializeTags(ICollection<string>? tags)
+        => string.Join(',', tags ?? []);
+
+    private object? NormalizeGuid(Guid? value)
+        => IsSqliteProvider()
+            ? value?.ToString()
+            : value;
+
+    private object NormalizeGuid(Guid value)
+        => IsSqliteProvider()
+            ? value.ToString()
+            : value;
+
+    private bool IsSqliteProvider()
+        => string.Equals(_db.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal);
 
     public async Task<bool> TryMarkExclusiveSoldAsync(Guid trackId)
     {
