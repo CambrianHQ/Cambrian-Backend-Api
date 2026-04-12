@@ -17,15 +17,14 @@ public class PurchaseRepository : IPurchaseRepository
     public async Task<Purchase?> GetByIdAsync(Guid id)
     {
         return await _db.Purchases
-            .Include(p => p.Track)
-            .Include(p => p.Buyer)
+            .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == id);
     }
 
     public async Task<List<Purchase>> GetByBuyerIdAsync(string buyerId)
     {
         return await _db.Purchases
-            .Include(p => p.Track)
+            .AsNoTracking()
             .Where(p => p.BuyerId == buyerId)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();
@@ -34,7 +33,7 @@ public class PurchaseRepository : IPurchaseRepository
     public async Task<List<Purchase>> GetByTrackIdAsync(Guid trackId)
     {
         return await _db.Purchases
-            .Include(p => p.Buyer)
+            .AsNoTracking()
             .Where(p => p.TrackId == trackId)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();
@@ -43,7 +42,7 @@ public class PurchaseRepository : IPurchaseRepository
     public async Task<List<Purchase>> GetByCreatorIdAsync(string creatorId, Guid? creatorUuid = null)
     {
         return await _db.Purchases
-            .Include(p => p.Track)
+            .AsNoTracking()
             .Where(p => p.Track.CreatorId == creatorId
                 || (creatorUuid != null && p.Track.CreatorUuid == creatorUuid))
             .OrderByDescending(p => p.CreatedAt)
@@ -53,8 +52,7 @@ public class PurchaseRepository : IPurchaseRepository
     public async Task<Purchase?> GetByStripeSessionIdAsync(string stripeSessionId)
     {
         return await _db.Purchases
-            .Include(p => p.Track)
-            .Include(p => p.Buyer)
+            .AsNoTracking()
             .FirstOrDefaultAsync(p => p.StripeSessionId == stripeSessionId);
     }
 
