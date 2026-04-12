@@ -5,6 +5,7 @@
   "description": "Dev tooling for Cambrian Backend API — contract validation, Postman export, etc.",
   "scripts": {
     "start:backend": "powershell -ExecutionPolicy Bypass -File scripts/start-backend.ps1 -UseExistingBuild",
+    "start:resend-mcp": "powershell -ExecutionPolicy Bypass -File scripts/start-resend-mcp.ps1",
     "export:postman": "node tools/export-postman/export-postman.mjs",
     "seed:catalog": "node seed/scripts/build-demo-catalog.mjs",
     "validate:contracts": "node scripts/validate-contracts.cjs",

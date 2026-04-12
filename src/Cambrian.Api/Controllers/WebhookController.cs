@@ -1,3 +1,4 @@
+using Cambrian.Application.DTOs.Email;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -61,5 +62,43 @@ public class WebhookController : BaseController
             _logger.LogError(ex, "EVENT: StripeWebhookProcessingError — returning 500 for Stripe retry");
             return StatusCode(500, "Webhook processing failed.");
         }
+    }
+
+    [HttpPost("email")]
+    public async Task<IActionResult> Email()
+    {
+        ResendWebhookEvent? evt;
+
+        try
+        {
+            evt = await System.Text.Json.JsonSerializer.DeserializeAsync<ResendWebhookEvent>(
+                Request.Body,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "EVENT: ResendWebhookFailed — invalid JSON payload");
+            return StatusCode(400, "Invalid webhook payload.");
+        }
+
+        if (evt is null)
+            return StatusCode(400, "Empty webhook payload.");
+
+        _logger.LogInformation(
+            "EVENT: ResendWebhookReceived type:{Type} emailId:{EmailId}",
+            evt.Type,
+            evt.Data?.EmailId);
+
+        if (evt.Type == "email.received")
+        {
+            // TODO: handle inbound email — parse evt.Data for from/subject/attachments
+            _logger.LogInformation(
+                "EVENT: ResendEmailReceived from:{From} subject:{Subject} attachments:{Count}",
+                evt.Data?.From,
+                evt.Data?.Subject,
+                evt.Data?.Attachments.Count ?? 0);
+        }
+
+        return Ok(new { });
     }
 }

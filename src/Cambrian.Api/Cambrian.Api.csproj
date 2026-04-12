@@ -30,4 +30,8 @@
     <Compile Remove="GeneratedControllers\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cambrian.Api.Tests" />
+  </ItemGroup>
+
 </Project>
