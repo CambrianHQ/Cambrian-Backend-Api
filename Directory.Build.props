@@ -1,4 +1,12 @@
 <Project>
+  <PropertyGroup>
+    <!-- Keep restore/build self-contained instead of depending on per-user NuGet state. -->
+    <RestoreConfigFile>$(MSBuildThisFileDirectory)NuGet.Config</RestoreConfigFile>
+
+    <!-- Shared compilation is unstable in this workspace and can cancel builds without surfacing the real error. -->
+    <UseSharedCompilation>false</UseSharedCompilation>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Pin vulnerable transitive packages to patched versions -->
     <PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.14" />
