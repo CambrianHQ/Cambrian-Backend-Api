@@ -5,6 +5,7 @@ using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
 
@@ -20,19 +21,22 @@ public class CreatorController : BaseController
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository _profiles;
     private readonly IUploadService _upload;
+    private readonly ILogger<CreatorController> _logger;
 
     public CreatorController(
         ICreatorService creator,
         ITrackRepository tracks,
         ICreatorIdentityRepository creators,
         ICreatorProfileRepository profiles,
-        IUploadService upload)
+        IUploadService upload,
+        ILogger<CreatorController> logger)
     {
         _creator = creator;
         _tracks = tracks;
         _creators = creators;
         _profiles = profiles;
         _upload = upload;
+        _logger = logger;
     }
 
     [HttpGet("tracks")]
@@ -121,7 +125,19 @@ public class CreatorController : BaseController
         var ownsUuid = creatorUuid.HasValue && track.CreatorUuid == creatorUuid.Value;
         if (!ownsLegacy && !ownsUuid) return ForbiddenResponse("You can only delete your own tracks.");
 
-        await RemoveTrackFromCollectionsAsync(userId, track.Id);
+        try
+        {
+            await RemoveTrackFromCollectionsAsync(userId, track.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Creator track delete collection cleanup failed. UserId={UserId} TrackId={TrackId}",
+                userId,
+                track.Id);
+        }
+
         await _tracks.DeleteAsync(track.Id);
 
         return OkResponse(new
