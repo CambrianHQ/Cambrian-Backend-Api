@@ -358,7 +358,9 @@ public class TrackRepository : ITrackRepository
 
         if (track is not null)
         {
-            _db.Tracks.Remove(track);
+            // Creator deletes must preserve historical purchase/library references.
+            track.Visibility = "hidden";
+            track.Status = "removed";
             await _db.SaveChangesAsync();
         }
     }
