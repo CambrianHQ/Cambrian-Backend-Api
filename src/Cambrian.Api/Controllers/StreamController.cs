@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using Cambrian.Application.Interfaces;
-using Cambrian.Domain.Entities;
+using Cambrian.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -69,7 +69,7 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, streamUserId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        var (audioKey, audioFile) = await OpenPlayableAudioAsync(track);
+        var (audioKey, audioFile) = await OpenPlayableAudioAsync(track.AudioUrl, track.CambrianTrackId, track.Id);
         audioFile?.Dispose();
         if (string.IsNullOrEmpty(audioKey))
             return NotFoundResponse("Audio file not found.");
@@ -119,9 +119,24 @@ public class StreamController : BaseController
         // Call the single-arg overload when no Range header is present so callers
         // (and tests) that only stub the no-range signature keep working; the
         // two-arg overload is only used when the client actually sent a Range.
-        var (_, file) = await OpenPlayableAudioAsync(track, hasRange ? rangeHeader : null);
+        var (_, file) = await OpenPlayableAudioAsync(track.AudioUrl, track.CambrianTrackId, track.Id, hasRange ? rangeHeader : null);
         if (file is null)
+        {
+            // For demo/seed tracks whose placeholder audio was never uploaded to
+            // S3 (common on staging after a fresh deploy), generate a valid silent
+            // MP3 on-the-fly so the frontend audio player doesn't break.
+            if (IsSeedTrack(track.CambrianTrackId))
+            {
+                _logger.LogWarning(
+                    "StreamAudio: serving generated silent placeholder for seed trackId={TrackId}",
+                    trackId);
+                var placeholder = SilentMp3Generator.Generate();
+                Response.Headers["Accept-Ranges"] = "bytes";
+                return File(placeholder, "audio/mpeg", enableRangeProcessing: true);
+            }
+
             return NotFoundResponse("Audio file not found on storage.");
+        }
 
         // If the storage layer returned a seekable stream (e.g. LocalObjectStorage
         // in development) let ASP.NET Core handle range processing — it emits the
@@ -182,18 +197,16 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, userId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        var (_, audioFile) = await OpenPlayableAudioAsync(track);
-        if (audioFile is null)
-            return NotFoundResponse("Audio file not found.");
-        audioFile.Dispose();
-
+        // Audio availability is checked when the client actually streams via
+        // GET /stream/{trackId}/audio. Verifying here was redundant and caused
+        // 500s when storage was temporarily unreachable (B-03).
         var session = await _streams.StartAsync(parsedTrackId, userId);
         return OkResponse(new { streamId = session.Id.ToString(), status = "started" });
     }
 
-    private async Task<(string? AudioKey, StorageFile? File)> OpenPlayableAudioAsync(Track track, string? rangeHeader = null)
+    private async Task<(string? AudioKey, StorageFile? File)> OpenPlayableAudioAsync(string? audioUrl, string? cambrianTrackId, Guid trackId, string? rangeHeader = null)
     {
-        foreach (var candidate in GetAudioCandidates(track))
+        foreach (var candidate in GetAudioCandidates(audioUrl, cambrianTrackId))
         {
             var file = string.IsNullOrWhiteSpace(rangeHeader)
                 ? await _storage.OpenReadAsync(candidate)
@@ -201,11 +214,11 @@ public class StreamController : BaseController
 
             if (file is not null)
             {
-                if (!string.Equals(track.AudioUrl, candidate, StringComparison.Ordinal))
+                if (!string.Equals(audioUrl, candidate, StringComparison.Ordinal))
                 {
                     _logger.LogInformation(
                         "StreamAudio: using seeded fallback audio key for trackId={TrackId} key={AudioKey}",
-                        track.Id, candidate);
+                        trackId, candidate);
                 }
 
                 return (candidate, file);
@@ -215,18 +228,22 @@ public class StreamController : BaseController
         return (null, null);
     }
 
-    private static IEnumerable<string> GetAudioCandidates(Track track)
+    private static IEnumerable<string> GetAudioCandidates(string? audioUrl, string? cambrianTrackId)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var configured = track.AudioUrl?.Trim();
+        var configured = audioUrl?.Trim();
         if (!string.IsNullOrWhiteSpace(configured) && seen.Add(configured))
             yield return configured;
 
-        var seededFallback = BuildSeedFallbackAudioKey(track.CambrianTrackId);
+        var seededFallback = BuildSeedFallbackAudioKey(cambrianTrackId);
         if (!string.IsNullOrWhiteSpace(seededFallback) && seen.Add(seededFallback))
             yield return seededFallback;
     }
+
+    private static bool IsSeedTrack(string? cambrianTrackId) =>
+        !string.IsNullOrEmpty(cambrianTrackId) &&
+        cambrianTrackId.StartsWith("CAMB-TRK-SEED", StringComparison.OrdinalIgnoreCase);
 
     private static string? BuildSeedFallbackAudioKey(string? cambrianTrackId)
     {

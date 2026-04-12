@@ -101,14 +101,16 @@ public class TrackRepository : ITrackRepository
         try
         {
             return await BuildTrackQuery()
-                .Where(t => t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                .Where(t => (t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                    && t.Status != "removed")
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
         }
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             return await BuildLegacyCompatibleTrackQuery()
-                .Where(t => t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                .Where(t => (t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                    && t.Status != "removed")
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
         }
