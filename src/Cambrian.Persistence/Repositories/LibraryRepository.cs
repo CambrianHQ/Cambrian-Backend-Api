@@ -16,10 +16,40 @@ public class LibraryRepository : ILibraryRepository
     public async Task<List<LibraryItem>> GetByUserIdAsync(string userId)
     {
         return await _db.Library
-            .Include(l => l.Track)
-                .ThenInclude(t => t.Creator)
+            .AsNoTracking()
             .Where(l => l.UserId == userId)
             .OrderByDescending(l => l.SavedAt)
+            .Select(l => new LibraryItem
+            {
+                Id = l.Id,
+                UserId = l.UserId,
+                TrackId = l.TrackId,
+                PurchaseId = l.PurchaseId,
+                Title = l.Title,
+                Artist = l.Artist,
+                AudioUrl = l.AudioUrl,
+                SavedAt = l.SavedAt,
+                Track = l.Track == null
+                    ? null!
+                    : new Track
+                    {
+                        Id = l.Track.Id,
+                        Title = l.Track.Title,
+                        Genre = l.Track.Genre,
+                        AudioUrl = l.Track.AudioUrl,
+                        CoverArtUrl = l.Track.CoverArtUrl,
+                        CreatorId = l.Track.CreatorId,
+                        Creator = l.Track.Creator == null
+                            ? null!
+                            : new ApplicationUser
+                            {
+                                Id = l.Track.Creator.Id,
+                                UserName = l.Track.Creator.UserName,
+                                DisplayName = l.Track.Creator.DisplayName,
+                                ProfileImageUrl = l.Track.Creator.ProfileImageUrl
+                            }
+                    }
+            })
             .ToListAsync();
     }
 

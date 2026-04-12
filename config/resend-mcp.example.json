@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "resend": {
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "ABSOLUTE_PATH_TO_REPO\\scripts\\start-resend-mcp.ps1"
+      ],
+      "env": {
+        "RESEND_API_KEY": "re_xxxxxxxxx",
+        "SENDER_EMAIL_ADDRESS": "noreply@yourdomain.com"
+      }
+    }
+  }
+}

@@ -159,14 +159,32 @@ internal static class StartupExtensions
     public static void AddEmailProvider(this WebApplicationBuilder builder)
     {
         builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
-        var emailProvider = builder.Configuration["Email:Provider"]?.ToLowerInvariant() ?? "console";
+        var emailOptions = builder.Configuration.GetSection("Email").Get<EmailOptions>() ?? new EmailOptions();
+        var emailProvider = (builder.Configuration["Email:Provider"] ?? emailOptions.Provider ?? "console")
+            .ToLowerInvariant();
         switch (emailProvider)
         {
             case "smtp":
+                EnsureSenderIdentityConfigured(emailOptions, "smtp");
+                if (string.IsNullOrWhiteSpace(emailOptions.SmtpHost))
+                    throw new InvalidOperationException(
+                        "Email:SmtpHost must be set when Email:Provider is 'smtp'.");
+                if (emailOptions.SmtpPort <= 0)
+                    throw new InvalidOperationException(
+                        "Email:SmtpPort must be a positive integer when Email:Provider is 'smtp'.");
                 builder.Services.AddSingleton<IEmailService, SmtpEmailService>();
                 break;
             case "resend":
-                builder.Services.AddHttpClient("Resend");
+                EnsureSenderIdentityConfigured(emailOptions, "resend");
+                if (string.IsNullOrWhiteSpace(emailOptions.ResendApiKey))
+                    throw new InvalidOperationException(
+                        "Email:ResendApiKey must be set when Email:Provider is 'resend'.");
+                builder.Services.AddHttpClient("Resend", client =>
+                {
+                    client.BaseAddress = new Uri("https://api.resend.com/");
+                    client.Timeout = TimeSpan.FromSeconds(15);
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("Cambrian-Backend-Api");
+                });
                 builder.Services.AddSingleton<IEmailService, ResendEmailService>();
                 break;
             default:
@@ -193,6 +211,17 @@ internal static class StartupExtensions
                 builder.Services.AddSingleton<ISmsService, ConsoleSmsService>();
                 break;
         }
+    }
+
+    private static void EnsureSenderIdentityConfigured(EmailOptions emailOptions, string provider)
+    {
+        if (string.IsNullOrWhiteSpace(emailOptions.FromAddress))
+            throw new InvalidOperationException(
+                $"Email:FromAddress must be set when Email:Provider is '{provider}'.");
+
+        if (string.IsNullOrWhiteSpace(emailOptions.FromName))
+            throw new InvalidOperationException(
+                $"Email:FromName must be set when Email:Provider is '{provider}'.");
     }
 
     public static void AddPaymentGateway(this WebApplicationBuilder builder)

@@ -10,6 +10,7 @@ If you're new here, start with the quickstart and then pick whichever tutorial m
 
 - **[5-minute quickstart](./quickstart.md)** — get an API key, list tracks, initiate a license, verify a license. All in curl.
 - **[Interactive API explorer](./api-explorer.html)** — Swagger UI loaded against the live API. Paste your key and try requests in the browser.
+- **[Resend AI onboarding](./resend-ai-onboarding.md)** — configure transactional email, agent tooling, CLI usage, and the Cambrian webhook endpoint.
 
 ## Tutorials
 
