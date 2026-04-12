@@ -6,6 +6,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -17,11 +18,12 @@ public sealed class CreatorControllerTests
     private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
     private readonly ICreatorProfileRepository _profiles = Substitute.For<ICreatorProfileRepository>();
     private readonly IUploadService _upload = Substitute.For<IUploadService>();
+    private readonly ILogger<CreatorController> _logger = Substitute.For<ILogger<CreatorController>>();
     private readonly CreatorController _controller;
 
     public CreatorControllerTests()
     {
-        _controller = new CreatorController(_creator, _tracks, _creators, _profiles, _upload);
+        _controller = new CreatorController(_creator, _tracks, _creators, _profiles, _upload, _logger);
         var httpContext = new DefaultHttpContext();
         httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
         [
@@ -114,6 +116,41 @@ public sealed class CreatorControllerTests
             Arg.Is<string?>(x => x == null),
             Arg.Is<string?>(x => x == null),
             Arg.Is<string>(s => !s.Contains(trackId.ToString(), StringComparison.OrdinalIgnoreCase)));
+        await _tracks.Received(1).DeleteAsync(trackId);
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteTrack_StillDeletesTrack_WhenCollectionCleanupFails()
+    {
+        var trackId = Guid.NewGuid();
+        _tracks.GetByIdAsync(trackId).Returns(new Track
+        {
+            Id = trackId,
+            CreatorId = "user-1",
+            CambrianTrackId = "CAMB-TRK-DELETE02",
+            Title = "Track"
+        });
+        _profiles.GetCollectionsAsync("user-1").Returns(
+        [
+            new TrackCollectionDto
+            {
+                Id = Guid.NewGuid().ToString(),
+                Title = "Album One",
+                TrackIds = [trackId.ToString()]
+            }
+        ]);
+        _profiles.UpdateCollectionAsync(
+            Arg.Any<Guid>(),
+            "user-1",
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>())
+            .Returns(Task.FromException<TrackCollectionDto>(new InvalidOperationException("stale collection row")));
+
+        var result = await _controller.DeleteTrack(trackId);
+
         await _tracks.Received(1).DeleteAsync(trackId);
         Assert.IsType<OkObjectResult>(result);
     }
