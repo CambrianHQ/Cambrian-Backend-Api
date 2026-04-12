@@ -346,7 +346,7 @@ public class UploadService : IUploadService
                 trackId);
         }
 
-        throw new ArgumentException("AlbumAssignmentType must be 'existing' or 'new'.");
+        return null;
     }
 
     private static void ApplyGenreFields(Track track, string? primaryGenre, string? subgenre, string? legacyGenre)
