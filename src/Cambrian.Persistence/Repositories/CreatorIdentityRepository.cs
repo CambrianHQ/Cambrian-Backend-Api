@@ -259,6 +259,24 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             return byUsername;
         }
 
+        // 4. Try as CreatorProfile slug for cases where the public route is configured
+        // before the creator identity row has the routable username mirrored across.
+        var profileUserId = await _db.CreatorProfiles
+            .AsNoTracking()
+            .Where(p => p.Slug.ToLower() == identifier.Trim().ToLower())
+            .Select(p => p.UserId)
+            .FirstOrDefaultAsync();
+        if (!string.IsNullOrWhiteSpace(profileUserId))
+        {
+            var byProfileSlug = await GetByUserIdAsync(profileUserId);
+            if (byProfileSlug is not null)
+            {
+                _logger.LogInformation("LegacyResolve: resolved profile slug={Slug} to creator={CreatorId}",
+                    identifier, byProfileSlug.Id);
+                return byProfileSlug;
+            }
+        }
+
         _logger.LogWarning("LegacyResolve: unresolved identifier={Identifier}", identifier);
         return null;
     }
@@ -308,9 +326,19 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
     /// </summary>
     private async Task<PublicCreatorDto> MapToDtoAsync(Creator c, CreatorStatsResponseDto stats, List<TrackResponse>? tracks = null)
     {
-        // Canonical source for presentation fields
+        // Canonical source for presentation fields.
+        // Project only the fields we need so this resolver remains compatible with
+        // older CreatorProfiles schemas that may not yet have newer toggle columns.
         var profile = await _db.CreatorProfiles.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.UserId == c.UserId);
+            .Where(p => p.UserId == c.UserId)
+            .Select(p => new
+            {
+                p.Bio,
+                p.ProfileImageUrl,
+                p.BannerImageUrl,
+                p.SocialLinks
+            })
+            .FirstOrDefaultAsync();
 
         var socialLinksSource = profile?.SocialLinks;
         List<SocialLinkItemDto>? links = null;

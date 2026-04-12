@@ -16,8 +16,7 @@ public class InvoiceRepository : IInvoiceRepository
     public async Task<List<Invoice>> GetByUserIdAsync(string userId)
     {
         return await _db.Invoices
-            .Include(i => i.Purchase)
-                .ThenInclude(p => p.Track)
+            .AsNoTracking()
             .Where(i => i.UserId == userId)
             .OrderByDescending(i => i.IssuedAt)
             .ToListAsync();
@@ -26,8 +25,7 @@ public class InvoiceRepository : IInvoiceRepository
     public async Task<Invoice?> GetByIdAsync(Guid id)
     {
         return await _db.Invoices
-            .Include(i => i.Purchase)
-                .ThenInclude(p => p.Track)
+            .AsNoTracking()
             .FirstOrDefaultAsync(i => i.Id == id);
     }
 
