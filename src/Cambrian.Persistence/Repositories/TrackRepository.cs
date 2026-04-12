@@ -331,7 +331,24 @@ public class TrackRepository : ITrackRepository
 
     public async Task UpdateAsync(Track track)
     {
-        _db.Tracks.Update(track);
+        var trackedEntry = _db.ChangeTracker
+            .Entries<Track>()
+            .FirstOrDefault(e => e.Entity.Id == track.Id);
+
+        if (trackedEntry is null)
+        {
+            var persisted = new Track { Id = track.Id };
+            _db.Tracks.Attach(persisted);
+            trackedEntry = _db.Entry(persisted);
+        }
+
+        if (!ReferenceEquals(trackedEntry.Entity, track))
+        {
+            trackedEntry.CurrentValues.SetValues(track);
+            trackedEntry.Entity.Tags = track.Tags.ToList();
+            trackedEntry.Property(t => t.Tags).IsModified = true;
+        }
+
         await _db.SaveChangesAsync();
     }
 
