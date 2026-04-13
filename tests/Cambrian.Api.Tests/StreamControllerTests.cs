@@ -32,7 +32,7 @@ public sealed class StreamControllerTests
     }
 
     [Fact]
-    public async Task Start_UsesSeedFallbackAudio_WhenAudioUrlIsMissing()
+    public async Task Start_StartsSession_WithoutCheckingStorage()
     {
         var trackId = Guid.NewGuid();
         var streamId = Guid.NewGuid();
@@ -45,12 +45,6 @@ public sealed class StreamControllerTests
             Visibility = "public",
             CreatorId = "creator-1"
         });
-        _storage.OpenReadAsync("tracks/demo-abc12345.mp3").Returns(new StorageFile
-        {
-            Stream = new MemoryStream(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }),
-            ContentType = "audio/mpeg",
-            Length = 4
-        });
         _streams.StartAsync(trackId, "listener-1").Returns(new StreamSession
         {
             Id = streamId,
@@ -62,30 +56,9 @@ public sealed class StreamControllerTests
         var result = await _controller.Start(trackId: trackId.ToString());
 
         Assert.IsType<OkObjectResult>(result);
-        await _storage.Received(1).OpenReadAsync("tracks/demo-abc12345.mp3");
+        // Start should NOT call storage — audio availability is checked
+        // when the client actually streams via GET /stream/{trackId}/audio.
+        await _storage.DidNotReceive().OpenReadAsync(Arg.Any<string>());
         await _streams.Received(1).StartAsync(trackId, "listener-1");
-    }
-
-    [Fact]
-    public async Task Start_Returns404_WhenNoPlayableAudioExists()
-    {
-        var trackId = Guid.NewGuid();
-        _tracks.GetByIdAsync(trackId).Returns(new Track
-        {
-            Id = trackId,
-            CambrianTrackId = "CAMB-TRK-DEF67890",
-            Title = "Broken Beat",
-            AudioUrl = null,
-            Visibility = "public",
-            CreatorId = "creator-1"
-        });
-        _storage.OpenReadAsync("tracks/demo-def67890.mp3").Returns((StorageFile?)null);
-        SetAuthenticatedUser("listener-1");
-
-        var result = await _controller.Start(trackId: trackId.ToString());
-
-        var notFound = Assert.IsType<NotFoundObjectResult>(result);
-        Assert.NotNull(notFound.Value);
-        await _streams.DidNotReceive().StartAsync(Arg.Any<Guid>(), Arg.Any<string?>());
     }
 }

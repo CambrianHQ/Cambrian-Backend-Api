@@ -30,11 +30,14 @@ public class AuthController : BaseController
         "developers", "embed", "sync", "pricing", "about"
     };
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, ILogger<AuthController> logger)
+    private readonly ICreatorProfileRepository _profiles;
+
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
         _creators = creators;
+        _profiles = profiles;
         _userManager = userManager;
         _tx = tx;
         _logger = logger;
@@ -395,6 +398,24 @@ public class AuthController : BaseController
                 DisplayName = displayName
             });
             _logger.LogInformation("EVENT: CreatorUsernameSynced userId:{UserId} username:{Username}", userId, normalized);
+
+            // Auto-provision CreatorProfile so the storefront, collections, and
+            // /creator/username/{slug} endpoints work immediately after registration
+            // without requiring a separate creatorProfileApi.upsert() call.
+            try
+            {
+                var existingProfile = await _profiles.GetByUserIdAsync(userId);
+                if (existingProfile is null)
+                {
+                    await _profiles.UpsertAsync(userId, normalized, "", null, null, false, true);
+                    _logger.LogInformation("EVENT: CreatorProfileProvisioned userId:{UserId} slug:{Slug}", userId, normalized);
+                }
+            }
+            catch (Exception profileEx)
+            {
+                // Non-critical — log but don't fail the set-username transaction
+                _logger.LogWarning(profileEx, "CreatorProfile auto-provision failed for userId={UserId}; user can create it manually", userId);
+            }
 
             await _tx.CommitAsync();
         }

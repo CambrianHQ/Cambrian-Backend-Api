@@ -39,7 +39,8 @@ public sealed class AuthControllerTests
 
         _tx.BeginTransactionAsync().Returns(Substitute.For<IAsyncDisposable>());
 
-        _controller = new AuthController(_auth, _subscriptions, _creators, _userManager, _tx, _logger);
+        var profiles = Substitute.For<ICreatorProfileRepository>();
+        _controller = new AuthController(_auth, _subscriptions, _creators, profiles, _userManager, _tx, _logger);
 
         // Provide a default HttpContext so AppendAuthCookie can resolve IHostEnvironment
         var env = Substitute.For<IHostEnvironment>();

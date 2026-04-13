@@ -188,10 +188,22 @@ public class PurchaseService : IPurchaseService
     public async Task<IReadOnlyCollection<PurchaseResponse>> GetByBuyerAsync(string userId)
     {
         var purchases = await _purchases.GetByBuyerIdAsync(userId);
+
+        // Resolve track titles in a single batch to populate TrackTitle
+        var trackIds = purchases.Select(p => p.TrackId).Distinct().ToList();
+        var trackTitles = new Dictionary<Guid, string>();
+        foreach (var trackId in trackIds)
+        {
+            var track = await _tracks.GetByIdAsync(trackId);
+            if (track is not null)
+                trackTitles[trackId] = track.Title;
+        }
+
         return purchases.Select(p => new PurchaseResponse
         {
             Id = p.Id.ToString(),
             TrackId = p.TrackId.ToString(),
+            TrackTitle = trackTitles.GetValueOrDefault(p.TrackId, ""),
             AmountCents = p.AmountCents,
             LicenseType = p.LicenseType ?? "non-exclusive",
             Status = p.Status,

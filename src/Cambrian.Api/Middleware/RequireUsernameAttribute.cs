@@ -46,6 +46,21 @@ public class RequireUsernameAttribute : Attribute, IAsyncActionFilter
 
         if (!UsernameHelper.IsSet(user))
         {
+            // Fallback: the Creators table is the canonical source of truth for username
+            // completion. Users who registered via Google OAuth or before the Creator table
+            // migration may have UserName == Email in Identity but a valid Creator row.
+            var creatorRepo = context.HttpContext.RequestServices
+                .GetService<Cambrian.Application.Interfaces.ICreatorIdentityRepository>();
+            if (creatorRepo is not null)
+            {
+                var creatorId = await creatorRepo.GetCreatorIdForUserAsync(userId);
+                if (creatorId.HasValue)
+                {
+                    await next();
+                    return;
+                }
+            }
+
             context.Result = new ObjectResult(
                 new
                 {

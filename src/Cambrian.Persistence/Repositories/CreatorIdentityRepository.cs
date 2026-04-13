@@ -277,6 +277,30 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             }
         }
 
+        // 5. Try as ApplicationUser.UserName — handles creators who set their Identity
+        //    username before the Creator table existed (migration 18) and never got a
+        //    Creator row auto-provisioned.
+        var normalized = identifier.Trim().ToLowerInvariant();
+        var legacyUser = await _db.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.NormalizedUserName == normalized.ToUpperInvariant()
+                                      && u.Role == "Creator");
+        if (legacyUser is not null)
+        {
+            _logger.LogInformation(
+                "LegacyResolve: backfilling Creator row for userId={UserId} username={Username}",
+                legacyUser.Id, normalized);
+
+            // Auto-provision the missing Creator row so future lookups hit step 3 directly.
+            var backfilled = await UpsertAsync(legacyUser.Id,
+                new Application.DTOs.Creators.UpdateCreatorProfileRequest
+                {
+                    Username = normalized,
+                    DisplayName = legacyUser.DisplayName ?? normalized
+                });
+            return backfilled;
+        }
+
         _logger.LogWarning("LegacyResolve: unresolved identifier={Identifier}", identifier);
         return null;
     }
