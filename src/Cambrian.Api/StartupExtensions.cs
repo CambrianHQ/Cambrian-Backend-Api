@@ -343,6 +343,7 @@ internal static class StartupExtensions
         await SeedFeatureFlagsAsync(app);
         await SeedStagingDataAsync(app);
         await SeedCreatorImagesAsync(app);
+        await BackfillCreatorProfilesAsync(app);
     }
 
     private static bool IsOriginAllowed(string origin, HashSet<string> originSet, string vercelSlug, string cfSlug)
@@ -1373,6 +1374,139 @@ internal static class StartupExtensions
         catch (Exception ex)
         {
             Console.WriteLine($"[Seed] Creator image backfill skipped: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Backfill Creator and CreatorProfile rows for every track creator in the database.
+    /// Ensures every creator's catalog/storefront is accessible. Idempotent — skips
+    /// creators that already have both rows.
+    /// </summary>
+    private static async Task BackfillCreatorProfilesAsync(WebApplication app)
+    {
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+
+            // Run once — skip if already completed
+            var flag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Name == "backfill_creator_profiles_done");
+            if (flag is not null && flag.Enabled)
+            {
+                Console.WriteLine("[Backfill] Creator profile backfill already completed — skipping.");
+                return;
+            }
+
+            // Find all distinct creator user IDs from tracks
+            var creatorUserIds = await db.Tracks
+                .AsNoTracking()
+                .Where(t => t.CreatorId != null && t.Status != "removed")
+                .Select(t => t.CreatorId!)
+                .Distinct()
+                .ToListAsync();
+
+            if (creatorUserIds.Count == 0)
+            {
+                Console.WriteLine("[Backfill] No track creators found — skipping.");
+                return;
+            }
+
+            var backfilledCreators = 0;
+            var backfilledProfiles = 0;
+
+            foreach (var userId in creatorUserIds)
+            {
+                // Look up the ApplicationUser
+                var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+                if (user is null) continue;
+
+                // Derive a username: prefer Identity UserName (if not email), else email prefix
+                var username = !string.IsNullOrWhiteSpace(user.UserName)
+                    && !string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase)
+                    ? user.UserName.Trim().ToLowerInvariant()
+                    : (user.Email ?? user.Id).Split('@')[0].Trim().ToLowerInvariant();
+
+                // Ensure Creator row exists
+                var hasCreator = await db.Creators.AnyAsync(c => c.UserId == userId);
+                if (!hasCreator)
+                {
+                    // Check username uniqueness — append user ID fragment if taken
+                    var slugCandidate = username;
+                    if (await db.Creators.AnyAsync(c => c.Username == slugCandidate))
+                        slugCandidate = $"{username}-{userId[..8]}";
+
+                    db.Creators.Add(new Creator
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        Username = slugCandidate,
+                        DisplayName = user.DisplayName ?? username,
+                        Bio = "",
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                    backfilledCreators++;
+                    // Update username for profile slug below
+                    username = slugCandidate;
+                }
+                else
+                {
+                    // Use existing creator's username for profile slug
+                    var existing = await db.Creators.AsNoTracking().FirstOrDefaultAsync(c => c.UserId == userId);
+                    if (existing is not null && !string.IsNullOrWhiteSpace(existing.Username))
+                        username = existing.Username;
+                }
+
+                // Ensure CreatorProfile row exists
+                var hasProfile = await db.CreatorProfiles.AnyAsync(cp => cp.UserId == userId);
+                if (!hasProfile)
+                {
+                    db.CreatorProfiles.Add(new CreatorProfile
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        Slug = username,
+                        Bio = "",
+                        ShowEarnings = false,
+                        ShowDownloadStats = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                    backfilledProfiles++;
+                }
+            }
+
+            if (backfilledCreators > 0 || backfilledProfiles > 0)
+            {
+                await db.SaveChangesAsync();
+                Console.WriteLine($"[Backfill] Creator profiles: {backfilledCreators} Creator rows, {backfilledProfiles} CreatorProfile rows created for {creatorUserIds.Count} track creators.");
+            }
+            else
+            {
+                Console.WriteLine($"[Backfill] All {creatorUserIds.Count} track creators already have Creator + CreatorProfile rows.");
+            }
+
+            // Mark complete so this never runs again
+            if (flag is null)
+            {
+                db.FeatureFlags.Add(new FeatureFlag
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "backfill_creator_profiles_done",
+                    Enabled = true,
+                    RolloutPercentage = 100
+                });
+            }
+            else
+            {
+                db.FeatureFlags.Attach(flag);
+                flag.Enabled = true;
+            }
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Backfill] Creator profile backfill failed (non-fatal): {ex.Message}");
         }
     }
 }
