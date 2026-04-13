@@ -73,12 +73,12 @@ public class TrackRepository : ITrackRepository
         try
         {
             return await BuildTrackQuery()
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .FirstOrDefaultAsync(t => t.Id == id && t.Status != "removed");
         }
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             return await BuildLegacyCompatibleTrackQuery()
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .FirstOrDefaultAsync(t => t.Id == id && t.Status != "removed");
         }
     }
 
@@ -87,12 +87,12 @@ public class TrackRepository : ITrackRepository
         try
         {
             return await BuildTrackQuery()
-                .FirstOrDefaultAsync(t => t.CambrianTrackId == cambrianTrackId);
+                .FirstOrDefaultAsync(t => t.CambrianTrackId == cambrianTrackId && t.Status != "removed");
         }
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             return await BuildLegacyCompatibleTrackQuery()
-                .FirstOrDefaultAsync(t => t.CambrianTrackId == cambrianTrackId);
+                .FirstOrDefaultAsync(t => t.CambrianTrackId == cambrianTrackId && t.Status != "removed");
         }
     }
 
