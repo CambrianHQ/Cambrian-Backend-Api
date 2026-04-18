@@ -319,9 +319,10 @@ Inherits `IdentityDbContext<ApplicationUser>`.
 | Id | Guid (PK) | |
 | CreatorId | string (FK) | → AspNetUsers.Id, ON DELETE RESTRICT |
 | AmountCents | long | |
-| Status | string | `pending`, `approved`, `paid`, `rejected` |
-| CreatedAt | DateTime | |
-| ProcessedAt | DateTime? | |
+| Status | string | `pending`, `completed`, `failed` (set by `PayoutService.RequestAsync`) |
+| FailureReason | string? | Populated when `Status = "failed"` |
+| RequestedAt | DateTime | |
+| CompletedAt | DateTime? | |
 
 #### WalletTransactions
 | Column | Type | Notes |
@@ -773,12 +774,19 @@ Claims set on authenticated API key request: `ClaimTypes.NameIdentifier` = userI
 9. DB transaction committed
         ↓
 10. Creator requests payout via POST /payouts
-    - PayoutService creates Payout record (status = "pending")
+    - PayoutService.RequestAsync opens a Serializable transaction:
+      (a) verifies wallet balance ≥ requested amount
+      (b) writes the WalletTransaction debit
+      (c) inserts the Payout record with Status = "pending"
+      — all three commit atomically, or none do.
         ↓
-11. Admin approves payout via admin panel
-    - AdminService updates Payout status = "approved" / "paid"
-    - WalletTransaction debit created
-    - Actual Stripe payout transfer executed via Stripe Connect
+11. Outside the transaction, PayoutService calls Stripe Connect to transfer funds:
+    - On success → Payout.Status = "completed", CompletedAt set.
+    - On failure → a compensating WalletTransaction credit is written, Payout.Status = "failed",
+      FailureReason stored, caller gets a retryable error.
+    There is no admin approve/reject step — the flow is fully creator-initiated and
+    self-compensating. The `/admin/payouts/{id}/approve` and `/reject` endpoints were
+    removed; attempting to re-add them risks double-crediting the wallet.
 ```
 
 **Protected invariants:**

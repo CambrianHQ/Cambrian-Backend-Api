@@ -94,8 +94,6 @@ public sealed class AuthorizationTests : IClassFixture<CambrianApiFixture>
     [InlineData("/admin/users/fake-id/role")]
     [InlineData("/admin/users/fake-id/suspend")]
     [InlineData("/admin/users/fake-id/reactivate")]
-    [InlineData("/admin/payouts/fake-id/approve")]
-    [InlineData("/admin/payouts/fake-id/reject")]
     [InlineData("/admin/tracks/fake-id/remove")]
     [InlineData("/admin/tracks/fake-id/visibility")]
     public async Task AdminPostEndpoints_Return401_WithoutAuth(string path)
@@ -128,7 +126,6 @@ public sealed class AuthorizationTests : IClassFixture<CambrianApiFixture>
     [Theory]
     [InlineData("/admin/users/fake-id/role", "post-role")]
     [InlineData("/admin/users/fake-id/suspend", "post-susp")]
-    [InlineData("/admin/payouts/fake-id/approve", "post-appr")]
     [InlineData("/admin/tracks/fake-id/remove", "post-rem")]
     public async Task AdminPostEndpoints_Return403_ForRegularUser(string path, string suffix)
     {

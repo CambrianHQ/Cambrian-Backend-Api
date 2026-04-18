@@ -62,14 +62,6 @@ public class AdminService : IAdminService
     public Task<string?> ResetUserPasswordAsync(string userId, string adminActor)
         => _admin.ResetUserPasswordAsync(userId, adminActor);
 
-    // ── Payout management ──
-
-    public Task<bool> ApprovePayoutAsync(string payoutId, string adminActor)
-        => Guid.TryParse(payoutId, out var id) ? _admin.ApprovePayoutAsync(id, adminActor) : Task.FromResult(false);
-
-    public Task<bool> RejectPayoutAsync(string payoutId, string adminActor)
-        => Guid.TryParse(payoutId, out var id) ? _admin.RejectPayoutAsync(id, adminActor) : Task.FromResult(false);
-
     // ── Track moderation ──
 
     public Task<bool> RemoveTrackAsync(string trackId, string adminActor)

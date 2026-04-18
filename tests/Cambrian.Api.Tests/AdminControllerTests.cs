@@ -164,50 +164,6 @@ public sealed class AdminControllerTests
         Assert.IsType<NotFoundObjectResult>(result);
     }
 
-    // ── ApprovePayout ──
-
-    [Fact]
-    public async Task ApprovePayout_ReturnsOk_WhenApproved()
-    {
-        _admin.ApprovePayoutAsync("p-1", Arg.Any<string>()).Returns(true);
-
-        var result = await _controller.ApprovePayout("p-1");
-
-        Assert.IsType<OkObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task ApprovePayout_ReturnsNotFound_WhenInvalid()
-    {
-        _admin.ApprovePayoutAsync("missing", Arg.Any<string>()).Returns(false);
-
-        var result = await _controller.ApprovePayout("missing");
-
-        Assert.IsType<NotFoundObjectResult>(result);
-    }
-
-    // ── RejectPayout ──
-
-    [Fact]
-    public async Task RejectPayout_ReturnsOk_WhenRejected()
-    {
-        _admin.RejectPayoutAsync("p-1", Arg.Any<string>()).Returns(true);
-
-        var result = await _controller.RejectPayout("p-1");
-
-        Assert.IsType<OkObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task RejectPayout_ReturnsNotFound_WhenInvalid()
-    {
-        _admin.RejectPayoutAsync("missing", Arg.Any<string>()).Returns(false);
-
-        var result = await _controller.RejectPayout("missing");
-
-        Assert.IsType<NotFoundObjectResult>(result);
-    }
-
     // ── RemoveTrack ──
 
     [Fact]
