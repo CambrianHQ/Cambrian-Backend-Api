@@ -6157,6 +6157,22 @@
         }
       }
     },
+    "/webhook/email": {
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "summary": "Resend inbound email webhook",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Invalid or empty webhook payload"
+          }
+        }
+      }
+    },
     "/ai-discovery/tracks/{trackId}": {
       "get": {
         "tags": [
