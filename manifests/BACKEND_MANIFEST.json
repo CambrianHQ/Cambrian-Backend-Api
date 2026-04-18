@@ -123,8 +123,6 @@
     { "method": "GET", "path": "/admin/settings", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "POST", "path": "/admin/settings", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "GET", "path": "/admin/payouts/requests", "auth": true, "role": "Admin", "tag": "Admin" },
-    { "method": "POST", "path": "/admin/payouts/{id}/approve", "auth": true, "role": "Admin", "tag": "Admin" },
-    { "method": "POST", "path": "/admin/payouts/{id}/reject", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "POST", "path": "/admin/users/{id}/role", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "POST", "path": "/admin/users/{id}/suspend", "auth": true, "role": "Admin", "tag": "Admin" },
     { "method": "POST", "path": "/admin/users/{id}/reactivate", "auth": true, "role": "Admin", "tag": "Admin" },

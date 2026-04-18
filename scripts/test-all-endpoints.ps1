@@ -262,8 +262,6 @@ Test-Endpoint -Method POST -Path "/admin/tracks/$fakeId/flag" -Token $adminToken
 Test-Endpoint -Method POST -Path "/admin/tracks/$fakeId/feature" -Token $adminToken -Tag "Admin" -Body '{}' -ExpectedMin 200 -ExpectedMax 499
 Test-Endpoint -Method POST -Path "/admin/tracks/$fakeId/pin" -Token $adminToken -Tag "Admin" -Body '{}' -ExpectedMin 200 -ExpectedMax 499
 Test-Endpoint -Method POST -Path "/admin/tracks/$fakeId/visibility" -Token $adminToken -Tag "Admin" -Body '{"visibility":"hidden"}' -ExpectedMin 200 -ExpectedMax 499
-Test-Endpoint -Method POST -Path "/admin/payouts/$fakeId/approve" -Token $adminToken -Tag "Admin" -Body '{}' -ExpectedMin 200 -ExpectedMax 499
-Test-Endpoint -Method POST -Path "/admin/payouts/$fakeId/reject" -Token $adminToken -Tag "Admin" -Body '{}' -ExpectedMin 200 -ExpectedMax 499
 
 # ═══════════════════════════════════════
 # SUMMARY

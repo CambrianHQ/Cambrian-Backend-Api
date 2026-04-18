@@ -134,8 +134,6 @@
     "POST /admin/users/:id/reactivate",
     "POST /admin/users/:id/verify-creator",
     "GET /admin/payouts/requests",
-    "POST /admin/payouts/:id/approve",
-    "POST /admin/payouts/:id/reject",
     "GET /admin/reports",
     "POST /admin/reports/:id/investigate",
     "POST /admin/tracks/:id/remove",

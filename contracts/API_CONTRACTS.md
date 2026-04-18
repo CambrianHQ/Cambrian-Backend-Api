@@ -1368,9 +1368,6 @@ POST returns **501** — settings persistence not yet implemented.
 ### `GET /admin/payouts/requests`
 Returns pending payout requests.
 
-### `POST /admin/payouts/{id}/approve` | `POST /admin/payouts/{id}/reject`
-Approve or reject payout.
-
 ### `POST /admin/users/{id}/role`
 **Request:** `{ "role": "Creator" }`
 
@@ -1508,4 +1505,4 @@ AI track generation.
 `Active`, `Inactive`, `Cancelled`
 
 ### Payout Status
-`pending`, `approved`, `rejected`, `completed`
+`pending`, `completed`, `failed`
