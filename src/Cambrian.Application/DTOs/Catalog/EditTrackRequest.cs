@@ -28,9 +28,12 @@ public class EditTrackRequest
     [MaxLength(500)]
     public string? Tags { get; set; }
 
+    [Range(1, int.MaxValue)]
     public int? NonExclusivePriceCents { get; set; }
 
+    [Range(1, int.MaxValue)]
     public int? ExclusivePriceCents { get; set; }
 
+    [Range(1, int.MaxValue)]
     public int? CopyrightBuyoutPriceCents { get; set; }
 }
