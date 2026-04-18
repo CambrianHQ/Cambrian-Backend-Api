@@ -425,59 +425,6 @@ public class AdminRepository : IAdminRepository
     }
 
     // ══════════════════════════════════════════════
-    // Payout management
-    // ══════════════════════════════════════════════
-
-    public async Task<bool> ApprovePayoutAsync(Guid payoutId, string adminActor)
-    {
-        var payout = await _db.Payouts.FindAsync(payoutId);
-        if (payout is null) return false;
-        if (payout.Status != "pending") return false;
-
-        payout.Status = "approved";
-        payout.CompletedAt = DateTime.UtcNow;
-
-        _db.AuditLogs.Add(new AuditLog
-        {
-            Action = "approve_payout",
-            Admin = adminActor,
-            Details = $"Approved payout {payoutId} (${payout.AmountCents / 100.0:F2})"
-        });
-        await _db.SaveChangesAsync();
-        return true;
-    }
-
-    public async Task<bool> RejectPayoutAsync(Guid payoutId, string adminActor)
-    {
-        var payout = await _db.Payouts.FindAsync(payoutId);
-        if (payout is null) return false;
-        if (payout.Status != "pending") return false;
-
-        payout.Status = "rejected";
-        payout.CompletedAt = DateTime.UtcNow;
-
-        // Re-credit the creator's wallet — the debit was taken at request time
-        _db.WalletTransactions.Add(new WalletTransaction
-        {
-            Id = Guid.NewGuid(),
-            UserId = payout.CreatorId,
-            AmountCents = payout.AmountCents,
-            Type = "credit",
-            Description = $"Payout {payoutId} rejected — funds returned",
-            CreatedAt = DateTime.UtcNow
-        });
-
-        _db.AuditLogs.Add(new AuditLog
-        {
-            Action = "reject_payout",
-            Admin = adminActor,
-            Details = $"Rejected payout {payoutId} (${payout.AmountCents / 100.0:F2}), wallet re-credited"
-        });
-        await _db.SaveChangesAsync();
-        return true;
-    }
-
-    // ══════════════════════════════════════════════
     // Track moderation
     // ══════════════════════════════════════════════
 

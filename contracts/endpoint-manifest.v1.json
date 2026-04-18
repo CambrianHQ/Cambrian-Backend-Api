@@ -34,18 +34,6 @@
                       },
                       {
                           "method":  "POST",
-                          "path":  "/admin/payouts/{id}/approve",
-                          "requiresAuth":  true,
-                          "tag":  "Admin"
-                      },
-                      {
-                          "method":  "POST",
-                          "path":  "/admin/payouts/{id}/reject",
-                          "requiresAuth":  true,
-                          "tag":  "Admin"
-                      },
-                      {
-                          "method":  "POST",
                           "path":  "/admin/users/{id}/role",
                           "requiresAuth":  true,
                           "tag":  "Admin"

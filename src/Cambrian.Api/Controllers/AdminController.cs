@@ -127,24 +127,6 @@ public class AdminController : BaseController
         return OkResponse(pending);
     }
 
-    [HttpPost("payouts/{id}/approve")]
-    public async Task<IActionResult> ApprovePayout(string id)
-    {
-        _logger.LogInformation("[Admin] ApprovePayout id={PayoutId}", id);
-        var ok = await _admin.ApprovePayoutAsync(id, GetAdminActor());
-        if (!ok) return NotFound(new { success = false, message = "Payout not found or not in pending status." });
-        return OkResponse(new { success = true, message = $"Payout {id} approved." });
-    }
-
-    [HttpPost("payouts/{id}/reject")]
-    public async Task<IActionResult> RejectPayout(string id)
-    {
-        _logger.LogInformation("[Admin] RejectPayout id={PayoutId}", id);
-        var ok = await _admin.RejectPayoutAsync(id, GetAdminActor());
-        if (!ok) return NotFound(new { success = false, message = "Payout not found or not in pending status." });
-        return OkResponse(new { success = true, message = $"Payout {id} rejected." });
-    }
-
     // --- User management ---
 
     public record SetRoleRequest(string Role);

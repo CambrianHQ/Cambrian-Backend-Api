@@ -33,10 +33,6 @@ public interface IAdminRepository
     /// </summary>
     Task<string?> ResetUserPasswordAsync(string userId, string adminActor);
 
-    // ── Payout management ──
-    Task<bool> ApprovePayoutAsync(Guid payoutId, string adminActor);
-    Task<bool> RejectPayoutAsync(Guid payoutId, string adminActor);
-
     // ── Track moderation ──
     Task<bool> RemoveTrackAsync(Guid trackId, string adminActor);
     Task<bool> RestoreTrackAsync(Guid trackId, string adminActor);
