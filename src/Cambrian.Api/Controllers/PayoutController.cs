@@ -98,24 +98,6 @@ public class PayoutController : BaseController
         return OkResponse(history);
     }
 
-    [HttpPost("settings")]
-    public IActionResult CreateSettings([FromBody] PayoutSettingsRequest? request = null)
-    {
-        return MessageResponse("Payout settings saved.");
-    }
-
-    [HttpPut("settings")]
-    public IActionResult UpdateSettings([FromBody] PayoutSettingsRequest? request = null)
-    {
-        return MessageResponse("Payout settings updated.");
-    }
-
-    public class PayoutSettingsRequest
-    {
-        public decimal? Threshold { get; set; }
-        public string? Schedule { get; set; }
-    }
-
     [HttpGet("/earnings")]
     public Task<IActionResult> Earnings() => PayoutsEarnings();
 }

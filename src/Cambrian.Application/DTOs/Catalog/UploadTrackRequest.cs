@@ -34,10 +34,13 @@ public class UploadTrackRequest
     [MaxLength(500)]
     public string? Tags { get; set; }
 
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
     public decimal? NonExclusivePrice { get; set; }
 
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
     public decimal? ExclusivePrice { get; set; }
 
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
     public decimal? CopyrightBuyoutPrice { get; set; }
 
     [MaxLength(20)]
