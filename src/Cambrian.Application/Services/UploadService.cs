@@ -217,7 +217,7 @@ public class UploadService : IUploadService
             Title = request.Title,
             Description = request.Description,
             Price = request.Price ?? 0,
-            LicenseType = request.LicenseType ?? "streaming",
+            LicenseType = NormalizeListingLicenseType(request.LicenseType),
             AudioUrl = audioUrl,
             CoverArtUrl = coverArtUrl,
             NonExclusivePriceCents = request.NonExclusivePrice.HasValue
@@ -362,6 +362,18 @@ public class UploadService : IUploadService
 
     private static string? NormalizeNullableText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // Track.LicenseType is the *listing* tier, not the buyer's usage. The frontend
+    // upload form historically sent usage values like "personal", which the
+    // marketplace UI then read as "not for sale". Only accept the three canonical
+    // tiers; anything else (including "personal", "streaming", null) collapses to
+    // "non-exclusive" so the track is sellable by default.
+    private static string NormalizeListingLicenseType(string? requested) =>
+        requested switch
+        {
+            "non-exclusive" or "exclusive" or "copyright_buyout" => requested,
+            _ => "non-exclusive"
+        };
 
     private static string GetCanonicalGenre(Track track) =>
         track.Subgenre ?? track.Genre ?? track.PrimaryGenre ?? string.Empty;
