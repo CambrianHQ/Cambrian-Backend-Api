@@ -108,9 +108,9 @@ services:
         sync: false
       # Frontend CORS
       - key: App__FrontendUrl
-        value: https://staging.cambrianmusic.com
+        value: https://cambrian-env-staging-loganbryanxs-projects.vercel.app
       - key: App__CorsOrigins
-        value: "https://staging.cambrianmusic.com"
+        value: "https://cambrian-env-staging-loganbryanxs-projects.vercel.app"
       # Vercel preview deployment CORS wildcard
       - key: App__VercelProjectSlug
         value: cambrian
