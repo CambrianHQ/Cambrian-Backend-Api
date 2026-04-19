@@ -197,7 +197,7 @@ Inherits `IdentityDbContext<ApplicationUser>`.
 | SubscriptionEndDate | DateTime? | |
 | StripeAccountId | string? | Stripe Connect Express `acct_xxx` |
 | WalletBalanceCents | long | |
-| PasswordResetCode | string? | Hashed 8-char code |
+| PasswordResetCode | string? | Hashed 6-digit numeric code |
 | PasswordResetCodeExpiry | DateTime? | |
 | ProfileImageUrl | string? | max 500 |
 | CoverImageUrl | string? | max 500 |
@@ -377,7 +377,7 @@ Inherits `IdentityDbContext<ApplicationUser>`.
 | TrackId | Guid (FK) | → Tracks.Id, ON DELETE CASCADE |
 | UserId | string? | |
 | StartedAt | DateTime | |
-| EndedAt | DateTime? | |
+| StoppedAt | DateTime? | |
 
 #### AnalyticsEvents
 | Column | Type | Notes |
@@ -684,7 +684,7 @@ Example valid: `Password123!`
 ### Password Reset Flow
 
 1. `POST /auth/forgot-password` — email or phone number
-2. Server generates 8-char random alphanumeric code (excludes 0/O, 1/I), hashes it, stores in `ApplicationUser.PasswordResetCode` with 15-minute expiry
+2. Server generates 6-digit numeric code (`000000`–`999999` via `RandomNumberGenerator.GetInt32`), hashes it (SHA-256), stores in `ApplicationUser.PasswordResetCode` with 15-minute expiry
 3. Code sent via email or SMS
 4. `POST /auth/verify-code` — validates code
 5. `POST /auth/reset-password` — code + new password
