@@ -197,7 +197,7 @@ Inherits `IdentityDbContext<ApplicationUser>`.
 | SubscriptionEndDate | DateTime? | |
 | StripeAccountId | string? | Stripe Connect Express `acct_xxx` |
 | WalletBalanceCents | long | |
-| PasswordResetCode | string? | Hashed 8-char code |
+| PasswordResetCode | string? | Hashed 6-digit numeric code |
 | PasswordResetCodeExpiry | DateTime? | |
 | ProfileImageUrl | string? | max 500 |
 | CoverImageUrl | string? | max 500 |
@@ -319,9 +319,10 @@ Inherits `IdentityDbContext<ApplicationUser>`.
 | Id | Guid (PK) | |
 | CreatorId | string (FK) | → AspNetUsers.Id, ON DELETE RESTRICT |
 | AmountCents | long | |
-| Status | string | `pending`, `approved`, `paid`, `rejected` |
-| CreatedAt | DateTime | |
-| ProcessedAt | DateTime? | |
+| Status | string | `pending`, `completed`, `failed` (set by `PayoutService.RequestAsync`) |
+| FailureReason | string? | Populated when `Status = "failed"` |
+| RequestedAt | DateTime | |
+| CompletedAt | DateTime? | |
 
 #### WalletTransactions
 | Column | Type | Notes |
@@ -376,7 +377,7 @@ Inherits `IdentityDbContext<ApplicationUser>`.
 | TrackId | Guid (FK) | → Tracks.Id, ON DELETE CASCADE |
 | UserId | string? | |
 | StartedAt | DateTime | |
-| EndedAt | DateTime? | |
+| StoppedAt | DateTime? | |
 
 #### AnalyticsEvents
 | Column | Type | Notes |
@@ -683,7 +684,7 @@ Example valid: `Password123!`
 ### Password Reset Flow
 
 1. `POST /auth/forgot-password` — email or phone number
-2. Server generates 8-char random alphanumeric code (excludes 0/O, 1/I), hashes it, stores in `ApplicationUser.PasswordResetCode` with 15-minute expiry
+2. Server generates 6-digit numeric code (`000000`–`999999` via `RandomNumberGenerator.GetInt32`), hashes it (SHA-256), stores in `ApplicationUser.PasswordResetCode` with 15-minute expiry
 3. Code sent via email or SMS
 4. `POST /auth/verify-code` — validates code
 5. `POST /auth/reset-password` — code + new password
@@ -773,12 +774,19 @@ Claims set on authenticated API key request: `ClaimTypes.NameIdentifier` = userI
 9. DB transaction committed
         ↓
 10. Creator requests payout via POST /payouts
-    - PayoutService creates Payout record (status = "pending")
+    - PayoutService.RequestAsync opens a Serializable transaction:
+      (a) verifies wallet balance ≥ requested amount
+      (b) writes the WalletTransaction debit
+      (c) inserts the Payout record with Status = "pending"
+      — all three commit atomically, or none do.
         ↓
-11. Admin approves payout via admin panel
-    - AdminService updates Payout status = "approved" / "paid"
-    - WalletTransaction debit created
-    - Actual Stripe payout transfer executed via Stripe Connect
+11. Outside the transaction, PayoutService calls Stripe Connect to transfer funds:
+    - On success → Payout.Status = "completed", CompletedAt set.
+    - On failure → a compensating WalletTransaction credit is written, Payout.Status = "failed",
+      FailureReason stored, caller gets a retryable error.
+    There is no admin approve/reject step — the flow is fully creator-initiated and
+    self-compensating. The `/admin/payouts/{id}/approve` and `/reject` endpoints were
+    removed; attempting to re-add them risks double-crediting the wallet.
 ```
 
 **Protected invariants:**

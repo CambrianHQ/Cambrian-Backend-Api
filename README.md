@@ -60,7 +60,7 @@
 | 9 | 💰 **Wallet & Credits** | Track wallet balance and credit creators on purchases |
 | 10 | 📋 **Subscriptions & Billing** | Manage subscription plans, upgrades, cancellations, and Stripe billing portals |
 | 11 | 🧾 **Invoices & Licenses** | Retrieve, list, and download invoices; browse music license types |
-| 12 | 🛡️ **Admin Panel** | Manage users, approve payouts, moderate tracks, view reports and audit logs |
+| 12 | 🛡️ **Admin Panel** | Manage users, review payouts, moderate tracks, and view reports and audit logs |
 | 13 | 🚩 **Feature Flags** | Per-user feature checks and admin-controlled rollout percentages |
 | 14 | 📈 **Analytics** | Track usage events and query admin summaries/events |
 | 15 | 🎨 **Creator Profiles** | Public creator pages with editable profile media and collections |
@@ -102,8 +102,16 @@ All endpoints are defined in the versioned OpenAPI spec at [`contracts/openapi.v
 | | `GET` | `/tracks/{id}` | ❌ |
 | 🎙️ **Creator** | `GET` | `/creator/tracks` | ✅ (Creator) |
 | | `GET` | `/creator/revenue` | ✅ (Creator) |
-| | `GET` | `/payouts` | ✅ (Creator) |
-| | `POST` | `/payouts` | ✅ (Creator) |
+| | `GET` | `/payouts/earnings` | ✅ (Creator) |
+| | `GET` | `/payouts/history` | ✅ (Creator) |
+| | `POST` | `/payouts/request` | ✅ (Creator) |
+| | `POST` | `/payouts/connect-stripe` | ✅ (Creator) |
+| | `GET` | `/payouts/connect-status` | ✅ (Creator) |
+| | `GET` | `/payouts/stripe-dashboard` | ✅ (Creator) |
+| | `GET` | `/payouts/account` | ✅ (Creator) |
+| | `POST` | `/payouts/connect` | ✅ (Creator) |
+| | `POST` | `/payouts/disconnect` | ✅ (Creator) |
+| | `DELETE` | `/payouts/disconnect` | ✅ (Creator) |
 | 🎨 **Creator Profile** | `GET` | `/creator-profile/{slug}` | ❌ |
 | | `GET` | `/creator-profile/me` | ✅ (Creator tier) |
 | | `PUT` | `/creator-profile/me` | ✅ (Creator tier) |
@@ -131,18 +139,30 @@ All endpoints are defined in the versioned OpenAPI spec at [`contracts/openapi.v
 | | `GET` | `/invoices/{invoiceId}/download` | ✅ |
 | 📜 **Licenses** | `GET` | `/licenses` | ❌ |
 | | `GET` | `/licenses/{licenseId}` | ❌ |
-| 🛡️ **Admin** | `GET` | `/admin/users` | ✅ (Admin) |
-| | `POST` | `/admin/users` | ✅ (Admin) |
-| | `PATCH` | `/admin/users/{id}` | ✅ (Admin) |
-| | `DELETE` | `/admin/users/{id}` | ✅ (Admin) |
-| | `GET` | `/admin/payouts` | ✅ (Admin) |
-| | `POST` | `/admin/payouts` | ✅ (Admin) |
-| | `PATCH` | `/admin/payouts/{id}` | ✅ (Admin) |
-| | `GET` | `/admin/tracks` | ✅ (Admin) |
-| | `PATCH` | `/admin/tracks/{id}` | ✅ (Admin) |
-| | `DELETE` | `/admin/tracks/{id}` | ✅ (Admin) |
-| | `GET` | `/admin/reports` | ✅ (Admin) |
+| 🛡️ **Admin** | `GET` | `/admin/dashboard` | ✅ (Admin) |
 | | `GET` | `/admin/audit` | ✅ (Admin) |
+| | `GET` | `/admin/integrity` | ✅ (Admin) |
+| | `GET` | `/admin/users` | ✅ (Admin) |
+| | `GET` | `/admin/payouts` | ✅ (Admin) |
+| | `GET` | `/admin/payouts/requests` | ✅ (Admin) |
+| | `GET` | `/admin/tracks` | ✅ (Admin) |
+| | `GET` | `/admin/purchases` | ✅ (Admin) |
+| | `GET` | `/admin/settings` | ✅ (Admin) |
+| | `POST` | `/admin/settings` | ✅ (Admin) |
+| | `POST` | `/admin/users/{id}/role` | ✅ (Admin) |
+| | `POST` | `/admin/users/{id}/suspend` | ✅ (Admin) |
+| | `POST` | `/admin/users/{id}/reactivate` | ✅ (Admin) |
+| | `POST` | `/admin/users/{id}/reset-password` | ✅ (Admin) |
+| | `POST` | `/admin/users/{id}/verify-creator` | ✅ (Admin) |
+| | `GET` | `/admin/reports` | ✅ (Admin) |
+| | `POST` | `/admin/reports/{id}/investigate` | ✅ (Admin) |
+| | `POST` | `/admin/tracks/{id}/remove` | ✅ (Admin) |
+| | `POST` | `/admin/tracks/{id}/restore` | ✅ (Admin) |
+| | `POST` | `/admin/tracks/{id}/hide` | ✅ (Admin) |
+| | `POST` | `/admin/tracks/{id}/flag` | ✅ (Admin) |
+| | `POST` | `/admin/tracks/{id}/feature` | ✅ (Admin) |
+| | `POST` | `/admin/tracks/{id}/pin` | ✅ (Admin) |
+| | `POST` | `/admin/tracks/{id}/visibility` | ✅ (Admin) |
 | ❤️ **Health** | `GET` | `/health` | ❌ |
 | | `GET` | `/auth/health` | ❌ |
 | | `GET` | `/health/storage` | ❌ |

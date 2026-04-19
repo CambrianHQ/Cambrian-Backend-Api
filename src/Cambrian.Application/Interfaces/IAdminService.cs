@@ -28,10 +28,6 @@ public interface IAdminService
     /// <summary>Returns the generated temporary password, or null if user not found.</summary>
     Task<string?> ResetUserPasswordAsync(string userId, string adminActor);
 
-    // ── Payout management ──
-    Task<bool> ApprovePayoutAsync(string payoutId, string adminActor);
-    Task<bool> RejectPayoutAsync(string payoutId, string adminActor);
-
     // ── Track moderation ──
     Task<bool> RemoveTrackAsync(string trackId, string adminActor);
     Task<bool> RestoreTrackAsync(string trackId, string adminActor);
