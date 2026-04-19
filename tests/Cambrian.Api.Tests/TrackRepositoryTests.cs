@@ -173,4 +173,111 @@ public sealed class TrackRepositoryTests : IDisposable
         Assert.Equal(trackId, purchase.TrackId);
         Assert.Equal(trackId, libraryItem.TrackId);
     }
+
+    // Marketplace search used to filter on Title only, so creator-name and
+    // description searches returned nothing. These tests pin the expanded
+    // search behavior so future edits can't quietly regress it.
+    [Theory]
+    [InlineData("aurora", new[] { "Aurora Loop" })]                       // title hit
+    [InlineData("velvet midnight", new string[0])]                         // multi-word phrase that doesn't match anywhere
+    [InlineData("midnight signal", new[] { "Midnight Signal" })]           // exact title
+    [InlineData("dreamy synthwave", new[] { "Aurora Loop" })]              // description hit
+    [InlineData("bella", new[] { "Aurora Loop", "Midnight Signal" })]      // creator displayName hit
+    [InlineData("bellanova", new[] { "Aurora Loop", "Midnight Signal" })] // creator username hit
+    [InlineData("BELLA", new[] { "Aurora Loop", "Midnight Signal" })]     // case-insensitive
+    public async Task BrowseAsync_SearchesAcrossTitleDescriptionAndCreator(string search, string[] expectedTitles)
+    {
+        await SeedSearchableCatalog();
+
+        var results = await _repository.BrowseAsync(page: 1, pageSize: 50, genre: null, search: search);
+        var titles = results.Select(t => t.Title).OrderBy(t => t).ToArray();
+        Assert.Equal(expectedTitles.OrderBy(t => t).ToArray(), titles);
+    }
+
+    private async Task SeedSearchableCatalog()
+    {
+        var bellaUserId = Guid.NewGuid().ToString();
+        var griffinUserId = Guid.NewGuid().ToString();
+
+        _db.Users.AddRange(
+            new ApplicationUser
+            {
+                Id = bellaUserId,
+                UserName = "bellanova",
+                NormalizedUserName = "BELLANOVA",
+                Email = "bella@test.com",
+                NormalizedEmail = "BELLA@TEST.COM",
+                DisplayName = "Bella Nova",
+                Role = "Creator",
+                Tier = "creator",
+                Status = "active"
+            },
+            new ApplicationUser
+            {
+                Id = griffinUserId,
+                UserName = "griffincole",
+                NormalizedUserName = "GRIFFINCOLE",
+                Email = "griffin@test.com",
+                NormalizedEmail = "GRIFFIN@TEST.COM",
+                DisplayName = "Griffin Cole",
+                Role = "Creator",
+                Tier = "creator",
+                Status = "active"
+            });
+
+        var bellaCreatorId = Guid.NewGuid();
+        var griffinCreatorId = Guid.NewGuid();
+        _db.Creators.AddRange(
+            new Creator { Id = bellaCreatorId, UserId = bellaUserId, Username = "bellanova", DisplayName = "Bella Nova" },
+            new Creator { Id = griffinCreatorId, UserId = griffinUserId, Username = "griffincole", DisplayName = "Griffin Cole" });
+
+        _db.Tracks.AddRange(
+            new Track
+            {
+                Id = Guid.NewGuid(),
+                CambrianTrackId = "CAMB-TRK-AURORA01",
+                CreatorId = bellaUserId,
+                CreatorUuid = bellaCreatorId,
+                Title = "Aurora Loop",
+                Description = "Dreamy synthwave with ambient textures",
+                Genre = "electronic",
+                NonExclusivePriceCents = 299,
+                ExclusivePriceCents = 1499,
+                CopyrightBuyoutPriceCents = 5999,
+                Status = "available",
+                Visibility = "public"
+            },
+            new Track
+            {
+                Id = Guid.NewGuid(),
+                CambrianTrackId = "CAMB-TRK-MIDNT001",
+                CreatorId = bellaUserId,
+                CreatorUuid = bellaCreatorId,
+                Title = "Midnight Signal",
+                Description = "Late-night driving track",
+                Genre = "electronic",
+                NonExclusivePriceCents = 449,
+                ExclusivePriceCents = 1999,
+                CopyrightBuyoutPriceCents = 7999,
+                Status = "available",
+                Visibility = "public"
+            },
+            new Track
+            {
+                Id = Guid.NewGuid(),
+                CambrianTrackId = "CAMB-TRK-FIELDS01",
+                CreatorId = griffinUserId,
+                CreatorUuid = griffinCreatorId,
+                Title = "Fields of Grace",
+                Description = "Orchestral cue for emotional moments",
+                Genre = "orchestral",
+                NonExclusivePriceCents = 599,
+                ExclusivePriceCents = 2499,
+                CopyrightBuyoutPriceCents = 9999,
+                Status = "available",
+                Visibility = "public"
+            });
+
+        await _db.SaveChangesAsync();
+    }
 }

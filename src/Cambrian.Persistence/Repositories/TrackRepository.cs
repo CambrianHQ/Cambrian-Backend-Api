@@ -291,7 +291,21 @@ public class TrackRepository : ITrackRepository
         }
 
         if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(t => t.Title.ToLower().Contains(search.ToLower()));
+        {
+            // Match against title, description, and either creator nav (Creator
+            // = legacy ApplicationUser, CreatorEntity = canonical Creator row).
+            // Tags are stored as a comma-joined string via a value converter so
+            // querying them in SQL would bypass the converter — left for a
+            // follow-up that adds a shadow column or switches Tags to a Postgres
+            // array.
+            var needle = search.ToLower();
+            query = query.Where(t =>
+                t.Title.ToLower().Contains(needle) ||
+                (t.Description != null && t.Description.ToLower().Contains(needle)) ||
+                (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
+                (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
+                (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)));
+        }
 
         if (!string.IsNullOrWhiteSpace(mood))
             query = query.Where(t => t.Mood != null && t.Mood.ToLower() == mood.ToLower());
