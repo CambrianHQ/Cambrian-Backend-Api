@@ -1,8 +1,11 @@
 using System.Security.Claims;
+using Cambrian.Api.Common;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Options;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -21,8 +24,10 @@ public class AdminController : BaseController
     private readonly IWebHostEnvironment _env;
     private readonly StorageOptions _storageOptions;
     private readonly IObjectStorage _storage;
+    private readonly UserManager<ApplicationUser> _users;
+    private readonly ICreatorIdentityRepository _creators;
 
-    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env, IOptions<StorageOptions> storageOptions, IObjectStorage storage)
+    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env, IOptions<StorageOptions> storageOptions, IObjectStorage storage, UserManager<ApplicationUser> users, ICreatorIdentityRepository creators)
     {
         _admin = admin;
         _integrity = integrity;
@@ -30,6 +35,8 @@ public class AdminController : BaseController
         _env = env;
         _storageOptions = storageOptions.Value;
         _storage = storage;
+        _users = users;
+        _creators = creators;
     }
 
     private string GetAdminActor()
@@ -66,6 +73,43 @@ public class AdminController : BaseController
     {
         var users = await _admin.GetUsersAsync();
         return OkResponse(users);
+    }
+
+    /// <summary>
+    /// Diagnostic dump of an ApplicationUser plus its Creator row, exposing the
+    /// raw fields the upload filters check (UserName vs Email, Role, CreatorTier,
+    /// Creator.UserId match). Lets admins root-cause "why can't this user upload"
+    /// without poking the DB directly.
+    /// </summary>
+    [HttpGet("users/{id}/diag")]
+    public async Task<IActionResult> UserDiag(string id)
+    {
+        var user = await _users.FindByIdAsync(id);
+        if (user is null) return NotFoundResponse(MsgUserNotFound);
+
+        var creatorId = await _creators.GetCreatorIdForUserAsync(id);
+        var usernameSet = UsernameHelper.IsSet(user);
+
+        return OkResponse(new
+        {
+            id = user.Id,
+            email = user.Email,
+            userName = user.UserName,
+            normalizedUserName = user.NormalizedUserName,
+            displayName = user.DisplayName,
+            role = user.Role,
+            status = user.Status,
+            tier = user.Tier,
+            creatorTier = user.CreatorTier.ToString(),
+            verifiedCreator = user.VerifiedCreator,
+            uploadCount = user.UploadCount,
+            emailConfirmed = user.EmailConfirmed,
+            creatorRowId = creatorId,
+            usernameHelperIsSet = usernameSet,
+            requireUsernameWouldPass = usernameSet || creatorId.HasValue,
+            requireCreatorTierWouldPass = string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase)
+                                       || string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase),
+        });
     }
 
     [HttpGet("tracks")]

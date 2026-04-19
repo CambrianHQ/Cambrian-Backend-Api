@@ -2,9 +2,11 @@ using System.Security.Claims;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Admin;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Options;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -30,7 +32,10 @@ public sealed class AdminControllerTests
         var logger = Substitute.For<ILogger<AdminController>>();
         var storageOptions = Options.Create(new StorageOptions { Provider = "local" });
         _env.EnvironmentName.Returns("Testing");
-        _controller = new AdminController(_admin, _integrity, logger, _env, storageOptions, _storage);
+        var userStore = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(userStore, null!, null!, null!, null!, null!, null!, null!, null!);
+        var creators = Substitute.For<ICreatorIdentityRepository>();
+        _controller = new AdminController(_admin, _integrity, logger, _env, storageOptions, _storage, users, creators);
         SetupAdmin();
     }
 
