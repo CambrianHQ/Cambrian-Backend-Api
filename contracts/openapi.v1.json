@@ -187,6 +187,29 @@
         }
       }
     },
+    "/admin/users/{id}/diag": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Diagnostic dump of an ApplicationUser + Creator row (admin-only).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/admin/tracks": {
       "get": {
         "tags": [
