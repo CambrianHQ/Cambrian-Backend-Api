@@ -2589,6 +2589,29 @@
         }
       }
     },
+    "/catalog/{trackId}": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "summary": "Alias for /tracks/{trackId} — kept for frontend checkout-restore compatibility.",
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/trending": {
       "get": {
         "tags": [

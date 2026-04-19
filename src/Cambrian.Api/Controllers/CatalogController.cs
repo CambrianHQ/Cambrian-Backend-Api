@@ -114,6 +114,12 @@ public class CatalogController : BaseController
         return OkResponse(result);
     }
 
+    // Frontend "checkout restore" hits /catalog/{id} expecting a single track. The
+    // canonical route is /tracks/{id} above; this is an alias so the existing
+    // frontend deploy stops 404'ing while it's updated.
+    [HttpGet("catalog/{trackId}")]
+    public Task<IActionResult> GetTrackCatalogAlias(string trackId) => GetTrack(trackId);
+
     [HttpGet("trending")]
     public async Task<IActionResult> Trending(
         [FromQuery] int page = 1,
