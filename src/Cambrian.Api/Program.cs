@@ -325,6 +325,11 @@ builder.Services.AddSingleton<ITierService, TierService>();
 builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
+
+// Public v1 API supporting services
+builder.Services.AddScoped<Cambrian.Application.Interfaces.V1.IIdempotencyStore,
+    Cambrian.Persistence.Repositories.IdempotencyStore>();
+builder.Services.AddScoped<Cambrian.Api.Middleware.ApiUsageActionFilter>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
 builder.Services.AddScoped<IDebugService, Cambrian.Persistence.Services.DebugService>();
 builder.Services.AddScoped<IHealthService, Cambrian.Persistence.Services.HealthService>();

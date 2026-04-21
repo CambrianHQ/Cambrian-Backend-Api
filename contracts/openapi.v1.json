@@ -6809,68 +6809,107 @@
         }
       }
     },
-    "/api/v1/licenses": {
+    "/api/v1/licenses/purchase": {
       "post": {
         "tags": [
           "V1 Licenses"
         ],
-        "summary": "Initiate license purchase checkout. Returns a Stripe checkout URL.",
+        "summary": "Initiate a license-purchase Stripe Checkout session. Canonical route.",
+        "description": "Requires authentication (JWT bearer or X-API-Key). Idempotent when an Idempotency-Key header is supplied — subsequent calls with the same key from the same user return the original response without contacting Stripe again (TTL 24h).",
         "security": [
+          { "Bearer": [] },
+          { "ApiKey": [] }
+        ],
+        "parameters": [
           {
-            "Bearer": []
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Client-supplied idempotency key (UUID recommended). Reusing the same key with the same user returns the cached response."
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "trackId": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "licenseType": {
-                    "type": "string",
-                    "enum": [
-                      "nonexclusive",
-                      "exclusive",
-                      "copyright_buyout"
-                    ]
-                  }
-                },
-                "required": [
-                  "trackId",
-                  "licenseType"
-                ]
-              }
+              "schema": { "$ref": "#/components/schemas/LicensePurchaseRequest" }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Checkout session created (or replayed from idempotency cache).",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "description": "V1 raw response (not wrapped in ApiResponse envelope).",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "checkoutUrl": {
-                      "type": "string",
-                      "description": "Stripe checkout URL to redirect the user to."
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
+                "schema": { "$ref": "#/components/schemas/V1ApiResponse_LicensePurchaseResponse" }
+              }
+            }
+          },
+          "400": { "description": "Invalid request body." },
+          "401": { "description": "Missing or invalid authentication." },
+          "403": { "description": "Authenticated but not authorized (e.g. subscription required)." },
+          "429": { "description": "Rate limit exceeded (100 req/min)." }
+        }
+      }
+    },
+    "/api/v1/licenses": {
+      "post": {
+        "tags": [
+          "V1 Licenses"
+        ],
+        "summary": "DEPRECATED alias for POST /api/v1/licenses/purchase.",
+        "deprecated": true,
+        "security": [
+          { "Bearer": [] },
+          { "ApiKey": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LicensePurchaseRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout session created.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/V1ApiResponse_LicensePurchaseResponse" }
               }
             }
           }
+        }
+      }
+    },
+    "/api/v1/tracks/search": {
+      "get": {
+        "tags": [
+          "V1 Catalog"
+        ],
+        "summary": "Search and filter the public track catalogue. Canonical route.",
+        "parameters": [
+          { "name": "genre", "in": "query", "schema": { "type": "string" } },
+          { "name": "mood", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "tempo", "in": "query", "schema": { "type": "string" } },
+          { "name": "instrumental", "in": "query", "schema": { "type": "boolean" } },
+          { "name": "sort", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/V1ApiResponse_TrackList" }
+              }
+            }
+          },
+          "429": { "description": "Rate limit exceeded." }
         }
       }
     },
@@ -6879,7 +6918,8 @@
         "tags": [
           "V1 Catalog"
         ],
-        "summary": "Search and browse tracks with pagination.",
+        "summary": "DEPRECATED alias for GET /api/v1/tracks/search.",
+        "deprecated": true,
         "parameters": [
           {
             "name": "genre",
@@ -7070,6 +7110,61 @@
   },
   "components": {
     "schemas": {
+      "V1ApiResponse_LicensePurchaseResponse": {
+        "type": "object",
+        "description": "Canonical envelope for /api/v1/licenses/purchase responses.",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/LicensePurchaseResponse" },
+          "error": { "type": "string", "nullable": true },
+          "meta": { "$ref": "#/components/schemas/V1PaginationMeta", "nullable": true }
+        }
+      },
+      "V1ApiResponse_TrackList": {
+        "type": "object",
+        "description": "Canonical envelope for the paginated track search/list responses.",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "array", "items": { "type": "object" } },
+          "error": { "type": "string", "nullable": true },
+          "meta": { "$ref": "#/components/schemas/V1PaginationMeta" }
+        }
+      },
+      "LicensePurchaseRequest": {
+        "type": "object",
+        "required": [ "trackId", "licenseType" ],
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "description": "UUID or CambrianTrackId (CAMB-TRK-XXXX)."
+          },
+          "licenseType": {
+            "type": "string",
+            "enum": [ "non-exclusive", "exclusive", "copyright_buyout" ]
+          },
+          "usageType": {
+            "type": "string",
+            "description": "Optional usage type recorded on the license certificate (personal, youtube, ads, podcast, ...).",
+            "nullable": true
+          },
+          "clientReferenceId": {
+            "type": "string",
+            "description": "Optional client-supplied reference passed through to Stripe.",
+            "nullable": true
+          }
+        }
+      },
+      "LicensePurchaseResponse": {
+        "type": "object",
+        "properties": {
+          "checkoutUrl": { "type": "string" },
+          "status": { "type": "string", "nullable": true },
+          "idempotent": {
+            "type": "boolean",
+            "description": "True when served from the idempotency cache (same Idempotency-Key)."
+          }
+        }
+      },
       "ActivityItemResponse": {
         "type": "object",
         "properties": {
