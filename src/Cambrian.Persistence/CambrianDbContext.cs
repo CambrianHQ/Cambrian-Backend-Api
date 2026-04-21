@@ -53,9 +53,30 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
+    public DbSet<ApiIdempotencyKey> ApiIdempotencyKeys => Set<ApiIdempotencyKey>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<ApiIdempotencyKey>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Key).IsRequired().HasMaxLength(128);
+            e.Property(x => x.UserId).IsRequired().HasMaxLength(450);
+            e.Property(x => x.RouteKey).IsRequired().HasMaxLength(128);
+            e.Property(x => x.ResponseBody).IsRequired();
+            e.Property(x => x.StatusCode).IsRequired();
+            e.Property(x => x.CreatedAt).IsRequired();
+            e.Property(x => x.ExpiresAt).IsRequired();
+            // Composite uniqueness: a (key, user, route) triple maps to exactly one stored response.
+            e.HasIndex(x => new { x.Key, x.UserId, x.RouteKey })
+                .IsUnique()
+                .HasDatabaseName("ux_api_idempotency_keys_key_user_route");
+            // Sweep-friendly: background cleanup walks expired rows.
+            e.HasIndex(x => x.ExpiresAt).HasDatabaseName("ix_api_idempotency_keys_expires_at");
+            e.ToTable("ApiIdempotencyKeys");
+        });
 
         builder.Entity<Track>(e =>
         {
