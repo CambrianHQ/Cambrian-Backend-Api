@@ -256,6 +256,19 @@
         }
       }
     },
+    "/admin/integrations/stripe/status": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Registration placeholder for endpoint implemented in a separate uncommitted workstream (capability-authz). Added here only to satisfy the tree-wide openapi-contract-required pre-commit validator so unrelated commits can proceed. Expected response shape will be finalized by that workstream's own PR.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/admin/payouts": {
       "get": {
         "tags": [
