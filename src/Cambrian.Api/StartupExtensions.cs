@@ -644,6 +644,13 @@ internal static class StartupExtensions
                 await flagRepo.UpsertAsync("creator_storefront", enabled: true);
                 Console.WriteLine("[Seed] Feature flag 'creator_storefront' enabled");
             }
+
+            var stripeConnect = await flagRepo.GetByNameAsync(Cambrian.Api.Common.StripeConnectAvailability.FeatureFlagName);
+            if (stripeConnect is null)
+            {
+                await flagRepo.UpsertAsync(Cambrian.Api.Common.StripeConnectAvailability.FeatureFlagName, enabled: true);
+                Console.WriteLine($"[Seed] Feature flag '{Cambrian.Api.Common.StripeConnectAvailability.FeatureFlagName}' created (enabled)");
+            }
         }
         catch (Exception ex)
         {

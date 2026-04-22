@@ -185,6 +185,9 @@ public sealed class TrackRepositoryTests : IDisposable
     [InlineData("bella", new[] { "Aurora Loop", "Midnight Signal" })]      // creator displayName hit
     [InlineData("bellanova", new[] { "Aurora Loop", "Midnight Signal" })] // creator username hit
     [InlineData("BELLA", new[] { "Aurora Loop", "Midnight Signal" })]     // case-insensitive
+    [InlineData("electronic", new[] { "Aurora Loop", "Midnight Signal" })] // genre hit
+    [InlineData("orchestral", new[] { "Fields of Grace" })]                // genre hit (separate creator)
+    [InlineData("dark", new[] { "Midnight Signal" })]                       // mood hit
     public async Task BrowseAsync_SearchesAcrossTitleDescriptionAndCreator(string search, string[] expectedTitles)
     {
         await SeedSearchableCatalog();
@@ -256,6 +259,7 @@ public sealed class TrackRepositoryTests : IDisposable
                 Title = "Midnight Signal",
                 Description = "Late-night driving track",
                 Genre = "electronic",
+                Mood = "dark",
                 NonExclusivePriceCents = 449,
                 ExclusivePriceCents = 1999,
                 CopyrightBuyoutPriceCents = 7999,

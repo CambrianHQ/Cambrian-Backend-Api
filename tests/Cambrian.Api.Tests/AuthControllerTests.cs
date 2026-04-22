@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Api.Controllers;
+using Cambrian.Application.Auth;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
@@ -40,7 +41,8 @@ public sealed class AuthControllerTests
         _tx.BeginTransactionAsync().Returns(Substitute.For<IAsyncDisposable>());
 
         var profiles = Substitute.For<ICreatorProfileRepository>();
-        _controller = new AuthController(_auth, _subscriptions, _creators, profiles, _userManager, _tx, _logger);
+        var capabilities = Substitute.For<ICapabilityResolver>();
+        _controller = new AuthController(_auth, _subscriptions, _creators, profiles, capabilities, _userManager, _tx, _logger);
 
         // Provide a default HttpContext so AppendAuthCookie can resolve IHostEnvironment
         var env = Substitute.For<IHostEnvironment>();

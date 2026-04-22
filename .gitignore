@@ -11,6 +11,16 @@ Thumbs.db
 
 .claude/
 .codex-run/
+.agents/
+.junie/
+.windsurf/
+skills-lock.json
+
+################################################
+# Local .NET SDK cache
+################################################
+
+.dotnet-home/
 
 ################################################
 # IDE / Editor

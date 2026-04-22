@@ -207,8 +207,30 @@ public class UploadService : IUploadService
             ? (int)Math.Round(request.Price.Value * 100, MidpointRounding.AwayFromZero)
             : 0;
 
+        // Price floors per /pricing tier. Used as the fallback when the frontend
+        // uploads a track without any price fields — previously those tracks were
+        // stored with 0/0/0 and rendered as "Coming soon" on the marketplace,
+        // unsellable until manually edited. Matches the backfill defaults in
+        // 20260419215404_BackfillZeroTrackPrices.
+        const int DefaultNonExclusiveCents = 999;
+        const int DefaultExclusiveCents = 4999;
+        const int DefaultCopyrightBuyoutCents = 19999;
+
         // Resolve the Creator UUID for the uploading user
         var creatorUuid = await _creators.GetCreatorIdForUserAsync(request.CreatorId!);
+
+        var resolvedNonExclusiveCents = request.NonExclusivePriceCents
+            ?? (request.NonExclusivePrice.HasValue
+                ? (int)Math.Round(request.NonExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
+                : (priceCents > 0 ? priceCents : DefaultNonExclusiveCents));
+        var resolvedExclusiveCents = request.ExclusivePriceCents
+            ?? (request.ExclusivePrice.HasValue
+                ? (int)Math.Round(request.ExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
+                : (priceCents > 0 ? priceCents : DefaultExclusiveCents));
+        var resolvedCopyrightBuyoutCents = request.CopyrightBuyoutPriceCents
+            ?? (request.CopyrightBuyoutPrice.HasValue
+                ? (int)Math.Round(request.CopyrightBuyoutPrice.Value * 100, MidpointRounding.AwayFromZero)
+                : DefaultCopyrightBuyoutCents);
 
         var track = new Track
         {
@@ -216,19 +238,13 @@ public class UploadService : IUploadService
             CambrianTrackId = TrackIdDto.Generate(),
             Title = request.Title,
             Description = request.Description,
-            Price = request.Price ?? 0,
+            Price = request.Price ?? (resolvedNonExclusiveCents / 100m),
             LicenseType = NormalizeListingLicenseType(request.LicenseType),
             AudioUrl = audioUrl,
             CoverArtUrl = coverArtUrl,
-            NonExclusivePriceCents = request.NonExclusivePrice.HasValue
-                ? (int)Math.Round(request.NonExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
-                : priceCents,
-            ExclusivePriceCents = request.ExclusivePrice.HasValue
-                ? (int)Math.Round(request.ExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
-                : priceCents,
-            CopyrightBuyoutPriceCents = request.CopyrightBuyoutPrice.HasValue
-                ? (int)Math.Round(request.CopyrightBuyoutPrice.Value * 100, MidpointRounding.AwayFromZero)
-                : 0,
+            NonExclusivePriceCents = resolvedNonExclusiveCents,
+            ExclusivePriceCents = resolvedExclusiveCents,
+            CopyrightBuyoutPriceCents = resolvedCopyrightBuyoutCents,
             CreatorId = request.CreatorId,
             CreatorUuid = creatorUuid,
             Tags = string.IsNullOrWhiteSpace(request.Tags)

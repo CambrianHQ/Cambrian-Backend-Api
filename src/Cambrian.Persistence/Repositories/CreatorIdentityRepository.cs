@@ -109,7 +109,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 Title = t.Title,
                 Description = t.Description,
                 Genre = t.Genre ?? "",
-                Price = t.Price,
+                Price = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
                 NonExclusivePrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
                 ExclusivePrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price,
                 CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents > 0
@@ -129,6 +129,89 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 CreatedAt = t.CreatedAt,
             })
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// Paged variant: returns items + total row count so callers can emit a
+    /// pagination envelope. Uses the same visibility filters as
+    /// GetTracksByCreatorIdAsync so the storefront surface is consistent.
+    /// </summary>
+    public async Task<PagedResult<TrackResponse>> GetTracksPagedByCreatorIdAsync(Guid creatorId, int page, int pageSize)
+    {
+        if (creatorId == Guid.Empty)
+            throw new ArgumentException("creatorId must be a valid UUID.", nameof(creatorId));
+
+        var creator = await _db.Creators
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == creatorId);
+
+        if (creator is null)
+        {
+            return new PagedResult<TrackResponse>
+            {
+                Items = Array.Empty<TrackResponse>(),
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = 0,
+            };
+        }
+
+        var profileImageUrl = await _db.CreatorProfiles.AsNoTracking()
+            .Where(p => p.UserId == creator.UserId)
+            .Select(p => p.ProfileImageUrl)
+            .FirstOrDefaultAsync();
+
+        var artistName = creator.DisplayName ?? creator.Username;
+        var legacyUserId = creator.UserId;
+
+        var baseQuery = _db.Tracks
+            .AsNoTracking()
+            .Where(t => (t.CreatorUuid == creatorId || t.CreatorId == legacyUserId)
+                        && t.Visibility == "public"
+                        && !t.ExclusiveSold
+                        && t.Status != "copyright_transferred");
+
+        var total = await baseQuery.CountAsync();
+
+        var items = await baseQuery
+            .OrderByDescending(t => t.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(t => new TrackResponse
+            {
+                Id = t.Id.ToString(),
+                CambrianTrackId = t.CambrianTrackId,
+                Title = t.Title,
+                Description = t.Description,
+                Genre = t.Genre ?? "",
+                Price = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
+                NonExclusivePrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
+                ExclusivePrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price,
+                CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents > 0
+                    ? t.CopyrightBuyoutPriceCents / 100m
+                    : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price),
+                ExclusiveSold = t.ExclusiveSold,
+                Status = t.Status ?? "available",
+                IsCopyrightTransferred = t.CopyrightOwnerId != null,
+                LicenseType = t.LicenseType,
+                Duration = t.Duration,
+                AudioUrl = t.AudioUrl,
+                CoverArtUrl = t.CoverArtUrl,
+                CreatorId = t.CreatorId,
+                Artist = artistName,
+                CreatorSlug = creator.Username,
+                CreatorProfileImageUrl = profileImageUrl,
+                CreatedAt = t.CreatedAt,
+            })
+            .ToListAsync();
+
+        return new PagedResult<TrackResponse>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = total,
+        };
     }
 
     public async Task<bool> IsUsernameTakenAsync(string normalizedUsername, Guid? excludeCreatorId = null)

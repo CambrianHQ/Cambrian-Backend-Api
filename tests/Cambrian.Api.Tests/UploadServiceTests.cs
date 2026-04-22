@@ -153,8 +153,39 @@ public sealed class UploadServiceTests
             t.ExclusivePriceCents == 49999));
     }
 
+    // The frontend sends prices as cents-based fields (matching the edit DTO).
+    // When both cents and dollar fields are present, cents takes precedence.
     [Fact]
-    public async Task Upload_DefaultsPriceCentsToZero_WhenNotProvided()
+    public async Task Upload_PrefersDirectCentsFields_OverDollarConversion()
+    {
+        _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns("https://cdn.test/track.mp3");
+
+        var request = new UploadTrackRequest
+        {
+            Audio = MakeFile(),
+            CreatorId = "c1",
+            Title = "Beat",
+            NonExclusivePriceCents = 999,
+            ExclusivePriceCents = 4999,
+            CopyrightBuyoutPriceCents = 19999
+        };
+
+        await _sut.Upload(request);
+
+        await _tracks.Received(1).AddAsync(Arg.Is<Track>(t =>
+            t.NonExclusivePriceCents == 999 &&
+            t.ExclusivePriceCents == 4999 &&
+            t.CopyrightBuyoutPriceCents == 19999));
+    }
+
+    // When the frontend uploads a track without per-tier prices, the backend
+    // must fall back to the platform tier minimums (matches /pricing floors and
+    // the existing 20260419215404_BackfillZeroTrackPrices migration). Storing
+    // 0/0/0 made tracks render as "Coming soon" on the marketplace and be
+    // unsellable until manually edited — the bug surfaced in the 2026-04-20 audit.
+    [Fact]
+    public async Task Upload_DefaultsAllThreePriceTiersToPlatformFloors_WhenNotProvided()
     {
         _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/track.mp3");
@@ -168,9 +199,72 @@ public sealed class UploadServiceTests
 
         await _sut.Upload(request);
 
+        // All three tiers must be non-zero so the track is sellable on first upload.
+        // Exact floors: Personal $9.99, Commercial $49.99, Extended $199.99.
         await _tracks.Received(1).AddAsync(Arg.Is<Track>(t =>
-            t.NonExclusivePriceCents == 0 &&
-            t.ExclusivePriceCents == 0));
+            t.NonExclusivePriceCents == 999 &&
+            t.ExclusivePriceCents == 4999 &&
+            t.CopyrightBuyoutPriceCents == 19999 &&
+            t.NonExclusivePriceCents > 0 &&
+            t.ExclusivePriceCents > 0 &&
+            t.CopyrightBuyoutPriceCents > 0));
+    }
+
+    // When the caller sets SOME tiers explicitly but omits others, the explicit
+    // values must be preserved untouched and the omitted ones fall back to the
+    // platform floors. "Omit to default" is the v1 contract; a creator
+    // intentionally disabling a tier is a separate future feature.
+    [Fact]
+    public async Task Upload_PartialPrices_PreservesExplicitAndDefaultsOmitted()
+    {
+        _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns("https://cdn.test/track.mp3");
+
+        // Caller sets ONLY NonExclusivePrice. Exclusive + CopyrightBuyout omitted.
+        var request = new UploadTrackRequest
+        {
+            Audio = MakeFile(),
+            CreatorId = "c1",
+            Title = "Personal-only Beat",
+            NonExclusivePrice = 5.00m
+        };
+
+        await _sut.Upload(request);
+
+        await _tracks.Received(1).AddAsync(Arg.Is<Track>(t =>
+            // Explicit value preserved (not overridden by floor)
+            t.NonExclusivePriceCents == 500 &&
+            // Omitted tiers fall back to the platform floors — NOT 0, NOT
+            // a rounded version of the explicit Personal price.
+            t.ExclusivePriceCents == 4999 &&
+            t.CopyrightBuyoutPriceCents == 19999));
+    }
+
+    // If the frontend sends only the legacy `Price` field (single price, no
+    // per-tier breakdown), use it as the per-tier floor instead of the platform
+    // default. Preserves backwards compat for older upload forms.
+    [Fact]
+    public async Task Upload_UsesLegacyPriceFieldAsTierFloor_WhenPerTierPricesMissing()
+    {
+        _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns("https://cdn.test/track.mp3");
+
+        var request = new UploadTrackRequest
+        {
+            Audio = MakeFile(),
+            CreatorId = "c1",
+            Title = "Beat",
+            Price = 14.99m  // legacy single-price form
+        };
+
+        await _sut.Upload(request);
+
+        await _tracks.Received(1).AddAsync(Arg.Is<Track>(t =>
+            t.NonExclusivePriceCents == 1499 &&
+            t.ExclusivePriceCents == 1499 &&
+            // CopyrightBuyout still falls to the platform default (Extended is
+            // a heavier license that should never be priced lower than the floor).
+            t.CopyrightBuyoutPriceCents == 19999));
     }
 
     [Fact]

@@ -8,6 +8,7 @@ using Cambrian.Application.Configuration;
 using Cambrian.Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
+using Cambrian.Application.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
@@ -199,6 +200,39 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAssertion(ctx =>
             ctx.User.HasClaim(c => c.Type == "email_verified" && c.Value == "true"));
     });
+
+    // Capability-based policies — read from HttpContext.Items["Capabilities"]
+    // With endpoint routing, AuthorizationHandlerContext.Resource is the HttpContext.
+    options.AddPolicy("CanUploadTrack", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+            HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.TrackUpload));
+    });
+    options.AddPolicy("CanEditOwnTrack", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+            HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.TrackEditOwn));
+    });
+    options.AddPolicy("CanDeleteOwnTrack", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+            HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.TrackDeleteOwn));
+    });
+    options.AddPolicy("CanRequestPayout", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+            HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.PayoutRequest));
+    });
+    options.AddPolicy("CanPurchaseLicense", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx =>
+            HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.LicensePurchase));
+    });
 });
 builder.Services.AddMemoryCache();
 builder.Services.AddControllers();
@@ -325,10 +359,18 @@ builder.Services.AddSingleton<ITierService, TierService>();
 builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 builder.Services.AddScoped<ILicenseService, LicenseService>();
+
+// Public v1 API supporting services
+builder.Services.AddScoped<Cambrian.Application.Interfaces.V1.IIdempotencyStore,
+    Cambrian.Persistence.Repositories.IdempotencyStore>();
+builder.Services.AddScoped<Cambrian.Api.Middleware.ApiUsageActionFilter>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
 builder.Services.AddScoped<IDebugService, Cambrian.Persistence.Services.DebugService>();
 builder.Services.AddScoped<IHealthService, Cambrian.Persistence.Services.HealthService>();
 builder.Services.AddSingleton<ILocalDeliveryDebugStore, LocalDeliveryDebugStore>();
+
+// Capability-based authorization
+builder.Services.AddScoped<ICapabilityResolver, CapabilityResolver>();
 
 // Anti-drift: single source of truth services
 builder.Services.AddScoped<IEntitlementService, EntitlementService>();
@@ -523,6 +565,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyMiddleware>();
+app.UseMiddleware<Cambrian.Api.Middleware.CapabilityMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapMcp();
@@ -588,4 +631,15 @@ await app.RunAsync();
 public partial class Program
 {
     protected Program() { }
+
+    /// <summary>
+    /// Check if the HttpContext has a given capability loaded by CapabilityMiddleware.
+    /// </summary>
+    internal static bool HasCapability(HttpContext? httpContext, string capability)
+    {
+        if (httpContext is null) return false;
+        if (httpContext.Items.TryGetValue("Capabilities", out var caps) && caps is IReadOnlyList<string> list)
+            return list.Contains(capability);
+        return false;
+    }
 }
