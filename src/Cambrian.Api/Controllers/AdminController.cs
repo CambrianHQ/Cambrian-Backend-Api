@@ -26,8 +26,10 @@ public class AdminController : BaseController
     private readonly IObjectStorage _storage;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ICreatorIdentityRepository _creators;
+    private readonly IFeatureFlagRepository _flags;
+    private readonly IPaymentGateway _gateway;
 
-    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env, IOptions<StorageOptions> storageOptions, IObjectStorage storage, UserManager<ApplicationUser> users, ICreatorIdentityRepository creators)
+    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env, IOptions<StorageOptions> storageOptions, IObjectStorage storage, UserManager<ApplicationUser> users, ICreatorIdentityRepository creators, IFeatureFlagRepository flags, IPaymentGateway gateway)
     {
         _admin = admin;
         _integrity = integrity;
@@ -37,6 +39,8 @@ public class AdminController : BaseController
         _storage = storage;
         _users = users;
         _creators = creators;
+        _flags = flags;
+        _gateway = gateway;
     }
 
     private string GetAdminActor()
@@ -66,6 +70,21 @@ public class AdminController : BaseController
     {
         var report = await _integrity.RunAuditAsync();
         return OkResponse(report);
+    }
+
+    [HttpGet("integrations/stripe/status")]
+    public async Task<IActionResult> StripeStatus()
+    {
+        var enabled = await _flags.IsEnabledAsync(StripeConnectAvailability.FeatureFlagName);
+
+        return OkResponse(new
+        {
+            stripeConnectEnabled = enabled,
+            ready = enabled,
+            status = enabled ? "enabled" : "disabled",
+            paymentGateway = _gateway.GetType().Name,
+            checkedAt = DateTime.UtcNow
+        });
     }
 
     [HttpGet("users")]

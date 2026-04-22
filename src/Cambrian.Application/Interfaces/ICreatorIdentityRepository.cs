@@ -25,6 +25,12 @@ public interface ICreatorIdentityRepository
     /// </summary>
     Task<List<TrackResponse>> GetTracksByCreatorIdAsync(Guid creatorId, int page, int pageSize);
 
+    /// <summary>
+    /// Paged variant of GetTracksByCreatorIdAsync that returns total count alongside items,
+    /// so controllers can emit a paginated response envelope.
+    /// </summary>
+    Task<PagedResult<TrackResponse>> GetTracksPagedByCreatorIdAsync(Guid creatorId, int page, int pageSize);
+
     /// <summary>Check if a normalized username is already taken.</summary>
     Task<bool> IsUsernameTakenAsync(string normalizedUsername, Guid? excludeCreatorId = null);
 

@@ -80,6 +80,32 @@ public sealed class CatalogServiceTests
     }
 
     [Fact]
+    public async Task GetTrackAsync_CentsPricing_UsesNonExclusivePriceForLegacyAlias()
+    {
+        var id = Guid.NewGuid();
+        var track = new Track
+        {
+            Id = id,
+            Title = "Beat 3",
+            Price = 0m,
+            NonExclusivePriceCents = 1999,
+            ExclusivePriceCents = 4999,
+            CopyrightBuyoutPriceCents = 9999,
+            CreatorId = "creator-1",
+            Creator = new ApplicationUser { DisplayName = "DJ Test" }
+        };
+        _tracks.GetByIdAsync(id).Returns(track);
+
+        var result = await _sut.GetTrackAsync(id.ToString());
+
+        Assert.NotNull(result);
+        Assert.Equal(19.99m, result!.Price);
+        Assert.Equal(19.99m, result.NonExclusivePrice);
+        Assert.Equal(49.99m, result.ExclusivePrice);
+        Assert.Equal(99.99m, result.CopyrightBuyoutPrice);
+    }
+
+    [Fact]
     public async Task GetTrackAsync_FallsBackToUnknown_WhenDisplayNameIsNull()
     {
         var id = Guid.NewGuid();

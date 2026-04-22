@@ -74,6 +74,7 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
 
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
 
+        Assert.Equal(19.99m, data.GetProperty("price").GetDecimal());
         Assert.Equal(19.99m, data.GetProperty("nonExclusivePrice").GetDecimal());
         Assert.Equal(49.99m, data.GetProperty("exclusivePrice").GetDecimal());
         Assert.Equal(99.99m, data.GetProperty("copyrightBuyoutPrice").GetDecimal());
@@ -122,6 +123,64 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
 
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
         Assert.True(data.TryGetProperty("creatorSlug", out _));
+    }
+
+    [Fact]
+    public async Task CreatorTrackEdit_ReturnsDollarAndCentPricing()
+    {
+        var email = $"ct-edit-{Guid.NewGuid():N}@test.com";
+        var username = $"edit-{Guid.NewGuid():N}"[..16];
+        var client = await CreateCreatorClientAsync(email, username: username);
+        var userId = await _fixture.GetUserIdAsync(email);
+
+        var trackId = await SeedTrackWithPriceCentsAsync(userId, "Editable Beat",
+            nonExCents: 999, exCents: 4999, buyoutCents: 19999);
+
+        var res = await client.PutAsJsonAsync($"/creator/tracks/{trackId}", new
+        {
+            nonExclusivePriceCents = 999,
+            exclusivePriceCents = 4999,
+            copyrightBuyoutPriceCents = 19999
+        });
+        res.EnsureSuccessStatusCode();
+
+        var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+
+        Assert.Equal(9.99m, data.GetProperty("price").GetDecimal());
+        Assert.Equal(9.99m, data.GetProperty("nonExclusivePrice").GetDecimal());
+        Assert.Equal(49.99m, data.GetProperty("exclusivePrice").GetDecimal());
+        Assert.Equal(199.99m, data.GetProperty("copyrightBuyoutPrice").GetDecimal());
+        Assert.Equal(999, data.GetProperty("nonExclusivePriceCents").GetInt32());
+        Assert.Equal(4999, data.GetProperty("exclusivePriceCents").GetInt32());
+        Assert.Equal(19999, data.GetProperty("copyrightBuyoutPriceCents").GetInt32());
+    }
+
+    [Fact]
+    public async Task UserProfile_TracksIncludeDollarPricingAliases()
+    {
+        var email = $"ct-user-prices-{Guid.NewGuid():N}@test.com";
+        var username = $"prices-{Guid.NewGuid():N}"[..16];
+        var client = await CreateCreatorClientAsync(email, username: username);
+        var userId = await _fixture.GetUserIdAsync(email);
+
+        await SeedTrackWithPriceCentsAsync(userId, "Profile Beat",
+            nonExCents: 999, exCents: 4999, buyoutCents: 19999);
+
+        var publicClient = _fixture.CreateClient();
+        var res = await publicClient.GetAsync($"/users/{username}");
+        res.EnsureSuccessStatusCode();
+
+        var track = (await res.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data")
+            .GetProperty("tracks")[0];
+
+        Assert.Equal(9.99m, track.GetProperty("price").GetDecimal());
+        Assert.Equal(9.99m, track.GetProperty("nonExclusivePrice").GetDecimal());
+        Assert.Equal(49.99m, track.GetProperty("exclusivePrice").GetDecimal());
+        Assert.Equal(199.99m, track.GetProperty("copyrightBuyoutPrice").GetDecimal());
+        Assert.Equal(999, track.GetProperty("nonExclusivePriceCents").GetInt32());
+        Assert.Equal(4999, track.GetProperty("exclusivePriceCents").GetInt32());
+        Assert.Equal(19999, track.GetProperty("copyrightBuyoutPriceCents").GetInt32());
     }
 
     // ────────────────────────────────────────────────────────────
@@ -475,7 +534,7 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
     //  Helpers
     // ────────────────────────────────────────────────────────────
 
-    private async Task<HttpClient> CreateCreatorClientAsync(string email)
+    private async Task<HttpClient> CreateCreatorClientAsync(string email, string? username = null)
     {
         var password = "Test1234!@";
         await _fixture.RegisterUserAsync(email, password);
@@ -487,9 +546,9 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
             user.Tier = "creator";
             user.Role = "Creator";
             // Set a real username so [RequireUsername] passes
-            var username = $"ct-{Guid.NewGuid():N}"[..16];
-            user.UserName = username;
-            user.NormalizedUserName = username.ToUpperInvariant();
+            var resolvedUsername = username ?? $"ct-{Guid.NewGuid():N}"[..16];
+            user.UserName = resolvedUsername;
+            user.NormalizedUserName = resolvedUsername.ToUpperInvariant();
             await db.SaveChangesAsync();
         }
 

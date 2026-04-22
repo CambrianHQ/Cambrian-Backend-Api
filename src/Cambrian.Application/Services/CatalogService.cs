@@ -165,7 +165,7 @@ public class CatalogService : ICatalogService
             Tags = t.Tags,
             Instrumental = t.Instrumental,
             Visibility = t.Visibility,
-            Price = t.Price,
+            Price = nonExPrice,
             NonExclusivePrice = nonExPrice,
             ExclusivePrice = exPrice,
             CopyrightBuyoutPrice = buyoutPrice,

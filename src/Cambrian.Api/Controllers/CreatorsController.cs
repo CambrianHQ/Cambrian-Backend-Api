@@ -142,9 +142,9 @@ public class CreatorsController : BaseController
         if (creator is null) return NotFoundResponse("Creator not found.");
 
         var actualCreatorId = Guid.Parse(creator.Id);
-        var tracks = await _creators.GetTracksByCreatorIdAsync(actualCreatorId, page, pageSize);
-        ResolveTrackUrls(tracks);
-        return OkResponse(tracks);
+        var paged = await _creators.GetTracksPagedByCreatorIdAsync(actualCreatorId, page, pageSize);
+        ResolveTrackUrls(paged.Items);
+        return Ok(ToPagedEnvelope(paged));
     }
 
     // ───── GET /creator/tracks/{slug} ─────
@@ -168,10 +168,22 @@ public class CreatorsController : BaseController
         if (creator is null) return NotFoundResponse("Creator not found.");
 
         var creatorId = Guid.Parse(creator.Id);
-        var tracks = await _creators.GetTracksByCreatorIdAsync(creatorId, page, pageSize);
-        ResolveTrackUrls(tracks);
-        return OkResponse(tracks);
+        var paged = await _creators.GetTracksPagedByCreatorIdAsync(creatorId, page, pageSize);
+        ResolveTrackUrls(paged.Items);
+        return Ok(ToPagedEnvelope(paged));
     }
+
+    private static Cambrian.Application.DTOs.Catalog.CatalogPageResponse ToPagedEnvelope(
+        Cambrian.Application.DTOs.Catalog.PagedResult<Cambrian.Application.DTOs.Catalog.TrackResponse> paged) => new()
+    {
+        Data = paged.Items,
+        Page = paged.Page,
+        PageSize = paged.PageSize,
+        TotalCount = paged.TotalCount,
+        TotalPages = paged.TotalPages,
+        HasNextPage = paged.HasNextPage,
+        HasPreviousPage = paged.HasPreviousPage,
+    };
 
     // ───── GET /api/creators/username-availability?username=... ─────
 

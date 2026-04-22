@@ -42,7 +42,7 @@ public class CreatorService : ICreatorService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyCollection<TrackResponse>> GetTracksAsync(string userId, int page, int pageSize)
+    public async Task<PagedResult<TrackResponse>> GetTracksAsync(string userId, int page, int pageSize)
     {
         var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
         var tracks = await _tracks.GetCreatorTrackSummariesAsync(userId, creatorUuid);
@@ -55,7 +55,7 @@ public class CreatorService : ICreatorService
             ? TierManifest.For(creator.CreatorTier).FeeRate
             : TierManifest.Free.FeeRate;
 
-        return tracks
+        var items = tracks
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(t =>
@@ -80,7 +80,7 @@ public class CreatorService : ICreatorService
                     Tags = t.Tags,
                     Instrumental = t.Instrumental,
                     Visibility = t.Visibility,
-                    Price = t.Price,
+                    Price = nonExPrice,
                     NonExclusivePrice = nonExPrice,
                     ExclusivePrice = exPrice,
                     CopyrightBuyoutPrice = buyoutPrice,
@@ -106,6 +106,14 @@ public class CreatorService : ICreatorService
                 };
             })
             .ToList();
+
+        return new PagedResult<TrackResponse>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = tracks.Count,
+        };
     }
 
     public async Task<object> GetRevenueAsync(string userId)

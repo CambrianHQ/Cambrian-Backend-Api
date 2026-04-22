@@ -11,6 +11,7 @@ namespace Cambrian.Api.Controllers;
 [Authorize]
 [RequireCreatorTier]
 [RequireUsername]
+[RequireStripeConnectEnabled]
 [EnableRateLimiting("auth")]
 public class PayoutController : BaseController
 {

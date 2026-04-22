@@ -153,6 +153,32 @@ public sealed class UploadServiceTests
             t.ExclusivePriceCents == 49999));
     }
 
+    // The frontend sends prices as cents-based fields (matching the edit DTO).
+    // When both cents and dollar fields are present, cents takes precedence.
+    [Fact]
+    public async Task Upload_PrefersDirectCentsFields_OverDollarConversion()
+    {
+        _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns("https://cdn.test/track.mp3");
+
+        var request = new UploadTrackRequest
+        {
+            Audio = MakeFile(),
+            CreatorId = "c1",
+            Title = "Beat",
+            NonExclusivePriceCents = 999,
+            ExclusivePriceCents = 4999,
+            CopyrightBuyoutPriceCents = 19999
+        };
+
+        await _sut.Upload(request);
+
+        await _tracks.Received(1).AddAsync(Arg.Is<Track>(t =>
+            t.NonExclusivePriceCents == 999 &&
+            t.ExclusivePriceCents == 4999 &&
+            t.CopyrightBuyoutPriceCents == 19999));
+    }
+
     // When the frontend uploads a track without per-tier prices, the backend
     // must fall back to the platform tier minimums (matches /pricing floors and
     // the existing 20260419215404_BackfillZeroTrackPrices migration). Storing

@@ -1,3 +1,4 @@
+using Cambrian.Api.Common;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.CreatorProfile;
@@ -46,14 +47,23 @@ public class CreatorController : BaseController
         if (pageSize is < 1 or > 100) pageSize = 50;
 
         var userId = GetRequiredUserId()!;
-        var tracks = await _creator.GetTracksAsync(userId, page, pageSize);
-        foreach (var t in tracks)
+        var paged = await _creator.GetTracksAsync(userId, page, pageSize);
+        foreach (var t in paged.Items)
         {
             t.AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio");
             if (!string.IsNullOrEmpty(t.CoverArtUrl))
                 t.CoverArtUrl = ResolveImageUrl(t.CoverArtUrl);
         }
-        return OkResponse(tracks);
+        return Ok(new CatalogPageResponse
+        {
+            Data = paged.Items,
+            Page = paged.Page,
+            PageSize = paged.PageSize,
+            TotalCount = paged.TotalCount,
+            TotalPages = paged.TotalPages,
+            HasNextPage = paged.HasNextPage,
+            HasPreviousPage = paged.HasPreviousPage,
+        });
     }
 
     [HttpGet("revenue")]
@@ -64,6 +74,7 @@ public class CreatorController : BaseController
         return OkResponse(revenue);
     }
 
+    [Authorize(Policy = "CanEditOwnTrack")]
     [HttpPut("tracks/{trackId:guid}")]
     public async Task<IActionResult> EditTrack(Guid trackId, [FromBody] EditTrackRequest request)
     {
@@ -83,7 +94,11 @@ public class CreatorController : BaseController
         if (request.Mood is not null) track.Mood = request.Mood;
         if (request.Tempo is not null) track.Tempo = request.Tempo;
         if (request.Tags is not null) track.Tags = request.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
-        if (request.NonExclusivePriceCents.HasValue) track.NonExclusivePriceCents = request.NonExclusivePriceCents.Value;
+        if (request.NonExclusivePriceCents.HasValue)
+        {
+            track.NonExclusivePriceCents = request.NonExclusivePriceCents.Value;
+            track.Price = request.NonExclusivePriceCents.Value / 100m;
+        }
         if (request.ExclusivePriceCents.HasValue) track.ExclusivePriceCents = request.ExclusivePriceCents.Value;
         if (request.CopyrightBuyoutPriceCents.HasValue) track.CopyrightBuyoutPriceCents = request.CopyrightBuyoutPriceCents.Value;
 
@@ -91,6 +106,7 @@ public class CreatorController : BaseController
         return OkResponse(await BuildMutationResponseAsync(userId, track));
     }
 
+    [Authorize(Policy = "CanEditOwnTrack")]
     [HttpPut("tracks/{trackId:guid}/cover-art")]
     [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<IActionResult> UpdateTrackCoverArt(Guid trackId, [FromForm] UpdateTrackCoverArtRequest request)
@@ -113,6 +129,7 @@ public class CreatorController : BaseController
         return OkResponse(await BuildMutationResponseAsync(userId, track));
     }
 
+    [Authorize(Policy = "CanDeleteOwnTrack")]
     [HttpDelete("tracks/{trackId:guid}")]
     public async Task<IActionResult> DeleteTrack(Guid trackId)
     {
@@ -151,6 +168,8 @@ public class CreatorController : BaseController
     private async Task<object> BuildMutationResponseAsync(string userId, Domain.Entities.Track track)
     {
         var linkedCollection = await FindLinkedCollectionAsync(userId, track.Id);
+        var pricing = TrackPricingSnapshot.FromTrack(track);
+
         return new
         {
             id = track.Id,
@@ -164,9 +183,13 @@ public class CreatorController : BaseController
             tempo = track.Tempo,
             tags = track.Tags,
             coverArtUrl = string.IsNullOrWhiteSpace(track.CoverArtUrl) ? null : ResolveImageUrl(track.CoverArtUrl),
-            nonExclusivePriceCents = track.NonExclusivePriceCents,
-            exclusivePriceCents = track.ExclusivePriceCents,
-            copyrightBuyoutPriceCents = track.CopyrightBuyoutPriceCents,
+            price = pricing.Price,
+            nonExclusivePrice = pricing.NonExclusivePrice,
+            exclusivePrice = pricing.ExclusivePrice,
+            copyrightBuyoutPrice = pricing.CopyrightBuyoutPrice,
+            nonExclusivePriceCents = pricing.NonExclusivePriceCents,
+            exclusivePriceCents = pricing.ExclusivePriceCents,
+            copyrightBuyoutPriceCents = pricing.CopyrightBuyoutPriceCents,
             collectionId = linkedCollection?.Id,
             collectionTitle = linkedCollection?.Title
         };

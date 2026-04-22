@@ -25,6 +25,8 @@ public sealed class AdminControllerTests
     private readonly IMarketplaceIntegrityService _integrity = Substitute.For<IMarketplaceIntegrityService>();
     private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
     private readonly IWebHostEnvironment _env = Substitute.For<IWebHostEnvironment>();
+    private readonly IFeatureFlagRepository _flags = Substitute.For<IFeatureFlagRepository>();
+    private readonly IPaymentGateway _gateway = Substitute.For<IPaymentGateway>();
     private readonly AdminController _controller;
 
     public AdminControllerTests()
@@ -35,7 +37,7 @@ public sealed class AdminControllerTests
         var userStore = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(userStore, null!, null!, null!, null!, null!, null!, null!, null!);
         var creators = Substitute.For<ICreatorIdentityRepository>();
-        _controller = new AdminController(_admin, _integrity, logger, _env, storageOptions, _storage, users, creators);
+        _controller = new AdminController(_admin, _integrity, logger, _env, storageOptions, _storage, users, creators, _flags, _gateway);
         SetupAdmin();
     }
 
@@ -81,6 +83,17 @@ public sealed class AdminControllerTests
         var result = await _controller.Audit();
 
         Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task StripeStatus_ReturnsFlagState()
+    {
+        _flags.IsEnabledAsync("StripeConnectEnabled").Returns(true);
+
+        var result = await _controller.StripeStatus();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.NotNull(ok.Value);
     }
 
     // ── Users ──

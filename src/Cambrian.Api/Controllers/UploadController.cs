@@ -32,7 +32,7 @@ public class UploadController : BaseController
         _logger = logger;
     }
 
-    [Authorize]
+    [Authorize(Policy = "CanUploadTrack")]
     [RequireCreatorTier]
     [RequireUsername]
     [HttpPost("upload")]

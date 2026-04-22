@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Cambrian.Api.Common;
+using Cambrian.Application.Auth;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
@@ -19,6 +20,7 @@ public class AuthController : BaseController
     private readonly IAuthService _auth;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly ICreatorIdentityRepository _creators;
+    private readonly ICapabilityResolver _capabilities;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ITransactionManager _tx;
     private readonly ILogger<AuthController> _logger;
@@ -32,12 +34,13 @@ public class AuthController : BaseController
 
     private readonly ICreatorProfileRepository _profiles;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, ILogger<AuthController> logger)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, ICapabilityResolver capabilities, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
         _creators = creators;
         _profiles = profiles;
+        _capabilities = capabilities;
         _userManager = userManager;
         _tx = tx;
         _logger = logger;
@@ -210,6 +213,11 @@ public class AuthController : BaseController
 
         var username = needsUsername ? null : user!.UserName;
 
+        // Resolve capabilities for this user
+        var capabilities = user is not null
+            ? await _capabilities.ResolveAsync(user)
+            : Array.Empty<string>();
+
         return OkResponse(new
         {
             token = freshToken ?? Request.Headers.Authorization.ToString().Replace("Bearer ", ""),
@@ -230,7 +238,8 @@ public class AuthController : BaseController
             subscriptionStatus = profile.SubscriptionStatus,
             subscriptionEndDate = profile.SubscriptionEndDate,
             platformFeePercent = profile.PlatformFeePercent,
-            contractVersion = profile.ContractVersion
+            contractVersion = profile.ContractVersion,
+            capabilities
         });
     }
 

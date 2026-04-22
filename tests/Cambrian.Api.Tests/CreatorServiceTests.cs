@@ -143,7 +143,12 @@ public sealed class CreatorServiceTests
 
         var result = await sut.GetTracksAsync("creator-1", 1, 50);
 
-        var track = Assert.Single(result);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(50, result.PageSize);
+        Assert.False(result.HasNextPage);
+        Assert.False(result.HasPreviousPage);
+        var track = Assert.Single(result.Items);
         Assert.Equal("CAMB-TRK-1001", track.CambrianTrackId);
         Assert.Equal("Night Drive", track.Title);
         Assert.Equal("Synthwave", track.Genre);

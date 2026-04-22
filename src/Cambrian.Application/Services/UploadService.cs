@@ -219,15 +219,18 @@ public class UploadService : IUploadService
         // Resolve the Creator UUID for the uploading user
         var creatorUuid = await _creators.GetCreatorIdForUserAsync(request.CreatorId!);
 
-        var resolvedNonExclusiveCents = request.NonExclusivePrice.HasValue
-            ? (int)Math.Round(request.NonExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
-            : (priceCents > 0 ? priceCents : DefaultNonExclusiveCents);
-        var resolvedExclusiveCents = request.ExclusivePrice.HasValue
-            ? (int)Math.Round(request.ExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
-            : (priceCents > 0 ? priceCents : DefaultExclusiveCents);
-        var resolvedCopyrightBuyoutCents = request.CopyrightBuyoutPrice.HasValue
-            ? (int)Math.Round(request.CopyrightBuyoutPrice.Value * 100, MidpointRounding.AwayFromZero)
-            : DefaultCopyrightBuyoutCents;
+        var resolvedNonExclusiveCents = request.NonExclusivePriceCents
+            ?? (request.NonExclusivePrice.HasValue
+                ? (int)Math.Round(request.NonExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
+                : (priceCents > 0 ? priceCents : DefaultNonExclusiveCents));
+        var resolvedExclusiveCents = request.ExclusivePriceCents
+            ?? (request.ExclusivePrice.HasValue
+                ? (int)Math.Round(request.ExclusivePrice.Value * 100, MidpointRounding.AwayFromZero)
+                : (priceCents > 0 ? priceCents : DefaultExclusiveCents));
+        var resolvedCopyrightBuyoutCents = request.CopyrightBuyoutPriceCents
+            ?? (request.CopyrightBuyoutPrice.HasValue
+                ? (int)Math.Round(request.CopyrightBuyoutPrice.Value * 100, MidpointRounding.AwayFromZero)
+                : DefaultCopyrightBuyoutCents);
 
         var track = new Track
         {
