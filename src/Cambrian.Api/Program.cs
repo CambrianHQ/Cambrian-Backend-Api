@@ -367,6 +367,7 @@ builder.Services.AddScoped<Cambrian.Api.Middleware.ApiUsageActionFilter>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
 builder.Services.AddScoped<IDebugService, Cambrian.Persistence.Services.DebugService>();
 builder.Services.AddScoped<IHealthService, Cambrian.Persistence.Services.HealthService>();
+builder.Services.AddScoped<IPreflightService, Cambrian.Infrastructure.Diagnostics.PreflightService>();
 builder.Services.AddSingleton<ILocalDeliveryDebugStore, LocalDeliveryDebugStore>();
 
 // Capability-based authorization
