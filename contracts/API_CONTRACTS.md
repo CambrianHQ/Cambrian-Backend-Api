@@ -1028,6 +1028,39 @@ Same request shape as POST. **Response (200):** `TrackCollectionDto`.
 
 **Response (200):** Paginated `TrackResponse[]`.
 
+### `PUT /creator/tracks/{trackId}` (Authorized, Creator role)
+
+Update editable track metadata and pricing.
+
+**Request:**
+```json
+{
+  "title": "Midnight Pulse",
+  "description": "Updated description",
+  "primaryGenre": "Electronic",
+  "subgenre": "Synthwave",
+  "mood": "dark",
+  "tempo": "128 BPM",
+  "tags": "cinematic,synth,dark",
+  "nonExclusivePriceCents": 999,
+  "exclusivePriceCents": 4999,
+  "copyrightBuyoutPriceCents": 19999
+}
+```
+
+**Response (200):** Track mutation payload including both dollar aliases and cent fields.
+
+### `PUT /creator/tracks/{trackId}/cover-art` (Authorized, Creator role)
+
+Replace an existing song's cover image without deleting or re-uploading the track.
+
+**Request (multipart/form-data):**
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| coverArt | file | Yes | Image, max 10MB |
+
+**Response (200):** Track mutation payload including the updated `coverArtUrl`.
+
 ### `GET /creator/revenue`
 
 **Response (200):** Creator revenue summary object.

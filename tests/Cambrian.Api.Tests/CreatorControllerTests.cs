@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.CreatorProfile;
@@ -59,6 +60,39 @@ public sealed class CreatorControllerTests
     }
 
     [Fact]
+    public async Task EditTrack_UpdatesLegacyPriceAliasWhenNonExclusivePriceChanges()
+    {
+        var trackId = Guid.NewGuid();
+        var track = new Track
+        {
+            Id = trackId,
+            CreatorId = "user-1",
+            Title = "Before",
+            Price = 29.99m,
+            NonExclusivePriceCents = 2999,
+            ExclusivePriceCents = 4999,
+            CopyrightBuyoutPriceCents = 19999
+        };
+        _tracks.GetByIdAsync(trackId).Returns(track);
+
+        var result = await _controller.EditTrack(trackId, new EditTrackRequest
+        {
+            NonExclusivePriceCents = 999
+        });
+
+        await _tracks.Received(1).UpdateAsync(Arg.Is<Track>(t =>
+            t.NonExclusivePriceCents == 999 &&
+            t.Price == 9.99m));
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+        var data = json.RootElement.GetProperty("Data");
+        Assert.Equal(9.99m, data.GetProperty("price").GetDecimal());
+        Assert.Equal(9.99m, data.GetProperty("nonExclusivePrice").GetDecimal());
+        Assert.Equal(999, data.GetProperty("nonExclusivePriceCents").GetInt32());
+    }
+
+    [Fact]
     public async Task UpdateTrackCoverArt_ReplacesCoverArt()
     {
         var trackId = Guid.NewGuid();
@@ -66,7 +100,10 @@ public sealed class CreatorControllerTests
         {
             Id = trackId,
             CreatorId = "user-1",
-            Title = "Track"
+            Title = "Track",
+            Price = 9.99m,
+            ExclusivePriceCents = 4999,
+            CopyrightBuyoutPriceCents = 19999
         };
         _tracks.GetByIdAsync(trackId).Returns(track);
         _upload.UploadCoverArtAsync("user-1", Arg.Any<IFormFile>()).Returns("covers/user-1/new-cover.jpg");
@@ -77,7 +114,15 @@ public sealed class CreatorControllerTests
         });
 
         await _tracks.Received(1).UpdateAsync(Arg.Is<Track>(t => t.CoverArtUrl == "covers/user-1/new-cover.jpg"));
-        Assert.IsType<OkObjectResult>(result);
+        var ok = Assert.IsType<OkObjectResult>(result);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+        var data = json.RootElement.GetProperty("Data");
+        Assert.Equal(9.99m, data.GetProperty("nonExclusivePrice").GetDecimal());
+        Assert.Equal(999, data.GetProperty("nonExclusivePriceCents").GetInt32());
+        Assert.Equal(49.99m, data.GetProperty("exclusivePrice").GetDecimal());
+        Assert.Equal(4999, data.GetProperty("exclusivePriceCents").GetInt32());
+        Assert.Equal(199.99m, data.GetProperty("copyrightBuyoutPrice").GetDecimal());
+        Assert.Equal(19999, data.GetProperty("copyrightBuyoutPriceCents").GetInt32());
     }
 
     [Fact]

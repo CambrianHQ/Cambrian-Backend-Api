@@ -2862,7 +2862,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogPageResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -4006,26 +4013,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/TrackResponse"
-                      }
-                    },
-                    "message": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "error": {
-                      "type": "string",
-                      "nullable": true
-                    }
-                  }
+                  "$ref": "#/components/schemas/CatalogPageResponse"
                 }
               }
             }
@@ -4076,26 +4064,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/TrackResponse"
-                      }
-                    },
-                    "message": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "error": {
-                      "type": "string",
-                      "nullable": true
-                    }
-                  }
+                  "$ref": "#/components/schemas/CatalogPageResponse"
                 }
               }
             }

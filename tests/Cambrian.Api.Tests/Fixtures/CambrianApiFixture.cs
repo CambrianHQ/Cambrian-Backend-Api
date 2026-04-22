@@ -101,6 +101,7 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
         await db.Database.EnsureCreatedAsync();
+        await SetFeatureFlagAsync("StripeConnectEnabled", true);
     }
 
     async Task IAsyncLifetime.DisposeAsync()

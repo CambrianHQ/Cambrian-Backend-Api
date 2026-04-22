@@ -130,7 +130,7 @@ public sealed class StorefrontService : IStorefrontService
             Genre = t.Subgenre ?? t.Genre ?? t.PrimaryGenre ?? "",
             PrimaryGenre = t.PrimaryGenre,
             Subgenre = t.Subgenre,
-            Price = t.Price,
+            Price = nonExPrice,
             NonExclusivePrice = nonExPrice,
             ExclusivePrice = exPrice,
             CopyrightBuyoutPrice = buyoutPrice,

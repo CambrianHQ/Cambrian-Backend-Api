@@ -43,6 +43,18 @@ public class UploadTrackRequest
     [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
     public decimal? CopyrightBuyoutPrice { get; set; }
 
+    /// <summary>Non-exclusive price in cents (preferred over NonExclusivePrice).</summary>
+    [Range(1, int.MaxValue)]
+    public int? NonExclusivePriceCents { get; set; }
+
+    /// <summary>Exclusive price in cents (preferred over ExclusivePrice).</summary>
+    [Range(1, int.MaxValue)]
+    public int? ExclusivePriceCents { get; set; }
+
+    /// <summary>Copyright buyout price in cents (preferred over CopyrightBuyoutPrice).</summary>
+    [Range(1, int.MaxValue)]
+    public int? CopyrightBuyoutPriceCents { get; set; }
+
     [MaxLength(20)]
     public string? AlbumAssignmentType { get; set; }
 

@@ -1,3 +1,4 @@
+using Cambrian.Api.Common;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -43,15 +44,20 @@ public class UsersController : BaseController
         var trackList = new List<object>();
         foreach (var t in userTracks)
         {
+            var pricing = TrackPricingSnapshot.FromTrack(t);
             trackList.Add(new
             {
                 id = t.Id,
                 title = t.Title,
                 genre = t.Genre,
                 coverArtUrl = ResolveImageUrl(t.CoverArtUrl),
-                nonExclusivePriceCents = t.NonExclusivePriceCents,
-                exclusivePriceCents = t.ExclusivePriceCents,
-                copyrightBuyoutPriceCents = t.CopyrightBuyoutPriceCents,
+                price = pricing.Price,
+                nonExclusivePrice = pricing.NonExclusivePrice,
+                exclusivePrice = pricing.ExclusivePrice,
+                copyrightBuyoutPrice = pricing.CopyrightBuyoutPrice,
+                nonExclusivePriceCents = pricing.NonExclusivePriceCents,
+                exclusivePriceCents = pricing.ExclusivePriceCents,
+                copyrightBuyoutPriceCents = pricing.CopyrightBuyoutPriceCents,
                 createdAt = t.CreatedAt
             });
         }
