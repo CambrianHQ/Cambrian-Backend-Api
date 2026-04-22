@@ -54,7 +54,8 @@ public class AuthController : BaseController
         var result = await _auth.RegisterAsync(request);
         _logger.LogInformation("EVENT: RegisterCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
         AppendAuthCookie(result.Token);
-        return CreatedResponse(ToSession(result));
+        var caps = await ResolveCapabilitiesAsync(result.UserId.ToString());
+        return CreatedResponse(ToSession(result, caps));
     }
 
     [EnableRateLimiting("auth")]
@@ -65,7 +66,8 @@ public class AuthController : BaseController
         var result = await _auth.LoginAsync(request);
         _logger.LogInformation("EVENT: LoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
         AppendAuthCookie(result.Token);
-        return OkResponse(ToSession(result));
+        var caps = await ResolveCapabilitiesAsync(result.UserId.ToString());
+        return OkResponse(ToSession(result, caps));
     }
 
     [HttpGet("google/status")]
@@ -94,7 +96,8 @@ public class AuthController : BaseController
             var result = await _auth.GoogleLoginAsync(request);
             _logger.LogInformation("EVENT: GoogleLoginCompleted userId:{UserId} tier:{Tier}", result.UserId, result.Tier);
             AppendAuthCookie(result.Token);
-            return OkResponse(ToSession(result));
+            var caps = await ResolveCapabilitiesAsync(result.UserId.ToString());
+            return OkResponse(ToSession(result, caps));
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("not configured"))
         {
@@ -263,7 +266,7 @@ public class AuthController : BaseController
         });
     }
 
-    private static object ToSession(AuthResponse auth) => new
+    private static object ToSession(AuthResponse auth, IReadOnlyList<string> capabilities) => new
     {
         token = auth.Token,
         tier = (auth.Tier ?? "free").ToLowerInvariant(),
@@ -278,8 +281,20 @@ public class AuthController : BaseController
             username = auth.Username,
             displayName = auth.DisplayName,
             phoneNumber = auth.PhoneNumber,
-        }
+        },
+        capabilities
     };
+
+    /// <summary>
+    /// Loads the user by id and resolves their capability set. Returns an empty
+    /// array if the user is no longer resolvable (frontend treats missing as 401).
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ResolveCapabilitiesAsync(string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null) return Array.Empty<string>();
+        return await _capabilities.ResolveAsync(user);
+    }
 
     [Authorize]
     [HttpPost("logout")]

@@ -1,0 +1,132 @@
+[
+  {
+    "Name": "ConnectionStrings__DefaultConnection",
+    "RefCount": 5,
+    "References": "governance\\DEPLOYMENT_CHECKLIST.md:96:| `ConnectionStrings__DefaultConnection` | Yes (non-Render) | - | ADO.NET connection string | || manifests\\BACKEND_MANIFEST.json:248:    { \"name\": \"ConnectionStrings__DefaultConnection\", \"required\": false, \"description\": \"ADO.NET connection string (alternative to DATABASE_URL)\" }, || .github\\workflows\\ci.yml:70:          ConnectionStrings__DefaultConnection: \"Host=localhost;Database=ci_openapi;Username=unused;Password=unused\" || scripts\\validate-openapi.ps1:46:$env:ConnectionStrings__DefaultConnection = \"Host=localhost;Database=openapi_gen;Username=unused;Password=unused\" || scripts\\validate-openapi.ps1:48:Remove-Item env:ConnectionStrings__DefaultConnection -ErrorAction SilentlyContinue"
+  },
+  {
+    "Name": "Jwt__Key",
+    "RefCount": 6,
+    "References": "manifests\\BACKEND_MANIFEST.json:250:    { \"name\": \"Jwt__Key\", \"required\": false, \"description\": \"Alternative JWT key binding\" }, || governance\\DEPLOYMENT_CHECKLIST.md:27:   | `Jwt__Key` | Yes | Generate strong secret (`openssl rand -base64 48`), min length 32 | || governance\\DEPLOYMENT_CHECKLIST.md:56:| `Jwt__Key` ≥ 32 chars | All environments | App crashes with `InvalidOperationException` | || governance\\DEPLOYMENT_CHECKLIST.md:97:| `Jwt__Key` (or `JWT_KEY`) | Yes | - | JWT signing secret (>= 32 chars) | || governance\\DEPLOYMENT_CHECKLIST.md:149:- [ ] Set required secrets (`Jwt__Key`, Stripe, storage, email, admin seed) || src\\Cambrian.Api\\StartupExtensions.cs:84:            ?? Environment.GetEnvironmentVariable(\"Jwt__Key\")"
+  },
+  {
+    "Name": "Jwt__Issuer",
+    "RefCount": 2,
+    "References": "README.md:389:| `Jwt__Issuer` | JWT token issuer | || governance\\DEPLOYMENT_CHECKLIST.md:98:| `Jwt__Issuer` | No | `cambrian-api` | JWT issuer claim |"
+  },
+  {
+    "Name": "Jwt__Audience",
+    "RefCount": 2,
+    "References": "README.md:390:| `Jwt__Audience` | JWT token audience | || governance\\DEPLOYMENT_CHECKLIST.md:99:| `Jwt__Audience` | No | `cambrian-client` | JWT audience claim |"
+  },
+  {
+    "Name": "Stripe__SecretKey",
+    "RefCount": 6,
+    "References": "README.md:392:| `Stripe__SecretKey` | Stripe secret API key | || governance\\DEPLOYMENT_CHECKLIST.md:28:   | `Stripe__SecretKey` | Recommended | Use Stripe **test** key in staging | || governance\\DEPLOYMENT_CHECKLIST.md:58:| `Stripe__SecretKey` required | Production | App crashes if missing | || governance\\DEPLOYMENT_CHECKLIST.md:59:| `Stripe__SecretKey` must be `sk_live_` | Production | App crashes if `sk_test_` key is supplied | || governance\\DEPLOYMENT_CHECKLIST.md:100:| `Stripe__SecretKey` | Optional in non-prod | - | Stripe API key | || manifests\\BACKEND_MANIFEST.json:251:    { \"name\": \"Stripe__SecretKey\", \"required\": true, \"description\": \"Stripe API secret key\" },"
+  },
+  {
+    "Name": "Stripe__WebhookSecret",
+    "RefCount": 6,
+    "References": "README.md:393:| `Stripe__WebhookSecret` | Stripe webhook signing secret | || governance\\DEPLOYMENT_CHECKLIST.md:29:   | `Stripe__WebhookSecret` | If webhooks enabled | From Stripe webhook endpoint | || governance\\DEPLOYMENT_CHECKLIST.md:43:   - Copy signing secret into `Stripe__WebhookSecret` || governance\\DEPLOYMENT_CHECKLIST.md:101:| `Stripe__WebhookSecret` | When webhooks enabled | - | Stripe webhook signing secret | || governance\\DEPLOYMENT_CHECKLIST.md:128:| Webhook signature verification fails | Wrong webhook secret | Copy latest Stripe endpoint secret into `Stripe__WebhookSecret` | || manifests\\BACKEND_MANIFEST.json:252:    { \"name\": \"Stripe__WebhookSecret\", \"required\": true, \"description\": \"Stripe webhook signing secret\" },"
+  },
+  {
+    "Name": "Storage__Provider",
+    "RefCount": 8,
+    "References": "README.md:274:- Local storage (`Storage__Provider=local`) is useful for development but is ephemeral in containerized deployments. || README.md:276:  - `Storage__Provider=r2` || manifests\\BACKEND_MANIFEST.json:253:    { \"name\": \"Storage__Provider\", \"required\": true, \"values\": [\"local\", \"s3\", \"r2\"], \"description\": \"Object storage backend\" }, || governance\\DEPLOYMENT_CHECKLIST.md:30:   | `Storage__Provider` | Yes (for persistence) | `r2` or `s3` (leave `local` only for temporary testing) | || governance\\DEPLOYMENT_CHECKLIST.md:60:| `Storage__Provider` must be `s3` or `r2` | Production | App crashes if `local` or unset | || governance\\DEPLOYMENT_CHECKLIST.md:102:| `Storage__Provider` | No | `local` | `local`, `s3`, or `r2` | || governance\\DEPLOYMENT_CHECKLIST.md:126:| `health/storage` fails | Missing or invalid storage credentials | Recheck `Storage__Provider`, endpoint, bucket, access key, secret key | || governance\\DEPLOYMENT_CHECKLIST.md:129:| Uploads disappear after redeploy | Using local storage in containers | Move to `Storage__Provider=r2` or `s3` with persistent bucket |"
+  },
+  {
+    "Name": "Storage__Endpoint",
+    "RefCount": 4,
+    "References": "README.md:394:| `Storage__Endpoint` | S3-compatible storage endpoint URL | || governance\\DEPLOYMENT_CHECKLIST.md:31:   | `Storage__Endpoint` | When `r2`/`s3` | e.g. `https://<account-id>.r2.cloudflarestorage.com` | || governance\\DEPLOYMENT_CHECKLIST.md:103:| `Storage__Endpoint` | When `s3`/`r2` | - | S3-compatible endpoint URL | || manifests\\BACKEND_MANIFEST.json:254:    { \"name\": \"Storage__Endpoint\", \"required\": false, \"description\": \"S3/R2 endpoint URL (required if provider=s3|r2)\" },"
+  },
+  {
+    "Name": "Storage__Bucket",
+    "RefCount": 4,
+    "References": "README.md:395:| `Storage__Bucket` | Storage bucket name | || manifests\\BACKEND_MANIFEST.json:255:    { \"name\": \"Storage__Bucket\", \"required\": false, \"description\": \"Storage bucket name\" }, || governance\\DEPLOYMENT_CHECKLIST.md:38:   `DATABASE_URL`, `Storage__Bucket=cambrian-audio-staging`, `Storage__Region=auto`, and `Storage__UsePathStyle=true` are already defined by `render.yaml`. || governance\\DEPLOYMENT_CHECKLIST.md:104:| `Storage__Bucket` | When `s3`/`r2` | `cambrian-audio` | Bucket name |"
+  },
+  {
+    "Name": "Storage__AccessKey",
+    "RefCount": 4,
+    "References": "README.md:396:| `Storage__AccessKey` | Storage access key | || governance\\DEPLOYMENT_CHECKLIST.md:32:   | `Storage__AccessKey` | When `r2`/`s3` | Storage credential | || governance\\DEPLOYMENT_CHECKLIST.md:105:| `Storage__AccessKey` | When `s3`/`r2` | - | Storage access key | || manifests\\BACKEND_MANIFEST.json:256:    { \"name\": \"Storage__AccessKey\", \"required\": false, \"description\": \"S3/R2 access key (required if provider=s3|r2)\" },"
+  },
+  {
+    "Name": "Storage__SecretKey",
+    "RefCount": 4,
+    "References": "README.md:397:| `Storage__SecretKey` | Storage secret key | || manifests\\BACKEND_MANIFEST.json:257:    { \"name\": \"Storage__SecretKey\", \"required\": false, \"description\": \"S3/R2 secret key (required if provider=s3|r2)\" }, || governance\\DEPLOYMENT_CHECKLIST.md:33:   | `Storage__SecretKey` | When `r2`/`s3` | Storage credential | || governance\\DEPLOYMENT_CHECKLIST.md:106:| `Storage__SecretKey` | When `s3`/`r2` | - | Storage secret key |"
+  },
+  {
+    "Name": "Storage__Region",
+    "RefCount": 7,
+    "References": "README.md:277:  - `Storage__Region=auto` || README.md:286:| Signed stream/download URL returns `403` from R2 | Signature mismatch config | Ensure `Storage__Region=auto` and `Storage__UsePathStyle=true`; verify endpoint/bucket/key pair | || README.md:398:| `Storage__Region` | Storage region (`auto` for Cloudflare R2) | || manifests\\BACKEND_MANIFEST.json:258:    { \"name\": \"Storage__Region\", \"required\": false, \"description\": \"S3 region (use 'auto' for R2)\" }, || governance\\DEPLOYMENT_CHECKLIST.md:38:   `DATABASE_URL`, `Storage__Bucket=cambrian-audio-staging`, `Storage__Region=auto`, and `Storage__UsePathStyle=true` are already defined by `render.yaml`. || governance\\DEPLOYMENT_CHECKLIST.md:107:| `Storage__Region` | When `s3`/`r2` | `auto` | For R2, keep `auto` | || governance\\DEPLOYMENT_CHECKLIST.md:125:| Signed URL returns `403` from R2 | Wrong signature region/path style | Set `Storage__Region=auto` and `Storage__UsePathStyle=true`; confirm endpoint/bucket/keys |"
+  },
+  {
+    "Name": "Storage__LocalPath",
+    "RefCount": 0,
+    "References": ""
+  },
+  {
+    "Name": "Storage__PublicUrl",
+    "RefCount": 4,
+    "References": "README.md:400:| `Storage__PublicUrl` | Optional public bucket base URL (used for cover art URLs) | || manifests\\BACKEND_MANIFEST.json:259:    { \"name\": \"Storage__PublicUrl\", \"required\": false, \"description\": \"Public base URL for assets\" }, || governance\\DEPLOYMENT_CHECKLIST.md:34:   | `Storage__PublicUrl` | Optional | Public bucket URL for cover art links | || governance\\DEPLOYMENT_CHECKLIST.md:109:| `Storage__PublicUrl` | Optional | - | Public base URL for cover art |"
+  },
+  {
+    "Name": "Email__Provider",
+    "RefCount": 4,
+    "References": "manifests\\BACKEND_MANIFEST.json:260:    { \"name\": \"Email__Provider\", \"required\": true, \"values\": [\"console\", \"smtp\", \"resend\", \"sendgrid\"], \"description\": \"Email delivery backend\" }, || governance\\DEPLOYMENT_CHECKLIST.md:35:   | `Email__ResendApiKey` | If `Email__Provider=resend` | Required by staging email setup | || governance\\DEPLOYMENT_CHECKLIST.md:61:| `Email__Provider` must be `smtp` or `resend` | Production | App crashes if `console` or unset | || governance\\DEPLOYMENT_CHECKLIST.md:110:| `Email__Provider` | No | `console` | `console`, `smtp`, `resend`, `sendgrid` |"
+  },
+  {
+    "Name": "Email__FromAddress",
+    "RefCount": 2,
+    "References": "manifests\\BACKEND_MANIFEST.json:266:    { \"name\": \"Email__FromAddress\", \"required\": false, \"description\": \"Sender email address\" }, || scripts\\start-resend-mcp.ps1:29:    $env:Email__FromAddress"
+  },
+  {
+    "Name": "Email__FromName",
+    "RefCount": 1,
+    "References": "manifests\\BACKEND_MANIFEST.json:267:    { \"name\": \"Email__FromName\", \"required\": false, \"description\": \"Sender display name\" },"
+  },
+  {
+    "Name": "Email__ResendApiKey",
+    "RefCount": 4,
+    "References": "manifests\\BACKEND_MANIFEST.json:265:    { \"name\": \"Email__ResendApiKey\", \"required\": false, \"description\": \"Resend API key\" }, || governance\\DEPLOYMENT_CHECKLIST.md:35:   | `Email__ResendApiKey` | If `Email__Provider=resend` | Required by staging email setup | || governance\\DEPLOYMENT_CHECKLIST.md:111:| `Email__ResendApiKey` | When provider=`resend` | - | Resend API key | || scripts\\start-resend-mcp.ps1:17:    $env:Email__ResendApiKey"
+  },
+  {
+    "Name": "Sms__Provider",
+    "RefCount": 0,
+    "References": ""
+  },
+  {
+    "Name": "Sms__TwilioAccountSid",
+    "RefCount": 0,
+    "References": ""
+  },
+  {
+    "Name": "Sms__TwilioAuthToken",
+    "RefCount": 0,
+    "References": ""
+  },
+  {
+    "Name": "Sms__TwilioFromNumber",
+    "RefCount": 0,
+    "References": ""
+  },
+  {
+    "Name": "App__FrontendUrl",
+    "RefCount": 2,
+    "References": "governance\\DEPLOYMENT_CHECKLIST.md:62:| `App__FrontendUrl` required | Production | App crashes if missing | || governance\\DEPLOYMENT_CHECKLIST.md:113:| `App__FrontendUrl` | Yes | - | Primary frontend origin |"
+  },
+  {
+    "Name": "App__CorsOrigins",
+    "RefCount": 4,
+    "References": "README.md:289:| Browser CORS failures from preview deploys | Missing origin allow-list | Configure `App__CorsOrigins` and `App__VercelProjectSlug` for preview environments | || governance\\DEPLOYMENT_CHECKLIST.md:85:- `App__CorsOrigins` for explicit domains || governance\\DEPLOYMENT_CHECKLIST.md:114:| `App__CorsOrigins` | Yes | - | Comma-separated allowed origins | || governance\\DEPLOYMENT_CHECKLIST.md:127:| CORS failures from preview frontends | Origin not allowlisted | Add explicit origin to `App__CorsOrigins` or set `App__VercelProjectSlug` |"
+  },
+  {
+    "Name": "RateLimiting__GlobalPermitLimit",
+    "RefCount": 1,
+    "References": "governance\\DEPLOYMENT_CHECKLIST.md:116:| `RateLimiting__GlobalPermitLimit` | No | `100` | Requests/min per IP |"
+  },
+  {
+    "Name": "RateLimiting__AuthPermitLimit",
+    "RefCount": 1,
+    "References": "governance\\DEPLOYMENT_CHECKLIST.md:117:| `RateLimiting__AuthPermitLimit` | No | `10` | Auth requests/min per IP |"
+  }
+]

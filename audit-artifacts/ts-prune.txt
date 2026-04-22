@@ -1,0 +1,20 @@
+C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:1897
+            throw this.getFileNotFoundErrorIfNecessary(err, filePath);
+            ^
+System.Management.Automation.RemoteException
+FileNotFoundError: File not found: C:/Users/logan/Cambrian-Backend-Api/tsconfig.json
+    at RealFileSystemHost.getFileNotFoundErrorIfNecessary (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:1955:50)
+    at RealFileSystemHost.readFileSync (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:1897:24)
+    at TransactionalFileSystem.readFileSync (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:2431:32)
+    at TsConfigResolver.getTsConfigFileJson (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:2985:38)
+    at TsConfigResolver.decorator (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:2811:46)
+    at TsConfigResolver.parseJsonConfigFileContent (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:2981:70)
+    at TsConfigResolver.decorator (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:2811:46)
+    at TsConfigResolver.getCompilerOptions (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:2950:21)
+    at TsConfigResolver.decorator (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\@ts-morph\common\dist\ts-morph-common.js:2811:46)
+    at getTsConfigCompilerOptions (C:\Users\logan\AppData\Local\npm-cache\_npx\1532855dfcb86dac\node_modules\ts-morph\dist\ts-morph.js:20009:111) {
+  path: 'C:/Users/logan/Cambrian-Backend-Api/tsconfig.json',
+  code: 'ENOENT'
+}
+System.Management.Automation.RemoteException
+Node.js v24.13.0

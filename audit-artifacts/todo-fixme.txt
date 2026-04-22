@@ -1,0 +1,22 @@
+contracts\openapi.v1.json:7108:            "description": "UUID or CambrianTrackId (CAMB-TRK-XXXX)."
+docs\quickstart.md:110:The response wraps a single track in `{ success, data }`. You can pass either the short `CAMB-TRK-XXXX` identifier or the internal UUID.
+docs\quickstart.md:142:| `trackId`           | yes      | `CAMB-TRK-XXXX` or UUID                                                  |
+docs\tutorials\license-music-programmatically.md:157:        cambrianId: t.cambrianTrackId, // the CAMB-TRK-XXXX form, friendlier for humans
+architecture\ARCHITECTURE.md:104:- Identified by `CambrianTrackId` (format: `CAMB-TRK-XXXXXXXX`)
+scripts\extend-openapi.cjs:4: *  1. Track ID system (CAMB-TRK-XXXX)
+src\Cambrian.Infrastructure\Storage\R2ObjectStorage.cs:12:        // TODO: Implement R2 upload via S3-compatible API
+src\Cambrian.Infrastructure\Storage\R2ObjectStorage.cs:19:        // TODO: Implement signed URL generation
+src\Cambrian.Infrastructure\Storage\R2ObjectStorage.cs:30:        // TODO: Implement R2 download
+src\Cambrian.Infrastructure\Storage\R2ObjectStorage.cs:36:        // TODO: Implement R2 delete
+src\Cambrian.Persistence\Migrations\20260312135748_AddTrackIdLicenseCertificateUsageTypeSearchFilters.cs:22:            // Step 2: Backfill existing rows with unique CAMB-TRK-XXXXXXXX identifiers.
+src\Cambrian.Domain\Entities\LicenseCertificate.cs:10:    /// <summary>The Cambrian track identifier (CAMB-TRK-XXXX).</summary>
+src\Cambrian.Application\Services\ApiKeyService.cs:23:        var keyPrefix = rawKey[..8]; // "cbr_XXXX"
+src\Cambrian.Application\DTOs\V1\LicensePurchaseRequest.cs:11:    /// <summary>UUID or CambrianTrackId (CAMB-TRK-XXXX) of the track to license.</summary>
+src\Cambrian.Application\DTOs\Catalog\TrackResponse.cs:7:    /// <summary>Cambrian track identifier (CAMB-TRK-XXXX).</summary>
+src\Cambrian.Application\DTOs\Catalog\TrackIdDto.cs:7:/// Represents a unique Cambrian track identifier (format: CAMB-TRK-XXXX).
+src\Cambrian.Application\DTOs\Catalog\TrackIdDto.cs:14:        ErrorMessage = "TrackId must match format CAMB-TRK-XXXX (4-12 alphanumeric chars).")]
+src\Cambrian.Application\DTOs\Catalog\TrackIdDto.cs:32:    /// Validate that a string matches the CAMB-TRK-XXXX pattern.
+src\Cambrian.Api\Controllers\WebhookController.cs:94:            // TODO: handle inbound email — parse evt.Data for from/subject/attachments
+src\Cambrian.Application\DTOs\Licenses\LicenseCertificateDto.cs:11:    /// <summary>Cambrian track identifier (CAMB-TRK-XXXX).</summary>
+src\Cambrian.Api\Controllers\v1\TracksV1Controller.cs:71:    /// <summary>Get a single track by its Cambrian track ID (CAMB-TRK-XXXX) or UUID.</summary>
+src\Cambrian.Application\Interfaces\ITrackRepository.cs:18:    /// <summary>Lookup a track by its Cambrian track ID (CAMB-TRK-XXXX).</summary>

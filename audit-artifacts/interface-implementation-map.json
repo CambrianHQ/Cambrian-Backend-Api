@@ -1,0 +1,272 @@
+[
+  {
+    "Interface": "IActivityBackfillService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Services\\ActivityBackfillService.cs:8:public sealed class ActivityBackfillService : IActivityBackfillService"
+  },
+  {
+    "Interface": "IActivityService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Services\\ActivityService.cs:8:public sealed class ActivityService : IActivityService"
+  },
+  {
+    "Interface": "IAdminRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\AdminRepository.cs:11:public class AdminRepository : IAdminRepository"
+  },
+  {
+    "Interface": "IAdminService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\AdminService.cs:6:public class AdminService : IAdminService"
+  },
+  {
+    "Interface": "IAnalyticsRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\AnalyticsRepository.cs:7:public class AnalyticsRepository : IAnalyticsRepository"
+  },
+  {
+    "Interface": "IAnalyticsService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Services\\AnalyticsService.cs:8:public sealed class AnalyticsService : IAnalyticsService"
+  },
+  {
+    "Interface": "IApiKeyRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\ApiKeyRepository.cs:7:public class ApiKeyRepository : IApiKeyRepository"
+  },
+  {
+    "Interface": "IApiKeyService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\ApiKeyService.cs:9:public class ApiKeyService : IApiKeyService"
+  },
+  {
+    "Interface": "IAuthService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\AuthService.cs:19:public class AuthService : IAuthService"
+  },
+  {
+    "Interface": "IBillingService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\BillingService.cs:12:public sealed class BillingService : IBillingService"
+  },
+  {
+    "Interface": "ICatalogService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\CatalogService.cs:10:public class CatalogService : ICatalogService"
+  },
+  {
+    "Interface": "ICheckoutService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\CheckoutService.cs:15:public class CheckoutService : ICheckoutService"
+  },
+  {
+    "Interface": "ICreatorConnectService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\CreatorConnectService.cs:9:public class CreatorConnectService : ICreatorConnectService"
+  },
+  {
+    "Interface": "ICreatorIdentityRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\CreatorIdentityRepository.cs:15:public sealed class CreatorIdentityRepository : ICreatorIdentityRepository"
+  },
+  {
+    "Interface": "ICreatorProfileRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\CreatorProfileRepository.cs:9:public sealed class CreatorProfileRepository : ICreatorProfileRepository"
+  },
+  {
+    "Interface": "ICreatorService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\CreatorService.cs:11:public class CreatorService : ICreatorService"
+  },
+  {
+    "Interface": "IDebugService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Services\\DebugService.cs:7:public class DebugService : IDebugService"
+  },
+  {
+    "Interface": "IDownloadService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\DownloadService.cs:5:public class DownloadService : IDownloadService"
+  },
+  {
+    "Interface": "IEmailService",
+    "ImplCount": 3,
+    "Implementations": "src\\Cambrian.Infrastructure\\Email\\SmtpEmailService.cs:14:public sealed class SmtpEmailService : IEmailService || src\\Cambrian.Infrastructure\\Email\\ResendEmailService.cs:15:public sealed class ResendEmailService : IEmailService || src\\Cambrian.Infrastructure\\Email\\ConsoleEmailService.cs:9:public sealed class ConsoleEmailService : IEmailService"
+  },
+  {
+    "Interface": "IEntitlementService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\EntitlementService.cs:10:public sealed class EntitlementService : IEntitlementService"
+  },
+  {
+    "Interface": "IFeatureFlagRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\FeatureFlagRepository.cs:7:public class FeatureFlagRepository : IFeatureFlagRepository"
+  },
+  {
+    "Interface": "IFeatureFlagService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Infrastructure\\FeatureFlags\\ConfigurationFeatureFlagService.cs:7:public sealed class ConfigurationFeatureFlagService : IFeatureFlagService"
+  },
+  {
+    "Interface": "IFeeService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\FeeService.cs:7:public sealed class FeeService : IFeeService"
+  },
+  {
+    "Interface": "IHealthService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Services\\HealthService.cs:8:public class HealthService : IHealthService"
+  },
+  {
+    "Interface": "IIdempotencyStore",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\IdempotencyStore.cs:12:public sealed class IdempotencyStore : IIdempotencyStore"
+  },
+  {
+    "Interface": "IInvoiceRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\InvoiceRepository.cs:7:public class InvoiceRepository : IInvoiceRepository"
+  },
+  {
+    "Interface": "IInvoiceService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\InvoiceService.cs:6:public class InvoiceService : IInvoiceService"
+  },
+  {
+    "Interface": "ILibraryRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\LibraryRepository.cs:7:public class LibraryRepository : ILibraryRepository"
+  },
+  {
+    "Interface": "ILibraryService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\LibraryService.cs:11:public class LibraryService : ILibraryService"
+  },
+  {
+    "Interface": "ILicenseCertificateRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\LicenseCertificateRepository.cs:7:public class LicenseCertificateRepository : ILicenseCertificateRepository"
+  },
+  {
+    "Interface": "ILicenseService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\LicenseService.cs:7:public class LicenseService : ILicenseService"
+  },
+  {
+    "Interface": "ILocalDeliveryDebugStore",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Infrastructure\\Diagnostics\\LocalDeliveryDebugStore.cs:6:public sealed class LocalDeliveryDebugStore : ILocalDeliveryDebugStore"
+  },
+  {
+    "Interface": "IMarketplaceIntegrityService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Services\\MarketplaceIntegrityService.cs:8:public class MarketplaceIntegrityService : IMarketplaceIntegrityService"
+  },
+  {
+    "Interface": "IObjectStorage",
+    "ImplCount": 4,
+    "Implementations": "src\\Cambrian.Infrastructure\\Storage\\S3ObjectStorage.cs:33:public sealed class S3ObjectStorage : IObjectStorage || src\\Cambrian.Infrastructure\\Storage\\R2ObjectStorage.cs:8:public class R2ObjectStorage : IObjectStorage || src\\Cambrian.Infrastructure\\Storage\\LocalObjectStorage.cs:10:public sealed class LocalObjectStorage : IObjectStorage || tests\\Cambrian.Api.Tests\\Fixtures\\CambrianApiFixture.cs:439:internal sealed class FakeObjectStorage : IObjectStorage"
+  },
+  {
+    "Interface": "IPaymentGateway",
+    "ImplCount": 3,
+    "Implementations": "src\\Cambrian.Infrastructure\\Stripe\\StripeFacade.cs:8:public class StripeFacade : IPaymentGateway || src\\Cambrian.Infrastructure\\Stripe\\DevelopmentPaymentGateway.cs:12:public sealed class DevelopmentPaymentGateway : IPaymentGateway || tests\\Cambrian.Api.Tests\\Fixtures\\CambrianApiFixture.cs:375:internal sealed class FakePaymentGateway : IPaymentGateway"
+  },
+  {
+    "Interface": "IPaymentService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\PaymentService.cs:9:public class PaymentService : IPaymentService"
+  },
+  {
+    "Interface": "IPayoutRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\PayoutRepository.cs:7:public class PayoutRepository : IPayoutRepository"
+  },
+  {
+    "Interface": "IPayoutService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\PayoutService.cs:11:public class PayoutService : IPayoutService"
+  },
+  {
+    "Interface": "IPurchaseRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\PurchaseRepository.cs:8:public class PurchaseRepository : IPurchaseRepository"
+  },
+  {
+    "Interface": "IPurchaseService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\PurchaseService.cs:8:public class PurchaseService : IPurchaseService"
+  },
+  {
+    "Interface": "ISmsService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Infrastructure\\Sms\\ConsoleSmsService.cs:9:public sealed class ConsoleSmsService : ISmsService"
+  },
+  {
+    "Interface": "IStorefrontService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\StorefrontService.cs:10:public sealed class StorefrontService : IStorefrontService"
+  },
+  {
+    "Interface": "IStreamRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\StreamRepository.cs:7:public class StreamRepository : IStreamRepository"
+  },
+  {
+    "Interface": "IStreamService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\StreamService.cs:5:public class StreamService : IStreamService"
+  },
+  {
+    "Interface": "ISubscriptionRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\SubscriptionRepository.cs:7:public class SubscriptionRepository : ISubscriptionRepository"
+  },
+  {
+    "Interface": "ISubscriptionService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\SubscriptionService.cs:10:public class SubscriptionService : ISubscriptionService"
+  },
+  {
+    "Interface": "ITierService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\TierService.cs:6:public class TierService : ITierService"
+  },
+  {
+    "Interface": "ITrackRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\TrackRepository.cs:8:public class TrackRepository : ITrackRepository"
+  },
+  {
+    "Interface": "ITrackVisibilityPolicy",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\TrackVisibilityPolicy.cs:10:public sealed class TrackVisibilityPolicy : ITrackVisibilityPolicy"
+  },
+  {
+    "Interface": "ITransactionManager",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\EfTransactionManager.cs:7:public sealed class EfTransactionManager : ITransactionManager"
+  },
+  {
+    "Interface": "IUploadService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\UploadService.cs:12:public class UploadService : IUploadService"
+  },
+  {
+    "Interface": "IWalletRepository",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Persistence\\Repositories\\WalletRepository.cs:7:public class WalletRepository : IWalletRepository"
+  },
+  {
+    "Interface": "IWalletService",
+    "ImplCount": 1,
+    "Implementations": "src\\Cambrian.Application\\Services\\WalletService.cs:7:public class WalletService : IWalletService"
+  },
+  {
+    "Interface": "IWebhookService",
+    "ImplCount": 2,
+    "Implementations": "src\\Cambrian.Infrastructure\\Stripe\\StripeWebhookService.cs:20:public class StripeWebhookService : IWebhookService || tests\\Cambrian.Api.Tests\\Fixtures\\TestWebhookService.cs:16:internal sealed class TestWebhookService : IWebhookService"
+  }
+]
