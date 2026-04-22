@@ -1,14 +1,17 @@
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Auth;
 using Cambrian.Domain.Entities;
+using Cambrian.Domain.Enums;
 
 namespace Cambrian.Application.Auth;
 
 /// <summary>
-/// Resolves capabilities for a user based on their state in the database.
+/// Resolves capabilities for a user. Mirrors the frontend contract in
+/// `src/lib/auth/capabilities.ts` — any divergence will silently gate UI.
 /// </summary>
 public sealed class CapabilityResolver : ICapabilityResolver
 {
+    // Retained for future capability gates that need feature-flag awareness.
     private readonly IFeatureFlagRepository _featureFlags;
 
     public CapabilityResolver(IFeatureFlagRepository featureFlags)
@@ -16,39 +19,39 @@ public sealed class CapabilityResolver : ICapabilityResolver
         _featureFlags = featureFlags;
     }
 
-    public async Task<IReadOnlyList<string>> ResolveAsync(ApplicationUser user)
+    public Task<IReadOnlyList<string>> ResolveAsync(ApplicationUser user)
     {
-        // Admin gets all capabilities
-        if (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase))
-            return Capabilities.All;
-
-        var caps = new List<string>();
-
-        // Every authenticated user can purchase licenses
-        caps.Add(Capabilities.LicensePurchase);
-
-        // Track upload: user has Creator role or has set a username (creator onboarding complete)
+        var isAdmin = string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase);
         var isCreator = string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase);
-        var hasUsername = !string.IsNullOrWhiteSpace(user.UserName)
-                         && !string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+        var isPro = user.CreatorTier == CreatorTier.Pro
+                    || string.Equals(user.Tier, "pro", StringComparison.OrdinalIgnoreCase);
 
-        if (isCreator || hasUsername)
+        var caps = new List<string>(capacity: 10)
+        {
+            Capabilities.LicensePurchase
+        };
+
+        if (isCreator || isAdmin)
         {
             caps.Add(Capabilities.TrackUpload);
             caps.Add(Capabilities.TrackEditOwn);
             caps.Add(Capabilities.TrackDeleteOwn);
+            caps.Add(Capabilities.CreatorDashboardView);
         }
 
-        // Payout: requires Stripe Connect account AND the feature flag is enabled
-        if (!string.IsNullOrWhiteSpace(user.StripeAccountId))
+        if (isPro || isAdmin)
         {
-            var stripeConnectEnabled = await _featureFlags.IsEnabledAsync("StripeConnectEnabled");
-            if (stripeConnectEnabled)
-            {
-                caps.Add(Capabilities.PayoutRequest);
-            }
+            caps.Add(Capabilities.PayoutRequest);
+            caps.Add(Capabilities.InvoiceDownload);
+            caps.Add(Capabilities.TrackLicenseExclusive);
+            caps.Add(Capabilities.TrackLicenseBuyout);
         }
 
-        return caps;
+        if (isAdmin)
+        {
+            caps.Add(Capabilities.AdminAccess);
+        }
+
+        return Task.FromResult<IReadOnlyList<string>>(caps);
     }
 }

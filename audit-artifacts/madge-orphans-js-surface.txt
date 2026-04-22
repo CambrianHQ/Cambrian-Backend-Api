@@ -1,0 +1,26 @@
+- Finding files
+Processed 22 files (1.3s) (7 warnings)
+
+loadtests/authenticated.js
+loadtests/catalog.js
+loadtests/resilience.js
+loadtests/smoke.js
+loadtests/streaming.js
+migrate-storage.mjs
+scripts/check-contract-drift.cjs
+scripts/detect-breaking-changes.cjs
+scripts/detect-email-leaks.cjs
+scripts/email-pro-upgrade/list-recipients.mjs
+scripts/email-pro-upgrade/send-pro-upgrade-email.mjs
+scripts/extend-openapi.cjs
+scripts/fix-stale-openapi.cjs
+scripts/generate-endpoint-manifest.cjs
+scripts/patch-openapi-avatar.cjs
+scripts/patch-openapi-contract.cjs
+scripts/patch-openapi-routes.cjs
+scripts/patch-openapi.cjs
+scripts/reconcile-contracts.cjs
+scripts/validate-contracts.cjs
+seed/scripts/build-demo-catalog.mjs
+tools/export-postman/export-postman.mjs
+

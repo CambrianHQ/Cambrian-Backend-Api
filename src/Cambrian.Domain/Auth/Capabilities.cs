@@ -1,26 +1,37 @@
 namespace Cambrian.Domain.Auth;
 
 /// <summary>
-/// Defines all capability constants for the capability-based authorization system.
-/// These are the single source of truth for all permissions in the system.
+/// Single source of truth for capability strings.
+/// Frontend contract: `src/lib/auth/capabilities.ts`. Strings not in the
+/// frontend list are ignored client-side but may still gate backend policies.
 /// </summary>
 public static class Capabilities
 {
+    // Frontend-facing
+    public const string LicensePurchase = "license.purchase";
     public const string TrackUpload = "track.upload";
     public const string TrackEditOwn = "track.edit.own";
-    public const string TrackDeleteOwn = "track.delete.own";
-    public const string LicensePurchase = "license.purchase";
+    public const string TrackLicenseExclusive = "track.license.exclusive";
+    public const string TrackLicenseBuyout = "track.license.buyout";
     public const string PayoutRequest = "payout.request";
+    public const string CreatorDashboardView = "creator.dashboard.view";
+    public const string InvoiceDownload = "invoice.download";
     public const string AdminAccess = "admin.access";
 
-    /// <summary>All capabilities that exist in the system.</summary>
+    // Backend-only — gates server policies, ignored by the frontend.
+    public const string TrackDeleteOwn = "track.delete.own";
+
     public static readonly IReadOnlyList<string> All = new[]
     {
+        LicensePurchase,
         TrackUpload,
         TrackEditOwn,
         TrackDeleteOwn,
-        LicensePurchase,
+        TrackLicenseExclusive,
+        TrackLicenseBuyout,
         PayoutRequest,
+        CreatorDashboardView,
+        InvoiceDownload,
         AdminAccess
     };
 }
