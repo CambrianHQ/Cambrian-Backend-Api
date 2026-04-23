@@ -293,11 +293,11 @@ public class TrackRepository : ITrackRepository
         if (!string.IsNullOrWhiteSpace(search))
         {
             // Match against title, description, genre/subgenre/primaryGenre, mood,
-            // and either creator nav (Creator = legacy ApplicationUser,
-            // CreatorEntity = canonical Creator row). Tags are stored as a
-            // comma-joined string via a value converter so querying them in SQL
-            // would bypass the converter — left for a follow-up that adds a
-            // shadow column or switches Tags to a Postgres array.
+            // creator nav (Creator = legacy ApplicationUser, CreatorEntity =
+            // canonical Creator row), and tags. Tags is stored as a comma-joined
+            // string via a value converter; access via (string)(object)t.Tags lets
+            // EF resolve the store type (string) through the normal member-access
+            // path and generate LOWER("Tags") LIKE '%needle%' in SQL.
             var needle = search.ToLower();
             if (includeTaxonomyColumns)
             {
@@ -308,6 +308,7 @@ public class TrackRepository : ITrackRepository
                     (t.PrimaryGenre != null && t.PrimaryGenre.ToLower().Contains(needle)) ||
                     (t.Subgenre != null && t.Subgenre.ToLower().Contains(needle)) ||
                     (t.Mood != null && t.Mood.ToLower().Contains(needle)) ||
+                    ((string)(object)t.Tags).ToLower().Contains(needle) ||
                     (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
                     (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
                     (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)));
@@ -320,6 +321,7 @@ public class TrackRepository : ITrackRepository
                     (t.Description != null && t.Description.ToLower().Contains(needle)) ||
                     (t.Genre != null && t.Genre.ToLower().Contains(needle)) ||
                     (t.Mood != null && t.Mood.ToLower().Contains(needle)) ||
+                    ((string)(object)t.Tags).ToLower().Contains(needle) ||
                     (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
                     (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
                     (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)));
