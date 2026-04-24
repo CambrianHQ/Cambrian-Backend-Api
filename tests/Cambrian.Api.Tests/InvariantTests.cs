@@ -1,5 +1,6 @@
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -68,7 +69,10 @@ public sealed class InvariantTests
         var repo = Substitute.For<IPurchaseRepository>();
         repo.HasCompletedPurchaseAsync("user-1", trackId).Returns(false);
 
-        var svc = new EntitlementService(repo);
+        var svc = new EntitlementService(
+            repo,
+            Substitute.For<IEntitlementRepository>(),
+            NullLogger<EntitlementService>.Instance);
         Assert.False(await svc.CanDownloadAsync("user-1", trackId));
     }
 
@@ -79,7 +83,10 @@ public sealed class InvariantTests
         var repo = Substitute.For<IPurchaseRepository>();
         repo.HasCompletedPurchaseAsync("user-1", trackId).Returns(true);
 
-        var svc = new EntitlementService(repo);
+        var svc = new EntitlementService(
+            repo,
+            Substitute.For<IEntitlementRepository>(),
+            NullLogger<EntitlementService>.Instance);
         Assert.True(await svc.CanDownloadAsync("user-1", trackId));
     }
 
@@ -91,7 +98,10 @@ public sealed class InvariantTests
         var repo = Substitute.For<IPurchaseRepository>();
         repo.HasCompletedPurchaseAsync(userId, trackId).Returns(true);
 
-        var svc = new EntitlementService(repo);
+        var svc = new EntitlementService(
+            repo,
+            Substitute.For<IEntitlementRepository>(),
+            NullLogger<EntitlementService>.Instance);
         await svc.CanDownloadAsync(userId, trackId);
 
         await repo.Received(1).HasCompletedPurchaseAsync(userId, trackId);
