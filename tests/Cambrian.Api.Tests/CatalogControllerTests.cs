@@ -16,7 +16,7 @@ namespace Cambrian.Api.Tests;
 /// <summary>
 /// Controller-level tests for CatalogController covering discover, catalog,
 /// individual track retrieval, and trending endpoints. Verifies parameter
-/// clamping, GUID validation, and 404 responses for missing tracks.
+/// clamping, friendly track ID lookup, and 404 responses for missing tracks.
 /// </summary>
 public sealed class CatalogControllerTests
 {
@@ -168,14 +168,16 @@ public sealed class CatalogControllerTests
     // ── GetTrack ──
 
     [Fact]
-    public async Task GetTrack_Returns400_WhenTrackIdNotGuid()
+    public async Task GetTrack_Returns404_WhenFriendlyTrackIdNotFound()
     {
+        _catalog.GetTrackAsync("not-a-guid").Returns((TrackResponse?)null);
+
         var result = await _controller.GetTrack("not-a-guid");
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        var envelope = Assert.IsType<ApiResponse<object?>>(notFound.Value);
         Assert.False(envelope.Success);
-        Assert.Contains("GUID", envelope.Error);
+        Assert.Contains("not found", envelope.Error);
     }
 
     [Fact]
@@ -205,6 +207,23 @@ public sealed class CatalogControllerTests
         var result = await _controller.GetTrack(trackId);
 
         Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task GetTrack_Returns200_WhenCambrianTrackIdFound()
+    {
+        const string trackId = "CAMB-TRK-ABC12345";
+        _catalog.GetTrackAsync(trackId).Returns(new TrackResponse
+        {
+            Id = Guid.NewGuid().ToString(),
+            CambrianTrackId = trackId,
+            Title = "My Beat"
+        });
+
+        var result = await _controller.GetTrack(trackId);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _catalog.Received(1).GetTrackAsync(trackId);
     }
 
     // ── Trending ──

@@ -10,13 +10,30 @@ namespace Cambrian.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<int>(
+                name: "PasswordResetAttemptCount",
+                table: "AspNetUsers",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
 
+            migrationBuilder.AddColumn<global::System.DateTime>(
+                name: "PasswordResetLockedUntil",
+                table: "AspNetUsers",
+                type: "timestamp with time zone",
+                nullable: true);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropColumn(
+                name: "PasswordResetLockedUntil",
+                table: "AspNetUsers");
 
+            migrationBuilder.DropColumn(
+                name: "PasswordResetAttemptCount",
+                table: "AspNetUsers");
         }
     }
 }
