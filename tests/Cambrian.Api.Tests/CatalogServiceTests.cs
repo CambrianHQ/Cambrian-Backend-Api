@@ -25,8 +25,10 @@ public sealed class CatalogServiceTests
     }
 
     [Fact]
-    public async Task GetTrackAsync_ReturnsNull_WhenIdIsNotGuid()
+    public async Task GetTrackAsync_ReturnsNull_WhenCambrianTrackIdNotFound()
     {
+        _tracks.GetByCambrianTrackIdAsync("not-a-guid").Returns((Track?)null);
+
         var result = await _sut.GetTrackAsync("not-a-guid");
 
         Assert.Null(result);
@@ -77,6 +79,30 @@ public sealed class CatalogServiceTests
         Assert.False(result.ExclusiveSold);
         Assert.Equal("DJ Test", result.Artist);
         Assert.Equal("Lo-fi", result.Genre);
+    }
+
+    [Fact]
+    public async Task GetTrackAsync_LooksUpCambrianTrackId()
+    {
+        var id = Guid.NewGuid();
+        var cambrianTrackId = "CAMB-TRK-ABC12345";
+        var track = new Track
+        {
+            Id = id,
+            CambrianTrackId = cambrianTrackId,
+            Title = "Frontend Route Beat",
+            Price = 19.99m,
+            LicenseType = "non-exclusive",
+            Visibility = "public"
+        };
+        _tracks.GetByCambrianTrackIdAsync(cambrianTrackId).Returns(track);
+
+        var result = await _sut.GetTrackAsync(cambrianTrackId);
+
+        Assert.NotNull(result);
+        Assert.Equal(id.ToString(), result!.Id);
+        Assert.Equal(cambrianTrackId, result.CambrianTrackId);
+        Assert.Equal("Frontend Route Beat", result.Title);
     }
 
     [Fact]
