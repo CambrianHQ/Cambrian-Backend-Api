@@ -70,10 +70,9 @@ public class CatalogService : ICatalogService
 
     public async Task<TrackResponse?> GetTrackAsync(string trackId)
     {
-        if (!Guid.TryParse(trackId, out var id))
-            return null;
-
-        var track = await _tracks.GetByIdAsync(id);
+        var track = Guid.TryParse(trackId, out var id)
+            ? await _tracks.GetByIdAsync(id)
+            : await _tracks.GetByCambrianTrackIdAsync(trackId);
 
         return track is null ? null : await MapToResponseAsync(track);
     }

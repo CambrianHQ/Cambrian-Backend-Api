@@ -53,6 +53,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
+    public DbSet<Entitlement> Entitlements => Set<Entitlement>();
+
     public DbSet<ApiIdempotencyKey> ApiIdempotencyKeys => Set<ApiIdempotencyKey>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -346,6 +348,9 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
         // ── Activity items (backfill-safe display layer) ──
         builder.ApplyConfiguration(new ActivityItemConfiguration());
+
+        // ── Unified entitlement system (Chunk 1 — access control across all resources) ──
+        builder.ApplyConfiguration(new EntitlementConfiguration());
 
         // ── Track extensions (additive, nullable / defaulted) ──
         builder.Entity<Track>(e =>

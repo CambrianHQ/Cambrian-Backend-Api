@@ -415,6 +415,7 @@ builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
 builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
+builder.Services.AddScoped<IEntitlementRepository, EntitlementRepository>();
 builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 
 // Infrastructure

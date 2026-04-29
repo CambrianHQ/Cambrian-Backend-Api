@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using Cambrian.Api.Common;
 using Cambrian.Api.Contracts.Catalog;
 using Cambrian.Api.Controllers;
@@ -7,6 +8,7 @@ using Cambrian.Application.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
 namespace Cambrian.Api.Tests;
@@ -14,7 +16,7 @@ namespace Cambrian.Api.Tests;
 /// <summary>
 /// Controller-level tests for CatalogController covering discover, catalog,
 /// individual track retrieval, and trending endpoints. Verifies parameter
-/// clamping, GUID validation, and 404 responses for missing tracks.
+/// clamping, friendly track ID lookup, and 404 responses for missing tracks.
 /// </summary>
 public sealed class CatalogControllerTests
 {
@@ -166,14 +168,16 @@ public sealed class CatalogControllerTests
     // ── GetTrack ──
 
     [Fact]
-    public async Task GetTrack_Returns400_WhenTrackIdNotGuid()
+    public async Task GetTrack_Returns404_WhenFriendlyTrackIdNotFound()
     {
+        _catalog.GetTrackAsync("not-a-guid").Returns((TrackResponse?)null);
+
         var result = await _controller.GetTrack("not-a-guid");
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        var envelope = Assert.IsType<ApiResponse<object?>>(notFound.Value);
         Assert.False(envelope.Success);
-        Assert.Contains("GUID", envelope.Error);
+        Assert.Contains("not found", envelope.Error);
     }
 
     [Fact]
@@ -205,6 +209,23 @@ public sealed class CatalogControllerTests
         Assert.IsType<OkObjectResult>(result);
     }
 
+    [Fact]
+    public async Task GetTrack_Returns200_WhenCambrianTrackIdFound()
+    {
+        const string trackId = "CAMB-TRK-ABC12345";
+        _catalog.GetTrackAsync(trackId).Returns(new TrackResponse
+        {
+            Id = Guid.NewGuid().ToString(),
+            CambrianTrackId = trackId,
+            Title = "My Beat"
+        });
+
+        var result = await _controller.GetTrack(trackId);
+
+        Assert.IsType<OkObjectResult>(result);
+        await _catalog.Received(1).GetTrackAsync(trackId);
+    }
+
     // ── Trending ──
 
     [Fact]
@@ -227,5 +248,71 @@ public sealed class CatalogControllerTests
         var result = await _controller.ListTracks();
 
         Assert.IsType<OkObjectResult>(result);
+    }
+}
+
+/// <summary>
+/// Integration test: catalog search must match on Tags, not just title/genre/mood.
+/// Regression test for BUG-S4-03.
+/// </summary>
+[Trait("Category", "Integration")]
+public sealed class CatalogSearchIntegrationTests : IClassFixture<Cambrian.Api.Tests.Fixtures.CambrianApiFixture>
+{
+    private readonly Cambrian.Api.Tests.Fixtures.CambrianApiFixture _fixture;
+
+    public CatalogSearchIntegrationTests(Cambrian.Api.Tests.Fixtures.CambrianApiFixture fixture)
+        => _fixture = fixture;
+
+    [Fact]
+    public async Task Catalog_Search_Matches_On_Tags()
+    {
+        // Seed a creator
+        var email = $"tagsearch-{Guid.NewGuid():N}@cambrian.com";
+        await _fixture.RegisterUserAsync(email, "Test1234!@");
+        var creatorId = await _fixture.GetUserIdAsync(email);
+        await _fixture.SetUserRoleAsync(email, "Creator");
+        await _fixture.SetUsernameAsync(email, $"ts{Guid.NewGuid():N}"[..12]);
+
+        // Seed a track with tags but a title that does NOT match the search term
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Cambrian.Persistence.CambrianDbContext>();
+        var trackId = Guid.NewGuid();
+        db.Tracks.Add(new Cambrian.Domain.Entities.Track
+        {
+            Id = trackId,
+            CambrianTrackId = $"CAMB-TRK-{trackId.ToString()[..8].ToUpper()}",
+            Title = "Untitled",
+            Price = 9.99m,
+            LicenseType = "standard",
+            AudioUrl = "tracks/tag-test.mp3",
+            CreatorId = creatorId,
+            Genre = "Electronic",
+            Visibility = "public",
+            Tags = new List<string> { "lofi", "chill" }
+        });
+        await db.SaveChangesAsync();
+
+        // Search for "lofi" — should match via Tags
+        using var client = _fixture.CreateClient();
+        var response = await client.GetAsync("/catalog?search=lofi");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, $"Expected 2xx but got {(int)response.StatusCode}: {body}");
+
+        var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var data = json.GetProperty("data");
+
+        // The track must appear in results
+        var found = false;
+        foreach (var item in data.EnumerateArray())
+        {
+            var idStr = item.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+            if (idStr != null && Guid.TryParse(idStr, out var g) && g == trackId)
+            {
+                found = true;
+                break;
+            }
+        }
+
+        Assert.True(found, $"Track {trackId} with Tags=[lofi,chill] was not returned by /catalog?search=lofi");
     }
 }

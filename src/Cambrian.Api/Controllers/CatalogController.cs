@@ -94,11 +94,9 @@ public class CatalogController : BaseController
     };
 
     [HttpGet("tracks/{trackId}")]
+    [HttpGet("track/{trackId}")]
     public async Task<IActionResult> GetTrack(string trackId)
     {
-        if (!Guid.TryParse(trackId, out _))
-            return ErrorResponse("trackId must be a valid GUID.");
-
         var result = await _catalog.GetTrackAsync(trackId);
         if (result is null)
             return NotFoundResponse($"Track '{trackId}' not found.");

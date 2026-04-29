@@ -1960,6 +1960,38 @@
         }
       }
     },
+    "/sse": {
+      "get": {
+        "tags": [
+          "Cambrian.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Cambrian.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Cambrian.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/discover": {
       "get": {
         "tags": [
@@ -2131,6 +2163,28 @@
       }
     },
     "/tracks/{trackId}": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/track/{trackId}": {
       "get": {
         "tags": [
           "Catalog"
@@ -3716,6 +3770,143 @@
         }
       }
     },
+    "/api/entitlements/grant": {
+      "post": {
+        "tags": [
+          "Entitlements"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantEntitlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantEntitlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantEntitlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/entitlements/{id}": {
+      "delete": {
+        "tags": [
+          "Entitlements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeEntitlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeEntitlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeEntitlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/entitlements/me": {
+      "get": {
+        "tags": [
+          "Entitlements"
+        ],
+        "parameters": [
+          {
+            "name": "resourceType",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/EntitlementResourceType"
+            }
+          },
+          {
+            "name": "includeRevoked",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/entitlements/access": {
+      "get": {
+        "tags": [
+          "Entitlements"
+        ],
+        "parameters": [
+          {
+            "name": "resourceType",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/EntitlementResourceType"
+            }
+          },
+          {
+            "name": "resourceId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/EntitlementAccessLevel"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/feature-flags/check/{name}": {
       "get": {
         "tags": [
@@ -5127,19 +5318,19 @@
                     "type": "string"
                   },
                   "NonExclusivePrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "ExclusivePrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "CopyrightBuyoutPrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
@@ -5721,6 +5912,37 @@
         },
         "additionalProperties": false
       },
+      "EntitlementAccessLevel": {
+        "enum": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "EntitlementResourceType": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "EntitlementSourceType": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
       "ForgotPasswordRequest": {
         "type": "object",
         "properties": {
@@ -5740,6 +5962,45 @@
         "properties": {
           "idToken": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GrantEntitlementRequest": {
+        "required": [
+          "accessLevel",
+          "resourceId",
+          "resourceType",
+          "sourceType",
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "resourceType": {
+            "$ref": "#/components/schemas/EntitlementResourceType"
+          },
+          "resourceId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "accessLevel": {
+            "$ref": "#/components/schemas/EntitlementAccessLevel"
+          },
+          "sourceType": {
+            "$ref": "#/components/schemas/EntitlementSourceType"
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -5920,7 +6181,7 @@
           },
           "data": {
             "type": "array",
-            "items": {},
+            "items": { },
             "nullable": true
           },
           "error": {
@@ -6040,7 +6301,7 @@
             "nullable": true
           }
         },
-        "additionalProperties": {}
+        "additionalProperties": { }
       },
       "PurchaseCreateRequest": {
         "type": "object",
@@ -6157,6 +6418,20 @@
           },
           "newPassword": {
             "minLength": 8,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevokeEntitlementRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -6686,459 +6961,6 @@
           }
         },
         "additionalProperties": false
-      },
-      "AiCreatorCatalogHighlight": {
-        "type": "object",
-        "properties": {
-          "trackId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "bestUseCase": {
-            "type": "string"
-          },
-          "previewAvailable": {
-            "type": "boolean"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiCreatorProfileResponse": {
-        "type": "object",
-        "properties": {
-          "creator": {
-            "$ref": "#/components/schemas/AiCreatorProfile"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiCreatorProfile": {
-        "type": "object",
-        "properties": {
-          "creatorId": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "bio": {
-            "type": "string",
-            "nullable": true
-          },
-          "verifiedCreator": {
-            "type": "boolean"
-          },
-          "avatarUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "profileUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "trackCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "featuredGenres": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "featuredMoods": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "catalogHighlights": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiCreatorCatalogHighlight"
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiCreatorSummary": {
-        "type": "object",
-        "properties": {
-          "creatorId": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "verifiedCreator": {
-            "type": "boolean",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiLicenseOption": {
-        "type": "object",
-        "properties": {
-          "licenseType": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "price": {
-            "type": "number",
-            "format": "double"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "commercialUse": {
-            "type": "boolean"
-          },
-          "attributionRequired": {
-            "type": "boolean"
-          },
-          "instantDownload": {
-            "type": "boolean"
-          },
-          "exclusivity": {
-            "type": "string"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "allowedUseCases": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "restrictions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "recommendedFor": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiLicenseSummary": {
-        "type": "object",
-        "properties": {
-          "startingPrice": {
-            "type": "number",
-            "format": "double"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "commercialUse": {
-            "type": "boolean"
-          },
-          "attributionRequired": {
-            "type": "boolean"
-          },
-          "instantDownload": {
-            "type": "boolean"
-          },
-          "licenseClarityScore": {
-            "type": "number",
-            "format": "double"
-          },
-          "commercialSafetyNotes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiQuerySummary": {
-        "type": "object",
-        "properties": {
-          "intent": {
-            "type": "string"
-          },
-          "matchedOn": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "notes": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiTrackAttributes": {
-        "type": "object",
-        "properties": {
-          "genre": {
-            "type": "string",
-            "nullable": true
-          },
-          "subgenre": {
-            "type": "string",
-            "nullable": true
-          },
-          "moods": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "bpm": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "key": {
-            "type": "string",
-            "nullable": true
-          },
-          "durationSeconds": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "instrumental": {
-            "type": "boolean"
-          },
-          "hasVocals": {
-            "type": "boolean"
-          },
-          "vocalsType": {
-            "type": "string",
-            "nullable": true
-          },
-          "energyLevel": {
-            "type": "string",
-            "nullable": true
-          },
-          "energyCurve": {
-            "type": "string",
-            "nullable": true
-          },
-          "loopFriendly": {
-            "type": "boolean"
-          },
-          "dropMomentSeconds": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiTrackDetailsResponse": {
-        "type": "object",
-        "properties": {
-          "track": {
-            "$ref": "#/components/schemas/AiTrackDetails"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiTrackDetails": {
-        "type": "object",
-        "properties": {
-          "trackId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "creator": {
-            "$ref": "#/components/schemas/AiCreatorSummary"
-          },
-          "attributes": {
-            "$ref": "#/components/schemas/AiTrackAttributes"
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "aiGenerator": {
-            "type": "string",
-            "nullable": true
-          },
-          "useCaseHints": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "whyThisWorks": {
-            "type": "string"
-          },
-          "licenseSummary": {
-            "$ref": "#/components/schemas/AiLicenseSummary"
-          },
-          "preview": {
-            "$ref": "#/components/schemas/AiTrackPreview"
-          },
-          "waveformImageUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "coverImageUrl": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiTrackLicenseOptionsResponse": {
-        "type": "object",
-        "properties": {
-          "licenses": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiLicenseOption"
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiTrackPreviewResponse": {
-        "type": "object",
-        "properties": {
-          "preview": {
-            "$ref": "#/components/schemas/AiTrackPreview"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiTrackPreview": {
-        "type": "object",
-        "properties": {
-          "available": {
-            "type": "boolean"
-          },
-          "url": {
-            "type": "string",
-            "nullable": true
-          },
-          "durationSeconds": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "clipStartSeconds": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "clipEndSeconds": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "format": {
-            "type": "string",
-            "nullable": true
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiTrackSearchResponse": {
-        "type": "object",
-        "properties": {
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiTrackSearchResult"
-            }
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "pageSize": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "totalCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "querySummary": {
-            "$ref": "#/components/schemas/AiQuerySummary"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AiTrackSearchResult": {
-        "type": "object",
-        "properties": {
-          "trackId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "creator": {
-            "$ref": "#/components/schemas/AiCreatorSummary"
-          },
-          "score": {
-            "type": "number",
-            "format": "double"
-          },
-          "fitConfidence": {
-            "type": "string",
-            "enum": [
-              "low",
-              "medium",
-              "high"
-            ]
-          },
-          "reason": {
-            "type": "string"
-          },
-          "bestUseCase": {
-            "type": "string"
-          },
-          "secondaryUseCases": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "whyThisWorks": {
-            "type": "string"
-          },
-          "attributes": {
-            "$ref": "#/components/schemas/AiTrackAttributes"
-          },
-          "license": {
-            "$ref": "#/components/schemas/AiLicenseSummary"
-          },
-          "preview": {
-            "$ref": "#/components/schemas/AiTrackPreview"
-          }
-        },
-        "additionalProperties": false
       }
     },
     "securitySchemes": {
@@ -7152,7 +6974,7 @@
   },
   "security": [
     {
-      "Bearer": []
+      "Bearer": [ ]
     }
   ]
 }

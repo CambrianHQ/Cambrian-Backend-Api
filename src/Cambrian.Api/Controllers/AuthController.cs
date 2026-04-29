@@ -204,17 +204,22 @@ public class AuthController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var user = await _userManager.FindByIdAsync(userId);
 
-        // A user "needs a username" if their UserName is still their email (never personalized)
-        var needsUsername = user is null || !UsernameHelper.IsSet(user);
+        var isAdminRole = string.Equals(user?.Role, "Admin", StringComparison.OrdinalIgnoreCase);
+
+        // A non-admin user "needs a username" if their UserName is still their
+        // email sentinel. Admins are operational accounts and must not be forced
+        // through creator username onboarding.
+        var hasUsername = user is not null && UsernameHelper.IsSet(user);
+        var needsUsername = user is null || (!isAdminRole && !hasUsername);
 
         // isNewUser should only be true during the very first session after registration.
         // Once a user has the Creator role (set-username promotes to Creator) or has any
         // purchase activity, they are no longer "new" even if they skipped username setup.
         var isCreatorRole = string.Equals(user?.Role, "Creator", StringComparison.OrdinalIgnoreCase)
-                         || string.Equals(user?.Role, "Admin", StringComparison.OrdinalIgnoreCase);
+                         || isAdminRole;
         var isNewUser = needsUsername && !isCreatorRole;
 
-        var username = needsUsername ? null : user!.UserName;
+        var username = hasUsername ? user!.UserName : null;
 
         // Resolve capabilities for this user
         var capabilities = user is not null
@@ -234,7 +239,7 @@ public class AuthController : BaseController
             isNewUser,
             needsUsername,
             requiresUsernameSetup = needsUsername,
-            canChangeUsername = needsUsername,
+            canChangeUsername = needsUsername && !isAdminRole,
             creatorTier = profile.CreatorTier,
             uploadCount = profile.UploadCount,
             uploadLimit = profile.UploadLimit,
@@ -266,24 +271,31 @@ public class AuthController : BaseController
         });
     }
 
-    private static object ToSession(AuthResponse auth, IReadOnlyList<string> capabilities) => new
+    private static object ToSession(AuthResponse auth, IReadOnlyList<string> capabilities)
     {
-        token = auth.Token,
-        tier = (auth.Tier ?? "free").ToLowerInvariant(),
-        role = auth.Role ?? "User",
-        isNewUser = auth.IsNewUser,
-        needsUsername = auth.Username == null,
-        requiresUsernameSetup = auth.Username == null,
-        user = new
+        var role = auth.Role ?? "User";
+        var requiresUsernameSetup = auth.Username == null
+            && !string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+
+        return new
         {
-            id = auth.UserId.ToString(),
-            email = auth.Email,
-            username = auth.Username,
-            displayName = auth.DisplayName,
-            phoneNumber = auth.PhoneNumber,
-        },
-        capabilities
-    };
+            token = auth.Token,
+            tier = (auth.Tier ?? "free").ToLowerInvariant(),
+            role,
+            isNewUser = auth.IsNewUser && requiresUsernameSetup,
+            needsUsername = requiresUsernameSetup,
+            requiresUsernameSetup,
+            user = new
+            {
+                id = auth.UserId.ToString(),
+                email = auth.Email,
+                username = auth.Username,
+                displayName = auth.DisplayName,
+                phoneNumber = auth.PhoneNumber,
+            },
+            capabilities
+        };
+    }
 
     /// <summary>
     /// Loads the user by id and resolves their capability set. Returns an empty
