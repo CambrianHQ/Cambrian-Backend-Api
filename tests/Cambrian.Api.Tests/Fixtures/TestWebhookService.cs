@@ -48,14 +48,16 @@ internal sealed class TestWebhookService : IWebhookService
                 clientReferenceId = obj.TryGetProperty("client_reference_id", out var r) ? r.GetString() : null;
                 amountTotal = obj.TryGetProperty("amount_total", out var a) ? a.GetInt64() : null;
                 stripeSessionId = obj.TryGetProperty("id", out var s) ? s.GetString() : null;
+                stripeCustomerId = obj.TryGetProperty("customer", out var c) ? c.GetString() : null;
             }
-            else if (eventType is "customer.subscription.deleted" or "invoice.payment_failed")
+            else if (eventType is "customer.subscription.deleted" or "invoice.paid" or "invoice.payment_failed")
             {
                 stripeCustomerId = obj.TryGetProperty("customer", out var c) ? c.GetString() : null;
             }
-            else if (eventType is "charge.refunded" or "charge.dispute.created")
+            else if (eventType is "payment_intent.succeeded" or "charge.refunded" or "charge.dispute.created")
             {
                 stripePaymentIntentId = obj.TryGetProperty("payment_intent", out var pi) ? pi.GetString() : null;
+                stripePaymentIntentId ??= obj.TryGetProperty("id", out var id) ? id.GetString() : null;
             }
         }
 

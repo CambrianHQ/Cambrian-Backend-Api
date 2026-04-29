@@ -47,7 +47,8 @@ public class TrackRepository : ITrackRepository
             var query = ApplyBrowseFilters(
                 BuildTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
                 genre, search, mood, tempo, instrumental, duration,
-                includeTaxonomyColumns: true);
+                includeTaxonomyColumns: true,
+                includeTagSearch: _db.Database.IsRelational());
 
             return await ApplySort(query, sort)
                 .Skip((page - 1) * pageSize)
@@ -59,7 +60,8 @@ public class TrackRepository : ITrackRepository
             var query = ApplyBrowseFilters(
                 BuildLegacyCompatibleTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
                 genre, search, mood, tempo, instrumental, duration,
-                includeTaxonomyColumns: false);
+                includeTaxonomyColumns: false,
+                includeTagSearch: _db.Database.IsRelational());
 
             return await ApplySort(query, sort)
                 .Skip((page - 1) * pageSize)
@@ -194,7 +196,8 @@ public class TrackRepository : ITrackRepository
             var query = ApplyBrowseFilters(
                 _db.Tracks.Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
                 genre, search, mood, tempo, instrumental, duration,
-                includeTaxonomyColumns: true);
+                includeTaxonomyColumns: true,
+                includeTagSearch: _db.Database.IsRelational());
             return await query.CountAsync();
         }
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
@@ -202,7 +205,8 @@ public class TrackRepository : ITrackRepository
             var query = ApplyBrowseFilters(
                 BuildLegacyCompatibleTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
                 genre, search, mood, tempo, instrumental, duration,
-                includeTaxonomyColumns: false);
+                includeTaxonomyColumns: false,
+                includeTagSearch: _db.Database.IsRelational());
             return await query.CountAsync();
         }
     }
@@ -277,7 +281,8 @@ public class TrackRepository : ITrackRepository
         string? tempo,
         bool? instrumental,
         string? duration,
-        bool includeTaxonomyColumns)
+        bool includeTaxonomyColumns,
+        bool includeTagSearch)
     {
         if (!string.IsNullOrWhiteSpace(genre))
         {
@@ -297,34 +302,55 @@ public class TrackRepository : ITrackRepository
             // canonical Creator row), and tags. Tags is stored as a comma-joined
             // string via a value converter; access via (string)(object)t.Tags lets
             // EF resolve the store type (string) through the normal member-access
-            // path and generate LOWER("Tags") LIKE '%needle%' in SQL.
+            // path and generate LOWER("Tags") LIKE '%needle%' in SQL. InMemory keeps
+            // the CLR list shape, so tag search is enabled only for relational providers.
             var needle = search.ToLower();
             if (includeTaxonomyColumns)
             {
-                query = query.Where(t =>
-                    t.Title.ToLower().Contains(needle) ||
-                    (t.Description != null && t.Description.ToLower().Contains(needle)) ||
-                    (t.Genre != null && t.Genre.ToLower().Contains(needle)) ||
-                    (t.PrimaryGenre != null && t.PrimaryGenre.ToLower().Contains(needle)) ||
-                    (t.Subgenre != null && t.Subgenre.ToLower().Contains(needle)) ||
-                    (t.Mood != null && t.Mood.ToLower().Contains(needle)) ||
-                    ((string)(object)t.Tags).ToLower().Contains(needle) ||
-                    (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
-                    (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
-                    (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)));
+                query = includeTagSearch
+                    ? query.Where(t =>
+                        t.Title.ToLower().Contains(needle) ||
+                        (t.Description != null && t.Description.ToLower().Contains(needle)) ||
+                        (t.Genre != null && t.Genre.ToLower().Contains(needle)) ||
+                        (t.PrimaryGenre != null && t.PrimaryGenre.ToLower().Contains(needle)) ||
+                        (t.Subgenre != null && t.Subgenre.ToLower().Contains(needle)) ||
+                        (t.Mood != null && t.Mood.ToLower().Contains(needle)) ||
+                        ((string)(object)t.Tags).ToLower().Contains(needle) ||
+                        (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
+                        (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
+                        (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)))
+                    : query.Where(t =>
+                        t.Title.ToLower().Contains(needle) ||
+                        (t.Description != null && t.Description.ToLower().Contains(needle)) ||
+                        (t.Genre != null && t.Genre.ToLower().Contains(needle)) ||
+                        (t.PrimaryGenre != null && t.PrimaryGenre.ToLower().Contains(needle)) ||
+                        (t.Subgenre != null && t.Subgenre.ToLower().Contains(needle)) ||
+                        (t.Mood != null && t.Mood.ToLower().Contains(needle)) ||
+                        (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
+                        (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
+                        (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)));
             }
             else
             {
                 // Fallback path for databases still missing the taxonomy columns.
-                query = query.Where(t =>
-                    t.Title.ToLower().Contains(needle) ||
-                    (t.Description != null && t.Description.ToLower().Contains(needle)) ||
-                    (t.Genre != null && t.Genre.ToLower().Contains(needle)) ||
-                    (t.Mood != null && t.Mood.ToLower().Contains(needle)) ||
-                    ((string)(object)t.Tags).ToLower().Contains(needle) ||
-                    (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
-                    (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
-                    (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)));
+                query = includeTagSearch
+                    ? query.Where(t =>
+                        t.Title.ToLower().Contains(needle) ||
+                        (t.Description != null && t.Description.ToLower().Contains(needle)) ||
+                        (t.Genre != null && t.Genre.ToLower().Contains(needle)) ||
+                        (t.Mood != null && t.Mood.ToLower().Contains(needle)) ||
+                        ((string)(object)t.Tags).ToLower().Contains(needle) ||
+                        (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
+                        (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
+                        (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)))
+                    : query.Where(t =>
+                        t.Title.ToLower().Contains(needle) ||
+                        (t.Description != null && t.Description.ToLower().Contains(needle)) ||
+                        (t.Genre != null && t.Genre.ToLower().Contains(needle)) ||
+                        (t.Mood != null && t.Mood.ToLower().Contains(needle)) ||
+                        (t.CreatorEntity != null && t.CreatorEntity.Username != null && t.CreatorEntity.Username.ToLower().Contains(needle)) ||
+                        (t.CreatorEntity != null && t.CreatorEntity.DisplayName != null && t.CreatorEntity.DisplayName.ToLower().Contains(needle)) ||
+                        (t.Creator != null && t.Creator.DisplayName != null && t.Creator.DisplayName.ToLower().Contains(needle)));
             }
         }
 
