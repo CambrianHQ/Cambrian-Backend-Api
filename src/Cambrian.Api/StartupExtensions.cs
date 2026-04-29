@@ -441,10 +441,14 @@ internal static class StartupExtensions
         Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
         string email, string password)
     {
+        var adminId = Guid.NewGuid().ToString();
+        var username = await ResolveSeededAdminUsernameAsync(userManager, email, adminId);
         var admin = new ApplicationUser
         {
+            Id = adminId,
             Email = email,
-            UserName = email,
+            UserName = username,
+            NormalizedUserName = userManager.NormalizeName(username),
             DisplayName = AdminRole,
             Role = AdminRole,
             Tier = "creator",
@@ -471,6 +475,33 @@ internal static class StartupExtensions
             existing.Role = AdminRole;
             changed = true;
         }
+
+        if (!IsUsernameSet(existing))
+        {
+            var username = await ResolveSeededAdminUsernameAsync(userManager, adminEmail, existing.Id);
+            existing.UserName = username;
+            existing.NormalizedUserName = userManager.NormalizeName(username);
+            changed = true;
+        }
+
+        if (existing.DisplayName != AdminRole)
+        {
+            existing.DisplayName = AdminRole;
+            changed = true;
+        }
+
+        if (!existing.EmailConfirmed)
+        {
+            existing.EmailConfirmed = true;
+            changed = true;
+        }
+
+        if (!existing.EmailVerified)
+        {
+            existing.EmailVerified = true;
+            changed = true;
+        }
+
         var token = await userManager.GeneratePasswordResetTokenAsync(existing);
         var pwResult = await userManager.ResetPasswordAsync(existing, token, adminPassword);
         if (!pwResult.Succeeded)
@@ -488,6 +519,59 @@ internal static class StartupExtensions
         {
             Console.WriteLine($"[Seed] Admin account already up to date: {adminEmail}");
         }
+    }
+
+    private static bool IsUsernameSet(ApplicationUser user) =>
+        !string.IsNullOrWhiteSpace(user.UserName)
+        && !string.Equals(user.UserName, user.Email, StringComparison.OrdinalIgnoreCase);
+
+    private static async Task<string> ResolveSeededAdminUsernameAsync(
+        Microsoft.AspNetCore.Identity.UserManager<ApplicationUser> userManager,
+        string email,
+        string adminUserId)
+    {
+        var localPart = email.Split('@', 2)[0];
+        var baseUsername = SanitizeSeededAdminUsername(localPart);
+        var suffix = new string(adminUserId.Where(char.IsLetterOrDigit).Take(8).ToArray()).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            suffix = "seeded";
+        }
+
+        var candidates = new[]
+        {
+            baseUsername,
+            $"{baseUsername}-admin",
+            $"admin-{suffix}"
+        };
+
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var existing = await userManager.FindByNameAsync(candidate);
+            if (existing is null || string.Equals(existing.Id, adminUserId, StringComparison.Ordinal))
+            {
+                return candidate;
+            }
+        }
+
+        return $"admin-{suffix}";
+    }
+
+    private static string SanitizeSeededAdminUsername(string value)
+    {
+        var chars = value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '-')
+            .ToArray();
+
+        var username = new string(chars).Trim('-', '_');
+        if (username.Length < 3)
+        {
+            username = AdminRole.ToLowerInvariant();
+        }
+
+        return username.Length <= 40 ? username : username[..40].Trim('-', '_');
     }
 
     private static async Task SeedDemoUsersAsync(WebApplication app)

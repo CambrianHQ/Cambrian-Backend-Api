@@ -20,7 +20,9 @@ namespace Cambrian.Infrastructure.Stripe;
 public class StripeWebhookService : IWebhookService
 {
     private const string EventSubscriptionDeleted = "customer.subscription.deleted";
+    private const string EventInvoicePaid = "invoice.paid";
     private const string EventInvoicePaymentFailed = "invoice.payment_failed";
+    private const string EventPaymentIntentSucceeded = "payment_intent.succeeded";
     private const string EventChargeRefunded = "charge.refunded";
     private const string EventChargeDisputeCreated = "charge.dispute.created";
     private readonly CambrianDbContext _db;
@@ -92,16 +94,27 @@ public class StripeWebhookService : IWebhookService
                 clientReferenceId = session?.ClientReferenceId;
                 amountTotal = session?.AmountTotal;
                 stripeSessionId = session?.Id;
+                stripeCustomerId = session?.CustomerId;
             }
             else if (eventType == EventSubscriptionDeleted)
             {
                 var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
                 stripeCustomerId = sub?.CustomerId;
             }
+            else if (eventType == EventInvoicePaid)
+            {
+                var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
+                stripeCustomerId = invoice?.CustomerId;
+            }
             else if (eventType == EventInvoicePaymentFailed)
             {
                 var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
                 stripeCustomerId = invoice?.CustomerId;
+            }
+            else if (eventType == EventPaymentIntentSucceeded)
+            {
+                var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
+                stripePaymentIntentId = paymentIntent?.Id;
             }
             else if (eventType == EventChargeRefunded)
             {
@@ -196,14 +209,16 @@ public class StripeWebhookService : IWebhookService
                     ? amountProp.GetInt64()
                     : null;
                 stripeSessionId = obj.TryGetProperty("id", out var sessionProp) ? sessionProp.GetString() : null;
+                stripeCustomerId = obj.TryGetProperty("customer", out var customerProp) ? customerProp.GetString() : null;
             }
-            else if (eventType is EventSubscriptionDeleted or EventInvoicePaymentFailed)
+            else if (eventType is EventSubscriptionDeleted or EventInvoicePaid or EventInvoicePaymentFailed)
             {
                 stripeCustomerId = obj.TryGetProperty("customer", out var customerProp) ? customerProp.GetString() : null;
             }
-            else if (eventType is EventChargeRefunded or EventChargeDisputeCreated)
+            else if (eventType is EventPaymentIntentSucceeded or EventChargeRefunded or EventChargeDisputeCreated)
             {
                 stripePaymentIntentId = obj.TryGetProperty("payment_intent", out var piProp) ? piProp.GetString() : null;
+                stripePaymentIntentId ??= obj.TryGetProperty("id", out var intentProp) ? intentProp.GetString() : null;
             }
         }
 
@@ -289,15 +304,23 @@ public class StripeWebhookService : IWebhookService
             // ── Step 4: Process inside transaction ──
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
-                await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId);
+                await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId, stripeCustomerId);
             }
             else if (eventType == EventSubscriptionDeleted)
             {
                 await HandleSubscriptionDeleted(stripeCustomerId);
             }
+            else if (eventType == EventInvoicePaid)
+            {
+                await HandleInvoicePaid(stripeCustomerId);
+            }
             else if (eventType == EventInvoicePaymentFailed)
             {
                 await HandleInvoicePaymentFailed(stripeCustomerId);
+            }
+            else if (eventType == EventPaymentIntentSucceeded)
+            {
+                await HandlePaymentIntentSucceeded(stripePaymentIntentId);
             }
             else if (eventType == EventChargeRefunded)
             {
@@ -378,7 +401,7 @@ public class StripeWebhookService : IWebhookService
         }
     }
 
-    private async Task HandleCheckoutCompleted(string? clientReferenceId, long? amountTotal, string? stripeSessionId)
+    private async Task HandleCheckoutCompleted(string? clientReferenceId, long? amountTotal, string? stripeSessionId, string? stripeCustomerId)
     {
         if (clientReferenceId is null)
         {
@@ -391,7 +414,7 @@ public class StripeWebhookService : IWebhookService
         var parts = clientReferenceId.Split(':');
         if (parts.Length >= 3 && parts[1] == "subscription")
         {
-            await HandleSubscriptionCheckout(parts[0], parts[2]);
+            await HandleSubscriptionCheckout(parts[0], parts[2], stripeCustomerId);
             return;
         }
 
@@ -781,7 +804,7 @@ public class StripeWebhookService : IWebhookService
     /// Handle a subscription checkout: create or update the user's Subscription record
     /// and upgrade their tier on the ApplicationUser.
     /// </summary>
-    private async Task HandleSubscriptionCheckout(string userId, string tier)
+    private async Task HandleSubscriptionCheckout(string userId, string tier, string? stripeCustomerId)
     {
         // Cancel any existing subscription for this user
         var existing = await _db.Subscriptions
@@ -800,6 +823,7 @@ public class StripeWebhookService : IWebhookService
             UserId = userId,
             Plan = tier,
             Status = "active",
+            StripeCustomerId = stripeCustomerId,
             StartedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddMonths(1)
         };
@@ -821,6 +845,51 @@ public class StripeWebhookService : IWebhookService
         _logger.LogInformation(
             "Subscription activated: User={UserId} Plan={Plan}",
             userId, tier);
+    }
+
+    /// <summary>
+    /// Handle invoice.paid — restore subscription health after a successful renewal payment.
+    /// Uses the locally-stored StripeCustomerId when available so webhook processing
+    /// does not depend on a live Stripe customer lookup.
+    /// </summary>
+    private async Task HandleInvoicePaid(string? stripeCustomerId)
+    {
+        if (string.IsNullOrEmpty(stripeCustomerId))
+        {
+            _logger.LogWarning("invoice.paid received without customer ID");
+            return;
+        }
+
+        var user = await FindUserByStripeCustomerAsync(stripeCustomerId);
+        if (user is null)
+        {
+            _logger.LogWarning(
+                "invoice.paid: could not match Stripe customer {CustomerId} to a local user.",
+                stripeCustomerId);
+            return;
+        }
+
+        var latestSubscription = await _db.Subscriptions
+            .Where(s => s.UserId == user.Id)
+            .OrderByDescending(s => s.StartedAt)
+            .FirstOrDefaultAsync();
+
+        if (latestSubscription is not null)
+        {
+            latestSubscription.Status = "active";
+            latestSubscription.StripeCustomerId ??= stripeCustomerId;
+            if (latestSubscription.ExpiresAt is null || latestSubscription.ExpiresAt < DateTime.UtcNow)
+            {
+                latestSubscription.ExpiresAt = DateTime.UtcNow.AddMonths(1);
+            }
+        }
+
+        user.SubscriptionStatus = "Active";
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Invoice paid: User={UserId} StripeCustomer={CustomerId} marked subscription active",
+            user.Id, stripeCustomerId);
     }
 
     /// <summary>
@@ -892,6 +961,26 @@ public class StripeWebhookService : IWebhookService
                 "invoice.payment_failed: could not match Stripe customer {CustomerId} to a local user.",
                 stripeCustomerId);
         }
+    }
+
+    /// <summary>
+    /// Handle payment_intent.succeeded — recorded for observability only.
+    /// Checkout fulfillment remains keyed off checkout.session.completed.
+    /// </summary>
+    private Task HandlePaymentIntentSucceeded(string? stripePaymentIntentId)
+    {
+        if (string.IsNullOrEmpty(stripePaymentIntentId))
+        {
+            _logger.LogWarning("payment_intent.succeeded received without payment intent ID");
+        }
+        else
+        {
+            _logger.LogInformation(
+                "payment_intent.succeeded acknowledged for PaymentIntent {PaymentIntentId}",
+                stripePaymentIntentId);
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -1151,6 +1240,17 @@ public class StripeWebhookService : IWebhookService
     /// </summary>
     private async Task<ApplicationUser?> FindUserByStripeCustomerAsync(string stripeCustomerId)
     {
+        var localUserId = await _db.Subscriptions
+            .Where(s => s.StripeCustomerId == stripeCustomerId)
+            .OrderByDescending(s => s.StartedAt)
+            .Select(s => s.UserId)
+            .FirstOrDefaultAsync();
+
+        if (!string.IsNullOrEmpty(localUserId))
+        {
+            return await _db.Users.FindAsync(localUserId);
+        }
+
         try
         {
             var customerService = new CustomerService();
