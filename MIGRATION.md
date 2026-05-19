@@ -35,57 +35,37 @@ Supabase (same account already used for object storage).
 
 ---
 
-## 2. Snapshot data from Render
+## 2 + 3. Snapshot Render → Restore to Supabase → Verify
 
 Get the Render Postgres external connection string from the Render dashboard
-→ `cambrian-db-prod` → "External Database URL".
+→ `cambrian-db-prod` → "External Database URL". Set both URLs in your shell
+(do NOT commit them):
 
 ```bash
-# Set these locally — do NOT commit
 export RENDER_DB_URL="postgresql://cambrian:...@dpg-xxxxx.oregon-postgres.render.com/cambrian_prod"
 export SUPABASE_DB_URL="postgresql://postgres:...@db.xxxxx.supabase.co:5432/postgres"
-
-# Full dump — schema + data, no owner/privilege noise
-pg_dump "$RENDER_DB_URL" \
-  --no-owner \
-  --no-privileges \
-  --no-publications \
-  --no-subscriptions \
-  --format=custom \
-  --file=cambrian-prod-$(date +%Y%m%d-%H%M).dump
 ```
 
-Verify the dump:
-```bash
-ls -lh cambrian-prod-*.dump   # should be non-trivial size (MBs)
-```
-
----
-
-## 3. Restore to Supabase
+Then run the helper script (dumps, restores with confirmation, then diffs
+row counts and EF migration history between both DBs):
 
 ```bash
-pg_restore \
-  --dbname="$SUPABASE_DB_URL" \
-  --no-owner \
-  --no-privileges \
-  --clean \
-  --if-exists \
-  cambrian-prod-YYYYMMDD-HHMM.dump
+./scripts/migrate-render-to-supabase.sh all
 ```
 
-Sanity-check after restore:
+Or run the phases individually:
+
 ```bash
-psql "$SUPABASE_DB_URL" -c '\dt'                                # list tables
-psql "$SUPABASE_DB_URL" -c 'SELECT COUNT(*) FROM "AspNetUsers";'
-psql "$SUPABASE_DB_URL" -c 'SELECT COUNT(*) FROM "Tracks";'
-psql "$SUPABASE_DB_URL" -c 'SELECT COUNT(*) FROM "Purchases";'
-psql "$SUPABASE_DB_URL" -c 'SELECT "MigrationId" FROM "__EFMigrationsHistory" ORDER BY 1 DESC LIMIT 5;'
+./scripts/migrate-render-to-supabase.sh dump                # writes to ./db-dumps/
+./scripts/migrate-render-to-supabase.sh restore <dump-file>
+./scripts/verify-db-migration.sh                            # row-count diff
 ```
 
-The last row of `__EFMigrationsHistory` should be
-`20260406220049_AddApiKeysTable` (matches CLAUDE.md §5). If so, the app will
-not try to re-run migrations on first boot.
+The verify script exits non-zero if any table has mismatched row counts or
+if the latest `__EFMigrationsHistory` row doesn't match between source and
+destination. The expected latest migration is
+`20260406220049_AddApiKeysTable` (matches CLAUDE.md §5) — if it matches on
+both sides, the app will not re-run migrations on first boot.
 
 ---
 
@@ -163,22 +143,18 @@ If anything's wrong, fix here. Render is still serving production traffic.
 ## 7. Brief maintenance window — final sync + cutover
 
 If meaningful writes happened during steps 2–6 (purchases, signups), do a
-second incremental dump. Easiest approach: short maintenance window.
+second full sync. Easiest approach: short maintenance window.
 
 ```bash
 # (Optional) Put Render into maintenance — easiest is to suspend the service
 # in Render dashboard, returning 503 to clients for a few minutes.
 
-# Re-dump everything fresh
-pg_dump "$RENDER_DB_URL" --no-owner --no-privileges --format=custom \
-  --file=cambrian-final-$(date +%Y%m%d-%H%M).dump
-
-# Restore (this --clean drops + recreates)
-pg_restore --dbname="$SUPABASE_DB_URL" --no-owner --no-privileges \
-  --clean --if-exists cambrian-final-*.dump
-
-# Re-verify row counts match Render
+# Re-dump, restore, and verify — same script, same env vars as step 2-3
+./scripts/migrate-render-to-supabase.sh all
 ```
+
+`./scripts/verify-db-migration.sh` must exit 0 before you proceed to DNS
+cutover.
 
 **DNS cutover.** Point `api.cambrianmusic.com` at Fly:
 
