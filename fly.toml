@@ -1,0 +1,58 @@
+# Fly.io deployment config for Cambrian production
+# Docs: https://fly.io/docs/reference/configuration/
+#
+# Deploy:
+#   1. fly auth login
+#   2. fly launch --no-deploy --copy-config   (first time only; creates the app)
+#   3. Set secrets (see MIGRATION.md)
+#   4. fly deploy
+#
+# The app reads PORT from env (see Dockerfile ENTRYPOINT). Fly sets internal_port
+# below; we pass it through as PORT so the .NET host binds correctly.
+
+app = "cambrian-api"
+primary_region = "sea"   # Seattle — closest free-tier region to Render's "oregon"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  PORT = "8080"
+  Jwt__Issuer = "cambrian-api"
+  Jwt__Audience = "cambrian-client"
+  Storage__Region = "us-east-1"
+  Storage__UsePathStyle = "true"
+  Email__Provider = "resend"
+  Email__FromAddress = "noreply@cambrianmusic.com"
+  Email__FromName = "Cambrian Music"
+  RateLimiting__GlobalPermitLimit = "100"
+  RateLimiting__AuthPermitLimit = "10"
+  App__FrontendUrl = "https://cambrianmusic.com"
+  App__CorsOrigins = "https://cambrianmusic.com,https://www.cambrianmusic.com"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"     # scale to zero when idle
+  auto_start_machines = true
+  min_machines_running = 0        # set to 1 if you want to avoid cold starts
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "get"
+    path = "/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"                # .NET 8 + EF Core needs >256mb on startup
+  size = "shared-cpu-1x"
