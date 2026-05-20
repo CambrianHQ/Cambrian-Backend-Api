@@ -63,6 +63,9 @@ coverage/
 .env.test.local
 .env.production.local
 
+# Local database dumps (may contain production data)
+db-dumps/
+
 ################################################
 # Secrets
 ################################################
