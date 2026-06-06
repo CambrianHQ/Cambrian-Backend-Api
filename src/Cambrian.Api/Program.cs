@@ -21,6 +21,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.AspNetCore;
+using OpenTelemetry.Metrics;
+using Sentry.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +33,13 @@ if (args.Contains("--generate"))
     return;
 }
 // --- END TEMPORARY ---
+
+// Error monitoring. Binds the "Sentry" config section (DSN, sample rates, env).
+// With no DSN set the SDK initialises disabled, so non-prod environments without
+// a DSN are a safe no-op. Captures unhandled exceptions + failed requests; the
+// Stripe webhook handler also captures explicitly so a silent grant-Pro failure
+// alerts us instead of only landing in the log stream.
+builder.WebHost.UseSentry();
 
 // CLI: `dotnet run -- --seed` — run migrations + seed, then exit.
 // Useful for CI/CD pipelines and manual staging environment setup.
@@ -235,6 +244,21 @@ builder.Services.AddAuthorization(options =>
     });
 });
 builder.Services.AddMemoryCache();
+
+// OpenTelemetry metrics → Prometheus scraping endpoint at GET /metrics.
+//  - AspNetCore/HttpClient instrumentation feed the http_server_* / http_client_*
+//    histograms the Grafana dashboards query (grafana/dashboards/).
+//  - Runtime instrumentation supplies process/GC gauges for the executive dashboard.
+//  - AddMeter("Cambrian") subscribes to the custom business counters defined in
+//    Cambrian.Application.Observability.CambrianMetrics.
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddMeter(Cambrian.Application.Observability.CambrianMetrics.MeterName)
+        .AddPrometheusExporter());
+
 builder.Services.AddControllers();
 
 // Raise the multipart form body limit for audio uploads
@@ -331,6 +355,18 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
+
+    // Community boosts: ~30 actions/min per authenticated user (falls back to IP).
+    options.AddPolicy("community", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
 });
 
 // CORS
@@ -340,15 +376,13 @@ builder.AddCorsPolicy();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ILibraryService, LibraryService>();
-builder.Services.AddScoped<ICheckoutService, CheckoutService>();
 builder.Services.AddScoped<IPayoutService, PayoutService>();
-builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IPurchaseService, PurchaseService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddScoped<IWebhookService, StripeWebhookService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 builder.Services.AddScoped<IWalletService, WalletService>();
+builder.Services.AddScoped<ITrackBoostService, TrackBoostService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IStreamService, StreamService>();
@@ -358,7 +392,6 @@ builder.Services.AddSingleton<IFeeService, FeeService>();
 builder.Services.AddSingleton<ITierService, TierService>();
 builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
-builder.Services.AddScoped<ILicenseService, LicenseService>();
 
 // Public v1 API supporting services
 builder.Services.AddScoped<Cambrian.Application.Interfaces.V1.IIdempotencyStore,
@@ -375,7 +408,47 @@ builder.Services.AddScoped<ICapabilityResolver, CapabilityResolver>();
 
 // Anti-drift: single source of truth services
 builder.Services.AddScoped<IEntitlementService, EntitlementService>();
+builder.Services.AddScoped<IPlanEntitlementService, PlanEntitlementService>();
 builder.Services.AddSingleton<ITrackVisibilityPolicy, TrackVisibilityPolicy>();
+
+// §9 provenance / authorship / compliance
+// Production must supply a stable signing key so stamps verify across restarts.
+if (builder.Environment.IsProduction()
+    && string.IsNullOrWhiteSpace(builder.Configuration["Provenance:Signing:PrivateKeyPem"]))
+{
+    throw new InvalidOperationException(
+        "Provenance:Signing:PrivateKeyPem must be configured in Production — provenance stamps must "
+        + "verify across restarts. Generate an EC P-256 key and supply it as PKCS#8 PEM.");
+}
+builder.Services.AddSingleton<IProvenanceSigner, Cambrian.Infrastructure.Provenance.EcdsaProvenanceSigner>();
+
+// Batched on-chain anchoring (job + provider). Provider selects the IProvenanceAnchor; the
+// worker only runs when explicitly enabled, so tests/dev never anchor by surprise.
+builder.Services.Configure<ProvenanceAnchorOptions>(
+    builder.Configuration.GetSection(ProvenanceAnchorOptions.SectionName));
+var anchorOptions = builder.Configuration.GetSection(ProvenanceAnchorOptions.SectionName)
+    .Get<ProvenanceAnchorOptions>() ?? new ProvenanceAnchorOptions();
+
+if (string.Equals(anchorOptions.Provider, "evm", StringComparison.OrdinalIgnoreCase))
+{
+    if (string.IsNullOrWhiteSpace(anchorOptions.RpcUrl) || string.IsNullOrWhiteSpace(anchorOptions.PrivateKey))
+        throw new InvalidOperationException(
+            "Provenance:Anchor:Provider=evm requires Provenance:Anchor:RpcUrl and Provenance:Anchor:PrivateKey.");
+    builder.Services.AddSingleton<IProvenanceAnchor, Cambrian.Infrastructure.Provenance.EvmMerkleProvenanceAnchor>();
+}
+else
+{
+    builder.Services.AddSingleton<IProvenanceAnchor, Cambrian.Infrastructure.Provenance.NoOpProvenanceAnchor>();
+}
+
+builder.Services.AddScoped<ProvenanceAnchorBatchProcessor>();
+if (anchorOptions.JobEnabled)
+    builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.ProvenanceAnchorBatchService>();
+
+builder.Services.AddScoped<IProvenanceService, ProvenanceService>();
+builder.Services.AddScoped<IAuthorshipService, AuthorshipService>();
+builder.Services.AddScoped<IComplianceScoreService, ComplianceScoreService>();
+builder.Services.AddScoped<ITrackLegitimacyService, TrackLegitimacyService>();
 
 // Growth features
 builder.Services.Configure<Cambrian.Infrastructure.Options.GrowthFeaturesOptions>(
@@ -403,19 +476,21 @@ builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
 builder.Services.AddScoped<ITrackRepository, TrackRepository>();
 builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
 builder.Services.AddScoped<ILibraryRepository, LibraryRepository>();
+builder.Services.AddScoped<ITrackBoostRepository, TrackBoostRepository>();
 builder.Services.AddScoped<IPayoutRepository, PayoutRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IStreamRepository, StreamRepository>();
 builder.Services.AddScoped<IWalletRepository, WalletRepository>();
 builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
-builder.Services.AddScoped<ILicenseCertificateRepository, LicenseCertificateRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
 builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
 builder.Services.AddScoped<IEntitlementRepository, EntitlementRepository>();
+builder.Services.AddScoped<IProvenanceAnchorRepository, ProvenanceAnchorRepository>();
+builder.Services.AddScoped<ITrackAuthorshipRepository, TrackAuthorshipRepository>();
 builder.Services.AddScoped<ITransactionManager, EfTransactionManager>();
 
 // Infrastructure
@@ -539,13 +614,13 @@ app.Use(async (context, next) =>
 
 app.UseCors();
 
-// Serve static files — block direct access to uploaded audio
+// Serve static files — block direct access to uploaded audio, but keep public
+// creator images (covers, avatars, banners) reachable. See StaticUploadPolicy.
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
-        var path = ctx.File.PhysicalPath ?? "";
-        if (path.Contains("uploads") && !path.Contains("covers"))
+        if (Cambrian.Api.Infrastructure.StaticUploadPolicy.ShouldBlock(ctx.File.PhysicalPath))
         {
             ctx.Context.Response.StatusCode = StatusCodes.Status403Forbidden;
             ctx.Context.Response.ContentLength = 0;
@@ -571,6 +646,11 @@ app.UseMiddleware<Cambrian.Api.Middleware.CapabilityMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapMcp();
+
+// Prometheus scrape target: GET /metrics. Anonymous and outside the OpenAPI contract
+// (like /sse and /mcp) so it is internally scrapable without a token. In production this
+// path should be network-restricted rather than exposed publicly.
+app.MapPrometheusScrapingEndpoint();
 
 // Alias: /sse → /mcp (307 preserves HTTP method for MCP Streamable HTTP clients)
 app.MapMethods("/sse", new[] { "GET", "POST", "DELETE" }, (HttpContext ctx) =>

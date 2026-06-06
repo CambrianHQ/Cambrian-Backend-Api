@@ -60,6 +60,13 @@ services:
         sync: false
       - key: Stripe__WebhookSecret
         sync: false
+      # Stripe recurring Price IDs -- REQUIRED whenever a Stripe key is set, or
+      # startup throws (StartupExtensions ValidateStripeKey). Set the price_...
+      # IDs for the Creator and Pro plans in the Render dashboard.
+      - key: Stripe__Prices__Creator
+        sync: false
+      - key: Stripe__Prices__Pro
+        sync: false
       # Object storage -- S3/R2 (same provider as production, separate bucket)
       - key: Storage__Provider
         sync: false
@@ -80,6 +87,9 @@ services:
       - key: Storage__UsePathStyle
         value: "true"
       - key: Storage__PublicUrl
+        sync: false
+      # Error monitoring -- Sentry (leave blank to disable; SDK is a no-op without a DSN)
+      - key: Sentry__Dsn
         sync: false
       # Email -- Resend for staging (same domain, tagged sender name)
       - key: Email__Provider
@@ -150,6 +160,13 @@ services:
         sync: false
       - key: Stripe__WebhookSecret
         sync: false
+      # Stripe recurring Price IDs -- REQUIRED whenever a Stripe key is set, or
+      # startup throws (StartupExtensions ValidateStripeKey). Set the live
+      # price_... IDs for the Creator and Pro plans in the Render dashboard.
+      - key: Stripe__Prices__Creator
+        sync: false
+      - key: Stripe__Prices__Pro
+        sync: false
       - key: Storage__Provider
         sync: false           # must be s3 or r2 -- app refuses to start with local in Production
       - key: Storage__Endpoint
@@ -169,6 +186,9 @@ services:
       - key: Storage__UsePathStyle
         value: "true"
       - key: Storage__PublicUrl
+        sync: false
+      # Error monitoring -- Sentry (leave blank to disable; SDK is a no-op without a DSN)
+      - key: Sentry__Dsn
         sync: false
       - key: Email__Provider
         value: resend
