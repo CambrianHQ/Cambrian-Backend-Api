@@ -5,6 +5,270 @@
     "version": "1.0"
   },
   "paths": {
+    "/api/provenance/verify-inclusion": {
+      "post": {
+        "tags": [
+          "Provenance"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvenanceInclusionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvenanceInclusionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvenanceInclusionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/provenance/public-key": {
+      "get": {
+        "tags": [
+          "Provenance"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/provenance/verify": {
+      "post": {
+        "tags": [
+          "Provenance"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvenanceVerifyRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvenanceVerifyRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvenanceVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/tracks/{id}/provenance": {
+      "get": {
+        "tags": [
+          "Provenance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "402": {
+            "description": "Upgrade required"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/tracks/{id}/authorship": {
+      "get": {
+        "tags": [
+          "Provenance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "402": {
+            "description": "Upgrade required"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Provenance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackAuthorshipRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackAuthorshipRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackAuthorshipRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "402": {
+            "description": "Upgrade required"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/tracks/{id}/compliance-score": {
+      "get": {
+        "tags": [
+          "Provenance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "402": {
+            "description": "Upgrade required"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/tracks/{id}/creator-detail": {
+      "get": {
+        "tags": [
+          "Provenance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "402": {
+            "description": "Upgrade required"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
     "/activity/new": {
       "get": {
         "tags": [
@@ -906,28 +1170,6 @@
       }
     },
     "/ai-discovery/tracks/{trackId}": {
-      "get": {
-        "tags": [
-          "AiDiscovery"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/ai-discovery/tracks/{trackId}/licenses": {
       "get": {
         "tags": [
           "AiDiscovery"
@@ -1895,6 +2137,106 @@
         }
       }
     },
+    "/api/me/entitlements": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/billing/checkout": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingCheckoutRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingCheckoutRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingCheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/billing/portal": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tracks": {
+      "post": {
+        "tags": [
+          "Upload"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "Title"
+                ],
+                "type": "object",
+                "properties": {
+                  "Title": {
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "402": {
+            "description": "Upgrade required"
+          }
+        }
+      }
+    },
+    "/api/stripe/webhook": {
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/billing/checkout-session": {
       "post": {
         "tags": [
@@ -2184,6 +2526,68 @@
         }
       }
     },
+    "/tracks/{trackId}/boost": {
+      "post": {
+        "tags": [
+          "Community"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Community"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Community"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/track/{trackId}": {
       "get": {
         "tags": [
@@ -2330,49 +2734,28 @@
         }
       }
     },
-    "/checkout": {
-      "post": {
-        "tags": [
-          "Checkout"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CheckoutRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CheckoutRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/CheckoutRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/checkout/session/{sessionId}": {
+    "/community": {
       "get": {
         "tags": [
-          "Checkout"
+          "Community"
         ],
         "parameters": [
           {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
+            "name": "page",
+            "in": "query",
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
             }
           }
         ],
@@ -2383,7 +2766,7 @@
         }
       }
     },
-    "/community": {
+    "/community/hot-this-week": {
       "get": {
         "tags": [
           "Community"
@@ -2886,6 +3269,16 @@
       }
     },
     "/creator-profile/me/collections": {
+      "get": {
+        "tags": [
+          "CreatorProfile"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
       "post": {
         "tags": [
           "CreatorProfile"
@@ -3141,6 +3534,64 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/creators/search": {
+      "post": {
+        "tags": [
+          "Creators"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatorSearchRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatorSearchRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatorSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Creators"
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
             }
           }
         ],
@@ -4210,411 +4661,6 @@
         }
       }
     },
-    "/licenses/{licenseId}": {
-      "get": {
-        "tags": [
-          "Licenses"
-        ],
-        "parameters": [
-          {
-            "name": "licenseId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/licenses": {
-      "get": {
-        "tags": [
-          "Licenses"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/licenses/{licenseId}/pdf": {
-      "get": {
-        "tags": [
-          "Licenses"
-        ],
-        "parameters": [
-          {
-            "name": "licenseId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/licenses/verify/{licenseId}": {
-      "get": {
-        "tags": [
-          "Licenses"
-        ],
-        "parameters": [
-          {
-            "name": "licenseId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/licenses/purchase": {
-      "post": {
-        "tags": [
-          "LicensesV1"
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LicensePurchaseRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LicensePurchaseRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/LicensePurchaseRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicensePurchaseResponseV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicensePurchaseResponseV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicensePurchaseResponseV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/licenses": {
-      "post": {
-        "tags": [
-          "LicensesV1"
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LicensePurchaseRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LicensePurchaseRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/LicensePurchaseRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicensePurchaseResponseV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicensePurchaseResponseV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicensePurchaseResponseV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/licenses/{id}/verify": {
-      "get": {
-        "tags": [
-          "LicensesV1"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicenseVerifyResponseV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicenseVerifyResponseV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicenseVerifyResponseV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/payments/checkout": {
-      "post": {
-        "tags": [
-          "Payments"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PaymentCheckoutRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PaymentCheckoutRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/PaymentCheckoutRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/payments/state": {
-      "get": {
-        "tags": [
-          "Payments"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/payments/result": {
-      "get": {
-        "tags": [
-          "Payments"
-        ],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "trackId",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/payments/process": {
-      "post": {
-        "tags": [
-          "Payments"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PaymentProcessRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PaymentProcessRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/PaymentProcessRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/purchases": {
-      "post": {
-        "tags": [
-          "Payments"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseCreateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseCreateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseCreateRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "get": {
-        "tags": [
-          "Payments"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/purchases/credit-creator": {
-      "post": {
-        "tags": [
-          "Payments"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreditCreatorRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreditCreatorRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreditCreatorRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/payouts/connect-stripe": {
       "post": {
         "tags": [
@@ -5636,6 +5682,83 @@
   },
   "components": {
     "schemas": {
+      "ProvenanceInclusionRequest": {
+        "required": [
+          "contentHash",
+          "merkleProof",
+          "merkleRoot"
+        ],
+        "type": "object",
+        "properties": {
+          "contentHash": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "merkleProof": {
+            "maxLength": 8000,
+            "type": "string"
+          },
+          "merkleRoot": {
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProvenanceVerifyRequest": {
+        "required": [
+          "contentHash",
+          "signature"
+        ],
+        "type": "object",
+        "properties": {
+          "contentHash": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "signedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "signature": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrackAuthorshipRequest": {
+        "type": "object",
+        "properties": {
+          "edits": {
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true
+          },
+          "arrangementNotes": {
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true
+          },
+          "lyricsAuthored": {
+            "type": "boolean"
+          },
+          "processNotes": {
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true
+          },
+          "aiDisclosure": {
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true
+          },
+          "commercialRightsVerified": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "ActivityItemResponse": {
         "type": "object",
         "properties": {
@@ -6848,10 +6971,29 @@
         },
         "additionalProperties": false
       },
+      "CreatorSearchRequest": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "nullable": true
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpsertCreatorProfileRequest": {
         "type": "object",
         "properties": {
           "slug": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
             "type": "string",
             "nullable": true
           },
