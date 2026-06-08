@@ -104,6 +104,11 @@ GOVERNANCE_AUDIT_REPORT.md
 TEST_COVERAGE_ANALYSIS.md
 QA-USER-FLOW-REPORT.md
 CREATOR-IDENTITY-ROLLOUT.md
+audit-artifacts/
+contracts/openapi.generated.json
+
+# Local tooling cache (k6 binary, one-off scripts)
+.tools/
 
 ################################################
 # Docker
