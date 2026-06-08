@@ -1,8 +1,8 @@
 # 🦕 Cambrian Backend API
 
-> A **contract-driven**, **policy-compliant**, and **test-verified** REST API built with ASP.NET Core 8.
+> A **contract-driven** REST API for the Cambrian music platform, built with ASP.NET Core 8.
 
-[![CI](https://github.com/Cambrian-by-Kinetix-Interactive/Cambrian-Backend-Api/actions/workflows/ci.yml/badge.svg)](https://github.com/Cambrian-by-Kinetix-Interactive/Cambrian-Backend-Api/actions/workflows/ci.yml)
+[![CI](https://github.com/CambrianHQ/Cambrian-Backend-Api/actions/workflows/ci.yml/badge.svg)](https://github.com/CambrianHQ/Cambrian-Backend-Api/actions/workflows/ci.yml)
 
 ---
 
@@ -22,6 +22,7 @@
 - [Getting Started](#-getting-started)
 - [Environment Variables](#-environment-variables)
 - [Running with Docker](#-running-with-docker)
+- [Deployment](#-deployment)
 - [Testing](#-testing)
 - [Contracts](#-contracts)
 - [CI / CD](#-ci--cd)
@@ -59,12 +60,20 @@
 | 8 | 🎙️ **Creator Tools** | Manage creator tracks, view revenue dashboards, and request payouts |
 | 9 | 💰 **Wallet & Credits** | Track wallet balance and credit creators on purchases |
 | 10 | 📋 **Subscriptions & Billing** | Manage subscription plans, upgrades, cancellations, and Stripe billing portals |
-| 11 | 🧾 **Invoices & Licenses** | Retrieve, list, and download invoices; browse music license types |
+| 11 | 🧾 **Invoices** | Retrieve, list, and download purchase invoices (with PDF rendering) |
 | 12 | 🛡️ **Admin Panel** | Manage users, review payouts, moderate tracks, and view reports and audit logs |
 | 13 | 🚩 **Feature Flags** | Per-user feature checks and admin-controlled rollout percentages |
 | 14 | 📈 **Analytics** | Track usage events and query admin summaries/events |
 | 15 | 🎨 **Creator Profiles** | Public creator pages with editable profile media and collections |
 | 16 | ❤️ **Health Checks** | API, auth service, and object-storage health probe endpoints |
+| 17 | 🔑 **API Keys & Public v1** | Hashed API-key auth and the public `/api/v1/*` surface (tracks, creators, keys) |
+| 18 | 🎟️ **Entitlements** | Resource grants + plan/tier entitlement matrix exposed via `/me` |
+| 19 | 🚀 **Track Boosts & Community** | Paid track boosts and community "hot tracks" ranking |
+| 20 | 🎚️ **Release-Ready** | Audio mastering pipeline + per-plan release credits |
+| 21 | 🔏 **Provenance & Authorship** | Content hashing, ECDSA signing, batched Merkle anchoring, and authorship disclosure |
+| 22 | 🤖 **MCP / AI Discovery** | Model Context Protocol resources/tools for AI-assisted track discovery |
+
+> ℹ️ **Note on Licenses:** standalone license-certificate endpoints were retired; checkout/purchase now flows through `/billing`, and certificate/invoice PDFs are rendered server-side. See [Payments](#-api-endpoints).
 
 ---
 
@@ -84,10 +93,6 @@ All endpoints are defined in the versioned OpenAPI spec at [`contracts/openapi.v
 | | `POST` | `/library` | ✅ |
 | | `DELETE` | `/library/{trackId}` | ✅ |
 | | `GET` | `/library/purchased-track-ids` | ✅ |
-| 🛒 **Checkout** | `POST` | `/checkout` | ✅ |
-| | `GET` | `/checkout/session/{sessionId}` | ✅ |
-| 💳 **Payments** | `POST` | `/payments/checkout` | ✅ |
-| | `GET` | `/payments/state` | ✅ |
 | 🎧 **Streaming** | `GET` | `/stream/{trackId}` | ✅ |
 | | `GET` | `/stream/{trackId}/audio` | ❌ |
 | | `POST` | `/stream/start` | ✅ |
@@ -137,8 +142,19 @@ All endpoints are defined in the versioned OpenAPI spec at [`contracts/openapi.v
 | 🧾 **Invoices** | `GET` | `/invoices` | ✅ |
 | | `GET` | `/invoices/{invoiceId}` | ✅ |
 | | `GET` | `/invoices/{invoiceId}/download` | ✅ |
-| 📜 **Licenses** | `GET` | `/licenses` | ❌ |
-| | `GET` | `/licenses/{licenseId}` | ❌ |
+| 🔑 **API Keys** | `GET` | `/api/v1/keys` | ✅ |
+| | `POST` | `/api/v1/keys` | ✅ |
+| | `DELETE` | `/api/v1/keys/{id}` | ✅ |
+| 🎟️ **Entitlements** | `GET` | `/api/me/entitlements` | ✅ |
+| | `GET` | `/api/entitlements/access` | ✅ |
+| 🚀 **Boosts / Community** | `POST` | `/tracks/{trackId}/boost` | ✅ |
+| | `GET` | `/community/hot-this-week` | ❌ |
+| 🎚️ **Release-Ready** | `POST` | `/release-ready/jobs` | ✅ |
+| | `GET` | `/release-ready/credits` | ✅ |
+| | `POST` | `/release-ready/validate` | ✅ |
+| 🔏 **Provenance** | `GET` | `/api/tracks/{id}/provenance` | ❌ |
+| | `POST` | `/api/provenance/verify` | ❌ |
+| | `POST` | `/api/provenance/verify-inclusion` | ❌ |
 | 🛡️ **Admin** | `GET` | `/admin/dashboard` | ✅ (Admin) |
 | | `GET` | `/admin/audit` | ✅ (Admin) |
 | | `GET` | `/admin/integrity` | ✅ (Admin) |
@@ -272,10 +288,11 @@ Requests that exceed the limit receive a `429 Too Many Requests` response.
 - `GET /stream/{trackId}/audio` performs a redirect to object storage (S3/R2 signed URL), allowing CDN/native range handling for browser audio playback.
 - Download endpoints (`/download/*`) still enforce purchase entitlement before returning a download URL or file stream.
 - Local storage (`Storage__Provider=local`) is useful for development but is ephemeral in containerized deployments.
-- For Cloudflare R2, keep:
+- For Cloudflare R2:
   - `Storage__Provider=r2`
   - `Storage__Region=auto`
   - `Storage__UsePathStyle=true`
+- For a Supabase / AWS S3-style gateway, set a **real AWS region** (e.g. `us-east-1`). The `auto` value is a Cloudflare-R2-only convention and produces `SignatureDoesNotMatch` against SigV4 gateways that require a concrete region.
 
 ---
 
@@ -283,7 +300,7 @@ Requests that exceed the limit receive a `429 Too Many Requests` response.
 
 | Symptom | Likely cause | What to check |
 |---|---|---|
-| Signed stream/download URL returns `403` from R2 | Signature mismatch config | Ensure `Storage__Region=auto` and `Storage__UsePathStyle=true`; verify endpoint/bucket/key pair |
+| Signed stream/download URL returns `403`/`SignatureDoesNotMatch` | Region/path-style mismatch | R2: `Storage__Region=auto`. Supabase/S3 gateway: a real AWS region (e.g. `us-east-1`). Keep `Storage__UsePathStyle=true`; verify endpoint/bucket/key pair |
 | `POST /creator-profile/me/avatar` returns "Invalid image file." | Unsupported type, missing multipart field, or file >10 MB | Use form field name `file`; only jpg/jpeg/png/webp; keep size <= 10 MB |
 | Creator profile endpoints return `403 Creator tier required.` | JWT/user tier is not `creator` | Confirm token includes tier claim or user tier is set to creator |
 | Browser CORS failures from preview deploys | Missing origin allow-list | Configure `App__CorsOrigins` and `App__VercelProjectSlug` for preview environments |
@@ -302,16 +319,23 @@ Every endpoint is defined in the versioned OpenAPI specification located in [`co
 All routes that handle sensitive data are protected by authentication and authorization policies enforced at the framework level. Environment-specific secrets (database credentials, JWT secrets, Stripe keys, storage keys) are **never** committed to source control — see [`.env.example`](config/.env.example) for required variables. Secrets must be injected via environment variables or a secrets manager at runtime.
 
 ### ✅ Test Compliance
-Every feature area has a corresponding test class. The CI pipeline will **block merges** when any test fails. The current test suites are:
+The test project (`tests/Cambrian.Api.Tests/`) covers auth, payments/webhooks, catalog, creator identity, entitlements, boosts, release-ready, provenance, and contract conformance. Representative suites:
 
-| Test Suite | File | What it verifies |
+| Area | File | What it verifies |
 |---|---|---|
-| 🔐 Auth | `tests/Cambrian.Api.Tests/AuthTests.cs` | Register, Login, /auth/me, tier, 401 guards |
-| 🛒 Purchase | `tests/Cambrian.Api.Tests/CheckoutTests.cs` | POST /checkout → Stripe URL, auth gating, validation |
-| 📚 Library | `tests/Cambrian.Api.Tests/LibraryTests.cs` | GET/POST/DELETE /library, purchased-track-ids |
-| ⬆️ Upload | `tests/Cambrian.Api.Tests/UploadTests.cs` | Multipart upload, Creator role gate, validation |
-| ⬇️ Download | `tests/Cambrian.Api.Tests/DownloadTests.cs` | Signed URL generation, purchase-gate, 403/401 |
-| 📜 Contract | `tests/Cambrian.Api.Tests/ContractTests.cs` | All routes match OpenAPI spec |
+| 🔐 Auth | `AuthControllerTests.cs` | Register, login, `/auth/me`, set-username, role guards |
+| 💳 Webhooks/Money | `StripeWebhookServiceTests.cs`, `ConcurrencyTests.cs` | Fulfillment, idempotency, exclusive/buyout atomicity |
+| ⬆️/⬇️ Upload & Download | `UploadServiceTests.cs`, `DownloadControllerTests.cs` | Upload gating, signed URLs, purchase-gate |
+| 🎟️ Entitlements | `EntitlementMatrixTests.cs` | Plan/tier entitlement resolution |
+| 🚀 Boosts / 🎚️ Release-Ready | `TrackBoostTests.cs`, `ReleaseReadyCreditTests.cs` | Boost flow, mastering credits |
+| 🔏 Provenance | `ProvenanceAnchorBatchTests.cs`, `ProvenanceComplianceUnitTests.cs` | Merkle anchoring, compliance scoring |
+| 📜 Contract | `Contract/ApiContractTests.cs`, `AI/AiDiscoveryContractTests.cs` | Routes match the OpenAPI spec |
+
+> ⚠️ **Honest test status (not fully green).** The non-relational suite is the day-to-day signal (~720+ passing). Two groups are **known-failing** and tracked, not regressions:
+> - `AI/AiDiscoveryContractTests` — AI discovery schemas not yet present in `contracts/openapi.v1.json`.
+> - `/sse` OpenAPI coverage tests — the `/sse` alias is not modelled as a contract path.
+>
+> Relational tests use Testcontainers and **require Docker**; without it they are skipped/excluded. Do not assume a fully green suite — run it locally and read the summary.
 
 ---
 
@@ -347,7 +371,7 @@ Dependencies flow **inward only**: `Api` → `Application` → `Domain`. Infrast
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/loganbryanx/Cambrian-Backend-Api.git
+git clone https://github.com/CambrianHQ/Cambrian-Backend-Api.git
 cd Cambrian-Backend-Api
 
 # 2. Copy and configure environment variables
@@ -388,7 +412,7 @@ Copy [`.env.example`](config/.env.example) to `.env` and fill in the values. **N
 | `FRONTEND_URL` | Allowed CORS origin for the frontend |
 | `Jwt__Issuer` | JWT token issuer |
 | `Jwt__Audience` | JWT token audience |
-| `Jwt__Secret` | Long random secret for signing JWT tokens |
+| `Jwt__Key` | Long random secret used to sign JWT tokens (also accepts `JWT_KEY`) |
 | `Stripe__SecretKey` | Stripe secret API key |
 | `Stripe__WebhookSecret` | Stripe webhook signing secret |
 | `Storage__Endpoint` | S3-compatible storage endpoint URL |
@@ -414,6 +438,18 @@ docker compose up --build
 The API will be available at `http://localhost:8080`.
 
 > **Note:** Provide secrets via a `.env` file alongside `docker-compose.yml`. The compose file loads it automatically via `env_file`.
+
+---
+
+## 🚢 Deployment
+
+Production runs on **Render's free tier** with the database on **Neon** (external Postgres), described by [`render.yaml`](render.yaml).
+
+- **Production** deploys from `main`; **staging** deploys from `staging`. A git push is only the source-control half — a deploy is not live until Render has built and promoted it.
+- `DATABASE_URL` is set manually as a Render workspace secret (Neon connection string), not auto-provisioned. All `sync: false` env vars in `render.yaml` must be filled in the dashboard.
+- Migrations run automatically on startup (`app.RunMigrationsAsync()`); they are skipped in the `Testing` environment.
+- `Storage__Provider` must be `s3`/`r2` in Production (the app refuses to start with `local`). See [Storage & Streaming Notes](#-storage--streaming-notes) for the region caveat.
+- See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full runbook.
 
 ---
 
@@ -450,7 +486,7 @@ dotnet test tests/Cambrian.Api.Tests --filter "FullyQualifiedName~UploadTests"
 dotnet test tests/Cambrian.Api.Tests --filter "FullyQualifiedName~DownloadTests"
 ```
 
-Tests use `WebApplicationFactory<Program>` with in-memory SQLite — no external services required. **All tests must pass before a pull request can be merged.**
+Most tests use `WebApplicationFactory<Program>` with in-memory SQLite — no external services required. Relational tests use Testcontainers and require Docker. See the [honest test status](#-test-compliance) above before treating the suite as green.
 
 ---
 
@@ -479,9 +515,9 @@ On every push to `main` and on every pull request the pipeline:
 
 1. ✅ Restores NuGet dependencies
 2. 🔨 Builds the solution in Release configuration
-3. 🧪 Runs the full test suite
+3. 🧪 Runs the test suite
 
-**Merging is blocked if the build or any test fails.**
+A local pre-push hook runs a **critical-tests** subset before allowing a push. Note the [known-failing contract suites](#-test-compliance) — CI is not currently a fully green gate, so review the build/test summary rather than assuming a pass.
 
 ---
 
