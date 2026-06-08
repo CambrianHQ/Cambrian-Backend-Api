@@ -370,13 +370,24 @@ public class TrackRepository : ITrackRepository
     }
 
     private static IQueryable<Track> ApplySort(IQueryable<Track> query, string? sort)
-        => sort?.ToLower() switch
-        {
-            "price" => query.OrderBy(t => t.Price),
-            "price_desc" => query.OrderByDescending(t => t.Price),
-            "title" => query.OrderBy(t => t.Title),
-            _ => query.OrderByDescending(t => t.CreatedAt)
-        };
+        => TrackSorting.Apply(query, sort);
+
+    // Columns added to the Track entity after the original Tracks schema shipped.
+    // The legacy-compatible write path (Insert/UpdateLegacyCompatibleTrackAsync)
+    // intentionally omits these, so a missing-column error naming any of them means
+    // the target database predates the column and should use the legacy fallback
+    // writer rather than failing the write. Keep this in sync with columns absent
+    // from the legacy writers above.
+    private static readonly string[] ModernTrackColumns =
+    {
+        "PrimaryGenre",
+        "Subgenre",
+        "AiDisclosureDdex",
+        "CommercialRightsVerified",
+        "ContentHash",
+        "Signature",
+        "SignedAt",
+    };
 
     private static bool IsMissingTrackTaxonomyColumn(Exception ex)
     {
@@ -387,11 +398,10 @@ public class TrackRepository : ITrackRepository
             message.Contains("no column named", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("invalid column name", StringComparison.OrdinalIgnoreCase);
 
-        var taxonomyColumnMessage =
-            message.Contains("PrimaryGenre", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("Subgenre", StringComparison.OrdinalIgnoreCase);
+        var modernColumnMessage = ModernTrackColumns.Any(
+            column => message.Contains(column, StringComparison.OrdinalIgnoreCase));
 
-        return missingColumnMessage && taxonomyColumnMessage;
+        return missingColumnMessage && modernColumnMessage;
     }
 
     public async Task AddAsync(Track track)
