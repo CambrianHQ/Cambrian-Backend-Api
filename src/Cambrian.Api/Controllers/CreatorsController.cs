@@ -542,6 +542,31 @@ public class CreatorsController : BaseController
         return OkResponse(new { following, followerCount });
     }
 
+    // ───── POST/GET /creators/search ─────
+
+    /// <summary>
+    /// Search creators by username or display name. Public; result set is capped server-side.
+    /// Exposed at /creators/search (the path the frontend calls) for both POST (body) and GET (query).
+    /// </summary>
+    [HttpPost("/creators/search")]
+    public Task<IActionResult> SearchCreatorsPost([FromBody] CreatorSearchRequest? body)
+        => SearchCreatorsCore(body?.Query, body?.Limit);
+
+    [HttpGet("/creators/search")]
+    public Task<IActionResult> SearchCreatorsGet([FromQuery] string? query, [FromQuery] int? limit)
+        => SearchCreatorsCore(query, limit);
+
+    private async Task<IActionResult> SearchCreatorsCore(string? query, int? limit)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return OkResponse(Array.Empty<CreatorSearchResultDto>());
+
+        var results = await _creators.SearchAsync(query, limit ?? 20);
+        foreach (var r in results)
+            r.ProfileImageUrl = ResolveImageUrl(r.ProfileImageUrl);
+        return OkResponse(results);
+    }
+
     // ───── URL resolution helpers ─────
 
     private void ResolveTrackUrls(IEnumerable<Cambrian.Application.DTOs.Catalog.TrackResponse> tracks)

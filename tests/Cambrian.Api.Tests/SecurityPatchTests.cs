@@ -34,13 +34,12 @@ public sealed class SecurityPatchTests
         public ITrackRepository Tracks { get; } = Substitute.For<ITrackRepository>();
         public IObjectStorage Storage { get; } = Substitute.For<IObjectStorage>();
         public IEntitlementService Entitlement { get; } = Substitute.For<IEntitlementService>();
-        public ILicenseCertificateRepository Licenses { get; } = Substitute.For<ILicenseCertificateRepository>();
         public DownloadController Controller { get; }
 
         public C3Fixture()
         {
             var logger = Substitute.For<ILogger<DownloadController>>();
-            Controller = new DownloadController(Tracks, Storage, Entitlement, Licenses, logger);
+            Controller = new DownloadController(Tracks, Storage, Entitlement, logger);
             SetUser("user-1");
         }
 
@@ -102,8 +101,6 @@ public sealed class SecurityPatchTests
         });
         fix.Storage.GenerateDownloadUrl(Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/file.mp3");
-        fix.Licenses.GetByBuyerAndTrackAsync(Arg.Any<string>(), Arg.Any<string>())
-            .Returns((LicenseCertificate?)null);
 
         var result = await fix.Controller.Download(trackId.ToString());
 

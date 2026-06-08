@@ -247,6 +247,10 @@ public class AuthController : BaseController
             subscriptionEndDate = profile.SubscriptionEndDate,
             platformFeePercent = profile.PlatformFeePercent,
             contractVersion = profile.ContractVersion,
+            // Account credential state — the frontend gates the Change Password / Change Email
+            // forms on these. Mirrors what /auth/login and /auth/register already return.
+            hasPassword = !string.IsNullOrEmpty(user?.PasswordHash),
+            googleLinked = !string.IsNullOrEmpty(user?.GoogleId),
             capabilities
         });
     }
@@ -374,14 +378,14 @@ public class AuthController : BaseController
         if (UsernameHelper.IsSet(user))
             return ErrorResponse("Username cannot be changed once set.");
 
-        // Promote to Creator role on username set — this is the onboarding completion step.
-        // Users who set a username are entering the creator flow and need access to
-        // creator-profile, payout, and upload endpoints.
-        if (string.Equals(user.Role, "User", StringComparison.OrdinalIgnoreCase))
-        {
-            user.Role = "Creator";
-            _logger.LogInformation("EVENT: RolePromoted userId:{UserId} from=User to=Creator (username onboarding)", userId);
-        }
+        // Choosing a username is a generic onboarding step available to ANY authenticated
+        // account (listeners included) — it must NOT change the user's role. Previously this
+        // endpoint silently promoted every "User" to "Creator", which both granted creator
+        // capabilities and provisioned a public storefront for plain listeners. A listener
+        // stays a listener; an account becomes a creator only through an explicit path
+        // (registration with role=creator, admin promotion, or admin/billing tier upgrade).
+        var isCreatorAccount = string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase);
 
         // Wrap ALL uniqueness checks + writes in a transaction so concurrent requests
         // cannot both pass checks and commit duplicate usernames.
@@ -427,30 +431,38 @@ public class AuthController : BaseController
 
             _logger.LogInformation("EVENT: UsernameSet userId:{UserId} username:{Username}", userId, normalized);
 
-            // Pass DisplayName so Creator row gets the human-readable name, not just the normalized username
-            await _creators.UpsertAsync(userId, new Cambrian.Application.DTOs.Creators.UpdateCreatorProfileRequest
+            // Creator artifacts (the Creators row that powers /creator/username/{slug} and
+            // the public storefront profile) are only provisioned for accounts that are
+            // actually creators. Provisioning them for a listener would make the listener
+            // publicly discoverable as a creator even though no public creator lookup filters
+            // on role.
+            if (isCreatorAccount)
             {
-                Username = normalized,
-                DisplayName = displayName
-            });
-            _logger.LogInformation("EVENT: CreatorUsernameSynced userId:{UserId} username:{Username}", userId, normalized);
-
-            // Auto-provision CreatorProfile so the storefront, collections, and
-            // /creator/username/{slug} endpoints work immediately after registration
-            // without requiring a separate creatorProfileApi.upsert() call.
-            try
-            {
-                var existingProfile = await _profiles.GetByUserIdAsync(userId);
-                if (existingProfile is null)
+                // Pass DisplayName so Creator row gets the human-readable name, not just the normalized username
+                await _creators.UpsertAsync(userId, new Cambrian.Application.DTOs.Creators.UpdateCreatorProfileRequest
                 {
-                    await _profiles.UpsertAsync(userId, normalized, "", null, null, false, true);
-                    _logger.LogInformation("EVENT: CreatorProfileProvisioned userId:{UserId} slug:{Slug}", userId, normalized);
+                    Username = normalized,
+                    DisplayName = displayName
+                });
+                _logger.LogInformation("EVENT: CreatorUsernameSynced userId:{UserId} username:{Username}", userId, normalized);
+
+                // Auto-provision CreatorProfile so the storefront, collections, and
+                // /creator/username/{slug} endpoints work immediately after registration
+                // without requiring a separate creatorProfileApi.upsert() call.
+                try
+                {
+                    var existingProfile = await _profiles.GetByUserIdAsync(userId);
+                    if (existingProfile is null)
+                    {
+                        await _profiles.UpsertAsync(userId, normalized, "", null, null, false, true);
+                        _logger.LogInformation("EVENT: CreatorProfileProvisioned userId:{UserId} slug:{Slug}", userId, normalized);
+                    }
                 }
-            }
-            catch (Exception profileEx)
-            {
-                // Non-critical — log but don't fail the set-username transaction
-                _logger.LogWarning(profileEx, "CreatorProfile auto-provision failed for userId={UserId}; user can create it manually", userId);
+                catch (Exception profileEx)
+                {
+                    // Non-critical — log but don't fail the set-username transaction
+                    _logger.LogWarning(profileEx, "CreatorProfile auto-provision failed for userId={UserId}; user can create it manually", userId);
+                }
             }
 
             await _tx.CommitAsync();

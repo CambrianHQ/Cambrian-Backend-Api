@@ -64,6 +64,52 @@ public sealed class UploadServiceTests
     }
 
     [Fact]
+    public async Task Upload_ThrowsUpgradeRequired_WhenFreeTrackLimitReached()
+    {
+        // Free plan allows 10 tracks. A creator already at the limit must get a typed
+        // UpgradeRequiredException carrying the UPGRADE_REQUIRED code (maps to HTTP 402).
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        users.FindByIdAsync("at-limit").Returns(new ApplicationUser
+        {
+            Id = "at-limit",
+            CreatorTier = Cambrian.Domain.Enums.CreatorTier.Free,
+            UploadCount = 10
+        });
+        var sut = new UploadService(_storage, _tracks, users, Substitute.For<ILogger<UploadService>>(), _creators, _profiles);
+
+        var request = new UploadTrackRequest { Audio = MakeFile(), CreatorId = "at-limit", Title = "Beat" };
+
+        var ex = await Assert.ThrowsAsync<Cambrian.Application.Exceptions.UpgradeRequiredException>(
+            () => sut.Upload(request));
+        Assert.Equal("UPGRADE_REQUIRED", ex.Code);
+        await _tracks.DidNotReceive().AddAsync(Arg.Any<Track>());
+    }
+
+    [Fact]
+    public async Task Upload_AllowsEleventhTrack_ForCreatorTier()
+    {
+        // Creator/Pro are unlimited — the 11th upload must succeed.
+        var store = Substitute.For<IUserStore<ApplicationUser>>();
+        var users = Substitute.For<UserManager<ApplicationUser>>(store, null, null, null, null, null, null, null, null);
+        users.FindByIdAsync("creator-unlimited").Returns(new ApplicationUser
+        {
+            Id = "creator-unlimited",
+            CreatorTier = Cambrian.Domain.Enums.CreatorTier.Creator,
+            UploadCount = 10
+        });
+        users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns("https://cdn.test/track.mp3");
+        var sut = new UploadService(_storage, _tracks, users, Substitute.For<ILogger<UploadService>>(), _creators, _profiles);
+
+        var result = await sut.Upload(new UploadTrackRequest { Audio = MakeFile(), CreatorId = "creator-unlimited", Title = "Beat" });
+
+        Assert.True(Guid.TryParse(result.TrackId, out _));
+        await _tracks.Received(1).AddAsync(Arg.Any<Track>());
+    }
+
+    [Fact]
     public async Task Upload_ThrowsArgumentException_WhenAudioIsEmpty()
     {
         var request = new UploadTrackRequest

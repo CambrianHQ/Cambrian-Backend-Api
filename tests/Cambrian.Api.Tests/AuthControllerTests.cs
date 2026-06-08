@@ -339,7 +339,9 @@ public sealed class AuthControllerTests
         var userId = "user-f19";
         SetupUser(userId);
 
-        var user = new ApplicationUser { Id = userId, Email = "f19@test.com", Role = "User" };
+        // Creator-row provisioning (and thus the rollback-on-failure path) only runs for
+        // accounts that are already creators — listeners never touch the Creators table.
+        var user = new ApplicationUser { Id = userId, Email = "f19@test.com", Role = "Creator" };
         _userManager.FindByIdAsync(userId).Returns(user);
         _userManager.FindByNameAsync("testcreator").Returns((ApplicationUser?)null);
         _userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
@@ -365,19 +367,50 @@ public sealed class AuthControllerTests
         var userId = "user-ok";
         SetupUser(userId);
 
+        // A listener (Role == "User") setting a username: the transaction still commits,
+        // but the role must NOT change and NO creator artifacts may be provisioned.
         var user = new ApplicationUser { Id = userId, Email = "ok@test.com", Role = "User" };
         _userManager.FindByIdAsync(userId).Returns(user);
         _userManager.FindByNameAsync("goodname").Returns((ApplicationUser?)null);
         _userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
         _creators.IsUsernameTakenAsync("goodname").Returns(false);
-        _creators.UpsertAsync(Arg.Any<string>(), Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>())
-            .Returns(new Application.DTOs.Creators.PublicCreatorDto { Id = Guid.NewGuid().ToString(), Username = "goodname" });
         _auth.GenerateFreshTokenAsync(userId).Returns("fresh-jwt");
 
         var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "goodname" });
 
-        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.IsType<OkObjectResult>(result);
         await _tx.Received(1).CommitAsync();
         await _tx.DidNotReceive().RollbackAsync();
+
+        // The bug: setting a username silently promoted listeners to Creator and gave them
+        // a public storefront. A listener must stay a listener.
+        Assert.Equal("User", user.Role);
+        await _creators.DidNotReceive()
+            .UpsertAsync(Arg.Any<string>(), Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>());
+    }
+
+    [Fact]
+    public async Task SetUsername_DoesNotChangeRole_ButProvisions_ForCreatorAccount()
+    {
+        var userId = "user-creator";
+        SetupUser(userId);
+
+        var user = new ApplicationUser { Id = userId, Email = "creator@test.com", Role = "Creator" };
+        _userManager.FindByIdAsync(userId).Returns(user);
+        _userManager.FindByNameAsync("creatorname").Returns((ApplicationUser?)null);
+        _userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
+        _creators.IsUsernameTakenAsync("creatorname").Returns(false);
+        _creators.UpsertAsync(Arg.Any<string>(), Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>())
+            .Returns(new Application.DTOs.Creators.PublicCreatorDto { Id = Guid.NewGuid().ToString(), Username = "creatorname" });
+        _auth.GenerateFreshTokenAsync(userId).Returns("fresh-jwt");
+
+        var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "creatorname" });
+
+        Assert.IsType<OkObjectResult>(result);
+        await _tx.Received(1).CommitAsync();
+        // An existing creator keeps their role and DOES get the Creators-row provisioned.
+        Assert.Equal("Creator", user.Role);
+        await _creators.Received(1)
+            .UpsertAsync(userId, Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>());
     }
 }

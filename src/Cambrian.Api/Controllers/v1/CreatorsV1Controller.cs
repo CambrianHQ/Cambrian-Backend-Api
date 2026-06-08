@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Cambrian.Application.DTOs.Checkout;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

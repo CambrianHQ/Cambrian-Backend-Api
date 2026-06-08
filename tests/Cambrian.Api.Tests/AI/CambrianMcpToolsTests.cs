@@ -154,43 +154,6 @@ public class CambrianMcpToolsTests
         Assert.Equal("Track not found", doc.RootElement.GetProperty("error").GetString());
     }
 
-    // ── get_track_licenses ──
-
-    [Fact]
-    public async Task GetTrackLicenses_ReturnsLicenseArrayJson()
-    {
-        _discovery.GetLicenseOptionsAsync("CAMB-TRK-TEST0001")
-            .Returns(new List<AiLicenseOptionDto>
-            {
-                new()
-                {
-                    LicenseType = "non_exclusive",
-                    DisplayName = "Non-Exclusive License",
-                    Price = 29.99m,
-                    Currency = "USD",
-                    CommercialUse = true
-                }
-            });
-
-        var json = await CambrianMcpTools.GetTrackLicenses(_discovery, "CAMB-TRK-TEST0001");
-        var doc = JsonDocument.Parse(json);
-
-        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
-        Assert.Equal("non_exclusive", doc.RootElement[0].GetProperty("licenseType").GetString());
-    }
-
-    [Fact]
-    public async Task GetTrackLicenses_NotFound_ReturnsErrorJson()
-    {
-        _discovery.GetLicenseOptionsAsync("CAMB-TRK-MISSING")
-            .Returns((List<AiLicenseOptionDto>?)null);
-
-        var json = await CambrianMcpTools.GetTrackLicenses(_discovery, "CAMB-TRK-MISSING");
-        var doc = JsonDocument.Parse(json);
-
-        Assert.Equal("Track not found", doc.RootElement.GetProperty("error").GetString());
-    }
-
     // ── get_track_preview ──
 
     [Fact]

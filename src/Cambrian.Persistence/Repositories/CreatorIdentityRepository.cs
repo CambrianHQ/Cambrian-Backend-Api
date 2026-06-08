@@ -64,6 +64,57 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         return await MapToDtoAsync(creator, stats, tracks);
     }
 
+    public async Task<IReadOnlyList<CreatorSearchResultDto>> SearchAsync(string query, int limit)
+    {
+        var q = query?.Trim().ToLowerInvariant() ?? "";
+        if (q.Length == 0) return Array.Empty<CreatorSearchResultDto>();
+        limit = Math.Clamp(limit, 1, 50);
+
+        // Lowercase both sides so the match is case-insensitive on both Postgres (LIKE is
+        // case-sensitive) and SQLite. Username is already normalized lowercase; DisplayName is not.
+        var matches = await _db.Creators.AsNoTracking()
+            .Where(c => c.Username.ToLower().Contains(q)
+                        || (c.DisplayName != null && c.DisplayName.ToLower().Contains(q)))
+            .OrderBy(c => c.Username)
+            .Take(limit)
+            .Select(c => new { c.Id, c.UserId, c.Username, c.DisplayName, c.ProfileImageUrl })
+            .ToListAsync();
+
+        if (matches.Count == 0) return Array.Empty<CreatorSearchResultDto>();
+
+        // Canonical presentation fields live on CreatorProfile — batch-load them.
+        var userIds = matches.Select(m => m.UserId).ToList();
+        var profiles = await _db.CreatorProfiles.AsNoTracking()
+            .Where(p => userIds.Contains(p.UserId))
+            .Select(p => new { p.UserId, p.ProfileImageUrl, p.Bio })
+            .ToListAsync();
+        var profileByUser = profiles.ToDictionary(p => p.UserId);
+
+        var results = new List<CreatorSearchResultDto>(matches.Count);
+        foreach (var m in matches)
+        {
+            profileByUser.TryGetValue(m.UserId, out var prof);
+            // Dual-FK count (UUID FK or legacy string FK), public only. Bounded by the result cap.
+            var trackCount = await _db.Tracks.CountAsync(t =>
+                (t.CreatorUuid == m.Id || t.CreatorId == m.UserId)
+                && t.Visibility == "public"
+                && !t.ExclusiveSold
+                && t.Status != "copyright_transferred");
+
+            results.Add(new CreatorSearchResultDto
+            {
+                Id = m.Id.ToString(),
+                Username = m.Username,
+                DisplayName = m.DisplayName,
+                ProfileImageUrl = prof?.ProfileImageUrl ?? m.ProfileImageUrl,
+                Bio = prof?.Bio ?? "",
+                TrackCount = trackCount,
+            });
+        }
+
+        return results;
+    }
+
     /// <summary>
     /// Critical query: filter tracks WHERE t.CreatorId == creatorId (UUID FK).
     /// Join creator once for creatorUsername and creatorDisplayName.

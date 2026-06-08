@@ -2,6 +2,7 @@ using System.Text.Json;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.CreatorProfile;
+using Cambrian.Application.DTOs.Creators;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -162,13 +163,13 @@ public class CreatorProfileController : BaseController
     {
         var userId = GetRequiredUserId()!;
 
+        // Load the canonical creator identity once — used for slug derivation and DisplayName writes.
+        var creator = await _creators.GetByUserIdAsync(userId);
+
         // Auto-derive slug from the creator's username when not explicitly provided.
         var slug = body.Slug?.Trim().ToLowerInvariant() ?? "";
         if (string.IsNullOrWhiteSpace(slug))
-        {
-            var creator = await _creators.GetByUserIdAsync(userId);
             slug = creator?.Username?.Trim().ToLowerInvariant() ?? "";
-        }
         if (string.IsNullOrWhiteSpace(slug))
             return ErrorResponse("Slug is required. Set a username first via POST /auth/set-username.");
 
@@ -199,6 +200,9 @@ public class CreatorProfileController : BaseController
         if (body.Bio is not null && body.Bio.Length > 2000)
             return ErrorResponse("Bio must be 2000 characters or less.");
 
+        if (body.DisplayName is not null && body.DisplayName.Trim().Length > 100)
+            return ErrorResponse("Display name must be 100 characters or less.");
+
         var socialLinksJson = body.SocialLinks is not null
             ? JsonSerializer.Serialize(body.SocialLinks)
             : null;
@@ -208,16 +212,38 @@ public class CreatorProfileController : BaseController
         var saved = await _profiles.UpsertAsync(userId, slug, body.Bio?.Trim() ?? "",
             body.Niche?.Trim(), socialLinksJson, body.ShowEarnings, body.ShowDownloadStats);
 
-        // Sync bio back to ApplicationUser so /auth/me and settings return consistent data
-        if (body.Bio is not null)
+        var displayName = body.DisplayName?.Trim();
+
+        // Persist DisplayName to the canonical Creator identity row (read first by GetMyProfile and
+        // /auth/me) and mirror DisplayName + Bio to ApplicationUser so every read surface is consistent.
+        if (body.Bio is not null || !string.IsNullOrEmpty(displayName))
         {
             var appUser = await _userManager.FindByIdAsync(userId);
+
+            if (!string.IsNullOrEmpty(displayName))
+            {
+                await _creators.UpsertAsync(userId, new UpdateCreatorProfileRequest
+                {
+                    DisplayName = displayName,
+                    // Username is immutable once set; this also supplies the value if the Creator
+                    // row must be created (username set without a Creator row yet).
+                    Username = creator?.Username ?? appUser?.UserName,
+                });
+                // Echo the new name in the PUT response (CreatorProfileDto is the returned shape).
+                saved.DisplayName = displayName;
+            }
+
             if (appUser is not null)
             {
-                // ApplicationUser.Bio is varchar(500) — store truncated mirror; CreatorProfile is canonical
-                appUser.Bio = body.Bio.Trim().Length > 500
-                    ? body.Bio.Trim()[..497] + "..."
-                    : body.Bio.Trim();
+                if (body.Bio is not null)
+                {
+                    // ApplicationUser.Bio is varchar(500) — store truncated mirror; CreatorProfile is canonical
+                    appUser.Bio = body.Bio.Trim().Length > 500
+                        ? body.Bio.Trim()[..497] + "..."
+                        : body.Bio.Trim();
+                }
+                if (!string.IsNullOrEmpty(displayName))
+                    appUser.DisplayName = displayName;
                 await _userManager.UpdateAsync(appUser);
             }
         }
@@ -347,10 +373,32 @@ public class CreatorProfileController : BaseController
     [HttpGet("/creator/username/{slug}/collections")]
     public async Task<IActionResult> GetCollections(string slug)
     {
+        // Resolve the creator the same way GetBySlug does: profile slug first, then fall back to
+        // the canonical identity resolver (handles username, UUID, ApplicationUser.Id). The
+        // /creator/username/{slug} route passes a username, which often differs from the profile
+        // slug (e.g. "e2e_keep_run" vs "e2e-keep-run"), which previously 404'd a real creator.
         var profile = await _profiles.GetBySlugAsync(slug);
-        if (profile is null) return NotFoundResponse("Creator not found.");
+        var creatorUserId = profile?.UserId;
+        if (creatorUserId is null)
+        {
+            var creator = await _creators.ResolveByLegacyIdentifierAsync(slug);
+            creatorUserId = creator?.UserId;
+        }
+        if (creatorUserId is null) return NotFoundResponse("Creator not found.");
 
-        var collections = await _profiles.GetCollectionsAsync(profile.UserId);
+        var collections = await _profiles.GetCollectionsAsync(creatorUserId);
+        ResolveCollectionImageUrls(collections);
+        return OkResponse(collections);
+    }
+
+    // ───── Collections: list own (authenticated) ─────
+
+    [Authorize]
+    [HttpGet("me/collections")]
+    public async Task<IActionResult> GetMyCollections()
+    {
+        var userId = GetRequiredUserId()!;
+        var collections = await _profiles.GetCollectionsAsync(userId);
         ResolveCollectionImageUrls(collections);
         return OkResponse(collections);
     }

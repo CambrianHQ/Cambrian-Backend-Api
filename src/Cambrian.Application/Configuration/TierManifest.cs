@@ -22,6 +22,7 @@ public static class TierManifest
         StripePriceConfigKey = null,
         Features = ["Host up to 10 tracks", "Public profile", "On-chain provenance stamp", "Read-only compliance score"],
         AnalyticsAccess = AnalyticsAccess.Basic,
+        ReleaseReadyCreditsPerMonth = 0,
         FeatureFlags = BuildFeatureFlags(unlimitedAndSuite: false, proOnly: false)
     };
 
@@ -34,13 +35,17 @@ public static class TierManifest
         FeeRate = 0.15m,
         PriceCents = 1500,
         StripePriceConfigKey = "Stripe:Prices:Creator",
+        // Marketing copy published via /tiers/config — list only what works today.
+        // Roadmap items (PDF certificates, DDEX/C2PA export, Verified Clean badge) are
+        // surfaced as "coming soon" on the frontend, not advertised as included here.
         Features =
         [
-            "Unlimited tracks", "Full provenance suite", "Unlimited PDF certificates",
-            "Commercial-rights verification + Verified Clean badge", "DDEX + C2PA metadata",
-            "Royalty + catalog analytics"
+            "Unlimited tracks", "3 Release Ready masters per month",
+            "Full provenance suite (stamp + compliance score)",
+            "Commercial-rights attestation", "Creator analytics"
         ],
         AnalyticsAccess = AnalyticsAccess.Full,
+        ReleaseReadyCreditsPerMonth = 3,
         FeatureFlags = BuildFeatureFlags(unlimitedAndSuite: true, proOnly: false)
     };
 
@@ -53,12 +58,15 @@ public static class TierManifest
         FeeRate = 0.10m,
         PriceCents = 3900,
         StripePriceConfigKey = "Stripe:Prices:Pro",
+        // Roadmap items (Copyright Office assistance, bulk upload + scheduling, sync-pool)
+        // are surfaced as "coming soon" on the frontend, not advertised as included here.
         Features =
         [
-            "Everything in Creator", "Copyright Office registration assistance",
-            "Bulk upload + scheduling", "Sync-pool eligibility", "API access", "Priority support"
+            "Everything in Creator", "10 Release Ready masters per month",
+            "API access", "Priority support"
         ],
         AnalyticsAccess = AnalyticsAccess.Full,
+        ReleaseReadyCreditsPerMonth = 10,
         FeatureFlags = BuildFeatureFlags(unlimitedAndSuite: true, proOnly: true)
     };
 
@@ -85,6 +93,15 @@ public static class TierManifest
     /// Build the entitlement feature-flag matrix for a tier. Keys are stable, camelCase, and
     /// consumed verbatim by <c>GET /api/me/entitlements</c>. Adding a feature here adds it to
     /// the contract for every tier, so keep keys append-only.
+    /// <para>
+    /// ⚠️ Several of these flags are ROADMAP markers, not enforced/implemented features. As of
+    /// 2026-06 only <c>complianceScoreRead</c>, <c>provenanceStamp</c>, <c>fullProvenanceSuite</c>,
+    /// <c>catalogAnalytics</c>, and <c>apiAccess</c> back a working capability; <c>unlimitedTracks</c>
+    /// is enforced via UploadLimit. The rest — <c>pdfCertificates</c>, <c>commercialRightsVerification</c>,
+    /// <c>verifiedCleanBadge</c>, <c>ddexC2pa</c>, <c>routingGuidance</c>, <c>copyrightOfficeAssist</c>,
+    /// <c>bulkUpload</c>, <c>syncPool</c> — have no implementation and are surfaced as "coming soon".
+    /// Returning a flag here does NOT grant a real feature; don't treat these as live entitlements.
+    /// </para>
     /// </summary>
     private static IReadOnlyDictionary<string, bool> BuildFeatureFlags(bool unlimitedAndSuite, bool proOnly)
         => new Dictionary<string, bool>
@@ -132,6 +149,13 @@ public sealed class TierConfig
     public required IReadOnlyDictionary<string, bool> FeatureFlags { get; init; }
 
     public required AnalyticsAccess AnalyticsAccess { get; init; }
+
+    /// <summary>
+    /// Release Ready mastering credits granted per calendar month (0 = none).
+    /// Per-tier config constant — differentiated amounts (e.g. Creator 3 / Pro 10)
+    /// are a one-line change here once canonical pricing is confirmed.
+    /// </summary>
+    public int ReleaseReadyCreditsPerMonth { get; init; }
 
     public bool IsUnlimited => UploadLimit is null;
 }

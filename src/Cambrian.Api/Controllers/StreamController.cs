@@ -75,6 +75,7 @@ public class StreamController : BaseController
             return NotFoundResponse("Audio file not found.");
 
         var streamUrl = _storage.GenerateSignedUrl(audioKey);
+        Cambrian.Application.Observability.CambrianMetrics.StreamSignedUrlIssued.Add(1);
         return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl) });
     }
 

@@ -344,6 +344,36 @@ internal static class StartupExtensions
         await SeedStagingDataAsync(app);
         await SeedCreatorImagesAsync(app);
         await BackfillCreatorProfilesAsync(app);
+        await BackfillTrackContentHashesAsync(app);
+    }
+
+    /// <summary>
+    /// One-off backfill of <see cref="Cambrian.Domain.Entities.Track.ContentHash"/> for
+    /// pre-§9 tracks. Self-limiting and non-fatal — never blocks startup.
+    /// </summary>
+    private static async Task BackfillTrackContentHashesAsync(WebApplication app)
+    {
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            var storage = scope.ServiceProvider.GetRequiredService<IObjectStorage>();
+            var signer = scope.ServiceProvider.GetRequiredService<IProvenanceSigner>();
+
+            var result = await Startup.TrackContentHashBackfill.RunAsync(
+                db, storage, signer, log: Console.WriteLine);
+
+            if (result.Hashed == 0 && result.Skipped == 0)
+                Console.WriteLine("[Backfill] Track content hashes — nothing to backfill.");
+            else
+                Console.WriteLine(
+                    $"[Backfill] Track content hashes — hashed {result.Hashed}, skipped {result.Skipped}"
+                    + (result.Capped ? " (more remain for next boot)." : "."));
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Track content-hash backfill failed (non-fatal).");
+        }
     }
 
     private static bool IsOriginAllowed(string origin, HashSet<string> originSet, string vercelSlug, string cfSlug)
@@ -394,6 +424,22 @@ internal static class StartupExtensions
             throw new InvalidOperationException(
                 "Stripe:WebhookSecret must be configured in Production. "
                 + "Without it, webhook signature verification is bypassed, allowing spoofed events.");
+
+        // Subscription tiers (Creator/Pro) require pre-created Stripe Price IDs. These are only
+        // needed when a real Stripe key is configured (the Development gateway stubs checkout).
+        if (!string.IsNullOrWhiteSpace(stripeKey))
+        {
+            foreach (var key in new[] { "Stripe:Prices:Creator", "Stripe:Prices:Pro" })
+            {
+                if (string.IsNullOrWhiteSpace(builder.Configuration[key]))
+                {
+                    if (builder.Environment.IsProduction())
+                        throw new InvalidOperationException(
+                            $"{key} must be configured in Production. Subscription checkout references a pre-created Stripe Price ID.");
+                    Console.WriteLine($"[WARN] {key} is not set — subscription checkout for that tier will fail until a Stripe Price ID is configured.");
+                }
+            }
+        }
     }
 
     private static void ValidateFrontendUrl(WebApplicationBuilder builder)

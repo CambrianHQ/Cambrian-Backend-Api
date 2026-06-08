@@ -60,6 +60,43 @@ public class Track
 
     public string Visibility { get; set; } = "public"; // public, limited, hidden
 
+    /// <summary>
+    /// SHA-256 hex digest of the stored audio bytes, computed on upload (§9 provenance).
+    /// Nullable: existing rows are backfilled by a one-off pass, so a null here means
+    /// "not yet hashed" rather than "no audio".
+    /// </summary>
+    public string? ContentHash { get; set; }
+
+    /// <summary>
+    /// Server-signed provenance stamp over (<see cref="ContentHash"/>, <see cref="SignedAt"/>):
+    /// base64 ECDSA P-256 / SHA-256 signature. Free, instant, independently verifiable with the
+    /// platform public key — issued the moment the track is hashed. Null until hashed/signed.
+    /// </summary>
+    public string? Signature { get; set; }
+
+    /// <summary>UTC time the provenance stamp was signed (truncated to whole seconds). Null until signed.</summary>
+    public DateTime? SignedAt { get; set; }
+
+    /// <summary>
+    /// Whether the creator's commercial rights to this track have been verified.
+    /// Batch-1 placeholder: currently a creator self-attestation set via the authorship
+    /// upsert (or by an admin). The real verification flow (document upload + review,
+    /// "Verified Clean" badge) is §9 item 5 and will replace the write path.
+    /// </summary>
+    public bool CommercialRightsVerified { get; set; }
+
+    /// <summary>
+    /// DDEX AI-disclosure: whether the track is AI-generated/assisted. Captured at
+    /// Release Ready validation and surfaced in the DDEX export. Defaults false.
+    /// </summary>
+    public bool AiGenerated { get; set; }
+
+    /// <summary>
+    /// DDEX AI-disclosure: structured payload (tools/models used, per-element roles)
+    /// as JSON, aligned to DDEX AI-disclosure fields. Null until disclosed.
+    /// </summary>
+    public string? AiDisclosureDdex { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public string CreatorId { get; set; } = "";

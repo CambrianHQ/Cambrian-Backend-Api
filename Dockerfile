@@ -15,6 +15,12 @@ RUN dotnet publish src/Cambrian.Api/Cambrian.Api.csproj -c Release -o /app/publi
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
+
+# ffmpeg powers the Release Ready mastering pipeline (FfmpegEngine two-pass loudnorm).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app/publish .
 
 # Run as non-root user for container security

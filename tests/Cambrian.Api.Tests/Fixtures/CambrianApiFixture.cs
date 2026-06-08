@@ -50,6 +50,8 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
                 ["Jwt:Issuer"] = TestJwtIssuer,
                 ["Jwt:Audience"] = TestJwtAudience,
                 ["Checkout:RequireSubscription"] = "false",
+                ["Stripe:Prices:Creator"] = "price_test_creator",
+                ["Stripe:Prices:Pro"] = "price_test_pro",
             };
 
             foreach (var pair in CreateTestConfigurationOverrides())
@@ -209,6 +211,61 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         }
     }
 
+    /// <summary>Set a user's EmailVerified flag to an explicit value (verify or un-verify).</summary>
+    public async Task SetEmailVerifiedAsync(string email, bool verified)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == email);
+        user.EmailVerified = verified;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Register + return an HttpClient whose Bearer token has email_verified=false,
+    /// optionally with a role and username. Used to prove the "VerifiedEmail" policy
+    /// blocks unverified accounts from high-stakes endpoints.
+    /// </summary>
+    public async Task<HttpClient> CreateUnverifiedClientAsync(
+        string email,
+        string password = "Test1234!@",
+        string? role = null,
+        string? username = null)
+    {
+        await RegisterUserAsync(email, password);
+        if (!string.IsNullOrWhiteSpace(role))
+            await SetUserRoleAsync(email, role);
+        if (!string.IsNullOrWhiteSpace(username))
+            await SetUsernameAsync(email, username);
+
+        // Un-verify AFTER registration (RegisterUserAsync marks verified) so the
+        // freshly-issued login token carries email_verified=false.
+        await SetEmailVerifiedAsync(email, false);
+
+        var token = await LoginUserAsync(email, password);
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
+    /// <summary>Read a user's current Role string from the DB.</summary>
+    public async Task<string> GetUserRoleAsync(string email)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == email);
+        return user.Role;
+    }
+
+    /// <summary>True when a Creator row exists for the given user id.</summary>
+    public async Task<bool> CreatorRowExistsAsync(string userId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        return await db.Creators.AnyAsync(c => c.UserId == userId);
+    }
+
     /// <summary>Seed a track into the database and return its id.</summary>
     public async Task<Guid> SeedTrackAsync(string creatorId, string title = "Test Beat")
     {
@@ -240,6 +297,16 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var user = await userManager.FindByEmailAsync(email);
         return user?.Id ?? throw new InvalidOperationException($"User {email} not found");
+    }
+
+    /// <summary>Set a user's CreatorTier (drives the plan feature-flag gate).</summary>
+    public async Task SetCreatorTierAsync(string email, Cambrian.Domain.Enums.CreatorTier tier)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == email);
+        user.CreatorTier = tier;
+        await db.SaveChangesAsync();
     }
 
     /// <summary>Grant a role to a user.</summary>
@@ -396,6 +463,22 @@ internal sealed class FakePaymentGateway : IPaymentGateway
     {
         return Task.FromResult($"https://checkout.stripe.com/fake-sub?plan={planName}&ref={clientReferenceId}");
     }
+
+    public Task<string> CreateSubscriptionCheckoutByPriceAsync(
+        string priceId,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        string? customerEmail = null)
+    {
+        return Task.FromResult($"https://checkout.stripe.com/fake-sub?price={priceId}&ref={clientReferenceId}");
+    }
+
+    public Task<string> EnsureCustomerAsync(string email)
+        => Task.FromResult($"cus_fake_{email}");
+
+    public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl)
+        => Task.FromResult($"https://billing.stripe.com/fake-portal?customer={customerId}");
 
     public Task<CheckoutSessionInfo?> GetCheckoutSessionAsync(string sessionId)
     {

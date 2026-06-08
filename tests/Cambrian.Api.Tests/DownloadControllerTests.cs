@@ -19,13 +19,12 @@ public sealed class DownloadControllerTests
     private readonly ITrackRepository _tracks = Substitute.For<ITrackRepository>();
     private readonly IObjectStorage _storage = Substitute.For<IObjectStorage>();
     private readonly IEntitlementService _entitlement = Substitute.For<IEntitlementService>();
-    private readonly ILicenseCertificateRepository _licenses = Substitute.For<ILicenseCertificateRepository>();
     private readonly DownloadController _controller;
 
     public DownloadControllerTests()
     {
         var logger = Substitute.For<ILogger<DownloadController>>();
-        _controller = new DownloadController(_tracks, _storage, _entitlement, _licenses, logger);
+        _controller = new DownloadController(_tracks, _storage, _entitlement, logger);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -118,8 +117,6 @@ public sealed class DownloadControllerTests
         });
         _storage.GenerateDownloadUrl(Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/signed-download");
-        _licenses.GetByBuyerAndTrackAsync(Arg.Any<string>(), Arg.Any<string>())
-            .Returns((LicenseCertificate?)null);
 
         var result = await _controller.Download(trackId.ToString());
 
@@ -148,8 +145,6 @@ public sealed class DownloadControllerTests
         });
         _storage.GenerateDownloadUrl(Arg.Any<string>(), Arg.Any<string>())
             .Returns("https://cdn.test/signed-download");
-        _licenses.GetByBuyerAndTrackAsync(Arg.Any<string>(), Arg.Any<string>())
-            .Returns((LicenseCertificate?)null);
 
         await _controller.Download(trackId.ToString());
 

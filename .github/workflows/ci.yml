@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          global-json-file: global.json
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
@@ -28,10 +28,119 @@ jobs:
           restore-keys: ${{ runner.os }}-nuget-
       - name: Restore
         run: dotnet restore Cambrian.sln
-      - name: Build
-        run: dotnet build Cambrian.sln --no-restore --configuration Release
+      # -warnaserror is intentional: it promotes every compiler warning to an
+      # error so warnings can never accumulate. NOTE: this will currently fail
+      # on pre-existing warnings in tests/ (e.g. CS8620, CS4014) — those must be
+      # fixed before this job is made a required check.
+      - name: Build (warnings as errors)
+        run: dotnet build Cambrian.sln -warnaserror -c Release --no-restore
       - name: Test
-        run: dotnet test Cambrian.sln --no-build --configuration Release --logger "console;verbosity=minimal"
+        run: dotnet test Cambrian.sln -c Release --no-build --logger "console;verbosity=minimal"
+
+  docker:
+    # Proves the real deploy Dockerfile builds end-to-end (including the ffmpeg
+    # layer) — Railway deploys this exact file. Build only, no push.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build deploy image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  migrations:
+    # Apply every EF migration from an empty database to prove the migration
+    # chain is valid against real PostgreSQL.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: cambrian
+          POSTGRES_PASSWORD: cambrian
+          POSTGRES_DB: cambrian
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cambrian"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The app reads either ConnectionStrings__DefaultConnection or DATABASE_URL
+      # (ADO.NET form; postgres:// URIs are also accepted but converted). Use the
+      # ADO.NET form so no SSL is required against the local service container.
+      DATABASE_URL: "***REDACTED***"
+      ConnectionStrings__DefaultConnection: "***REDACTED***"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+      - name: Restore
+        run: dotnet restore Cambrian.sln
+      - name: Install dotnet-ef
+        run: dotnet tool restore || dotnet tool install --global dotnet-ef
+      - name: Apply all migrations from zero
+        run: |
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet ef database update \
+            -p src/Cambrian.Persistence \
+            -s src/Cambrian.Api
+
+  vulnerable:
+    # Fail the build if any package (direct or transitive) has a High/Critical
+    # advisory.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+      - name: Restore
+        run: dotnet restore Cambrian.sln
+      - name: Scan for vulnerable packages
+        run: |
+          dotnet list Cambrian.sln package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+          if grep -E 'High|Critical' vuln-report.txt; then
+            echo "::error::High or Critical vulnerable packages detected"
+            exit 1
+          fi
+          echo "No High/Critical vulnerabilities found."
+
+  gitleaks:
+    # Secret scan on pull requests.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   contract-validation:
     needs: build-test

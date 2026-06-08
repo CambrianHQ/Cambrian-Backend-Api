@@ -356,33 +356,16 @@ public sealed class S3ObjectStorage : IObjectStorage
             UsePathStyle = _options.UsePathStyle,
         };
 
-        // Without a sample key there is nothing to fetch — reads/deletes go
-        // through presigned URLs that require a key, so the most we can verify
-        // is that presigned URL generation itself works (i.e. credentials and
-        // endpoint are syntactically valid). Treat that as HeadBucketOk=true.
-        if (string.IsNullOrWhiteSpace(sampleKey))
-        {
-            try
-            {
-                _ = _client.GetPreSignedURL(new GetPreSignedUrlRequest
-                {
-                    BucketName = _options.Bucket,
-                    Key = "probe/__startup_check__",
-                    Expires = DateTime.UtcNow.AddMinutes(1),
-                    Verb = HttpVerb.GET,
-                });
-                result.HeadBucketOk = true;
-                result.BucketLocation = "(not verified — no sampleKey)";
-            }
-            catch (Exception ex)
-            {
-                result.HeadBucketOk = false;
-                result.HeadBucketError = $"presign failed: {ex.GetType().Name}: {ex.Message}";
-            }
-            return result;
-        }
-
-        var normalised = NormaliseKey(sampleKey);
+        // Always exercise the real network read path. A presigned URL that merely
+        // *generates* locally proves nothing about credentials, region, or endpoint —
+        // it is pure client-side crypto and succeeds even when every real read 403s.
+        // Without a caller-supplied key we HEAD a sentinel: a healthy bucket answers
+        // 404 (signing OK, object simply absent), broken credentials/region answer
+        // 403 SignatureDoesNotMatch, and a wrong endpoint fails to connect. This is
+        // what lets the startup probe and /qa-preflight catch a misconfigured store
+        // instead of reporting a false green while audio playback is dead.
+        var normalised = NormaliseKey(
+            string.IsNullOrWhiteSpace(sampleKey) ? "probe/__storage_health__" : sampleKey);
         result.SampleKey = normalised;
 
         string presignedUrl;

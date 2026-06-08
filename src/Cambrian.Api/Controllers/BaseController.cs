@@ -49,6 +49,13 @@ public class BaseController : ControllerBase
         StatusCode(409, ApiResponse.Fail(error));
 
     /// <summary>
+    /// 402 Payment Required with a machine-readable upgrade code the frontend detects
+    /// to launch the subscription upgrade flow.
+    /// </summary>
+    protected IActionResult UpgradeRequiredResponse(string error, string code = "UPGRADE_REQUIRED") =>
+        StatusCode(402, new { success = false, error, code });
+
+    /// <summary>
     /// Convert a relative URL (e.g. /uploads/key) to an absolute URL so the
     /// frontend on a different origin can fetch the file correctly.
     /// Already-absolute http(s) URLs (S3/R2 pre-signed) are returned unchanged.

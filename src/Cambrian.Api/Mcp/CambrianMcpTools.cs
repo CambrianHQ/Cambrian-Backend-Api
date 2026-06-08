@@ -72,21 +72,6 @@ public class CambrianMcpTools
         return JsonSerializer.Serialize(details, JsonOptions);
     }
 
-    [McpServerTool(Name = "get_track_licenses"), Description(
-        "Get all available license options for a track with prices, " +
-        "allowed uses, and restrictions.")]
-    public static async Task<string> GetTrackLicenses(
-        ITrackDiscoveryService discovery,
-        [Description("Track ID (CambrianTrackId or GUID)")] string trackId)
-    {
-        var options = await discovery.GetLicenseOptionsAsync(trackId);
-
-        if (options is null)
-            return JsonSerializer.Serialize(new { error = "Track not found" }, JsonOptions);
-
-        return JsonSerializer.Serialize(options, JsonOptions);
-    }
-
     [McpServerTool(Name = "get_track_preview"), Description(
         "Get preview info for a track including audio URL, duration, and format.")]
     public static async Task<string> GetTrackPreview(

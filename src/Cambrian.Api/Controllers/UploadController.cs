@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Catalog;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -33,6 +34,7 @@ public class UploadController : BaseController
     }
 
     [Authorize(Policy = "CanUploadTrack")]
+    [Authorize(Policy = "VerifiedEmail")]
     [RequireCreatorTier]
     [RequireUsername]
     [HttpPost("upload")]
@@ -59,11 +61,55 @@ public class UploadController : BaseController
         catch (ArgumentException ex)
         {
             _logger.LogWarning(ex, "EVENT: UploadRejected userId:{UserId} title:{Title}", userId, request.Title);
+            Cambrian.Application.Observability.CambrianMetrics.UploadFailed.Add(1);
             return ErrorResponse(ex.Message);
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "EVENT: UploadBlocked userId:{UserId} title:{Title}", userId, request.Title);
+            Cambrian.Application.Observability.CambrianMetrics.UploadFailed.Add(1);
+            return ErrorResponse(ex.Message);
+        }
+    }
+
+    // ───── POST /api/tracks — spec-canonical track creation ─────
+    // Alias of POST /upload that enforces the plan track limit and returns a typed
+    // 402 + UPGRADE_REQUIRED code the frontend can detect to launch the upgrade flow.
+
+    [Authorize(Policy = "CanUploadTrack")]
+    [Authorize(Policy = "VerifiedEmail")]
+    [RequireCreatorTier]
+    [RequireUsername]
+    [HttpPost("/api/tracks")]
+    [RequestSizeLimit(150 * 1024 * 1024)]
+    public async Task<IActionResult> CreateTrack([FromForm] UploadTrackRequest request)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        _logger.LogInformation("EVENT: TrackCreateStarted userId:{UserId} title:{Title}", userId, request.Title);
+        request.CreatorId = userId;
+
+        try
+        {
+            var result = await _upload.Upload(request);
+            if (!string.IsNullOrWhiteSpace(result.CoverArtUrl))
+                result.CoverArtUrl = ResolveImageUrl(result.CoverArtUrl);
+
+            if (_cache is MemoryCache mc)
+                mc.Compact(1.0);
+
+            _logger.LogInformation("EVENT: TrackCreateCompleted userId:{UserId} title:{Title}", userId, request.Title);
+            return CreatedResponse(result, "Track uploaded successfully.");
+        }
+        catch (UpgradeRequiredException ex)
+        {
+            _logger.LogWarning(ex, "EVENT: TrackCreateUpgradeRequired userId:{UserId} title:{Title}", userId, request.Title);
+            Cambrian.Application.Observability.CambrianMetrics.UploadFailed.Add(1);
+            return UpgradeRequiredResponse(ex.Message, ex.Code);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "EVENT: TrackCreateRejected userId:{UserId} title:{Title}", userId, request.Title);
+            Cambrian.Application.Observability.CambrianMetrics.UploadFailed.Add(1);
             return ErrorResponse(ex.Message);
         }
     }

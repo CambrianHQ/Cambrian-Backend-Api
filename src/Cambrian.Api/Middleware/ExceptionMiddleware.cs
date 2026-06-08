@@ -43,6 +43,17 @@ public sealed class ExceptionMiddleware
             }
 
             context.Response.ContentType = "application/json";
+
+            // Plan-gated actions (e.g. Free track limit) surface a 402 with a stable
+            // machine-readable code the frontend uses to launch the upgrade flow.
+            if (ex is UpgradeRequiredException upgrade)
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.PaymentRequired;
+                await context.Response.WriteAsync(JsonSerializer.Serialize(
+                    new { success = false, error = upgrade.Message, code = upgrade.Code }, _json));
+                return;
+            }
+
             context.Response.StatusCode = ex switch
             {
                 ForbiddenException          => (int)HttpStatusCode.Forbidden,

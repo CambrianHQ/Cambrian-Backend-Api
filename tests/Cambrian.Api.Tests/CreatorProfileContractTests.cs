@@ -90,6 +90,36 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         Assert.Equal("cinematic AI composer", data.GetProperty("niche").GetString());
     }
 
+    /// <summary>
+    /// B5 regression: PUT /creator-profile/me must persist displayName. It previously dropped the
+    /// field silently — the PUT echoed the old name and a subsequent GET still returned the old name.
+    /// </summary>
+    [Fact]
+    public async Task UpsertProfile_PersistsDisplayName_AndRoundTrips()
+    {
+        var email = $"creator-dn-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email, "Test1234!@");
+
+        var slug = $"dn-{Guid.NewGuid():N}"[..20];
+        var putRes = await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            displayName = "BUGPROBE-name",
+            bio = "x",
+            showEarnings = false,
+            showDownloadStats = false,
+        });
+        putRes.EnsureSuccessStatusCode();
+        var putData = (await putRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal("BUGPROBE-name", putData.GetProperty("displayName").GetString());
+
+        // The new name must survive a round trip (the bug was a silent revert to the old name).
+        var getRes = await client.GetAsync("/creator-profile/me");
+        getRes.EnsureSuccessStatusCode();
+        var getData = (await getRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal("BUGPROBE-name", getData.GetProperty("displayName").GetString());
+    }
+
     [Fact]
     public async Task GetBySlug_ReturnsExpectedShape_AfterCreation()
     {

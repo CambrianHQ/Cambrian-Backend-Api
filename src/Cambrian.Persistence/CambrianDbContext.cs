@@ -37,8 +37,6 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
 
-    public DbSet<LicenseCertificate> LicenseCertificates => Set<LicenseCertificate>();
-
     public DbSet<AnalyticsEvent> AnalyticsEvents => Set<AnalyticsEvent>();
 
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
@@ -56,6 +54,14 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Entitlement> Entitlements => Set<Entitlement>();
 
     public DbSet<ApiIdempotencyKey> ApiIdempotencyKeys => Set<ApiIdempotencyKey>();
+
+    public DbSet<TrackBoost> TrackBoosts => Set<TrackBoost>();
+
+    public DbSet<ProvenanceAnchor> ProvenanceAnchors => Set<ProvenanceAnchor>();
+
+    public DbSet<TrackAuthorship> TrackAuthorships => Set<TrackAuthorship>();
+
+    public DbSet<MasteringJob> MasteringJobs => Set<MasteringJob>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -78,6 +84,27 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             // Sweep-friendly: background cleanup walks expired rows.
             e.HasIndex(x => x.ExpiresAt).HasDatabaseName("ix_api_idempotency_keys_expires_at");
             e.ToTable("ApiIdempotencyKeys");
+        });
+
+        builder.Entity<TrackBoost>(e =>
+        {
+            e.HasKey(b => b.Id);
+            e.Property(b => b.UserId).IsRequired().HasMaxLength(450);
+            e.Property(b => b.CreatedAt).IsRequired();
+            // One boost per user per track — enforced at the database level,
+            // not just in application logic.
+            e.HasIndex(b => new { b.UserId, b.TrackId })
+                .IsUnique()
+                .HasDatabaseName("ux_track_boosts_user_track");
+            // Hot-This-Week ranks by boost count within a rolling window, so we
+            // index both the track (group-by) and the timestamp (window filter).
+            e.HasIndex(b => b.TrackId).HasDatabaseName("ix_track_boosts_track_id");
+            e.HasIndex(b => b.CreatedAt).HasDatabaseName("ix_track_boosts_created_at");
+            e.HasOne(b => b.Track)
+                .WithMany()
+                .HasForeignKey(b => b.TrackId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.ToTable("TrackBoosts");
         });
 
         builder.Entity<Track>(e =>
@@ -120,10 +147,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(p => p.StripeSessionId)
                 .IsUnique()
                 .HasFilter("\"StripeSessionId\" IS NOT NULL");
-            e.HasOne(p => p.License)
-                .WithOne()
-                .HasForeignKey<Purchase>(p => p.LicenseId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // LicenseId is retained as an inert, orphaned column after the
+            // LicenseCertificates table was dropped (licensing removed). No FK/navigation.
             e.HasOne(p => p.Buyer)
                 .WithMany(u => u.Purchases)
                 .HasForeignKey(p => p.BuyerId)
@@ -228,41 +253,6 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        builder.Entity<LicenseCertificate>(e =>
-        {
-            e.HasKey(lc => lc.Id);
-            e.Property(lc => lc.TrackId).HasMaxLength(25).IsRequired();
-            e.Property(lc => lc.LicenseType).HasMaxLength(30);
-            e.Property(lc => lc.UsageType).HasMaxLength(30).HasDefaultValue("personal");
-            e.Property(lc => lc.CopyrightOwner).HasMaxLength(200);
-            e.HasOne(lc => lc.Buyer)
-                .WithMany()
-                .HasForeignKey(lc => lc.BuyerId)
-                .OnDelete(DeleteBehavior.Restrict);
-            e.HasOne(lc => lc.Creator)
-                .WithMany()
-                .HasForeignKey(lc => lc.CreatorId)
-                .OnDelete(DeleteBehavior.Restrict);
-            e.HasOne(lc => lc.Purchase)
-                .WithMany()
-                .HasForeignKey(lc => lc.PurchaseId)
-                .OnDelete(DeleteBehavior.Restrict);
-            var listComparer = new ValueComparer<List<string>?>(
-                (a, b) => (a == null && b == null) || (a != null && b != null && a.SequenceEqual(b)),
-                v => v == null ? 0 : v.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode())),
-                v => v == null ? null : v.ToList());
-            e.Property(lc => lc.AllowedUses)
-                .HasConversion(
-                    v => v == null ? null : string.Join(',', v),
-                    v => v == null ? null : v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())
-                .Metadata.SetValueComparer(listComparer);
-            e.Property(lc => lc.Restrictions)
-                .HasConversion(
-                    v => v == null ? null : string.Join(',', v),
-                    v => v == null ? null : v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())
-                .Metadata.SetValueComparer(listComparer);
-        });
-
         builder.Entity<AnalyticsEvent>(e =>
         {
             e.HasKey(a => a.Id);
@@ -357,7 +347,19 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         {
             e.Property(t => t.UseCase).HasMaxLength(100);
             e.Property(t => t.TrendingScore).HasDefaultValue(0m);
+            // §9 provenance/compliance: content hash + signed stamp + commercial-rights attestation.
+            e.Property(t => t.ContentHash).HasMaxLength(64);
+            e.HasIndex(t => t.ContentHash).HasDatabaseName("IX_Tracks_ContentHash");
+            e.Property(t => t.Signature).HasMaxLength(200);
+            e.Property(t => t.CommercialRightsVerified).HasDefaultValue(false);
         });
+
+        // ── §9 provenance + authorship (additive tables) ──
+        builder.ApplyConfiguration(new ProvenanceAnchorConfiguration());
+        builder.ApplyConfiguration(new TrackAuthorshipConfiguration());
+
+        // ── Release Ready mastering ──
+        builder.ApplyConfiguration(new MasteringJobConfiguration());
 
         // ── API keys ──
         builder.Entity<ApiKey>(e =>

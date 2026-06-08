@@ -450,6 +450,33 @@ builder.Services.AddScoped<IAuthorshipService, AuthorshipService>();
 builder.Services.AddScoped<IComplianceScoreService, ComplianceScoreService>();
 builder.Services.AddScoped<ITrackLegitimacyService, TrackLegitimacyService>();
 
+// ── Release Ready mastering (config-switched engine) ──
+// FfmpegEngine is the default so the pipeline never blocks on RoEx approval;
+// flip Mastering:Engine to "tonn" once the RoEx key is provisioned.
+builder.Services.Configure<MasteringOptions>(builder.Configuration.GetSection(MasteringOptions.SectionName));
+var masteringOptions = builder.Configuration.GetSection(MasteringOptions.SectionName)
+    .Get<MasteringOptions>() ?? new MasteringOptions();
+
+if (string.Equals(masteringOptions.Engine, "tonn", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<IMasteringEngine, Cambrian.Infrastructure.Mastering.TonnEngine>(c =>
+        c.Timeout = TimeSpan.FromSeconds(120));
+}
+else
+{
+    builder.Services.AddScoped<IMasteringEngine, Cambrian.Infrastructure.Mastering.FfmpegEngine>();
+}
+
+builder.Services.AddSingleton<IReleaseValidationService, Cambrian.Infrastructure.Validation.ReleaseValidationService>();
+// Injected clock so credit month-boundary logic is deterministically testable.
+builder.Services.AddSingleton(TimeProvider.System);
+
+// Release Ready credits, persistence, orchestration + the in-process mastering worker.
+builder.Services.AddScoped<IMasteringJobRepository, MasteringJobRepository>();
+builder.Services.AddScoped<IReleaseCreditService, ReleaseCreditService>();
+builder.Services.AddScoped<IReleaseReadyService, ReleaseReadyService>();
+builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.MasteringWorker>();
+
 // Growth features
 builder.Services.Configure<Cambrian.Infrastructure.Options.GrowthFeaturesOptions>(
     builder.Configuration.GetSection("GrowthFeatures"));
@@ -505,6 +532,12 @@ builder.AddSmsProvider();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Trust only one hop: the Render load balancer directly in front of us.
+    // ForwardLimit = 1 means we read only the rightmost X-Forwarded-For value
+    // (added by Render's LB), ignoring any client-supplied ones further left.
+    // We clear default known-network restrictions because Render's LB IP is
+    // dynamic; instead we rely on the hop count to bound trust.
+    options.ForwardLimit = 1;
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });

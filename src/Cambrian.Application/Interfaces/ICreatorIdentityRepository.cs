@@ -15,6 +15,12 @@ public interface ICreatorIdentityRepository
     /// <summary>Resolve normalized username to creator, then return public DTO.</summary>
     Task<PublicCreatorDto?> GetByUsernameAsync(string username);
 
+    /// <summary>
+    /// Case-insensitive substring search over username and display name. Returns lightweight
+    /// match summaries (no track list). <paramref name="limit"/> is clamped server-side to 1..50.
+    /// </summary>
+    Task<IReadOnlyList<CreatorSearchResultDto>> SearchAsync(string query, int limit);
+
     /// <summary>Load creator by the linked ApplicationUser.Id.</summary>
     Task<PublicCreatorDto?> GetByUserIdAsync(string userId);
 

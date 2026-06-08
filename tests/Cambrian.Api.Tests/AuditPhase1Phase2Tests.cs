@@ -28,7 +28,6 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
     // ── shared webhook test infrastructure ──────────────────────────
     private readonly CambrianDbContext _db;
     private readonly ILogger<StripeWebhookService> _webhookLogger = Substitute.For<ILogger<StripeWebhookService>>();
-    private readonly ILicenseService _licenseService = Substitute.For<ILicenseService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
 
     // ── shared auth test infrastructure ─────────────────────────────
@@ -72,7 +71,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
         config["Stripe:WebhookSecret"].Returns("whsec_test");
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns("Production");
-        return new StripeWebhookService(_db, _licenseService, _emailService, config, _webhookLogger, env);
+        return new StripeWebhookService(_db, _emailService, config, _webhookLogger, env);
     }
 
     private static string UniqueEventId() => $"evt_{Guid.NewGuid():N}";
@@ -80,41 +79,6 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
     // ════════════════════════════════════════════════════════════════
     // Phase 1 — Webhook idempotency (Task 1)
     // ════════════════════════════════════════════════════════════════
-
-    [Fact]
-    public async Task ProcessEventAsync_ReplayedEvent_DoesNotCreateDuplicatePurchase()
-    {
-        var trackId = Guid.NewGuid();
-        var userId = "buyer-1";
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Test Beat", CreatorId = "creator-1" });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateWebhookService();
-        var eventId = UniqueEventId();
-
-        // First call — creates purchase
-        await svc.ProcessEventAsync(
-            eventId: eventId,
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
-            amountTotal: 2999,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        // Second call — same event ID, must be a no-op
-        await svc.ProcessEventAsync(
-            eventId: eventId,
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
-            amountTotal: 2999,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        // Exactly one purchase, one library item, one webhook event row
-        Assert.Equal(1, await _db.Purchases.CountAsync());
-        Assert.Equal(1, await _db.Library.CountAsync());
-        Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
-    }
 
     [Fact]
     public async Task ProcessEventAsync_ReplayedEvent_StatusRemainsCompleted()
@@ -140,98 +104,6 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
 
         var evt = await _db.StripeWebhookEvents.FirstAsync(e => e.EventId == eventId);
         Assert.Equal("completed", evt.Status);
-    }
-
-    [Fact]
-    public async Task ProcessEventAsync_FailedEvent_RecordsStatusFailedWithErrorMessage()
-    {
-        // Exclusive purchase triggers raw SQL which throws on InMemory DB
-        var trackId = Guid.NewGuid();
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Fail Beat", CreatorId = "c1" });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateWebhookService();
-        var eventId = UniqueEventId();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.ProcessEventAsync(
-                eventId: eventId,
-                eventType: "checkout.session.completed",
-                clientReferenceId: $"user1:{trackId}:exclusive",
-                amountTotal: 5000,
-                stripeCustomerId: null,
-                stripeSessionId: null));
-
-        var evt = await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == eventId);
-        Assert.NotNull(evt);
-        Assert.Equal("failed", evt.Status);
-        Assert.False(evt.Processed);
-        Assert.NotNull(evt.ErrorMessage);
-    }
-
-    [Fact]
-    public async Task ProcessEventAsync_FailedEventIsRetriable_SecondCallProcessesSuccessfully()
-    {
-        // First call fails (exclusive triggers raw SQL → InvalidOperationException on InMemory)
-        var trackId = Guid.NewGuid();
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Retry Beat", CreatorId = "c1" });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateWebhookService();
-        var eventId = UniqueEventId();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.ProcessEventAsync(
-                eventId: eventId,
-                eventType: "checkout.session.completed",
-                clientReferenceId: $"user1:{trackId}:exclusive",
-                amountTotal: 5000,
-                stripeCustomerId: null,
-                stripeSessionId: null));
-
-        var afterFailure = await _db.StripeWebhookEvents.FirstAsync(e => e.EventId == eventId);
-        Assert.Equal("failed", afterFailure.Status);
-
-        // Second call with same event ID — still exclusive (InMemory), still fails → upserts row
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.ProcessEventAsync(
-                eventId: eventId,
-                eventType: "checkout.session.completed",
-                clientReferenceId: $"user1:{trackId}:exclusive", // still same exclusive → still fails
-                amountTotal: 5000,
-                stripeCustomerId: null,
-                stripeSessionId: null));
-
-        // Still only one webhook event row (upserted, not duplicated)
-        Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // Phase 1 — Webhook event persisted before business logic (Task 1)
-    // ════════════════════════════════════════════════════════════════
-
-    [Fact]
-    public async Task ProcessEventAsync_EventRowSaved_EvenWhenBusinessLogicFails()
-    {
-        // Exclusive purchase fails on InMemory (raw SQL not supported)
-        var trackId = Guid.NewGuid();
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Beat", CreatorId = "c1" });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateWebhookService();
-        var eventId = UniqueEventId();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.ProcessEventAsync(
-                eventId: eventId,
-                eventType: "checkout.session.completed",
-                clientReferenceId: $"user1:{trackId}:exclusive",
-                amountTotal: 5000,
-                stripeCustomerId: null,
-                stripeSessionId: null));
-
-        // The webhook event row must exist even though business logic threw
-        Assert.True(await _db.StripeWebhookEvents.AnyAsync(e => e.EventId == eventId));
     }
 
     // ════════════════════════════════════════════════════════════════

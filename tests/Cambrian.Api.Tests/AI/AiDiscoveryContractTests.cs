@@ -23,7 +23,6 @@ public sealed class AiDiscoveryContractTests
     [Theory]
     [InlineData("/ai-discovery/tracks/search")]
     [InlineData("/ai-discovery/tracks/{trackId}")]
-    [InlineData("/ai-discovery/tracks/{trackId}/licenses")]
     [InlineData("/ai-discovery/tracks/{trackId}/preview")]
     [InlineData("/ai-discovery/creators/{creatorId}")]
     public void OpenApi_ContainsAiDiscoveryPath(string expectedPath)

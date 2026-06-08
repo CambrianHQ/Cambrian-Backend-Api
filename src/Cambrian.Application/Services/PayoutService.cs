@@ -159,6 +159,7 @@ public class PayoutService : IPayoutService
             await _payouts.AddAsync(payout);
 
             await _transactions.CommitAsync();
+            Observability.CambrianMetrics.PayoutCreated.Add(1);
             _logger.LogInformation(
                 "Payout {PayoutId} debit+record committed atomically: {AmountCents}c for creator {CreatorId}",
                 payout.Id, requestCents, creatorId);
@@ -185,6 +186,7 @@ public class PayoutService : IPayoutService
             payout.Status = "completed";
             payout.CompletedAt = DateTime.UtcNow;
             await _payouts.UpdateAsync(payout);
+            Observability.CambrianMetrics.PayoutApproved.Add(1);
 
             _logger.LogInformation(
                 "Payout {PayoutId} completed: {AmountCents}c → {AccountId} (transfer {TransferId})",

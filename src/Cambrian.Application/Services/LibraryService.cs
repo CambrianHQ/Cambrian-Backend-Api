@@ -79,6 +79,7 @@ public class LibraryService : ILibraryService
         };
 
         await _library.AddAsync(item);
+        Observability.CambrianMetrics.LibraryGrant.Add(1);
     }
 
     public async Task RemoveAsync(ClaimsPrincipal user, string trackId)

@@ -66,10 +66,11 @@ public class SubscriptionService : ISubscriptionService
         var existing = await _subscriptions.GetActiveAsync(userId);
         var user = await _users.FindByIdAsync(userId);
 
-        // Normalize "creator" -> "pro"
-        var plan = request.Plan;
-        if (string.Equals(plan, "creator", StringComparison.OrdinalIgnoreCase))
-            plan = "pro";
+        // Normalize to a known tier slug (free/creator/pro). "paid" is a legacy buyer plan
+        // and is preserved verbatim (it is not part of the creator tier matrix).
+        var plan = (request.Plan ?? "").Trim().ToLowerInvariant();
+        if (plan is not ("free" or "creator" or "pro" or "paid"))
+            plan = TierManifest.For(plan).Slug;
 
         if (existing is not null)
         {
@@ -181,11 +182,8 @@ public class SubscriptionService : ISubscriptionService
     /// </summary>
     private static void SyncCreatorTier(ApplicationUser user)
     {
-        user.CreatorTier = user.Tier switch
-        {
-            "pro" => CreatorTier.Pro,
-            _ => CreatorTier.Free
-        };
+        // "paid" is a buyer plan with no creator tier — treat as Free for creator capabilities.
+        user.CreatorTier = TierManifest.For(user.Tier ?? "free").Tier;
     }
 
 }

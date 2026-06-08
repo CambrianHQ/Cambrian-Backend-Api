@@ -35,14 +35,6 @@ public class AiDiscoveryController : ControllerBase
         return Ok(new { track = result });
     }
 
-    [HttpGet("tracks/{trackId}/licenses")]
-    public async Task<IActionResult> GetLicenses(string trackId)
-    {
-        var result = await _discovery.GetLicenseOptionsAsync(trackId);
-        if (result is null) return NotFound(new { error = "Track not found." });
-        return Ok(new { licenses = result });
-    }
-
     [HttpGet("tracks/{trackId}/preview")]
     public async Task<IActionResult> GetPreview(string trackId)
     {

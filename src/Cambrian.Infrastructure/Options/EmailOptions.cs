@@ -17,6 +17,10 @@ public sealed class EmailOptions
     // Resend settings
     public string ResendApiKey { get; set; } = string.Empty;
 
+    /// <summary>Signing secret from the Resend dashboard (whsec_…). Used to verify
+    /// Svix-signed webhook payloads on POST /webhook/email.</summary>
+    public string ResendWebhookSecret { get; set; } = string.Empty;
+
     // SendGrid settings
     public string SendGridApiKey { get; set; } = string.Empty;
 }

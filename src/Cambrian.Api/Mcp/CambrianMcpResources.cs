@@ -33,24 +33,6 @@ public class CambrianMcpResources
         };
     }
 
-    [McpServerResource(UriTemplate = "cambrian://tracks/{trackId}/licenses", Name = "Track Licenses", MimeType = "application/json")]
-    [Description("Returns all available license options for a track.")]
-    public static async Task<ResourceContents> GetTrackLicenses(
-        ITrackDiscoveryService discovery,
-        string trackId)
-    {
-        var options = await discovery.GetLicenseOptionsAsync(trackId);
-
-        return new TextResourceContents
-        {
-            Uri = $"cambrian://tracks/{trackId}/licenses",
-            MimeType = "application/json",
-            Text = options is not null
-                ? JsonSerializer.Serialize(options, JsonOptions)
-                : JsonSerializer.Serialize(new { error = "Track not found" }, JsonOptions)
-        };
-    }
-
     [McpServerResource(UriTemplate = "cambrian://creators/{creatorId}", Name = "Creator Profile", MimeType = "application/json")]
     [Description("Returns a creator's public profile by username or user ID.")]
     public static async Task<ResourceContents> GetCreator(

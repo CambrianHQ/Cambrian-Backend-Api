@@ -12,20 +12,17 @@ public class DownloadController : BaseController
     private readonly ITrackRepository _tracks;
     private readonly IObjectStorage _storage;
     private readonly IEntitlementService _entitlement;
-    private readonly ILicenseCertificateRepository _licenses;
     private readonly ILogger<DownloadController> _logger;
 
     public DownloadController(
         ITrackRepository tracks,
         IObjectStorage storage,
         IEntitlementService entitlement,
-        ILicenseCertificateRepository licenses,
         ILogger<DownloadController> logger)
     {
         _tracks = tracks;
         _storage = storage;
         _entitlement = entitlement;
-        _licenses = licenses;
         _logger = logger;
     }
 
@@ -77,12 +74,7 @@ public class DownloadController : BaseController
         if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             url = ResolveAbsoluteUrl($"/download/{trackId}/file");
 
-        // Look up the license certificate for this track + buyer
-        string? licenseId = null;
-        var license = await _licenses.GetByBuyerAndTrackAsync(userId, track.CambrianTrackId);
-        licenseId = license?.Id.ToString();
-
-        return OkResponse(new { url, filename, licenseId, expiresAt = DateTime.UtcNow.AddMinutes(15) });
+        return OkResponse(new { url, filename, expiresAt = DateTime.UtcNow.AddMinutes(15) });
     }
 
     /// <summary>

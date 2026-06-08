@@ -83,6 +83,7 @@ public class PayoutController : BaseController
         return OkResponse(earnings);
     }
 
+    [Authorize(Policy = "VerifiedEmail")]
     [HttpPost("request")]
     public async Task<IActionResult> RequestPayout(PayoutRequest request)
     {

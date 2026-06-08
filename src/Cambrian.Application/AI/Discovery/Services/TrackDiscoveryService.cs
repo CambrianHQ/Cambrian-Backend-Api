@@ -110,14 +110,6 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         return TrackAiResponseBuilder.BuildDetails(track, creator);
     }
 
-    public async Task<List<AiLicenseOptionDto>?> GetLicenseOptionsAsync(string trackId)
-    {
-        var track = await ResolveTrackAsync(trackId);
-        if (track is null) return null;
-
-        return TrackAiResponseBuilder.BuildLicenseOptions(track);
-    }
-
     public async Task<AiTrackPreviewDto?> GetPreviewAsync(string trackId)
     {
         var track = await ResolveTrackAsync(trackId);

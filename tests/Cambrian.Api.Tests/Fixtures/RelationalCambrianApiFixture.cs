@@ -59,6 +59,8 @@ public class RelationalCambrianApiFixture : WebApplicationFactory<Program>, IAsy
                 ["App:FrontendUrl"] = "http://localhost:5173",
                 ["Checkout:RequireSubscription"] = "false",
                 ["Stripe:WebhookSecret"] = "whsec_test",
+                ["Stripe:Prices:Creator"] = "price_test_creator",
+                ["Stripe:Prices:Pro"] = "price_test_pro",
             });
         });
 
@@ -379,6 +381,38 @@ public sealed class RecordingPaymentGateway : IPaymentGateway
 
         return Task.FromResult($"https://checkout.stripe.test/subscription/{sessionId}");
     }
+
+    public Task<string> CreateSubscriptionCheckoutByPriceAsync(
+        string priceId,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        string? customerEmail = null)
+    {
+        if (_nextCreateFailure is not null)
+        {
+            var ex = _nextCreateFailure;
+            _nextCreateFailure = null;
+            throw ex;
+        }
+
+        var sessionId = $"cs_sub_{Guid.NewGuid():N}";
+        _sessions[sessionId] = new CheckoutSessionInfo
+        {
+            SessionId = sessionId,
+            Status = "paid",
+            ClientReferenceId = clientReferenceId,
+            AmountTotal = null
+        };
+
+        return Task.FromResult($"https://checkout.stripe.test/subscription/{sessionId}");
+    }
+
+    public Task<string> EnsureCustomerAsync(string email)
+        => Task.FromResult($"cus_test_{email}");
+
+    public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl)
+        => Task.FromResult($"https://billing.stripe.test/portal/{customerId}");
 
     public Task<CheckoutSessionInfo?> GetCheckoutSessionAsync(string sessionId)
     {

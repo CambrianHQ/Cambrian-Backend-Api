@@ -9,8 +9,6 @@ public interface ITrackDiscoveryService
 
     Task<AiTrackDetailsDto?> GetTrackDetailsAsync(string trackId);
 
-    Task<List<AiLicenseOptionDto>?> GetLicenseOptionsAsync(string trackId);
-
     Task<AiTrackPreviewDto?> GetPreviewAsync(string trackId);
 
     Task<AiCreatorProfileDto?> GetCreatorProfileAsync(string creatorId);

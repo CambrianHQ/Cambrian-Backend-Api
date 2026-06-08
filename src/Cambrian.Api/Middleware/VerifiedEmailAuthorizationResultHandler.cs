@@ -23,8 +23,12 @@ public sealed class VerifiedEmailForbiddenResponseMiddleware
             || context.Response.StatusCode != StatusCodes.Status403Forbidden
             || context.User.Identity?.IsAuthenticated != true
             || !EndpointRequiresVerifiedEmail(context)
+            || UserEmailIsVerified(context)
             || context.Response.ContentLength is > 0)
         {
+            // Only an authenticated-but-unverified user hitting a VerifiedEmail-gated
+            // endpoint gets the structured body. A 403 for a verified user came from some
+            // other policy (e.g. a capability or role gate) and must not be mislabeled.
             return;
         }
 
@@ -47,4 +51,7 @@ public sealed class VerifiedEmailForbiddenResponseMiddleware
         return authorizeData?.Any(a =>
             string.Equals(a.Policy, "VerifiedEmail", StringComparison.OrdinalIgnoreCase)) == true;
     }
+
+    private static bool UserEmailIsVerified(HttpContext context) =>
+        context.User.HasClaim(c => c.Type == "email_verified" && c.Value == "true");
 }

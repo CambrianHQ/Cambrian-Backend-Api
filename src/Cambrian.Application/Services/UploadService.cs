@@ -1,7 +1,9 @@
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.CreatorProfile;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Provenance;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http;
@@ -17,6 +19,15 @@ public class UploadService : IUploadService
     private readonly ILogger<UploadService> _logger;
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository? _profiles;
+
+    /// <summary>
+    /// Optional so existing direct constructions (unit tests) keep working. When wired
+    /// via DI it records the §9 provenance anchor after the track is persisted.
+    /// </summary>
+    private readonly IProvenanceService? _provenance;
+
+    /// <summary>Optional §9 provenance signer (free signed stamp on upload). Null in unit-style constructions.</summary>
+    private readonly IProvenanceSigner? _signer;
 
     /// <summary>Allowed audio file extensions (lowercase, with dot).</summary>
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -129,7 +140,9 @@ public class UploadService : IUploadService
         UserManager<ApplicationUser> users,
         ILogger<UploadService> logger,
         ICreatorIdentityRepository creators,
-        ICreatorProfileRepository? profiles = null)
+        ICreatorProfileRepository? profiles = null,
+        IProvenanceService? provenance = null,
+        IProvenanceSigner? signer = null)
     {
         _storage = storage;
         _tracks = tracks;
@@ -137,6 +150,8 @@ public class UploadService : IUploadService
         _logger = logger;
         _creators = creators;
         _profiles = profiles;
+        _provenance = provenance;
+        _signer = signer;
     }
 
     public async Task<UploadTrackResponse> Upload(UploadTrackRequest request)
@@ -157,8 +172,8 @@ public class UploadService : IUploadService
         {
             _logger.LogWarning("Upload denied: creator {CreatorId} has {Count}/{Limit} tracks (tier={Tier})",
                 request.CreatorId, creator.UploadCount, tierConfig.UploadLimit.Value, tierConfig.Slug);
-            throw new InvalidOperationException(
-                $"Upload limit reached. {tierConfig.DisplayName} tier allows {tierConfig.UploadLimit} tracks. Upgrade to Pro for unlimited uploads.");
+            throw new UpgradeRequiredException(
+                $"Upload limit reached. The {tierConfig.DisplayName} plan allows {tierConfig.UploadLimit} tracks. Upgrade to Creator or Pro for unlimited uploads.");
         }
 
         // ── File-type validation ──
@@ -191,6 +206,14 @@ public class UploadService : IUploadService
         if (!ValidateMagicBytes(stream, extension, AudioMagicBytes))
             throw new ArgumentException(
                 $"File content does not match expected format for '{extension}'. The file may be corrupted or disguised.");
+
+        // §9 provenance: stable content hash of the audio bytes. Synchronous (batch 1);
+        // ComputeSha256Hex resets the stream to 0 so the upload below re-reads it.
+        var contentHash = ContentHashing.ComputeSha256Hex(stream);
+
+        // §9 provenance: free, instant signed stamp over (contentHash, signedAt).
+        var stamp = _signer?.Sign(contentHash, DateTime.UtcNow);
+
         var audioUrl = await _storage.UploadAsync(
             stream,
             key,
@@ -238,6 +261,9 @@ public class UploadService : IUploadService
             CambrianTrackId = TrackIdDto.Generate(),
             Title = request.Title,
             Description = request.Description,
+            ContentHash = contentHash,
+            Signature = stamp?.Signature,
+            SignedAt = stamp?.SignedAt,
             Price = request.Price ?? (resolvedNonExclusiveCents / 100m),
             LicenseType = NormalizeListingLicenseType(request.LicenseType),
             AudioUrl = audioUrl,
@@ -258,6 +284,11 @@ public class UploadService : IUploadService
 
         await _tracks.AddAsync(track);
 
+        // §9 provenance: record a pending anchor after the track row exists (FK target).
+        // The batched on-chain anchoring runs on the batch-2 job queue. Optional dependency.
+        if (_provenance is not null)
+            await _provenance.EnsureAnchorPendingAsync(track.Id, contentHash);
+
         var linkedCollection = await AssignTrackToCollectionAsync(request, track);
 
         // ── Increment upload count ──
@@ -266,6 +297,7 @@ public class UploadService : IUploadService
 
         _logger.LogInformation("Track uploaded: {TrackId} by creator {CreatorId} (upload #{Count}, tier={Tier})",
             track.Id, request.CreatorId, creator.UploadCount, tierConfig.Slug);
+        Observability.CambrianMetrics.UploadCompleted.Add(1);
 
         return new UploadTrackResponse
         {
