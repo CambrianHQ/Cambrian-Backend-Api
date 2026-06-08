@@ -38,35 +38,28 @@ public sealed class ReleaseReadyController : BaseController
     /// creates a draft job. No credit is spent.</summary>
     [HttpPost("validate")]
     [RequestSizeLimit(200_000_000)] // 200 MB ceiling for an uploaded master
-    public async Task<IActionResult> Validate(
-        [FromForm] IFormFile? audio,
-        [FromForm] IFormFile? artwork,
-        [FromForm] Guid? trackId,
-        [FromForm] bool aiGenerated,
-        [FromForm] string? aiDisclosure,
-        [FromForm] double? targetLufs,
-        CancellationToken ct)
+    public async Task<IActionResult> Validate([FromForm] ReleaseReadyValidateRequest request, CancellationToken ct)
     {
-        if (audio is null || audio.Length == 0)
+        if (request.Audio is null || request.Audio.Length == 0)
             return ErrorResponse("An audio file is required.");
 
         var userId = GetRequiredUserId()!;
 
         // Buffer the uploaded files into seekable memory streams for validation + storage.
-        await using var audioBuffer = await BufferAsync(audio, ct);
-        await using var artworkBuffer = artwork is { Length: > 0 } ? await BufferAsync(artwork, ct) : null;
+        await using var audioBuffer = await BufferAsync(request.Audio, ct);
+        await using var artworkBuffer = request.Artwork is { Length: > 0 } ? await BufferAsync(request.Artwork, ct) : null;
 
         var input = new ReleaseReadyUploadInput
         {
             UserId = userId,
             Audio = audioBuffer,
-            AudioFileName = audio.FileName,
+            AudioFileName = request.Audio.FileName,
             Artwork = artworkBuffer,
-            ArtworkFileName = artwork?.FileName,
-            TrackId = trackId,
-            AiGenerated = aiGenerated,
-            AiDisclosure = aiDisclosure,
-            TargetLufs = targetLufs,
+            ArtworkFileName = request.Artwork?.FileName,
+            TrackId = request.TrackId,
+            AiGenerated = request.AiGenerated,
+            AiDisclosure = request.AiDisclosure,
+            TargetLufs = request.TargetLufs,
         };
 
         try
