@@ -1,37 +1,25 @@
 # Render Infrastructure-as-Code blueprint
 # Docs: https://docs.render.com/infrastructure-as-code
 #
+# Production-only deploy on Render's free tier. Database lives on Neon
+# (external) — DATABASE_URL is set manually as a workspace secret rather
+# than auto-populated from a Render-managed database.
+#
 # Deploy:
-#   1. Push to default branch
-#   2. Render Dashboard -> Blueprints -> New Blueprint Instance
-#   3. Select this repo -> confirm
-
-databases:
-  # -- Staging database -----------------------------------------------
-  - name: cambrian-db-staging
-    plan: free
-    region: oregon
-    databaseName: cambrian_staging
-    user: cambrian
-    postgresMajorVersion: "16"
-
-  # -- Production database ---------------------------------------------
-  - name: cambrian-db-prod
-    plan: basic-256mb            # paid plan for persistent storage
-    region: oregon
-    databaseName: cambrian_prod
-    user: cambrian
-    postgresMajorVersion: "16"
+#   1. New Render workspace (separate from any with billing issues)
+#   2. Connect this GitHub repo
+#   3. Blueprints -> New Blueprint Instance -> select this branch
+#   4. Fill in all `sync: false` secrets in the dashboard, including DATABASE_URL
 
 services:
   # ====================================================================
-  #  STAGING API
+  #  PRODUCTION API (Render free tier, Neon DB)
   # ====================================================================
   - type: web
-    name: cambrian-api-staging
+    name: cambrian-api
     runtime: docker
-    repo: https://github.com/Cambrian-by-Kinetix-Interactive/Cambrian-Backend-Api
-    branch: staging
+    repo: https://github.com/CambrianHQ/Cambrian-Backend-Api
+    branch: main
     plan: free
     region: oregon
     dockerfilePath: ./Dockerfile
@@ -40,116 +28,12 @@ services:
       # Render injects PORT -- Dockerfile entrypoint uses it
       - key: PORT
         value: "10000"
-      # .NET environment
-      - key: ASPNETCORE_ENVIRONMENT
-        value: Staging
-      # Database -- Render auto-populates from the linked database
-      - key: DATABASE_URL
-        fromDatabase:
-          name: cambrian-db-staging
-          property: connectionString
-      # JWT -- generate a strong >=32-char secret in the Render dashboard       
-      - key: Jwt__Key
-        sync: false
-      - key: Jwt__Issuer
-        value: cambrian-api
-      - key: Jwt__Audience
-        value: cambrian-client
-      # Stripe -- test keys for staging
-      - key: Stripe__SecretKey
-        sync: false
-      - key: Stripe__WebhookSecret
-        sync: false
-      # Stripe recurring Price IDs -- REQUIRED whenever a Stripe key is set, or
-      # startup throws (StartupExtensions ValidateStripeKey). Set the price_...
-      # IDs for the Creator and Pro plans in the Render dashboard.
-      - key: Stripe__Prices__Creator
-        sync: false
-      - key: Stripe__Prices__Pro
-        sync: false
-      # Object storage -- S3/R2 (same provider as production, separate bucket)
-      - key: Storage__Provider
-        sync: false
-      - key: Storage__Endpoint
-        sync: false
-      - key: Storage__Bucket
-        value: cambrian-audio-prod
-      - key: Storage__AccessKey
-        sync: false
-      - key: Storage__SecretKey
-        sync: false
-      - key: Storage__Region
-        # Supabase S3 gateway requires a real AWS region in the SigV4
-        # string-to-sign. "auto" was a Cloudflare R2 leftover and caused
-        # SignatureDoesNotMatch on every request. Do not change back to
-        # "auto" unless this service is repointed at R2.
-        value: us-east-1
-      - key: Storage__UsePathStyle
-        value: "true"
-      - key: Storage__PublicUrl
-        sync: false
-      # Error monitoring -- Sentry (leave blank to disable; SDK is a no-op without a DSN)
-      - key: Sentry__Dsn
-        sync: false
-      # Email -- Resend for staging (same domain, tagged sender name)
-      - key: Email__Provider
-        value: resend
-      - key: Email__FromAddress
-        value: noreply@cambrianmusic.com
-      - key: Email__FromName
-        value: "Cambrian Music (Staging)"
-      - key: Email__ResendApiKey
-        sync: false
-      # Rate limiting -- relaxed for staging
-      - key: RateLimiting__GlobalPermitLimit
-        value: "500"
-      - key: RateLimiting__AuthPermitLimit
-        value: "100"
-      # Admin seed account
-      - key: Admin__Email
-        sync: false
-      - key: Admin__Password
-        sync: false
-      # Demo creators for local/staging verification (shared password, emails are deterministic in code)
-      - key: SeedDemoUsers__Password
-        sync: false
-      # Google OAuth
-      - key: Google__ClientId
-        sync: false
-      # Frontend CORS
-      - key: App__FrontendUrl
-        value: https://cambrian-env-staging-loganbryanxs-projects.vercel.app
-      - key: App__CorsOrigins
-        value: "https://cambrian-env-staging-loganbryanxs-projects.vercel.app"
-      # Vercel preview deployment CORS wildcard
-      - key: App__VercelProjectSlug
-        value: cambrian
-    buildFilter:
-      paths:
-        - src/**
-        - Dockerfile
-        - Cambrian.sln
-  # ====================================================================
-  #  PRODUCTION API
-  # ====================================================================
-  - type: web
-    name: cambrian-api
-    runtime: docker
-    repo: https://github.com/Cambrian-by-Kinetix-Interactive/Cambrian-Backend-Api
-    branch: main
-    plan: starter
-    region: oregon
-    dockerfilePath: ./Dockerfile
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: "10000"
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      # Database -- Neon (external). Paste the full postgresql:// URL as a
+      # workspace secret. Do not commit it. See db-dumps/README or .env.
       - key: DATABASE_URL
-        fromDatabase:
-          name: cambrian-db-prod
-          property: connectionString
+        sync: false
       - key: Jwt__Key
         sync: false
       - key: Jwt__Issuer
@@ -159,13 +43,6 @@ services:
       - key: Stripe__SecretKey
         sync: false
       - key: Stripe__WebhookSecret
-        sync: false
-      # Stripe recurring Price IDs -- REQUIRED whenever a Stripe key is set, or
-      # startup throws (StartupExtensions ValidateStripeKey). Set the live
-      # price_... IDs for the Creator and Pro plans in the Render dashboard.
-      - key: Stripe__Prices__Creator
-        sync: false
-      - key: Stripe__Prices__Pro
         sync: false
       - key: Storage__Provider
         sync: false           # must be s3 or r2 -- app refuses to start with local in Production
@@ -186,9 +63,6 @@ services:
       - key: Storage__UsePathStyle
         value: "true"
       - key: Storage__PublicUrl
-        sync: false
-      # Error monitoring -- Sentry (leave blank to disable; SDK is a no-op without a DSN)
-      - key: Sentry__Dsn
         sync: false
       - key: Email__Provider
         value: resend
@@ -224,4 +98,3 @@ services:
         - src/**
         - Dockerfile
         - Cambrian.sln
-
