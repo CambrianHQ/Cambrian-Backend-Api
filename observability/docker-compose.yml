@@ -1,0 +1,43 @@
+name: cambrian-observability
+
+# Local-only metrics stack: Prometheus scrapes the API's /metrics endpoint and
+# Grafana auto-provisions the dashboards in ../grafana/dashboards.
+#
+# Assumes the API is running on the host at http://localhost:5000 (bind it to
+# 0.0.0.0 so containers can reach it — see observability/README.md). To target a
+# different host/port, edit prometheus/prometheus.yml.
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cambrian-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2h
+      # Accept k6 load-test metrics via remote write (k6 run -o experimental-prometheus-rw).
+      - --web.enable-remote-write-receiver
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      # Lets `host.docker.internal` resolve to the host on Linux too (no-op on Docker Desktop).
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cambrian-grafana
+    restart: unless-stopped
+    ports:
+      # Host 3000/3001 are often taken (frontend dev servers); 3300 avoids the clash.
+      - "3300:3000"
+    environment:
+      # Local convenience only — anonymous admin, no login. Never use in prod.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

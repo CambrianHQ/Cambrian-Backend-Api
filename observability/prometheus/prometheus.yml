@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  # job_name becomes the `job="cambrian-api"` label the Grafana dashboards filter on.
+  - job_name: cambrian-api
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          # Dockerized API (docker compose up api → host port 3001).
+          # For a host-run API (`dotnet run` on :5000) use host.docker.internal:5000.
+          - host.docker.internal:3001

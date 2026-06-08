@@ -1,7 +1,18 @@
 # Grafana Dashboards
 
-Dashboard-as-code JSON files for Cambrian operational observability.  
-Import into Grafana via **Dashboards → Import → Upload JSON**.
+Dashboard-as-code JSON files for Cambrian operational observability.
+
+**Fastest path:** run the local stack in [`../observability`](../observability) — it
+auto-provisions these dashboards and a matching Prometheus datasource. See
+`../observability/README.md`.
+
+**Manual import:** **Dashboards → Import → Upload JSON**. Panels reference a Prometheus
+datasource by uid `cambrian-prometheus`; if your datasource has a different uid, pick it in
+the import dialog (or name your Prometheus datasource uid `cambrian-prometheus`).
+
+> Metric/label names follow OpenTelemetry semantic conventions
+> (`http_route`, `http_request_method`, `http_response_status_code`, `server_address`) as
+> emitted by the API's `/metrics` endpoint.
 
 ## Dashboards
 

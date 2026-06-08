@@ -39,7 +39,7 @@
       "targets": [
         {
           "expr": "avg(up{job=\"cambrian-api\"}) * 100",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -62,7 +62,7 @@
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"cambrian-api\"}[5m])))",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -84,8 +84,8 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\",status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\"}[5m]))",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "expr": "sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\",http_response_status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\"}[5m]))",
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -108,7 +108,7 @@
       "targets": [
         {
           "expr": "sum(rate(cambrian_checkout_completed_total[5m])) / clamp_min(sum(rate(cambrian_checkout_started_total[5m])), 1)",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -131,7 +131,7 @@
       "targets": [
         {
           "expr": "sum(rate(cambrian_upload_completed_total[5m])) / clamp_min(sum(rate(cambrian_upload_completed_total[5m]) + rate(cambrian_upload_failed_total[5m])), 1)",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -154,7 +154,7 @@
       "targets": [
         {
           "expr": "1 - (sum(rate(cambrian_webhook_failed_total[5m])) / clamp_min(sum(rate(cambrian_webhook_processed_total[5m])), 1))",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -167,7 +167,7 @@
         {
           "expr": "sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\"}[1m]))",
           "legendFormat": "total",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -180,17 +180,17 @@
         {
           "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"cambrian-api\"}[5m])))",
           "legendFormat": "p50",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"cambrian-api\"}[5m])))",
           "legendFormat": "p95",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"cambrian-api\"}[5m])))",
           "legendFormat": "p99",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -201,9 +201,9 @@
       "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "targets": [
         {
-          "expr": "sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\",status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\"}[5m]))",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\",http_response_status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{job=\"cambrian-api\"}[5m]))",
           "legendFormat": "5xx %",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -215,12 +215,12 @@
         {
           "expr": "rate(process_cpu_seconds_total{job=\"cambrian-api\"}[5m])",
           "legendFormat": "CPU (cores)",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "process_resident_memory_bytes{job=\"cambrian-api\"} / 1024 / 1024",
           "legendFormat": "RSS (MB)",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -232,7 +232,7 @@
         {
           "expr": "up{job=\"cambrian-api\"}",
           "legendFormat": "{{instance}}",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -244,7 +244,7 @@
         {
           "expr": "sum(rate(aspnetcore_rate_limiting_requests_total{result=\"rejected\",job=\"cambrian-api\"}[5m]))",
           "legendFormat": "429 / sec",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     }

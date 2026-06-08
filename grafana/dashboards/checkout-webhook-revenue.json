@@ -39,7 +39,7 @@
       "targets": [
         {
           "expr": "sum(rate(cambrian_checkout_completed_total[5m])) / clamp_min(sum(rate(cambrian_checkout_started_total[5m])), 1)",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -62,7 +62,7 @@
       "targets": [
         {
           "expr": "sum(rate(cambrian_webhook_duplicate_total[5m])) / clamp_min(sum(rate(cambrian_webhook_processed_total[5m])), 1)",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -73,7 +73,7 @@
       "targets": [
         {
           "expr": "sum(rate(cambrian_library_grant_total[5m])) * 60",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -84,7 +84,7 @@
       "targets": [
         {
           "expr": "sum(rate(cambrian_stream_signed_url_issued_total[5m])) * 60",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -96,17 +96,17 @@
         {
           "expr": "sum(rate(cambrian_checkout_started_total[5m])) * 60",
           "legendFormat": "started / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "sum(rate(cambrian_checkout_completed_total[5m])) * 60",
           "legendFormat": "completed / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "sum(rate(cambrian_checkout_failed_total[5m])) * 60",
           "legendFormat": "failed / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -118,17 +118,17 @@
         {
           "expr": "sum(rate(cambrian_webhook_processed_total[5m])) * 60",
           "legendFormat": "processed / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "sum(rate(cambrian_webhook_duplicate_total[5m])) * 60",
           "legendFormat": "duplicates / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "sum(rate(cambrian_webhook_failed_total[5m])) * 60",
           "legendFormat": "failed / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -140,12 +140,12 @@
         {
           "expr": "sum(rate(cambrian_upload_completed_total[5m])) * 60",
           "legendFormat": "completed / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "sum(rate(cambrian_upload_failed_total[5m])) * 60",
           "legendFormat": "failed / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -158,12 +158,12 @@
         {
           "expr": "histogram_quantile(0.50, sum by (le) (rate(http_client_request_duration_seconds_bucket{job=\"cambrian-api\",server_address=~\".*stripe.*\"}[5m])))",
           "legendFormat": "p50",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "histogram_quantile(0.95, sum by (le) (rate(http_client_request_duration_seconds_bucket{job=\"cambrian-api\",server_address=~\".*stripe.*\"}[5m])))",
           "legendFormat": "p95",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -175,12 +175,12 @@
         {
           "expr": "sum(rate(cambrian_payout_created_total[5m])) * 60",
           "legendFormat": "created / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         },
         {
           "expr": "sum(rate(cambrian_payout_approved_total[5m])) * 60",
           "legendFormat": "approved / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     },
@@ -192,7 +192,7 @@
         {
           "expr": "sum(rate(cambrian_stream_signed_url_issued_total[5m])) * 60",
           "legendFormat": "signed URLs / min",
-          "datasource": { "uid": "${DS_PROMETHEUS}" }
+          "datasource": { "uid": "cambrian-prometheus" }
         }
       ]
     }

@@ -16,7 +16,10 @@ export const options = {
   duration: "30s",
   thresholds: {
     http_req_duration: ["p(99)<1000"],
-    http_req_failed: ["rate<0.01"],
+    // Only gate on requests that should succeed (public endpoints).
+    // Auth-gated endpoints (library, auth/me, admin) intentionally return 401
+    // and are excluded via the `expected_response:true` tag.
+    "http_req_failed{expected_response:true}": ["rate<0.01"],
   },
 };
 
@@ -47,15 +50,22 @@ export default function () {
   res = http.get(`${BASE_URL}/api/v1/tracks`);
   check(res, { "v1 tracks 200": (r) => r.status === 200 });
 
-  // Auth endpoints return 401 (not 500)
-  res = http.get(`${BASE_URL}/library`);
+  // Auth-gated endpoints — verify they reject cleanly with 401, not 500.
+  // responseCallback marks these as not expected_response so they don't
+  // pollute the http_req_failed threshold above.
+  res = http.get(`${BASE_URL}/library`, {
+    responseCallback: http.expectedStatuses(401),
+  });
   check(res, { "library 401": (r) => r.status === 401 });
 
-  res = http.get(`${BASE_URL}/auth/me`);
+  res = http.get(`${BASE_URL}/auth/me`, {
+    responseCallback: http.expectedStatuses(401),
+  });
   check(res, { "auth/me 401": (r) => r.status === 401 });
 
-  // Admin returns 401 (not 500)
-  res = http.get(`${BASE_URL}/admin/dashboard`);
+  res = http.get(`${BASE_URL}/admin/dashboard`, {
+    responseCallback: http.expectedStatuses(401),
+  });
   check(res, { "admin 401": (r) => r.status === 401 });
 
   sleep(1);
