@@ -285,18 +285,6 @@
                           "tag":  "Users"
                       },
                       {
-                          "method":  "POST",
-                          "path":  "/checkout",
-                          "requiresAuth":  true,
-                          "tag":  "Checkout"
-                      },
-                      {
-                          "method":  "GET",
-                          "path":  "/checkout/session/{sessionId}",
-                          "requiresAuth":  true,
-                          "tag":  "Checkout"
-                      },
-                      {
                           "method":  "GET",
                           "path":  "/earnings",
                           "requiresAuth":  true,
@@ -418,30 +406,6 @@
                       },
                       {
                           "method":  "POST",
-                          "path":  "/payments/checkout",
-                          "requiresAuth":  true,
-                          "tag":  "Payments"
-                      },
-                      {
-                          "method":  "GET",
-                          "path":  "/payments/state",
-                          "requiresAuth":  true,
-                          "tag":  "Payments"
-                      },
-                      {
-                          "method":  "GET",
-                          "path":  "/payments/result",
-                          "requiresAuth":  false,
-                          "tag":  "Payments"
-                      },
-                      {
-                          "method":  "POST",
-                          "path":  "/payments/process",
-                          "requiresAuth":  true,
-                          "tag":  "Payments"
-                      },
-                      {
-                          "method":  "POST",
                           "path":  "/payouts/connect-stripe",
                           "requiresAuth":  true,
                           "tag":  "Payouts"
@@ -511,18 +475,6 @@
                           "path":  "/payouts/settings",
                           "requiresAuth":  true,
                           "tag":  "Payouts"
-                      },
-                      {
-                          "method":  "POST",
-                          "path":  "/purchases",
-                          "requiresAuth":  true,
-                          "tag":  "Purchases"
-                      },
-                      {
-                          "method":  "POST",
-                          "path":  "/purchases/credit-creator",
-                          "requiresAuth":  true,
-                          "tag":  "Purchases"
                       },
                       {
                           "method":  "GET",
@@ -632,18 +584,6 @@
                           "path":  "/wallet/history",
                           "requiresAuth":  true,
                           "tag":  "Wallet"
-                      },
-                      {
-                          "method":  "GET",
-                          "path":  "/licenses",
-                          "requiresAuth":  true,
-                          "tag":  "Licenses"
-                      },
-                      {
-                          "method":  "GET",
-                          "path":  "/licenses/{licenseId}",
-                          "requiresAuth":  true,
-                          "tag":  "Licenses"
                       },
                       {
                           "method":  "POST",
