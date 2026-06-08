@@ -23,20 +23,13 @@ public sealed class WebhookContractTests : IClassFixture<CambrianApiFixture>
     private HttpClient CreateClient() => _factory.CreateClient();
 
     [Fact]
-    public async Task Stripe_Webhook_Processes_Checkout_Completed()
+    public async Task Stripe_Webhook_Processes_Subscription_Checkout_Completed()
     {
-        // Seed creator + track
-        var creatorEmail = "wh-contract-creator@cambrian.com";
-        await _factory.RegisterUserAsync(creatorEmail, "Test1234!@");
-        var creatorId = await _factory.GetUserIdAsync(creatorEmail);
-        var trackId = await _factory.SeedTrackAsync(creatorId, "Webhook Contract Beat");
+        // Track-license purchasing is removed; subscription checkout is the fulfilled path.
+        var email = "wh-contract-sub@cambrian.com";
+        await _factory.RegisterUserAsync(email, "Test1234!@");
+        var userId = await _factory.GetUserIdAsync(email);
 
-        // Seed buyer
-        var buyerEmail = "wh-contract-buyer@cambrian.com";
-        await _factory.RegisterUserAsync(buyerEmail, "Test1234!@");
-        var buyerId = await _factory.GetUserIdAsync(buyerEmail);
-
-        var sessionId = $"cs_test_{Guid.NewGuid():N}";
         var eventId = $"evt_wh_contract_{Guid.NewGuid():N}";
         var payload = $$"""
         {
@@ -44,14 +37,9 @@ public sealed class WebhookContractTests : IClassFixture<CambrianApiFixture>
             "type": "checkout.session.completed",
             "data": {
                 "object": {
-                    "id": "{{sessionId}}",
-                    "client_reference_id": "{{buyerId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 2999,
-                    "metadata": {
-                        "trackId": "{{trackId}}",
-                        "userId": "{{buyerId}}",
-                        "licenseType": "non-exclusive"
-                    }
+                    "id": "cs_test_{{Guid.NewGuid():N}}",
+                    "client_reference_id": "{{userId}}:subscription:creator",
+                    "customer": "cus_wh_contract"
                 }
             }
         }
@@ -63,34 +51,23 @@ public sealed class WebhookContractTests : IClassFixture<CambrianApiFixture>
 
         response.EnsureSuccessStatusCode();
 
-        // Verify domain side-effects: purchase and library item created
+        // Verify domain side-effect: subscription activated.
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
-        var purchase = await db.Purchases
-            .FirstOrDefaultAsync(p => p.TrackId == trackId && p.BuyerId == buyerId);
-        Assert.NotNull(purchase);
-
-        var libraryItem = await db.Library
-            .FirstOrDefaultAsync(l => l.TrackId == trackId && l.UserId == buyerId);
-        Assert.NotNull(libraryItem);
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == userId);
+        Assert.NotNull(sub);
+        Assert.Equal("active", sub.Status);
+        Assert.Equal("creator", sub.Plan);
     }
 
     [Fact]
     public async Task Stripe_Webhook_Is_Idempotent_On_Replay()
     {
-        // Seed creator + track
-        var creatorEmail = "wh-idemp-creator@cambrian.com";
-        await _factory.RegisterUserAsync(creatorEmail, "Test1234!@");
-        var creatorId = await _factory.GetUserIdAsync(creatorEmail);
-        var trackId = await _factory.SeedTrackAsync(creatorId, "Idempotent Beat");
+        var email = "wh-idemp-sub@cambrian.com";
+        await _factory.RegisterUserAsync(email, "Test1234!@");
+        var userId = await _factory.GetUserIdAsync(email);
 
-        // Seed buyer
-        var buyerEmail = "wh-idemp-buyer@cambrian.com";
-        await _factory.RegisterUserAsync(buyerEmail, "Test1234!@");
-        var buyerId = await _factory.GetUserIdAsync(buyerEmail);
-
-        var sessionId = $"cs_test_idemp_{Guid.NewGuid():N}";
         var eventId = $"evt_idemp_{Guid.NewGuid():N}";
         var payload = $$"""
         {
@@ -98,14 +75,9 @@ public sealed class WebhookContractTests : IClassFixture<CambrianApiFixture>
             "type": "checkout.session.completed",
             "data": {
                 "object": {
-                    "id": "{{sessionId}}",
-                    "client_reference_id": "{{buyerId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 2999,
-                    "metadata": {
-                        "trackId": "{{trackId}}",
-                        "userId": "{{buyerId}}",
-                        "licenseType": "non-exclusive"
-                    }
+                    "id": "cs_test_idemp_{{Guid.NewGuid():N}}",
+                    "client_reference_id": "{{userId}}:subscription:creator",
+                    "customer": "cus_idemp"
                 }
             }
         }
@@ -121,14 +93,13 @@ public sealed class WebhookContractTests : IClassFixture<CambrianApiFixture>
         var response2 = await client.PostAsync("/webhook/stripe", content2);
         response2.EnsureSuccessStatusCode();
 
-        // Should NOT create duplicate purchases
+        // Should NOT create duplicate subscriptions
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
-        var purchaseCount = await db.Purchases
-            .CountAsync(p => p.TrackId == trackId && p.BuyerId == buyerId);
+        var subCount = await db.Subscriptions.CountAsync(s => s.UserId == userId);
 
-        Assert.Equal(1, purchaseCount);
+        Assert.Equal(1, subCount);
     }
 
     [Fact]

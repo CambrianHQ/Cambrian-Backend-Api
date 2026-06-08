@@ -27,10 +27,12 @@ public class Purchase
     /// <summary>Stripe Checkout Session ID — used for webhook lookup.</summary>
     public string? StripeSessionId { get; set; }
 
-    /// <summary>FK to the license certificate issued for this purchase (null until payment confirmed).</summary>
+    /// <summary>
+    /// Legacy column retained for historical purchase rows. The LicenseCertificates table
+    /// was dropped when licensing was removed, so this is now an inert nullable id with no
+    /// foreign key or navigation.
+    /// </summary>
     public Guid? LicenseId { get; set; }
-
-    public LicenseCertificate? License { get; set; }
 
     /// <summary>When the purchase was completed (payment confirmed).</summary>
     public DateTime? CompletedAt { get; set; }

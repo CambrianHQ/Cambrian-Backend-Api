@@ -27,7 +27,10 @@ public sealed class BillingServiceTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["App:FrontendUrl"] = "http://localhost:5173"
+                ["App:FrontendUrl"] = "http://localhost:5173",
+                // Creator/Pro subscriptions are price-based: the Stripe price ids must be configured.
+                ["Stripe:Prices:Creator"] = "price_creator_test",
+                ["Stripe:Prices:Pro"] = "price_pro_test",
             })
             .Build();
 
@@ -43,8 +46,7 @@ public sealed class BillingServiceTests
     [Fact]
     public async Task CreateCheckoutAsync_CreatesStripeSubscriptionSession_ForProTier()
     {
-        _gateway.CreateSubscriptionCheckoutAsync(
-                Arg.Any<int>(),
+        _gateway.CreateSubscriptionCheckoutByPriceAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -53,15 +55,16 @@ public sealed class BillingServiceTests
             .Returns("https://checkout.stripe.test/subscription/cs_sub_123");
 
         var response = await _sut.CreateCheckoutAsync(
-            new BillingCheckoutRequest { Tier = "creator" },
+            new BillingCheckoutRequest { Tier = "pro" },
             "user-1",
             "buyer@example.com");
 
         response.CheckoutUrl.Should().Contain("https://checkout.stripe.test/subscription/");
 
-        await _gateway.Received(1).CreateSubscriptionCheckoutAsync(
-            Arg.Any<int>(),
-            Arg.Any<string>(),
+        // Pro checkout is price-based: the configured Pro Stripe price id, a Pro client
+        // reference (so the webhook grants the Pro tier), and the frontend success/cancel urls.
+        await _gateway.Received(1).CreateSubscriptionCheckoutByPriceAsync(
+            "price_pro_test",
             "user-1:subscription:pro",
             "http://localhost:5173/payment?payment_success=true&session_id={CHECKOUT_SESSION_ID}",
             "http://localhost:5173/payment",

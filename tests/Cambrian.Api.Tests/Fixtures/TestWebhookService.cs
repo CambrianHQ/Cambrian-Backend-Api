@@ -19,13 +19,12 @@ internal sealed class TestWebhookService : IWebhookService
 
     public TestWebhookService(
         CambrianDbContext db,
-        ILicenseService licenseService,
         IEmailService emailService,
         IConfiguration configuration,
         ILogger<StripeWebhookService> logger,
         IHostEnvironment env)
     {
-        _inner = new StripeWebhookService(db, licenseService, emailService, configuration, logger, env);
+        _inner = new StripeWebhookService(db, emailService, configuration, logger, env);
     }
 
     public async Task HandleStripeAsync(string payload, string signature)

@@ -62,6 +62,31 @@ public sealed class DevelopmentPaymentGateway : IPaymentGateway
         return Task.FromResult(ResolveRedirectUrl(successUrl, sessionId));
     }
 
+    public Task<string> CreateSubscriptionCheckoutByPriceAsync(
+        string priceId,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        string? customerEmail = null)
+    {
+        var sessionId = $"cs_dev_sub_{Guid.NewGuid():N}";
+        _sessions[sessionId] = new CheckoutSessionInfo
+        {
+            SessionId = sessionId,
+            Status = "paid",
+            ClientReferenceId = clientReferenceId,
+            AmountTotal = null
+        };
+
+        return Task.FromResult(ResolveRedirectUrl(successUrl, sessionId));
+    }
+
+    public Task<string> EnsureCustomerAsync(string email)
+        => Task.FromResult($"cus_dev_{Uri.EscapeDataString(email)}");
+
+    public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl)
+        => Task.FromResult($"{_frontendUrl}/settings/billing?portal=dev&customer={Uri.EscapeDataString(customerId)}");
+
     public Task<CheckoutSessionInfo?> GetCheckoutSessionAsync(string sessionId)
     {
         _sessions.TryGetValue(sessionId, out var session);

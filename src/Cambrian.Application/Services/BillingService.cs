@@ -15,6 +15,7 @@ public sealed class BillingService : IBillingService
     private readonly ISubscriptionService _subscriptionService;
     private readonly IPaymentGateway _gateway;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<BillingService> _logger;
     private readonly string _frontendUrl;
 
@@ -30,38 +31,89 @@ public sealed class BillingService : IBillingService
         _subscriptionService = subscriptionService;
         _gateway = gateway;
         _users = users;
+        _configuration = configuration;
         _logger = logger;
         _frontendUrl = ResolveFrontendUrl(configuration);
     }
 
     public async Task<CheckoutResponse> CreateCheckoutAsync(BillingCheckoutRequest request, string userId, string? userEmail = null)
     {
-        var tier = request.Tier?.ToLowerInvariant() ?? "";
-        var (amountCents, planName) = tier switch
-        {
-            "paid" => (999, "Buyer Subscription"),
-            "creator" or "pro" => (TierManifest.Pro.PriceCents, TierManifest.Pro.DisplayName),
-            _ => (0, "")
-        };
-
-        // Normalize "creator" -> "pro" for consistency
-        if (tier == "creator") tier = "pro";
-
-        if (amountCents == 0)
-            throw new ArgumentException("Invalid tier. Choose 'paid' or 'pro'.");
+        var tier = (request.Tier ?? "").Trim().ToLowerInvariant();
 
         var successUrl = $"{_frontendUrl}/payment?payment_success=true&session_id={{CHECKOUT_SESSION_ID}}";
         var cancelUrl = $"{_frontendUrl}/payment";
 
-        var url = await _gateway.CreateSubscriptionCheckoutAsync(
-            amountCents,
-            planName,
-            clientReferenceId: $"{userId}:subscription:{tier}",
-            successUrl,
-            cancelUrl,
-            customerEmail: userEmail);
+        // Subscription tiers (creator/pro) use pre-created Stripe Price IDs.
+        if (tier is "creator" or "pro")
+        {
+            var tierConfig = TierManifest.For(tier);
+            var priceId = ResolvePriceId(tierConfig);
 
-        return new CheckoutResponse { CheckoutUrl = url };
+            var subUrl = await _gateway.CreateSubscriptionCheckoutByPriceAsync(
+                priceId,
+                clientReferenceId: $"{userId}:subscription:{tier}",
+                successUrl,
+                cancelUrl,
+                customerEmail: userEmail);
+
+            return new CheckoutResponse { CheckoutUrl = subUrl };
+        }
+
+        // Legacy buyer subscription ("paid") — retained for back-compat with the existing
+        // /billing flow; not part of the creator tier matrix.
+        if (tier == "paid")
+        {
+            var url = await _gateway.CreateSubscriptionCheckoutAsync(
+                amountInCents: 999,
+                planName: "Buyer Subscription",
+                clientReferenceId: $"{userId}:subscription:paid",
+                successUrl,
+                cancelUrl,
+                customerEmail: userEmail);
+
+            return new CheckoutResponse { CheckoutUrl = url };
+        }
+
+        throw new ArgumentException("Invalid tier. Choose 'creator' or 'pro'.");
+    }
+
+    public async Task<PortalResponse> CreatePortalAsync(string userId, string? userEmail = null)
+    {
+        // Prefer the Stripe customer id captured on the active subscription; otherwise
+        // resolve one from the user's email (find-or-create).
+        var sub = await _subscriptions.GetActiveAsync(userId);
+        var customerId = sub?.StripeCustomerId;
+
+        if (string.IsNullOrWhiteSpace(customerId))
+        {
+            var email = userEmail ?? (await _users.FindByIdAsync(userId))?.Email;
+            if (string.IsNullOrWhiteSpace(email))
+                throw new ArgumentException("Cannot open billing portal: no Stripe customer and no email on file.");
+            customerId = await _gateway.EnsureCustomerAsync(email);
+        }
+
+        var returnUrl = $"{_frontendUrl}/settings/billing";
+        var portalUrl = await _gateway.CreateBillingPortalSessionAsync(customerId!, returnUrl);
+
+        _logger.LogInformation("EVENT: BillingPortalCreated userId:{UserId}", userId);
+        return new PortalResponse { PortalUrl = portalUrl };
+    }
+
+    /// <summary>
+    /// Resolve the configured Stripe Price ID for a tier. Price IDs are environment config
+    /// (never hardcoded). Throws a clear error if the tier is misconfigured.
+    /// </summary>
+    private string ResolvePriceId(TierConfig tierConfig)
+    {
+        if (tierConfig.StripePriceConfigKey is null)
+            throw new ArgumentException($"Tier '{tierConfig.Slug}' has no subscription price.");
+
+        var priceId = _configuration[tierConfig.StripePriceConfigKey];
+        if (string.IsNullOrWhiteSpace(priceId))
+            throw new InvalidOperationException(
+                $"Stripe price for the {tierConfig.DisplayName} tier is not configured ({tierConfig.StripePriceConfigKey}).");
+
+        return priceId;
     }
 
     public async Task<BillingStatusResponse> GetStatusAsync(string userId)

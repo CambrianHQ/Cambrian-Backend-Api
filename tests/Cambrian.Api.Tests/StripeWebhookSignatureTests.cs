@@ -24,14 +24,11 @@ public sealed class StripeWebhookSignatureTests : IClassFixture<SignedStripeWebh
     [Fact]
     public async Task Webhook_With_Valid_Signature_Is_Processed()
     {
-        var creatorEmail = $"signed-wh-creator-{Guid.NewGuid():N}@cambrian.com";
-        await _fixture.RegisterUserAsync(creatorEmail, "Test1234!@");
-        var creatorId = await _fixture.GetUserIdAsync(creatorEmail);
-        var trackId = await _fixture.SeedTrackAsync(creatorId, "Signed Webhook Beat");
-
-        var buyerEmail = $"signed-wh-buyer-{Guid.NewGuid():N}@cambrian.com";
-        await _fixture.RegisterUserAsync(buyerEmail, "Test1234!@");
-        var buyerId = await _fixture.GetUserIdAsync(buyerEmail);
+        // Track-license purchasing is removed; a signed subscription checkout is the
+        // fulfilled path and exercises the real signature-verification pipeline.
+        var email = $"signed-wh-sub-{Guid.NewGuid():N}@cambrian.com";
+        await _fixture.RegisterUserAsync(email, "Test1234!@");
+        var userId = await _fixture.GetUserIdAsync(email);
 
         var payload = $$"""
         {
@@ -42,8 +39,8 @@ public sealed class StripeWebhookSignatureTests : IClassFixture<SignedStripeWebh
                 "object": {
                     "object": "checkout.session",
                     "id": "cs_signed_{{Guid.NewGuid():N}}",
-                    "client_reference_id": "{{buyerId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 2999
+                    "client_reference_id": "{{userId}}:subscription:creator",
+                    "customer": "cus_signed_{{Guid.NewGuid():N}}"
                 }
             }
         }
@@ -63,13 +60,11 @@ public sealed class StripeWebhookSignatureTests : IClassFixture<SignedStripeWebh
         using var scope = _fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
-        var purchase = await db.Purchases
-            .FirstOrDefaultAsync(p => p.BuyerId == buyerId && p.TrackId == trackId);
-        Assert.NotNull(purchase);
-
-        var libraryItem = await db.Library
-            .FirstOrDefaultAsync(l => l.UserId == buyerId && l.TrackId == trackId);
-        Assert.NotNull(libraryItem);
+        var sub = await db.Subscriptions
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+        Assert.NotNull(sub);
+        Assert.Equal("active", sub.Status);
+        Assert.Equal("creator", sub.Plan);
     }
 
     [Fact]

@@ -23,21 +23,17 @@ public sealed class ConcurrencyTests : IClassFixture<CambrianApiFixture>
     /// <summary>
     /// Duplicate Stripe webhook delivery under parallel execution. The unique
     /// index on StripeWebhookEvents.EventId plus the idempotency check must
-    /// collapse all deliveries to exactly one purchase regardless of timing.
+    /// collapse all deliveries to exactly one subscription regardless of timing.
+    /// (Track-license purchasing has been removed; subscription checkout is the
+    /// fulfilled path.)
     /// </summary>
     [Fact]
-    public async Task Duplicate_Webhook_Event_Under_Parallel_Delivery_Creates_Single_Purchase()
+    public async Task Duplicate_Webhook_Event_Under_Parallel_Delivery_Activates_Single_Subscription()
     {
-        // Seed a creator and track.
-        var creatorEmail = $"conc-creator-{Guid.NewGuid():N}@cambrian.com";
-        await _fixture.RegisterUserAsync(creatorEmail, "Test1234!@");
-        var creatorId = await _fixture.GetUserIdAsync(creatorEmail);
-        var trackId = await _fixture.SeedTrackAsync(creatorId, "Concurrency Beat");
-
-        // Seed a buyer.
-        var buyerEmail = $"conc-buyer-{Guid.NewGuid():N}@cambrian.com";
-        await _fixture.RegisterUserAsync(buyerEmail, "Test1234!@");
-        var buyerId = await _fixture.GetUserIdAsync(buyerEmail);
+        // Seed a user.
+        var userEmail = $"conc-sub-{Guid.NewGuid():N}@cambrian.com";
+        await _fixture.RegisterUserAsync(userEmail, "Test1234!@");
+        var userId = await _fixture.GetUserIdAsync(userEmail);
 
         var eventId = $"evt_conc_{Guid.NewGuid():N}";
         var payload = $$"""
@@ -46,8 +42,8 @@ public sealed class ConcurrencyTests : IClassFixture<CambrianApiFixture>
             "type": "checkout.session.completed",
             "data": {
                 "object": {
-                    "client_reference_id": "{{buyerId}}:{{trackId}}:non-exclusive",
-                    "amount_total": 2499
+                    "client_reference_id": "{{userId}}:subscription:creator",
+                    "customer": "cus_conc"
                 }
             }
         }
@@ -77,15 +73,10 @@ public sealed class ConcurrencyTests : IClassFixture<CambrianApiFixture>
         using var scope = _fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
-        var purchases = await db.Purchases
-            .Where(p => p.BuyerId == buyerId && p.TrackId == trackId)
+        var subscriptions = await db.Subscriptions
+            .Where(s => s.UserId == userId)
             .ToListAsync();
-        Assert.Single(purchases);
-
-        var libraryItems = await db.Library
-            .Where(l => l.UserId == buyerId && l.TrackId == trackId)
-            .ToListAsync();
-        Assert.Single(libraryItems);
+        Assert.Single(subscriptions);
 
         var events = await db.StripeWebhookEvents
             .Where(e => e.EventId == eventId)

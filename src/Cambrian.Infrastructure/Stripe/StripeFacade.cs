@@ -97,6 +97,50 @@ public class StripeFacade : IPaymentGateway
         return session.Url!;
     }
 
+    public async Task<string> CreateSubscriptionCheckoutByPriceAsync(
+        string priceId,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        string? customerEmail = null)
+    {
+        if (string.IsNullOrWhiteSpace(priceId))
+            throw new InvalidOperationException("A Stripe Price ID is required for subscription checkout.");
+
+        var options = new SessionCreateOptions
+        {
+            Mode = "subscription",
+            Customer = customerEmail != null ? await FindOrCreateCustomerAsync(customerEmail) : null,
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            ClientReferenceId = clientReferenceId,
+            LineItems = new List<SessionLineItemOptions>
+            {
+                new() { Price = priceId, Quantity = 1 }
+            }
+        };
+
+        var service = new SessionService();
+        var session = await service.CreateAsync(options);
+        return session.Url!;
+    }
+
+    public Task<string> EnsureCustomerAsync(string email) => FindOrCreateCustomerAsync(email);
+
+    public async Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(customerId))
+            throw new InvalidOperationException("A Stripe customer ID is required to open the billing portal.");
+
+        var service = new global::Stripe.BillingPortal.SessionService();
+        var session = await service.CreateAsync(new global::Stripe.BillingPortal.SessionCreateOptions
+        {
+            Customer = customerId,
+            ReturnUrl = returnUrl
+        });
+        return session.Url;
+    }
+
     public async Task<Session> GetSessionAsync(string sessionId)
     {
         var service = new SessionService();

@@ -31,6 +31,7 @@ public class BillingController : BaseController
             return ErrorResponse("Admin accounts cannot purchase subscriptions.");
 
         _logger.LogInformation("EVENT: BillingCheckoutStarted userId:{UserId} tier:{Tier}", userId, request.Tier);
+        Cambrian.Application.Observability.CambrianMetrics.CheckoutStarted.Add(1);
 
         try
         {
@@ -41,6 +42,7 @@ public class BillingController : BaseController
         catch (ArgumentException ex)
         {
             _logger.LogWarning(ex, "EVENT: BillingCheckoutFailed userId:{UserId} tier:{Tier}", userId, request.Tier);
+            Cambrian.Application.Observability.CambrianMetrics.CheckoutFailed.Add(1);
             return ErrorResponse(ex.Message);
         }
     }
@@ -49,6 +51,55 @@ public class BillingController : BaseController
     public async Task<IActionResult> CheckoutSession(BillingCheckoutRequest request)
     {
         return await Checkout(request);
+    }
+
+    // ───── Spec-canonical /api routes (frontend contract) ─────
+
+    /// <summary>POST /api/billing/checkout { tier } → { checkoutUrl }.</summary>
+    [HttpPost("/api/billing/checkout")]
+    public async Task<IActionResult> ApiCheckout(BillingCheckoutRequest request)
+    {
+        var userId = GetRequiredUserId()!;
+        var userEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+
+        if (User.IsInRole("Admin"))
+            return ErrorResponse("Admin accounts cannot purchase subscriptions.");
+
+        _logger.LogInformation("EVENT: BillingCheckoutStarted userId:{UserId} tier:{Tier}", userId, request.Tier);
+        Cambrian.Application.Observability.CambrianMetrics.CheckoutStarted.Add(1);
+
+        try
+        {
+            var result = await _billing.CreateCheckoutAsync(request, userId, userEmail);
+            _logger.LogInformation("EVENT: BillingCheckoutCreated userId:{UserId} tier:{Tier}", userId, request.Tier);
+            return OkResponse(new { checkoutUrl = result.CheckoutUrl });
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "EVENT: BillingCheckoutFailed userId:{UserId} tier:{Tier}", userId, request.Tier);
+            Cambrian.Application.Observability.CambrianMetrics.CheckoutFailed.Add(1);
+            return ErrorResponse(ex.Message);
+        }
+    }
+
+    /// <summary>POST /api/billing/portal → { portalUrl } (Stripe Customer Portal).</summary>
+    [HttpPost("/api/billing/portal")]
+    public async Task<IActionResult> ApiPortal()
+    {
+        var userId = GetRequiredUserId()!;
+        var userEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+
+        try
+        {
+            var result = await _billing.CreatePortalAsync(userId, userEmail);
+            _logger.LogInformation("EVENT: BillingPortalRequested userId:{UserId}", userId);
+            return OkResponse(new { portalUrl = result.PortalUrl });
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "EVENT: BillingPortalFailed userId:{UserId}", userId);
+            return ErrorResponse(ex.Message);
+        }
     }
 
     [HttpGet("status")]

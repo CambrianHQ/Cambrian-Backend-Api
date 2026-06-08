@@ -40,18 +40,8 @@ public sealed class StripeWebhookLifecycleTests : IDisposable
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns("Testing");
 
-        var licenseService = Substitute.For<ILicenseService>();
-        licenseService.IssueCertificateAsync(
-                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
-            .Returns(new Cambrian.Application.DTOs.Licenses.LicenseCertificateDto
-            {
-                LicenseId = Guid.NewGuid().ToString()
-            });
-
         _sut = new StripeWebhookService(
             _db,
-            licenseService,
             Substitute.For<IEmailService>(),
             config,
             Substitute.For<ILogger<StripeWebhookService>>(),

@@ -7,7 +7,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 
 namespace Cambrian.Api.Tests;
 
@@ -15,7 +14,6 @@ public sealed class StripeWebhookServiceTests : IDisposable
 {
     private readonly CambrianDbContext _db;
     private readonly ILogger<StripeWebhookService> _logger = Substitute.For<ILogger<StripeWebhookService>>();
-    private readonly ILicenseService _licenseService = Substitute.For<ILicenseService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
 
     public StripeWebhookServiceTests()
@@ -36,7 +34,20 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns("Production");
 
-        return new StripeWebhookService(_db, _licenseService, _emailService, config, _logger, env);
+        return new StripeWebhookService(_db, _emailService, config, _logger, env);
+    }
+
+    private StripeWebhookService CreateServiceWithPrices(string creatorPrice, string proPrice)
+    {
+        var config = Substitute.For<IConfiguration>();
+        config["Stripe:WebhookSecret"].Returns("whsec_test");
+        config["Stripe:Prices:Creator"].Returns(creatorPrice);
+        config["Stripe:Prices:Pro"].Returns(proPrice);
+
+        var env = Substitute.For<IHostEnvironment>();
+        env.EnvironmentName.Returns("Production");
+
+        return new StripeWebhookService(_db, _emailService, config, _logger, env);
     }
 
     private static string UniqueEventId() => $"evt_{Guid.NewGuid():N}";
@@ -88,7 +99,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns("Development");
 
-        var svc = new StripeWebhookService(_db, _licenseService, _emailService, config, _logger, env);
+        var svc = new StripeWebhookService(_db, _emailService, config, _logger, env);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.HandleStripeAsync("{}", ""));
@@ -97,7 +108,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     // ════════════════════════════════════════════════════════════════
-    // H4: Persist-first pattern verification
+    // Persist-first pattern + idempotency ledger
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
@@ -121,93 +132,48 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Null(evt.ErrorMessage);
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // checkout.session.completed — track-license purchasing has been REMOVED
+    // ════════════════════════════════════════════════════════════════
+
     [Fact]
-    public async Task ProcessEventAsync_FailedEvent_RecordsErrorMessage()
+    public async Task ProcessEventAsync_TrackPurchaseReference_CreatesNoPurchaseLibraryOrWalletCredit()
     {
-        // Exclusive purchase on InMemory DB triggers InvalidOperationException
-        // because ExecuteSqlInterpolatedAsync is not supported.
+        // REGRESSION (licensing removal): a legacy track-purchase clientReferenceId
+        // ("userId:trackId:licenseType") must no longer create a Purchase, Library item,
+        // or creator wallet credit, and must not issue any license. Only an [IGNORED]
+        // dead-letter log fires; the event still completes so Stripe receives 200.
         var trackId = Guid.NewGuid();
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Fail Beat", CreatorId = "c1" });
+        var userId = "buyer-x";
+        _db.Tracks.Add(new Track
+        {
+            Id = trackId,
+            Title = "Beat",
+            CreatorId = "creator-x",
+            NonExclusivePriceCents = 2999
+        });
         await _db.SaveChangesAsync();
 
         var svc = CreateService();
         var eventId = UniqueEventId();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await svc.ProcessEventAsync(
-                eventId: eventId,
-                eventType: "checkout.session.completed",
-                clientReferenceId: $"user1:{trackId}:exclusive",
-                amountTotal: 5000,
-                stripeCustomerId: null,
-                stripeSessionId: null));
-
-        var evt = await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == eventId);
-        Assert.NotNull(evt);
-        Assert.Equal("failed", evt.Status);
-        Assert.False(evt.Processed);
-        Assert.NotNull(evt.ErrorMessage);
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // checkout.session.completed — track purchases
-    // ════════════════════════════════════════════════════════════════
-
-    [Fact]
-    public async Task ProcessEventAsync_CheckoutCompleted_CreatesPurchaseAndLibraryItem()
-    {
-        var trackId = Guid.NewGuid();
-        var userId = "user-1";
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Test Beat", CreatorId = "creator-1" });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateService();
         await svc.ProcessEventAsync(
-            eventId: UniqueEventId(),
+            eventId: eventId,
             eventType: "checkout.session.completed",
             clientReferenceId: $"{userId}:{trackId}:non-exclusive",
             amountTotal: 2999,
             stripeCustomerId: null,
             stripeSessionId: null);
 
-        var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == userId);
-        Assert.NotNull(purchase);
-        Assert.Equal("completed", purchase.Status);
-        Assert.Equal("non-exclusive", purchase.LicenseType);
-        Assert.Equal(2999, purchase.AmountCents);
-        Assert.Equal(trackId, purchase.TrackId);
+        Assert.Empty(await _db.Purchases.ToListAsync());
+        Assert.Empty(await _db.Library.ToListAsync());
+        Assert.Empty(await _db.WalletTransactions.ToListAsync());
 
-        var lib = await _db.Library.FirstOrDefaultAsync(l => l.UserId == userId);
-        Assert.NotNull(lib);
-        Assert.Equal(trackId, lib.TrackId);
-    }
-
-    [Fact]
-    public async Task ProcessEventAsync_LegacyPurchaseGuid_MarksCompleted()
-    {
-        var purchaseId = Guid.NewGuid();
-        var trackId = Guid.NewGuid();
-        _db.Purchases.Add(new Purchase
-        {
-            Id = purchaseId,
-            BuyerId = "buyer-1",
-            TrackId = trackId,
-            AmountCents = 1000,
-            Status = "pending"
-        });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateService();
-        await svc.ProcessEventAsync(
-            eventId: UniqueEventId(),
-            eventType: "checkout.session.completed",
-            clientReferenceId: purchaseId.ToString(),
-            amountTotal: null,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        var purchase = await _db.Purchases.FindAsync(purchaseId);
-        Assert.Equal("completed", purchase!.Status);
+        // Event still completes (no 5xx → no Stripe retry storm).
+        var evt = await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == eventId);
+        Assert.NotNull(evt);
+        Assert.Equal("completed", evt.Status);
+        Assert.True(evt.Processed);
     }
 
     [Fact]
@@ -224,119 +190,23 @@ public sealed class StripeWebhookServiceTests : IDisposable
         // No exception = handled gracefully when clientReferenceId is null
     }
 
-    // ── Duplicate purchase prevention ──
-
     [Fact]
-    public async Task ProcessEventAsync_DuplicatePurchase_DoesNotCreateSecondRecord()
-    {
-        var trackId = Guid.NewGuid();
-        var userId = "user-dup";
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Dup Beat", CreatorId = "creator-1" });
-        _db.Purchases.Add(new Purchase
-        {
-            Id = Guid.NewGuid(),
-            BuyerId = userId,
-            TrackId = trackId,
-            AmountCents = 1000,
-            LicenseType = "non-exclusive",
-            Status = "pending"
-        });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateService();
-        await svc.ProcessEventAsync(
-            eventId: UniqueEventId(),
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
-            amountTotal: 1000,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        var purchases = await _db.Purchases
-            .Where(p => p.BuyerId == userId && p.TrackId == trackId)
-            .ToListAsync();
-        Assert.Single(purchases);
-        Assert.Equal("completed", purchases[0].Status);
-    }
-
-    [Fact]
-    public async Task ProcessEventAsync_ReplayedEventId_DoesNotReprocessTrackPurchase()
-    {
-        var trackId = Guid.NewGuid();
-        var userId = "user-replay";
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Replay Beat", CreatorId = "creator-1" });
-        await _db.SaveChangesAsync();
-
-        var svc = CreateService();
-        var eventId = "evt_replay_purchase";
-
-        await svc.ProcessEventAsync(
-            eventId: eventId,
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
-            amountTotal: 2500,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        // Second call with same eventId should be idempotent
-        await svc.ProcessEventAsync(
-            eventId: eventId,
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
-            amountTotal: 2500,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        var purchases = await _db.Purchases
-            .Where(p => p.BuyerId == userId && p.TrackId == trackId)
-            .ToListAsync();
-        var libraryItems = await _db.Library
-            .Where(l => l.UserId == userId && l.TrackId == trackId)
-            .ToListAsync();
-
-        Assert.Single(purchases);
-        Assert.Equal(2500, purchases[0].AmountCents);
-        Assert.Single(libraryItems);
-        Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
-    }
-
-    // ── Dead-letter logging for invalid references ──
-
-    [Fact]
-    public async Task ProcessEventAsync_InvalidTrackId_DoesNotThrow()
+    public async Task ProcessEventAsync_NonSubscriptionReference_DoesNotThrow()
     {
         var svc = CreateService();
         await svc.ProcessEventAsync(
             eventId: UniqueEventId(),
             eventType: "checkout.session.completed",
-            clientReferenceId: "user1:not-a-guid:non-exclusive",
+            clientReferenceId: $"user1:{Guid.NewGuid()}:non-exclusive",
             amountTotal: 999,
             stripeCustomerId: null,
             stripeSessionId: null);
 
-        var purchases = await _db.Purchases.ToListAsync();
-        Assert.Empty(purchases);
-    }
-
-    [Fact]
-    public async Task ProcessEventAsync_MissingTrack_DoesNotThrow()
-    {
-        var missingTrackId = Guid.NewGuid();
-        var svc = CreateService();
-        await svc.ProcessEventAsync(
-            eventId: UniqueEventId(),
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"user1:{missingTrackId}:non-exclusive",
-            amountTotal: 999,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        var purchases = await _db.Purchases.ToListAsync();
-        Assert.Empty(purchases);
+        Assert.Empty(await _db.Purchases.ToListAsync());
     }
 
     // ════════════════════════════════════════════════════════════════
-    // checkout.session.completed — subscription upgrades
+    // checkout.session.completed — subscription upgrades (PRESERVED)
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
@@ -402,6 +272,61 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ProcessEventAsync_SubscriptionUpdated_SyncsTierStatusAndPeriodEnd()
+    {
+        // Portal-driven upgrade creator -> pro arrives as customer.subscription.updated.
+        var userId = "user-portal-upgrade";
+        const string customerId = "cus_portal_1";
+        _db.Users.Add(new ApplicationUser { Id = userId, UserName = userId, Tier = "creator", CreatorTier = Cambrian.Domain.Enums.CreatorTier.Creator });
+        _db.Subscriptions.Add(new Subscription
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Plan = "creator",
+            Status = "active",
+            StripeCustomerId = customerId,
+            StartedAt = DateTime.UtcNow.AddDays(-5),
+            ExpiresAt = DateTime.UtcNow.AddDays(25)
+        });
+        await _db.SaveChangesAsync();
+
+        var periodEnd = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds();
+        var payload = $$"""
+        {
+          "type": "customer.subscription.updated",
+          "data": { "object": {
+            "customer": "{{customerId}}",
+            "status": "active",
+            "current_period_end": {{periodEnd}},
+            "items": { "data": [ { "price": { "id": "price_pro_live" } } ] }
+          } }
+        }
+        """;
+
+        var svc = CreateServiceWithPrices(creatorPrice: "price_creator_live", proPrice: "price_pro_live");
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "customer.subscription.updated",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: customerId,
+            stripeSessionId: null,
+            stripePaymentIntentId: null,
+            payload: payload,
+            stripeSubscriptionId: "sub_portal_1");
+
+        var user = await _db.Users.FindAsync(userId);
+        Assert.Equal("pro", user!.Tier);
+        Assert.Equal(Cambrian.Domain.Enums.CreatorTier.Pro, user.CreatorTier);
+        Assert.Equal("Active", user.SubscriptionStatus);
+
+        var sub = await _db.Subscriptions.FirstAsync(s => s.UserId == userId);
+        Assert.Equal("pro", sub.Plan);
+        Assert.Equal("active", sub.Status);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(periodEnd).UtcDateTime, sub.ExpiresAt);
+    }
+
+    [Fact]
     public async Task ProcessEventAsync_ReplayedEventId_DoesNotCreateSecondSubscription()
     {
         var userId = "user-replay-sub";
@@ -440,7 +365,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Subscription lifecycle webhooks
+    // Subscription lifecycle webhooks (PRESERVED)
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
@@ -471,6 +396,134 @@ public sealed class StripeWebhookServiceTests : IDisposable
         // No exception = handles missing customer ID gracefully
     }
 
+    // ── Audit gap closer: cancel/downgrade must REVOKE the paid entitlement ──
+    // Pre-existing tests only proved "did not throw". These assert the actual
+    // state change: a cancelled/downgraded subscriber loses paid entitlement.
+
+    [Fact]
+    public async Task ProcessEventAsync_SubscriptionDeleted_DowngradesProToFree_AndRevokesPaidEntitlement()
+    {
+        // A Pro subscriber whose Stripe subscription is cancelled (customer.subscription.deleted).
+        const string userId = "user-cancel-pro";
+        const string customerId = "cus_cancel_pro";
+        _db.Users.Add(new ApplicationUser
+        {
+            Id = userId,
+            UserName = userId,
+            Tier = "pro",
+            CreatorTier = Cambrian.Domain.Enums.CreatorTier.Pro,
+            SubscriptionStatus = "Active",
+        });
+        // The webhook resolves the user via an active subscription carrying the Stripe
+        // customer id (so the test never falls back to a live Stripe lookup).
+        _db.Subscriptions.Add(new Subscription
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Plan = "pro",
+            Status = "active",
+            StripeCustomerId = customerId,
+            StartedAt = DateTime.UtcNow.AddDays(-10),
+            ExpiresAt = DateTime.UtcNow.AddDays(20),
+        });
+        await _db.SaveChangesAsync();
+
+        var svc = CreateService();
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "customer.subscription.deleted",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: customerId,
+            stripeSessionId: null);
+
+        // Tier is reset to free — both the string field and the authoritative enum —
+        // and the subscription is marked cancelled.
+        var user = await _db.Users.FindAsync(userId);
+        Assert.Equal("free", user!.Tier);
+        Assert.Equal(Cambrian.Domain.Enums.CreatorTier.Free, user.CreatorTier);
+        Assert.Equal("Cancelled", user.SubscriptionStatus);
+
+        var sub = await _db.Subscriptions.FirstAsync(s => s.UserId == userId);
+        Assert.Equal("cancelled", sub.Status);
+
+        // Entitlement revocation is the real invariant: the resolved tier now grants
+        // ZERO Release Ready credits and no paid/Pro-only capabilities — proving the
+        // cancel strips entitlement rather than merely relabelling the user.
+        var resolved = Cambrian.Application.Configuration.TierManifest.For(user.CreatorTier);
+        Assert.Equal(0, resolved.ReleaseReadyCreditsPerMonth);
+        Assert.False(resolved.FeatureFlags["apiAccess"], "a cancelled subscriber loses Pro-only entitlements");
+        Assert.False(resolved.FeatureFlags["unlimitedTracks"], "a cancelled subscriber loses paid entitlements");
+    }
+
+    [Fact]
+    public async Task ProcessEventAsync_SubscriptionUpdated_DowngradeProToCreator_LowersTierAndRevokesProEntitlement()
+    {
+        // Portal-driven DOWNGRADE pro -> creator arrives as customer.subscription.updated
+        // carrying the Creator price id.
+        const string userId = "user-downgrade-pro";
+        const string customerId = "cus_downgrade_pro";
+        _db.Users.Add(new ApplicationUser
+        {
+            Id = userId,
+            UserName = userId,
+            Tier = "pro",
+            CreatorTier = Cambrian.Domain.Enums.CreatorTier.Pro,
+            SubscriptionStatus = "Active",
+        });
+        _db.Subscriptions.Add(new Subscription
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Plan = "pro",
+            Status = "active",
+            StripeCustomerId = customerId,
+            StartedAt = DateTime.UtcNow.AddDays(-5),
+            ExpiresAt = DateTime.UtcNow.AddDays(25),
+        });
+        await _db.SaveChangesAsync();
+
+        var periodEnd = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds();
+        var payload = $$"""
+        {
+          "type": "customer.subscription.updated",
+          "data": { "object": {
+            "customer": "{{customerId}}",
+            "status": "active",
+            "current_period_end": {{periodEnd}},
+            "items": { "data": [ { "price": { "id": "price_creator_live" } } ] }
+          } }
+        }
+        """;
+
+        var svc = CreateServiceWithPrices(creatorPrice: "price_creator_live", proPrice: "price_pro_live");
+        await svc.ProcessEventAsync(
+            eventId: UniqueEventId(),
+            eventType: "customer.subscription.updated",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: customerId,
+            stripeSessionId: null,
+            stripePaymentIntentId: null,
+            payload: payload,
+            stripeSubscriptionId: "sub_downgrade_1");
+
+        // Tier drops pro -> creator (string + authoritative enum).
+        var user = await _db.Users.FindAsync(userId);
+        Assert.Equal("creator", user!.Tier);
+        Assert.Equal(Cambrian.Domain.Enums.CreatorTier.Creator, user.CreatorTier);
+
+        var sub = await _db.Subscriptions.FirstAsync(s => s.UserId == userId);
+        Assert.Equal("creator", sub.Plan);
+
+        // Pro-only entitlement is revoked while Creator entitlement remains, and the
+        // Release Ready grant falls from the Pro allowance (10) to the Creator allowance (3).
+        var resolved = Cambrian.Application.Configuration.TierManifest.For(user.CreatorTier);
+        Assert.Equal(3, resolved.ReleaseReadyCreditsPerMonth);
+        Assert.False(resolved.FeatureFlags["apiAccess"], "Pro-only entitlement is revoked on downgrade");
+        Assert.True(resolved.FeatureFlags["unlimitedTracks"], "Creator-tier entitlements are retained");
+    }
+
     [Fact]
     public async Task ProcessEventAsync_InvoicePaymentFailed_HandlesGracefully()
     {
@@ -497,133 +550,5 @@ public sealed class StripeWebhookServiceTests : IDisposable
             stripeCustomerId: null,
             stripeSessionId: null);
         // No exception = handles missing customer ID gracefully
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // License certificate creation
-    // ════════════════════════════════════════════════════════════════
-
-    [Fact]
-    public async Task ProcessEventAsync_CheckoutCompleted_IssuesLicenseCertificate()
-    {
-        var trackId = Guid.NewGuid();
-        var userId = "user-license";
-        var licenseId = Guid.NewGuid();
-        _db.Tracks.Add(new Track { Id = trackId, Title = "License Beat", CreatorId = "creator-lic" });
-        await _db.SaveChangesAsync();
-
-        _licenseService.IssueCertificateAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
-            .Returns(new Cambrian.Application.DTOs.Licenses.LicenseCertificateDto
-            {
-                LicenseId = licenseId.ToString(),
-                TrackId = trackId.ToString(),
-                BuyerId = userId,
-                CreatorId = "creator-lic",
-                UsageType = "personal",
-                IssuedAt = DateTime.UtcNow
-            });
-
-        var svc = CreateService();
-        await svc.ProcessEventAsync(
-            eventId: UniqueEventId(),
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"{userId}:{trackId}:non-exclusive:personal",
-            amountTotal: 1999,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId);
-        Assert.NotNull(purchase);
-        Assert.Equal(licenseId, purchase.LicenseId);
-
-        await _licenseService.Received(1).IssueCertificateAsync(
-            purchase.Id,
-            Arg.Any<string>(),
-            userId,
-            "creator-lic",
-            "non-exclusive",
-            "personal");
-    }
-
-    // ── Duplicate purchase ensures library exists ──
-
-    [Fact]
-    public async Task ProcessEventAsync_DuplicatePurchase_BackfillsLibraryItem()
-    {
-        var trackId = Guid.NewGuid();
-        var userId = "user-dup-lib";
-        var purchaseId = Guid.NewGuid();
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Dup Lib Beat", CreatorId = "creator-dup" });
-        _db.Purchases.Add(new Purchase
-        {
-            Id = purchaseId,
-            BuyerId = userId,
-            TrackId = trackId,
-            AmountCents = 1500,
-            LicenseType = "non-exclusive",
-            Status = "completed"
-        });
-        // Intentionally NO library item — simulating a gap
-        await _db.SaveChangesAsync();
-
-        var svc = CreateService();
-        await svc.ProcessEventAsync(
-            eventId: UniqueEventId(),
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
-            amountTotal: 1500,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        // Purchase should still be single
-        var purchases = await _db.Purchases
-            .Where(p => p.BuyerId == userId && p.TrackId == trackId)
-            .ToListAsync();
-        Assert.Single(purchases);
-
-        // Library item should now exist (back-filled)
-        var lib = await _db.Library
-            .FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == trackId);
-        Assert.NotNull(lib);
-        Assert.Equal(purchaseId, lib.PurchaseId);
-    }
-
-    // ── License failure does not block purchase+library ──
-
-    [Fact]
-    public async Task ProcessEventAsync_LicenseFailure_StillCreatesPurchaseAndLibrary()
-    {
-        var trackId = Guid.NewGuid();
-        var userId = "user-lic-fail";
-        _db.Tracks.Add(new Track { Id = trackId, Title = "Fail License Beat", CreatorId = "creator-fail" });
-        await _db.SaveChangesAsync();
-
-        _licenseService.IssueCertificateAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
-            .ThrowsAsync(new Exception("License service unavailable"));
-
-        var svc = CreateService();
-        await svc.ProcessEventAsync(
-            eventId: UniqueEventId(),
-            eventType: "checkout.session.completed",
-            clientReferenceId: $"{userId}:{trackId}:non-exclusive",
-            amountTotal: 2000,
-            stripeCustomerId: null,
-            stripeSessionId: null);
-
-        // Purchase should still be created
-        var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.BuyerId == userId && p.TrackId == trackId);
-        Assert.NotNull(purchase);
-        Assert.Equal("completed", purchase.Status);
-
-        // Library should still be created
-        var lib = await _db.Library.FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == trackId);
-        Assert.NotNull(lib);
-
-        // License should NOT be linked (it failed)
-        Assert.Null(purchase.LicenseId);
     }
 }

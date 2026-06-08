@@ -6,6 +6,12 @@ public interface IBillingService
 {
     Task<CheckoutResponse> CreateCheckoutAsync(BillingCheckoutRequest request, string userId, string? userEmail = null);
 
+    /// <summary>
+    /// Create a Stripe Customer Portal session for the user so they can self-manage
+    /// (upgrade/downgrade/cancel/payment method). Returns the portal URL.
+    /// </summary>
+    Task<PortalResponse> CreatePortalAsync(string userId, string? userEmail = null);
+
     Task<BillingStatusResponse> GetStatusAsync(string userId);
 
     /// <summary>

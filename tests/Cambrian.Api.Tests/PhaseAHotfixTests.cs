@@ -21,7 +21,6 @@ public sealed class PhaseAHotfixTests : IDisposable
 {
     private readonly CambrianDbContext _db;
     private readonly ILogger<StripeWebhookService> _logger = Substitute.For<ILogger<StripeWebhookService>>();
-    private readonly ILicenseService _licenseService = Substitute.For<ILicenseService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
 
     public PhaseAHotfixTests()
@@ -42,7 +41,7 @@ public sealed class PhaseAHotfixTests : IDisposable
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns("Production");
 
-        return new StripeWebhookService(_db, _licenseService, _emailService, config, _logger, env);
+        return new StripeWebhookService(_db, _emailService, config, _logger, env);
     }
 
     // ════════════════════════════════════════════════════════════════

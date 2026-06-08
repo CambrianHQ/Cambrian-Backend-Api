@@ -31,6 +31,29 @@ public interface IPaymentGateway
         string? customerEmail = null);
 
     /// <summary>
+    /// Create a hosted subscription checkout session backed by a pre-created Stripe Price ID
+    /// (recommended over inline price_data — enables clean proration, portal, and reporting).
+    /// Returns the redirect URL.
+    /// </summary>
+    Task<string> CreateSubscriptionCheckoutByPriceAsync(
+        string priceId,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        string? customerEmail = null);
+
+    /// <summary>
+    /// Find an existing Stripe billing Customer by email, or create one. Returns the customer ID.
+    /// </summary>
+    Task<string> EnsureCustomerAsync(string email);
+
+    /// <summary>
+    /// Create a Stripe Billing Customer Portal session for self-service subscription
+    /// management (upgrade/downgrade/cancel/payment method) and return the portal URL.
+    /// </summary>
+    Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl);
+
+    /// <summary>
     /// Retrieve a checkout session by its ID and return its status + metadata.
     /// </summary>
     Task<CheckoutSessionInfo?> GetCheckoutSessionAsync(string sessionId);
