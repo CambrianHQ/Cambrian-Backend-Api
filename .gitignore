@@ -186,3 +186,9 @@ publish-out/
 
 # Test results
 **/TestResults/
+# SOPS / secrets — never commit decrypted material or keys
+config/secrets.env
+*.dec
+*.decrypted
+age-key*.txt
+keys.txt
