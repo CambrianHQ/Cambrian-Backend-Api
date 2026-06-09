@@ -192,3 +192,4 @@ config/secrets.env
 *.decrypted
 age-key*.txt
 keys.txt
+!config/secrets.enc.env
