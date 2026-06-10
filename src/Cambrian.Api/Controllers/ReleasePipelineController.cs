@@ -49,6 +49,13 @@ public sealed class ReleasePipelineController : BaseController
         return result is null ? NotFoundResponse("Track not found.") : OkResponse(result);
     }
 
+    /// <summary>Legacy un-prefixed readiness path (residue F7) — permanent 308 to the
+    /// canonical <c>/api/tracks/{id}/readiness</c>. Do not add new callers.</summary>
+    [AllowAnonymous]
+    [HttpGet("/tracks/{id:guid}/readiness")]
+    public IActionResult LegacyReadiness(Guid id) =>
+        RedirectPermanentPreserveMethod($"/api/tracks/{id}/readiness");
+
     /// <summary>Start a Release Ready pipeline job for the track. 202 with the job id;
     /// 402 when the monthly credit allowance is exhausted.</summary>
     [HttpPost("tracks/{id:guid}/release-ready")]

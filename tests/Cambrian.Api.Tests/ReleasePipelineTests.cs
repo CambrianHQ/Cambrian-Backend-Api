@@ -128,6 +128,21 @@ public class ReleasePipelineTests : IClassFixture<ReleasePipelineFixture>
         Assert.Equal("pass", after["aiDisclosure"]);
     }
 
+    [Fact]
+    public async Task Readiness_LegacyUnprefixedPath_Redirects308ToCanonical()
+    {
+        var trackId = Guid.NewGuid();
+        var client = _fixture.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+        });
+
+        var res = await client.GetAsync($"/tracks/{trackId}/readiness");
+
+        Assert.Equal(HttpStatusCode.PermanentRedirect, res.StatusCode); // 308
+        Assert.Equal($"/api/tracks/{trackId}/readiness", res.Headers.Location?.ToString());
+    }
+
     // ── Release-ready jobs ──
 
     [Fact]

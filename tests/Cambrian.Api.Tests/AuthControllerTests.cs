@@ -196,7 +196,7 @@ public sealed class AuthControllerTests
         var userId = Guid.NewGuid().ToString();
         SetupUser(userId);
 
-        _auth.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>()).Returns((UserProfileResponse?)null);
+        _auth.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>()).Returns(Task.FromResult<UserProfileResponse>(null!));
 
         var result = await _controller.Me();
 
