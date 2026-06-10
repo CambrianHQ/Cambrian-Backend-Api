@@ -10,15 +10,18 @@ public sealed class AuthorshipService : IAuthorshipService
 {
     private readonly ITrackAuthorshipRepository _authorship;
     private readonly ITrackRepository _tracks;
+    private readonly ITrackReadinessCache _readinessCache;
     private readonly ILogger<AuthorshipService> _logger;
 
     public AuthorshipService(
         ITrackAuthorshipRepository authorship,
         ITrackRepository tracks,
+        ITrackReadinessCache readinessCache,
         ILogger<AuthorshipService> logger)
     {
         _authorship = authorship;
         _tracks = tracks;
+        _readinessCache = readinessCache;
         _logger = logger;
     }
 
@@ -54,6 +57,8 @@ public sealed class AuthorshipService : IAuthorshipService
             track.CommercialRightsVerified = request.CommercialRightsVerified;
             await _tracks.UpdateAsync(track);
         }
+
+        _readinessCache.Invalidate(track.Id);
 
         _logger.LogInformation(
             "EVENT: AuthorshipUpserted trackId:{TrackId} rightsVerified:{Rights}",

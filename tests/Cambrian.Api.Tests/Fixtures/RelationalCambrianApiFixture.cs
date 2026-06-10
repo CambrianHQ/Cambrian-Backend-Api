@@ -443,4 +443,34 @@ public sealed class RecordingPaymentGateway : IPaymentGateway
 
     public Task DeleteConnectedAccountAsync(string accountId)
         => Task.CompletedTask;
+
+    public Task<string> CreateConnectedCheckoutAsync(
+        string connectedAccountId, int amountInCents, string productName, string clientReferenceId,
+        string successUrl, string cancelUrl, long applicationFeeCents)
+    {
+        var sessionId = $"cs_tip_{Guid.NewGuid():N}";
+        _sessions[sessionId] = new CheckoutSessionInfo
+        {
+            SessionId = sessionId,
+            Status = "paid",
+            ClientReferenceId = clientReferenceId,
+            AmountTotal = amountInCents
+        };
+        return Task.FromResult($"https://checkout.stripe.test/tip/{sessionId}");
+    }
+
+    public Task<string> CreateConnectedSubscriptionCheckoutAsync(
+        string connectedAccountId, int amountInCents, string productName, string clientReferenceId,
+        string successUrl, string cancelUrl, decimal applicationFeePercent)
+    {
+        var sessionId = $"cs_fansub_{Guid.NewGuid():N}";
+        _sessions[sessionId] = new CheckoutSessionInfo
+        {
+            SessionId = sessionId,
+            Status = "paid",
+            ClientReferenceId = clientReferenceId,
+            AmountTotal = amountInCents
+        };
+        return Task.FromResult($"https://checkout.stripe.test/fansub/{sessionId}");
+    }
 }

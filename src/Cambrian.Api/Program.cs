@@ -477,6 +477,21 @@ builder.Services.AddScoped<IReleaseCreditService, ReleaseCreditService>();
 builder.Services.AddScoped<IReleaseReadyService, ReleaseReadyService>();
 builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.MasteringWorker>();
 
+// Release pipeline: readiness scoring + track-based release-ready jobs.
+builder.Services.AddSingleton<ITrackReadinessCache, Cambrian.Api.Services.MemoryTrackReadinessCache>();
+builder.Services.AddScoped<ITrackReadinessService, TrackReadinessService>();
+builder.Services.AddScoped<ITrackReleasePipelineService, TrackReleasePipelineService>();
+
+// Paid authorship records (issued by the Stripe webhook after payment).
+builder.Services.AddScoped<IAuthorshipRecordRepository, AuthorshipRecordRepository>();
+builder.Services.AddScoped<IAuthorshipRecordService, AuthorshipRecordService>();
+builder.Services.AddScoped<IAuthorshipRecordIssuer>(sp => sp.GetRequiredService<IAuthorshipRecordService>());
+
+// Connect money-in: tips + fan subscriptions on artists' connected accounts.
+builder.Services.AddScoped<IFanSubscriptionRepository, FanSubscriptionRepository>();
+builder.Services.AddScoped<IArtistMonetizationService, ArtistMonetizationService>();
+builder.Services.AddScoped<IConnectWebhookService, Cambrian.Infrastructure.Stripe.StripeConnectWebhookService>();
+
 // Growth features
 builder.Services.Configure<Cambrian.Infrastructure.Options.GrowthFeaturesOptions>(
     builder.Configuration.GetSection("GrowthFeatures"));

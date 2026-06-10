@@ -32,6 +32,12 @@ public class ApplicationUser : IdentityUser
     /// <summary>Stripe Connect Express account ID (e.g. acct_xxx). Null if not connected.</summary>
     public string? StripeAccountId { get; set; }
 
+    /// <summary>
+    /// Artist-set monthly fan-subscription price in cents. Null = fan subscriptions
+    /// not offered. Fans are always billed at this price, never one they choose.
+    /// </summary>
+    public int? FanSubscriptionPriceCents { get; set; }
+
     public long WalletBalanceCents { get; set; }
 
     /// <summary>Hashed 6-digit numeric code for password reset (null = no pending reset).</summary>

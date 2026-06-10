@@ -52,6 +52,7 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
                 ["Checkout:RequireSubscription"] = "false",
                 ["Stripe:Prices:Creator"] = "price_test_creator",
                 ["Stripe:Prices:Pro"] = "price_test_pro",
+                ["App:FrontendUrl"] = "https://app.cambrian.test",
             };
 
             foreach (var pair in CreateTestConfigurationOverrides())
@@ -517,6 +518,33 @@ internal sealed class FakePaymentGateway : IPaymentGateway
 
     public Task DeleteConnectedAccountAsync(string accountId)
         => Task.CompletedTask;
+
+    // ── Connect money-in fakes ──
+    // Recorded so tests can assert the fee parameters passed to the gateway.
+    public sealed record ConnectedCheckoutCall(
+        string AccountId, int AmountCents, string ClientReferenceId, long ApplicationFeeCents);
+
+    public sealed record ConnectedSubscriptionCall(
+        string AccountId, int AmountCents, string ClientReferenceId, decimal ApplicationFeePercent);
+
+    public List<ConnectedCheckoutCall> ConnectedCheckouts { get; } = new();
+    public List<ConnectedSubscriptionCall> ConnectedSubscriptions { get; } = new();
+
+    public Task<string> CreateConnectedCheckoutAsync(
+        string connectedAccountId, int amountInCents, string productName, string clientReferenceId,
+        string successUrl, string cancelUrl, long applicationFeeCents)
+    {
+        ConnectedCheckouts.Add(new ConnectedCheckoutCall(connectedAccountId, amountInCents, clientReferenceId, applicationFeeCents));
+        return Task.FromResult($"https://checkout.stripe.com/fake-tip?account={connectedAccountId}&ref={clientReferenceId}");
+    }
+
+    public Task<string> CreateConnectedSubscriptionCheckoutAsync(
+        string connectedAccountId, int amountInCents, string productName, string clientReferenceId,
+        string successUrl, string cancelUrl, decimal applicationFeePercent)
+    {
+        ConnectedSubscriptions.Add(new ConnectedSubscriptionCall(connectedAccountId, amountInCents, clientReferenceId, applicationFeePercent));
+        return Task.FromResult($"https://checkout.stripe.com/fake-fansub?account={connectedAccountId}&ref={clientReferenceId}");
+    }
 }
 
 internal sealed class FakeObjectStorage : IObjectStorage

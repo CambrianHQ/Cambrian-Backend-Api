@@ -14,12 +14,18 @@ namespace Cambrian.Api.Controllers;
 public class WebhookController : BaseController
 {
     private readonly IWebhookService _webhooks;
+    private readonly IConnectWebhookService _connectWebhooks;
     private readonly ILogger<WebhookController> _logger;
     private readonly EmailOptions _emailOptions;
 
-    public WebhookController(IWebhookService webhooks, ILogger<WebhookController> logger, IOptions<EmailOptions> emailOptions)
+    public WebhookController(
+        IWebhookService webhooks,
+        IConnectWebhookService connectWebhooks,
+        ILogger<WebhookController> logger,
+        IOptions<EmailOptions> emailOptions)
     {
         _webhooks = webhooks;
+        _connectWebhooks = connectWebhooks;
         _logger = logger;
         _emailOptions = emailOptions.Value;
     }
@@ -71,6 +77,45 @@ public class WebhookController : BaseController
             // duplicate processing on successful retry.
             SentrySdk.CaptureException(ex);
             _logger.LogError(ex, "EVENT: StripeWebhookProcessingError — returning 500 for Stripe retry");
+            return StatusCode(500, "Webhook processing failed.");
+        }
+    }
+
+    /// <summary>Stripe Connect events (tips + fan subscriptions on connected accounts).
+    /// Separate endpoint + signing secret from the platform webhook.</summary>
+    [HttpPost("stripe/connect")]
+    public async Task<IActionResult> StripeConnect()
+    {
+        var signature = Request.Headers["Stripe-Signature"].ToString();
+
+        using var reader = new StreamReader(Request.Body);
+        var json = await reader.ReadToEndAsync();
+
+        _logger.LogInformation(
+            "EVENT: StripeConnectWebhookReceived payloadLength:{Length} signaturePresent:{SigPresent}",
+            json.Length, !string.IsNullOrEmpty(signature));
+
+        try
+        {
+            await _connectWebhooks.HandleStripeAsync(json, signature ?? "");
+            _logger.LogInformation("EVENT: StripeConnectWebhookProcessed");
+            return MessageResponse("Received.");
+        }
+        catch (Stripe.StripeException ex)
+        {
+            _logger.LogError(ex, "EVENT: StripeConnectWebhookFailed — invalid signature");
+            return StatusCode(400, "Invalid webhook signature.");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("signature verification"))
+        {
+            _logger.LogError(ex, "EVENT: StripeConnectWebhookFailed — signature verification failed");
+            return StatusCode(400, "Webhook signature verification failed.");
+        }
+        catch (Exception ex)
+        {
+            // 500 → Stripe retries; the event ledger keeps the retry idempotent.
+            SentrySdk.CaptureException(ex);
+            _logger.LogError(ex, "EVENT: StripeConnectWebhookProcessingError — returning 500 for Stripe retry");
             return StatusCode(500, "Webhook processing failed.");
         }
     }

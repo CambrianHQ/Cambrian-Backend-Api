@@ -22,9 +22,10 @@ internal sealed class TestWebhookService : IWebhookService
         IEmailService emailService,
         IConfiguration configuration,
         ILogger<StripeWebhookService> logger,
-        IHostEnvironment env)
+        IHostEnvironment env,
+        IAuthorshipRecordIssuer? authorshipIssuer = null)
     {
-        _inner = new StripeWebhookService(db, emailService, configuration, logger, env);
+        _inner = new StripeWebhookService(db, emailService, configuration, logger, env, authorshipIssuer);
     }
 
     public async Task HandleStripeAsync(string payload, string signature)

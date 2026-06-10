@@ -22,6 +22,7 @@ public class CreatorController : BaseController
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository _profiles;
     private readonly IUploadService _upload;
+    private readonly ITrackReadinessCache _readinessCache;
     private readonly ILogger<CreatorController> _logger;
 
     public CreatorController(
@@ -30,6 +31,7 @@ public class CreatorController : BaseController
         ICreatorIdentityRepository creators,
         ICreatorProfileRepository profiles,
         IUploadService upload,
+        ITrackReadinessCache readinessCache,
         ILogger<CreatorController> logger)
     {
         _creator = creator;
@@ -37,6 +39,7 @@ public class CreatorController : BaseController
         _creators = creators;
         _profiles = profiles;
         _upload = upload;
+        _readinessCache = readinessCache;
         _logger = logger;
     }
 
@@ -103,6 +106,7 @@ public class CreatorController : BaseController
         if (request.CopyrightBuyoutPriceCents.HasValue) track.CopyrightBuyoutPriceCents = request.CopyrightBuyoutPriceCents.Value;
 
         await _tracks.UpdateAsync(track);
+        _readinessCache.Invalidate(track.Id);
         return OkResponse(await BuildMutationResponseAsync(userId, track));
     }
 
@@ -125,6 +129,7 @@ public class CreatorController : BaseController
 
         track.CoverArtUrl = await _upload.UploadCoverArtAsync(userId, request.CoverArt);
         await _tracks.UpdateAsync(track);
+        _readinessCache.Invalidate(track.Id);
 
         return OkResponse(await BuildMutationResponseAsync(userId, track));
     }

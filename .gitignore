@@ -186,3 +186,17 @@ publish-out/
 
 # Test results
 **/TestResults/
+# SOPS / secrets — never commit decrypted material or keys
+config/secrets.env
+*.dec
+*.decrypted
+age-key*.txt
+keys.txt
+!config/secrets.enc.env
+
+# Local plaintext secrets for testing — NEVER commit (encrypted secrets.enc.env is tracked)
+config/secrets.env
+config/*.plain.env
+*-env-backup.txt
+*-age-key*.txt
+*.decrypted.env
