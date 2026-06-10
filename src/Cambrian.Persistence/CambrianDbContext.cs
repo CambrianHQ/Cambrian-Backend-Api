@@ -63,6 +63,12 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<MasteringJob> MasteringJobs => Set<MasteringJob>();
 
+    public DbSet<AuthorshipRecord> AuthorshipRecords => Set<AuthorshipRecord>();
+
+    public DbSet<EarningsTransaction> EarningsTransactions => Set<EarningsTransaction>();
+
+    public DbSet<FanSubscription> FanSubscriptions => Set<FanSubscription>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -360,6 +366,11 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
         // ── Release Ready mastering ──
         builder.ApplyConfiguration(new MasteringJobConfiguration());
+
+        // ── Release pipeline: paid authorship records + money-in earnings ledger ──
+        builder.ApplyConfiguration(new AuthorshipRecordConfiguration());
+        builder.ApplyConfiguration(new EarningsTransactionConfiguration());
+        builder.ApplyConfiguration(new FanSubscriptionConfiguration());
 
         // ── API keys ──
         builder.Entity<ApiKey>(e =>

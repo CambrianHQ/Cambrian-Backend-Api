@@ -26,6 +26,26 @@ public class MasteringJob
     /// <summary>Engine that ran the job: <c>ffmpeg</c> | <c>tonn</c>.</summary>
     public string Engine { get; set; } = "ffmpeg";
 
+    /// <summary>
+    /// <c>mastering</c> — classic upload-and-master flow; <c>release_pipeline</c> —
+    /// track-based Release Ready job that also runs the Metadata → Cover →
+    /// Disclosure → Provenance stages after mastering.
+    /// </summary>
+    public string Kind { get; set; } = "mastering";
+
+    /// <summary>
+    /// SHA-256 hex of the source audio at submit time. Release-pipeline idempotency:
+    /// one charged job per (TrackId, ContentHash) — re-running unchanged audio warns
+    /// instead of double-charging.
+    /// </summary>
+    public string? ContentHash { get; set; }
+
+    /// <summary>Current pipeline stage: mastering | metadata | cover | disclosure | provenance (null for classic jobs).</summary>
+    public string? Stage { get; set; }
+
+    /// <summary>JSON array of stage transitions <c>[{stage, status, at, detail?}]</c> for GET /api/jobs/{id}.</summary>
+    public string? StageHistoryJson { get; set; }
+
     /// <summary>queued | processing | awaiting_approval | done | failed.</summary>
     public string Status { get; set; } = "queued";
 

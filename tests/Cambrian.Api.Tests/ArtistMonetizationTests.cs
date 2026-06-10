@@ -1,0 +1,247 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Cambrian.Api.Tests.Fixtures;
+using Cambrian.Application.Interfaces;
+using Cambrian.Infrastructure.Stripe;
+using Cambrian.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Cambrian.Api.Tests;
+
+public class ArtistMonetizationTests : IClassFixture<CambrianApiFixture>
+{
+    private readonly CambrianApiFixture _fixture;
+
+    public ArtistMonetizationTests(CambrianApiFixture fixture) => _fixture = fixture;
+
+    // ── Tips ──
+
+    [Fact]
+    public async Task Tip_ArtistWithoutConnectedAccount_Returns409()
+    {
+        var artistId = await SeedArtistAsync(connected: false);
+        var fan = await CreateFanAsync();
+
+        var res = await fan.PostAsJsonAsync($"/api/artists/{artistId}/tip", new { amountCents = 500 });
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task Tip_CreatesConnectedCheckout_WithZeroApplicationFee()
+    {
+        var artistId = await SeedArtistAsync(connected: true);
+        var fan = await CreateFanAsync();
+
+        var res = await fan.PostAsJsonAsync($"/api/artists/{artistId}/tip", new { amountCents = 500 });
+        Assert.True(res.StatusCode == HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+
+        var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.StartsWith("https://", data.GetProperty("checkoutUrl").GetString());
+
+        var call = Gateway().ConnectedCheckouts.Last();
+        Assert.Equal(500, call.AmountCents);
+        Assert.Equal(0, call.ApplicationFeeCents); // launch: tips carry no platform fee
+        Assert.Contains($":tip:{artistId}", call.ClientReferenceId);
+    }
+
+    [Fact]
+    public async Task Tip_BelowMinimum_Returns400()
+    {
+        var artistId = await SeedArtistAsync(connected: true);
+        var fan = await CreateFanAsync();
+
+        var res = await fan.PostAsJsonAsync($"/api/artists/{artistId}/tip", new { amountCents = 50 });
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+    }
+
+    // ── Fan subscriptions ──
+
+    [Fact]
+    public async Task Subscribe_ArtistWithoutPrice_Returns409()
+    {
+        var artistId = await SeedArtistAsync(connected: true, subscriptionPriceCents: null);
+        var fan = await CreateFanAsync();
+
+        var res = await fan.PostAsync($"/api/artists/{artistId}/subscribe", null);
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task Subscribe_CreatesConnectedSubscription_AtArtistPrice_With15PercentFee()
+    {
+        var artistId = await SeedArtistAsync(connected: true, subscriptionPriceCents: 700);
+        var fan = await CreateFanAsync();
+
+        var res = await fan.PostAsync($"/api/artists/{artistId}/subscribe", null);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        var call = Gateway().ConnectedSubscriptions.Last();
+        Assert.Equal(700, call.AmountCents);          // always the artist-set price
+        Assert.Equal(15m, call.ApplicationFeePercent); // 15% platform fee on subs
+    }
+
+    [Fact]
+    public async Task SetSubscriptionPrice_PersistsOnArtist()
+    {
+        var email = $"price-artist-{Guid.NewGuid():N}@cambrian.com";
+        var client = await _fixture.CreateAuthenticatedClientAsync(email);
+
+        var res = await client.PutAsJsonAsync("/api/artists/me/subscription-price", new { priceCents = 900 });
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.AsNoTracking().FirstAsync(u => u.Email == email);
+        Assert.Equal(900, user.FanSubscriptionPriceCents);
+    }
+
+    // ── Connect webhooks → earnings ledger ──
+
+    [Fact]
+    public async Task ConnectWebhook_TipCompleted_WritesEarnings_AndIsIdempotent()
+    {
+        var artistId = await SeedArtistAsync(connected: true);
+        var sessionId = $"cs_tip_{Guid.NewGuid():N}";
+
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            "evt_tip_1_" + sessionId, "checkout.session.completed", "acct_fake_123",
+            clientReferenceId: $"fan-user-1:tip:{artistId}",
+            sessionId: sessionId,
+            amountTotal: 500));
+
+        // Stripe retry (same event id) + duplicate delivery (new event id, same session).
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            "evt_tip_1_" + sessionId, "checkout.session.completed", "acct_fake_123",
+            clientReferenceId: $"fan-user-1:tip:{artistId}",
+            sessionId: sessionId,
+            amountTotal: 500));
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            "evt_tip_2_" + sessionId, "checkout.session.completed", "acct_fake_123",
+            clientReferenceId: $"fan-user-1:tip:{artistId}",
+            sessionId: sessionId,
+            amountTotal: 500));
+
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var rows = await db.EarningsTransactions
+            .Where(t => t.ArtistUserId == artistId && t.ExternalRef == sessionId)
+            .ToListAsync();
+
+        var row = Assert.Single(rows);
+        Assert.Equal("tip", row.Source);
+        Assert.Equal(500, row.GrossCents);
+        Assert.Equal(0, row.FeeCents);
+        Assert.Equal(500, row.NetCents);
+        Assert.Equal("fan-user-1", row.PayerUserId);
+    }
+
+    [Fact]
+    public async Task ConnectWebhook_FanSubLifecycle_Activates_RecordsEarnings_Renews_Cancels()
+    {
+        var artistId = await SeedArtistAsync(connected: true, subscriptionPriceCents: 1000);
+        var fanEmail = $"fansub-fan-{Guid.NewGuid():N}@cambrian.com";
+        var fan = await _fixture.CreateAuthenticatedClientAsync(fanEmail);
+        var fanUserId = await _fixture.GetUserIdAsync(fanEmail);
+
+        // Subscribe → pending FanSubscription row + checkout.
+        var res = await fan.PostAsync($"/api/artists/{artistId}/subscribe", null);
+        res.EnsureSuccessStatusCode();
+        var fanSubId = Gateway().ConnectedSubscriptions.Last().ClientReferenceId.Split(':')[2];
+
+        var sessionId = $"cs_fansub_{Guid.NewGuid():N}";
+        var stripeSubId = $"sub_{Guid.NewGuid():N}";
+
+        // 1. checkout.session.completed → active + first-period earnings (15% fee).
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            $"evt_fs1_{sessionId}", "checkout.session.completed", "acct_fake_123",
+            clientReferenceId: $"{fanUserId}:fansub:{fanSubId}",
+            sessionId: sessionId,
+            amountTotal: 1000,
+            sessionSubscriptionId: stripeSubId));
+
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            var sub = await db.FanSubscriptions.AsNoTracking().FirstAsync(s => s.Id == Guid.Parse(fanSubId));
+            Assert.Equal("active", sub.Status);
+            Assert.Equal(stripeSubId, sub.StripeSubscriptionId);
+
+            var first = await db.EarningsTransactions.AsNoTracking()
+                .FirstAsync(t => t.ExternalRef == sessionId);
+            Assert.Equal("sub", first.Source);
+            Assert.Equal(1000, first.GrossCents);
+            Assert.Equal(150, first.FeeCents);  // gross − floor(gross × 0.85)
+            Assert.Equal(850, first.NetCents);
+        }
+
+        // 2. invoice.paid subscription_create is skipped (already recorded from the session).
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            $"evt_fs2_{sessionId}", "invoice.paid", "acct_fake_123",
+            invoiceId: $"in_create_{sessionId}",
+            invoiceSubscriptionId: stripeSubId,
+            billingReason: "subscription_create",
+            amountPaid: 1000));
+
+        // 3. invoice.paid subscription_cycle → renewal earnings.
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            $"evt_fs3_{sessionId}", "invoice.paid", "acct_fake_123",
+            invoiceId: $"in_cycle_{sessionId}",
+            invoiceSubscriptionId: stripeSubId,
+            billingReason: "subscription_cycle",
+            amountPaid: 1000));
+
+        // 4. customer.subscription.deleted → cancelled.
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            $"evt_fs4_{sessionId}", "customer.subscription.deleted", "acct_fake_123",
+            subscriptionId: stripeSubId));
+
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+
+            var rows = await db.EarningsTransactions.AsNoTracking()
+                .Where(t => t.ArtistUserId == artistId && t.Source == "sub")
+                .Where(t => t.ExternalRef == sessionId || t.ExternalRef.Contains(sessionId))
+                .ToListAsync();
+            Assert.Equal(2, rows.Count); // first period + one renewal; create-invoice skipped
+            Assert.All(rows, r => Assert.Equal(850, r.NetCents));
+
+            var sub = await db.FanSubscriptions.AsNoTracking().FirstAsync(s => s.Id == Guid.Parse(fanSubId));
+            Assert.Equal("cancelled", sub.Status);
+            Assert.NotNull(sub.CancelledAt);
+        }
+    }
+
+    // ── Helpers ──
+
+    private FakePaymentGateway Gateway() =>
+        (FakePaymentGateway)_fixture.Services.GetRequiredService<IPaymentGateway>();
+
+    private async Task<HttpClient> CreateFanAsync() =>
+        await _fixture.CreateAuthenticatedClientAsync($"fan-{Guid.NewGuid():N}@cambrian.com");
+
+    /// <summary>Seed an artist user; optionally with a connected Stripe account and sub price.</summary>
+    private async Task<string> SeedArtistAsync(bool connected, int? subscriptionPriceCents = null)
+    {
+        var email = $"artist-{Guid.NewGuid():N}@cambrian.com";
+        await _fixture.RegisterUserAsync(email);
+        var userId = await _fixture.GetUserIdAsync(email);
+
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Id == userId);
+        user.StripeAccountId = connected ? "acct_fake_123" : null;
+        user.FanSubscriptionPriceCents = subscriptionPriceCents;
+        await db.SaveChangesAsync();
+        return userId;
+    }
+
+    private async Task ProcessConnectEventAsync(Func<StripeConnectWebhookService, Task> action)
+    {
+        using var scope = _fixture.Services.CreateScope();
+        var svc = (StripeConnectWebhookService)scope.ServiceProvider.GetRequiredService<IConnectWebhookService>();
+        await action(svc);
+    }
+}

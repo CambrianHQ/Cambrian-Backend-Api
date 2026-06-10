@@ -117,6 +117,48 @@ public sealed class DevelopmentPaymentGateway : IPaymentGateway
     public Task DeleteConnectedAccountAsync(string accountId)
         => Task.CompletedTask;
 
+    public Task<string> CreateConnectedCheckoutAsync(
+        string connectedAccountId,
+        int amountInCents,
+        string productName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        long applicationFeeCents)
+    {
+        var sessionId = $"cs_dev_tip_{Guid.NewGuid():N}";
+        _sessions[sessionId] = new CheckoutSessionInfo
+        {
+            SessionId = sessionId,
+            Status = "paid",
+            ClientReferenceId = clientReferenceId,
+            AmountTotal = amountInCents
+        };
+
+        return Task.FromResult(ResolveRedirectUrl(successUrl, sessionId));
+    }
+
+    public Task<string> CreateConnectedSubscriptionCheckoutAsync(
+        string connectedAccountId,
+        int amountInCents,
+        string productName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        decimal applicationFeePercent)
+    {
+        var sessionId = $"cs_dev_fansub_{Guid.NewGuid():N}";
+        _sessions[sessionId] = new CheckoutSessionInfo
+        {
+            SessionId = sessionId,
+            Status = "paid",
+            ClientReferenceId = clientReferenceId,
+            AmountTotal = amountInCents
+        };
+
+        return Task.FromResult(ResolveRedirectUrl(successUrl, sessionId));
+    }
+
     private static string ResolveRedirectUrl(string template, string sessionId)
         => template.Replace("{CHECKOUT_SESSION_ID}", Uri.EscapeDataString(sessionId), StringComparison.Ordinal);
 }

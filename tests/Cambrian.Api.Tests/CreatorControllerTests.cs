@@ -19,12 +19,13 @@ public sealed class CreatorControllerTests
     private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
     private readonly ICreatorProfileRepository _profiles = Substitute.For<ICreatorProfileRepository>();
     private readonly IUploadService _upload = Substitute.For<IUploadService>();
+    private readonly ITrackReadinessCache _readinessCache = Substitute.For<ITrackReadinessCache>();
     private readonly ILogger<CreatorController> _logger = Substitute.For<ILogger<CreatorController>>();
     private readonly CreatorController _controller;
 
     public CreatorControllerTests()
     {
-        _controller = new CreatorController(_creator, _tracks, _creators, _profiles, _upload, _logger);
+        _controller = new CreatorController(_creator, _tracks, _creators, _profiles, _upload, _readinessCache, _logger);
         var httpContext = new DefaultHttpContext();
         httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
         [

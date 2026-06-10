@@ -26,11 +26,12 @@ public sealed class WebhookControllerTests
     public WebhookControllerTests()
     {
         var logger = Substitute.For<ILogger<WebhookController>>();
+        var connectWebhooks = Substitute.For<IConnectWebhookService>();
         var noSecret = Options.Create(new EmailOptions());
-        _controller = new WebhookController(_webhookService, logger, noSecret);
+        _controller = new WebhookController(_webhookService, connectWebhooks, logger, noSecret);
 
         var withSecret = Options.Create(new EmailOptions { ResendWebhookSecret = TestWebhookSecret });
-        _controllerWithSecret = new WebhookController(_webhookService, logger, withSecret);
+        _controllerWithSecret = new WebhookController(_webhookService, connectWebhooks, logger, withSecret);
     }
 
     private void SetupRequest(string body, string? stripeSignature, WebhookController? target = null)

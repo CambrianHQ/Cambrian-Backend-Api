@@ -31,19 +31,22 @@ public class StripeWebhookService : IWebhookService
     private readonly IConfiguration _config;
     private readonly string _webhookSecret;
     private readonly ILogger<StripeWebhookService> _logger;
+    private readonly IAuthorshipRecordIssuer? _authorshipIssuer;
 
     public StripeWebhookService(
         CambrianDbContext db,
         IEmailService email,
         IConfiguration configuration,
         ILogger<StripeWebhookService> logger,
-        IHostEnvironment env)
+        IHostEnvironment env,
+        IAuthorshipRecordIssuer? authorshipIssuer = null)
     {
         _db = db;
         _email = email;
         _config = configuration;
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "";
         _logger = logger;
+        _authorshipIssuer = authorshipIssuer;
     }
 
     public async Task HandleStripeAsync(string payload, string signature)
@@ -430,6 +433,22 @@ public class StripeWebhookService : IWebhookService
         if (parts.Length >= 3 && parts[1] == "subscription")
         {
             await HandleSubscriptionCheckout(parts[0], parts[2], stripeCustomerId, stripeSubscriptionId);
+            return;
+        }
+
+        // AuthorshipRecordService sets clientReferenceId = "userId:authorship:recordId".
+        // Payment completes the record: hash evidence, freeze + sign the canonical JSON.
+        if (parts.Length == 3 && parts[1] == "authorship" && Guid.TryParse(parts[2], out var recordId))
+        {
+            if (_authorshipIssuer is null)
+            {
+                _logger.LogError(
+                    "[DEAD-LETTER] Authorship payment received but no issuer is registered. RecordId={RecordId} StripeSessionId={SessionId}",
+                    recordId, stripeSessionId);
+                return;
+            }
+
+            await _authorshipIssuer.IssueForSessionAsync(recordId, stripeSessionId ?? "");
             return;
         }
 
