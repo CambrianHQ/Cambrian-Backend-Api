@@ -48,8 +48,8 @@ public class CapabilityResolverTests
         Assert.DoesNotContain(Capabilities.TrackEditOwn, caps);
         Assert.DoesNotContain(Capabilities.CreatorDashboardView, caps);
         Assert.DoesNotContain(Capabilities.AdminAccess, caps);
-        // Pro tier does grant payout/invoice/exclusive/buyout even for non-creators —
-        // spec drives this purely off tier; gating by role is a separate policy concern.
+        // Pro tier grants payout/invoice even for non-creators — spec drives this
+        // purely off tier; gating by role is a separate policy concern.
         Assert.Contains(Capabilities.PayoutRequest, caps);
     }
 
@@ -86,8 +86,9 @@ public class CapabilityResolverTests
         Assert.Contains(Capabilities.CreatorDashboardView, caps);
         Assert.Contains(Capabilities.PayoutRequest, caps);
         Assert.Contains(Capabilities.InvoiceDownload, caps);
-        Assert.Contains(Capabilities.TrackLicenseExclusive, caps);
-        Assert.Contains(Capabilities.TrackLicenseBuyout, caps);
+        // Retired licensing caps must never be issued (residue F13).
+        Assert.DoesNotContain(Capabilities.TrackLicenseExclusive, caps);
+        Assert.DoesNotContain(Capabilities.TrackLicenseBuyout, caps);
         Assert.DoesNotContain(Capabilities.AdminAccess, caps);
     }
 
@@ -103,6 +104,29 @@ public class CapabilityResolverTests
             Assert.Contains(c, caps);
         }
         Assert.Equal(Capabilities.All.Count, caps.Count);
+    }
+
+    [Theory]
+    [InlineData("User", CreatorTier.Free)]
+    [InlineData("User", CreatorTier.Pro)]
+    [InlineData("Creator", CreatorTier.Free)]
+    [InlineData("Creator", CreatorTier.Pro)]
+    [InlineData("Admin", CreatorTier.Free)]
+    [InlineData("Admin", CreatorTier.Pro)]
+    public async Task Issued_capabilities_never_include_retired_licensing_caps(string role, CreatorTier tier)
+    {
+        // F13 token snapshot: no role × tier combination may ever emit the retired
+        // licensing-marketplace capabilities in an issued token.
+        var user = new ApplicationUser { Role = role, CreatorTier = tier, Tier = tier == CreatorTier.Pro ? "pro" : "free" };
+
+        var caps = await CreateResolver().ResolveAsync(user);
+
+        Assert.DoesNotContain("track.license.exclusive", caps);
+        Assert.DoesNotContain("track.license.buyout", caps);
+        foreach (var retired in Capabilities.Retired)
+        {
+            Assert.DoesNotContain(retired, caps);
+        }
     }
 
     [Fact]
@@ -126,7 +150,7 @@ public class CapabilityResolverTests
 
         var proCaps = await resolver.ResolveAsync(user);
         Assert.Contains(Capabilities.PayoutRequest, proCaps);
-        Assert.Contains(Capabilities.TrackLicenseExclusive, proCaps);
+        Assert.DoesNotContain(Capabilities.TrackLicenseExclusive, proCaps);
 
         // Subscription ended / tier downgraded
         user.CreatorTier = CreatorTier.Free;
@@ -205,8 +229,9 @@ public class CapabilityIntegrationTests : IClassFixture<CambrianApiFixture>
 
         Assert.Contains(Capabilities.PayoutRequest, capList);
         Assert.Contains(Capabilities.InvoiceDownload, capList);
-        Assert.Contains(Capabilities.TrackLicenseExclusive, capList);
-        Assert.Contains(Capabilities.TrackLicenseBuyout, capList);
+        // Retired licensing caps must never be issued (residue F13).
+        Assert.DoesNotContain(Capabilities.TrackLicenseExclusive, capList);
+        Assert.DoesNotContain(Capabilities.TrackLicenseBuyout, capList);
     }
 
     [Fact]

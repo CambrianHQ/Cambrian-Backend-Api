@@ -5,6 +5,52 @@
     "version": "1.0"
   },
   "paths": {
+    "/tracks/{id}/readiness": {
+      "get": {
+        "tags": [
+          "ReleasePipeline"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "308": {
+            "description": "Permanent redirect to /api/tracks/{id}/readiness"
+          }
+        }
+      }
+    },
+    "/api/charts/weekly": {
+      "get": {
+        "tags": [
+          "Charts"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/charts/aggregate": {
+      "post": {
+        "tags": [
+          "Charts"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/provenance/verify-inclusion": {
       "post": {
         "tags": [

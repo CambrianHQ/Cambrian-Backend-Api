@@ -11,8 +11,6 @@ public static class Capabilities
     public const string LicensePurchase = "license.purchase";
     public const string TrackUpload = "track.upload";
     public const string TrackEditOwn = "track.edit.own";
-    public const string TrackLicenseExclusive = "track.license.exclusive";
-    public const string TrackLicenseBuyout = "track.license.buyout";
     public const string PayoutRequest = "payout.request";
     public const string CreatorDashboardView = "creator.dashboard.view";
     public const string InvoiceDownload = "invoice.download";
@@ -21,14 +19,26 @@ public static class Capabilities
     // Backend-only — gates server policies, ignored by the frontend.
     public const string TrackDeleteOwn = "track.delete.own";
 
+    /// <summary>
+    /// Retired licensing-marketplace capabilities. These are NEVER issued in a
+    /// token anymore (residue F13) and are excluded from <see cref="All"/>.
+    /// Kept as named constants only so tests can assert they never appear.
+    /// </summary>
+    public const string TrackLicenseExclusive = "track.license.exclusive";
+    public const string TrackLicenseBuyout = "track.license.buyout";
+
+    public static readonly IReadOnlyList<string> Retired = new[]
+    {
+        TrackLicenseExclusive,
+        TrackLicenseBuyout,
+    };
+
     public static readonly IReadOnlyList<string> All = new[]
     {
         LicensePurchase,
         TrackUpload,
         TrackEditOwn,
         TrackDeleteOwn,
-        TrackLicenseExclusive,
-        TrackLicenseBuyout,
         PayoutRequest,
         CreatorDashboardView,
         InvoiceDownload,

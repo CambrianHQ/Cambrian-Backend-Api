@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Billing;
 using Cambrian.Application.DTOs.Subscriptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Cambrian.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -124,9 +125,19 @@ public sealed class BillingService : IBillingService
             ? TierManifest.For(user.CreatorTier)
             : TierManifest.Free;
 
+        // F8 — the plan label must agree with the entitlement. Prefer the live
+        // subscription plan; when there's no subscription record (comped/seeded
+        // Pro) fall back to the authoritative creator-tier entitlement, never
+        // the raw JWT tier claim, and never a hard-coded "free". This keeps
+        // /settings/billing from disagreeing with the issued tier claim.
+        var isPro = tierConfig.Tier == CreatorTier.Pro;
+        var planLabel = !string.IsNullOrWhiteSpace(sub?.Plan)
+            ? sub!.Plan
+            : (isPro ? "pro" : "free");
+
         return new BillingStatusResponse
         {
-            Tier = sub?.Plan ?? "free",
+            Tier = planLabel,
             Status = sub?.Status ?? "active",
             ExpiresAt = sub?.ExpiresAt,
             CreatorTier = tierConfig.Tier.ToString(),

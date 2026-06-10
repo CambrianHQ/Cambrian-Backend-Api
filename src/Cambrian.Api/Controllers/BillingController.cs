@@ -2,7 +2,9 @@ using System.Security.Claims;
 using Cambrian.Application.DTOs.Billing;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
@@ -13,16 +15,43 @@ public class BillingController : BaseController
 {
     private readonly IBillingService _billing;
     private readonly ILogger<BillingController> _logger;
+    private readonly IConfiguration _config;
 
-    public BillingController(IBillingService billing, ILogger<BillingController> logger)
+    public BillingController(IBillingService billing, ILogger<BillingController> logger, IConfiguration config)
     {
         _billing = billing;
         _logger = logger;
+        _config = config;
+    }
+
+    /// <summary>
+    /// Launch kill switch (residue #6). Checkout is on by default; set
+    /// CHECKOUT_ENABLED=false (or Checkout:Enabled=false) to make every
+    /// checkout-session endpoint return 503 with a friendly code — used to stop
+    /// new charges during an incident without a redeploy.
+    /// </summary>
+    private bool CheckoutEnabled =>
+        _config.GetValue<bool?>("Checkout:Enabled")
+        ?? _config.GetValue<bool?>("CHECKOUT_ENABLED")
+        ?? true;
+
+    private IActionResult CheckoutDisabledResponse()
+    {
+        _logger.LogWarning("EVENT: BillingCheckoutBlocked reason:checkout_disabled");
+        return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+        {
+            success = false,
+            data = (object?)null,
+            message = "Checkout is temporarily unavailable. Please try again shortly.",
+            error = "checkout_disabled",
+        });
     }
 
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(BillingCheckoutRequest request)
     {
+        if (!CheckoutEnabled) return CheckoutDisabledResponse();
+
         var userId = GetRequiredUserId()!;
         var userEmail = User.FindFirstValue(ClaimTypes.Email)
                      ?? User.FindFirstValue("email");
@@ -59,6 +88,8 @@ public class BillingController : BaseController
     [HttpPost("/api/billing/checkout")]
     public async Task<IActionResult> ApiCheckout(BillingCheckoutRequest request)
     {
+        if (!CheckoutEnabled) return CheckoutDisabledResponse();
+
         var userId = GetRequiredUserId()!;
         var userEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
 

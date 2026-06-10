@@ -390,6 +390,8 @@ builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
 builder.Services.AddSingleton<IFeeService, FeeService>();
 builder.Services.AddSingleton<ITierService, TierService>();
+// Weekly "The Scene" charts — singleton cache, admin-triggered aggregation (R17).
+builder.Services.AddSingleton<IWeeklyChartService, WeeklyChartService>();
 builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 
@@ -706,6 +708,41 @@ app.MapMethods("/sse", new[] { "GET", "POST", "DELETE" }, (HttpContext ctx) =>
     var query = ctx.Request.QueryString.Value ?? "";
     return Results.Redirect($"/mcp{query}", permanent: false, preserveMethod: true);
 });
+
+// Alias: /charts/weekly → same payload as /api/charts/weekly. Kept out of the
+// OpenAPI contract (the canonical /api path is the documented one). (residue R17)
+app.MapGet("/charts/weekly", async (IWeeklyChartService charts, CancellationToken ct) =>
+{
+    var chart = await charts.GetCurrentAsync(ct);
+    return Results.Json(new { success = true, data = chart, message = (string?)null, error = (string?)null });
+}).ExcludeFromDescription();
+
+// Legacy readiness path → canonical /api/tracks/{id}/readiness (residue F7).
+// The readiness endpoint has only ever lived under /api; this 308 makes the old
+// un-prefixed path explicit for any stale client instead of a bare 404.
+app.MapMethods("/tracks/{id}/readiness", new[] { "GET" }, (string id) =>
+    Results.Redirect($"/api/tracks/{id}/readiness", permanent: true, preserveMethod: true))
+    .ExcludeFromDescription();
+
+// Lightweight keep-warm / liveness probe with build info. Anonymous, always 200,
+// no DB hit — safe as an uptime-monitor / Render keep-warm target. (residue #5)
+app.MapGet("/healthz", () =>
+{
+    var asm = typeof(Program).Assembly.GetName();
+    return Results.Json(new
+    {
+        status = "ok",
+        service = "cambrian-api",
+        environment = app.Environment.EnvironmentName,
+        build = new
+        {
+            version = asm.Version?.ToString() ?? "unknown",
+            commit = Environment.GetEnvironmentVariable("GIT_COMMIT")
+                ?? Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT")
+                ?? "unknown",
+        },
+    });
+}).ExcludeFromDescription();
 
 await app.RunMigrationsAsync();
 await app.SeedDataAsync();

@@ -43,8 +43,8 @@ public sealed class CapabilityResolver : ICapabilityResolver
         {
             caps.Add(Capabilities.PayoutRequest);
             caps.Add(Capabilities.InvoiceDownload);
-            caps.Add(Capabilities.TrackLicenseExclusive);
-            caps.Add(Capabilities.TrackLicenseBuyout);
+            // NOTE: track.license.exclusive / track.license.buyout are intentionally
+            // NOT issued — the licensing marketplace was sunset. See residue F13.
         }
 
         if (isAdmin)

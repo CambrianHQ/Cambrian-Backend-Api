@@ -13,6 +13,10 @@ POST /api/tracks/{id}/release-ready    → 202 { jobId }  |  402 if no credits
 GET  /api/jobs/{id}                    → { status, stage, artifacts: [{ kind, url }] }
 ```
 
+> Readiness is canonical at **`/api/tracks/{id}/readiness`** only (auth + owner-scoped).
+> The legacy un-prefixed `/tracks/{id}/readiness` is a permanent **308 redirect**
+> to the canonical path for stale clients — do not add new callers to it. (residue F7)
+
 Notes:
 - Readiness checks/weights: `loudness` 25 (−14 LUFS ±1), `metadata` 25,
   `aiDisclosure` 25, `cover` 15 (3000×3000 JPEG/PNG), `provenance` 10.
@@ -71,8 +75,15 @@ Notes:
   (see `docs/earnings-transactions.md`). Earnings reads/aggregation are owned
   by the earnings read agent.
 
-## Charts *(owned by the charts agent — not implemented here)*
+## Charts *(implemented — residue R17)*
 
 ```
-GET  /api/charts/weekly                → { weekOf, entries: [{ rank, trackId, artist, title, delta }] }
+GET  /api/charts/weekly                → { weekOf, entries: [{ rank, trackId, title, artist, creatorId, coverArtUrl, deltaRank }], trackOfTheWeek }
+POST /admin/charts/aggregate           → recompute now (Admin only) → same shape
 ```
+
+Public read; `/charts/weekly` is an un-documented alias of the canonical
+`/api/charts/weekly`. Aggregation is **on-demand** (admin-triggered) and cached
+in-process — ranked by the catalog's "popular" ordering until a scheduled job
+and per-window play aggregation land. The admin trigger is how charts become
+populated/testable on demand.
