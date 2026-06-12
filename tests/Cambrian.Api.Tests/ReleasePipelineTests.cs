@@ -27,6 +27,10 @@ public class ReleasePipelineFixture : CambrianApiFixture
         {
             services.RemoveAll<IMasteringEngine>();
             services.AddSingleton<IMasteringEngine, FakeMasteringEngine>();
+
+            // The worker is excluded from the Testing host (its DB polling races
+            // other fixtures' SQLite connections) — this suite needs it, so opt in.
+            services.AddHostedService<Cambrian.Api.BackgroundServices.MasteringWorker>();
         });
     }
 

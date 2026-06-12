@@ -200,3 +200,7 @@ config/*.plain.env
 *-env-backup.txt
 *-age-key*.txt
 *.decrypted.env
+
+LOCAL_PAID_SETUP.md
+stripe-listen*.log
+run-local.sh

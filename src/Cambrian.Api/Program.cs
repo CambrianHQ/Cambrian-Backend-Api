@@ -477,7 +477,12 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IMasteringJobRepository, MasteringJobRepository>();
 builder.Services.AddScoped<IReleaseCreditService, ReleaseCreditService>();
 builder.Services.AddScoped<IReleaseReadyService, ReleaseReadyService>();
-builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.MasteringWorker>();
+// Not in Testing: the worker's 3-second DB poll shares the test host's single
+// in-memory SQLite connection and intermittently collides with test requests
+// (random 500s in unrelated tests, e.g. the SlugConflict flake). Pipeline tests
+// that need the worker re-add it explicitly (ReleasePipelineFixture).
+if (builder.Environment.EnvironmentName != TestingEnvironment)
+    builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.MasteringWorker>();
 
 // Release pipeline: readiness scoring + track-based release-ready jobs.
 builder.Services.AddSingleton<ITrackReadinessCache, Cambrian.Api.Services.MemoryTrackReadinessCache>();
