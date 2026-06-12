@@ -17,6 +17,13 @@ public sealed class MasteringJobConfiguration : IEntityTypeConfiguration<Masteri
         builder.Property(x => x.SourceKey).IsRequired();
         builder.Property(x => x.SourceFileName).HasMaxLength(512);
         builder.Property(x => x.EngineRef).HasMaxLength(256);
+        builder.Property(x => x.Kind).HasMaxLength(20).IsRequired().HasDefaultValue("mastering");
+        builder.Property(x => x.ContentHash).HasMaxLength(64);
+        builder.Property(x => x.Stage).HasMaxLength(20);
+
+        // Release-pipeline idempotency: find an existing job for the same audio.
+        builder.HasIndex(x => new { x.TrackId, x.ContentHash })
+            .HasDatabaseName("IX_MasteringJobs_TrackId_ContentHash");
 
         // Worker poll: claim queued jobs oldest-first.
         builder.HasIndex(x => new { x.Status, x.CreatedAt })

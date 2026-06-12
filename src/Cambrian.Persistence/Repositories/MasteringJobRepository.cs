@@ -57,6 +57,20 @@ public class MasteringJobRepository : IMasteringJobRepository
                  && j.Status != "failed",
             ct);
 
+    public Task<MasteringJob?> GetLatestForTrackAsync(Guid trackId, CancellationToken ct = default) =>
+        _db.MasteringJobs
+            .Where(j => j.TrackId == trackId)
+            .OrderByDescending(j => j.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+    public Task<MasteringJob?> GetActiveByTrackAndHashAsync(Guid trackId, string contentHash, CancellationToken ct = default) =>
+        _db.MasteringJobs
+            .Where(j => j.TrackId == trackId
+                        && j.ContentHash == contentHash
+                        && j.Status != "failed")
+            .OrderByDescending(j => j.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
     /// <summary>
     /// Race-safely claim the oldest queued job for the worker. A conditional
     /// <c>ExecuteUpdateAsync</c> (status guard) inside a transaction guarantees that

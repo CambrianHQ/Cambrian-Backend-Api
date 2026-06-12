@@ -272,4 +272,97 @@ public class StripeFacade : IPaymentGateway
         var service = new AccountService();
         await service.DeleteAsync(accountId);
     }
+
+    // ── Connect money-in: direct charges on the artist's connected account ──
+
+    public async Task<string> CreateConnectedCheckoutAsync(
+        string connectedAccountId,
+        int amountInCents,
+        string productName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        long applicationFeeCents)
+    {
+        var options = new SessionCreateOptions
+        {
+            Mode = "payment",
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            ClientReferenceId = clientReferenceId,
+            LineItems = new List<SessionLineItemOptions>
+            {
+                new()
+                {
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = "usd",
+                        UnitAmount = amountInCents,
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = productName
+                        }
+                    },
+                    Quantity = 1
+                }
+            },
+            // 0 at launch for tips: omit the field entirely rather than sending 0.
+            PaymentIntentData = applicationFeeCents > 0
+                ? new SessionPaymentIntentDataOptions { ApplicationFeeAmount = applicationFeeCents }
+                : null,
+        };
+
+        var service = new SessionService();
+        var session = await service.CreateAsync(options, ConnectedAccount(connectedAccountId));
+        return session.Url!;
+    }
+
+    public async Task<string> CreateConnectedSubscriptionCheckoutAsync(
+        string connectedAccountId,
+        int amountInCents,
+        string productName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        decimal applicationFeePercent)
+    {
+        var options = new SessionCreateOptions
+        {
+            Mode = "subscription",
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            ClientReferenceId = clientReferenceId,
+            LineItems = new List<SessionLineItemOptions>
+            {
+                new()
+                {
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = "usd",
+                        UnitAmount = amountInCents,
+                        Recurring = new SessionLineItemPriceDataRecurringOptions
+                        {
+                            Interval = "month"
+                        },
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = productName
+                        }
+                    },
+                    Quantity = 1
+                }
+            },
+            SubscriptionData = applicationFeePercent > 0
+                ? new SessionSubscriptionDataOptions { ApplicationFeePercent = applicationFeePercent }
+                : null,
+        };
+
+        var service = new SessionService();
+        var session = await service.CreateAsync(options, ConnectedAccount(connectedAccountId));
+        return session.Url!;
+    }
+
+    /// <summary>Scope an API call to the connected account (direct charge semantics).</summary>
+    private static RequestOptions ConnectedAccount(string accountId) =>
+        new() { StripeAccount = accountId };
 }

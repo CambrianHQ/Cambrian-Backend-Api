@@ -390,6 +390,8 @@ builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
 builder.Services.AddSingleton<IFeeService, FeeService>();
 builder.Services.AddSingleton<ITierService, TierService>();
+// Weekly "The Scene" charts — singleton cache, admin-triggered aggregation (R17).
+builder.Services.AddSingleton<IWeeklyChartService, WeeklyChartService>();
 builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 
@@ -475,7 +477,27 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IMasteringJobRepository, MasteringJobRepository>();
 builder.Services.AddScoped<IReleaseCreditService, ReleaseCreditService>();
 builder.Services.AddScoped<IReleaseReadyService, ReleaseReadyService>();
-builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.MasteringWorker>();
+// Not in Testing: the worker's 3-second DB poll shares the test host's single
+// in-memory SQLite connection and intermittently collides with test requests
+// (random 500s in unrelated tests, e.g. the SlugConflict flake). Pipeline tests
+// that need the worker re-add it explicitly (ReleasePipelineFixture).
+if (builder.Environment.EnvironmentName != TestingEnvironment)
+    builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.MasteringWorker>();
+
+// Release pipeline: readiness scoring + track-based release-ready jobs.
+builder.Services.AddSingleton<ITrackReadinessCache, Cambrian.Api.Services.MemoryTrackReadinessCache>();
+builder.Services.AddScoped<ITrackReadinessService, TrackReadinessService>();
+builder.Services.AddScoped<ITrackReleasePipelineService, TrackReleasePipelineService>();
+
+// Paid authorship records (issued by the Stripe webhook after payment).
+builder.Services.AddScoped<IAuthorshipRecordRepository, AuthorshipRecordRepository>();
+builder.Services.AddScoped<IAuthorshipRecordService, AuthorshipRecordService>();
+builder.Services.AddScoped<IAuthorshipRecordIssuer>(sp => sp.GetRequiredService<IAuthorshipRecordService>());
+
+// Connect money-in: tips + fan subscriptions on artists' connected accounts.
+builder.Services.AddScoped<IFanSubscriptionRepository, FanSubscriptionRepository>();
+builder.Services.AddScoped<IArtistMonetizationService, ArtistMonetizationService>();
+builder.Services.AddScoped<IConnectWebhookService, Cambrian.Infrastructure.Stripe.StripeConnectWebhookService>();
 
 // Growth features
 builder.Services.Configure<Cambrian.Infrastructure.Options.GrowthFeaturesOptions>(
@@ -691,6 +713,41 @@ app.MapMethods("/sse", new[] { "GET", "POST", "DELETE" }, (HttpContext ctx) =>
     var query = ctx.Request.QueryString.Value ?? "";
     return Results.Redirect($"/mcp{query}", permanent: false, preserveMethod: true);
 });
+
+// Alias: /charts/weekly → same payload as /api/charts/weekly. Kept out of the
+// OpenAPI contract (the canonical /api path is the documented one). (residue R17)
+app.MapGet("/charts/weekly", async (IWeeklyChartService charts, CancellationToken ct) =>
+{
+    var chart = await charts.GetCurrentAsync(ct);
+    return Results.Json(new { success = true, data = chart, message = (string?)null, error = (string?)null });
+}).ExcludeFromDescription();
+
+// Legacy readiness path → canonical /api/tracks/{id}/readiness (residue F7).
+// The readiness endpoint has only ever lived under /api; this 308 makes the old
+// un-prefixed path explicit for any stale client instead of a bare 404.
+app.MapMethods("/tracks/{id}/readiness", new[] { "GET" }, (string id) =>
+    Results.Redirect($"/api/tracks/{id}/readiness", permanent: true, preserveMethod: true))
+    .ExcludeFromDescription();
+
+// Lightweight keep-warm / liveness probe with build info. Anonymous, always 200,
+// no DB hit — safe as an uptime-monitor / Render keep-warm target. (residue #5)
+app.MapGet("/healthz", () =>
+{
+    var asm = typeof(Program).Assembly.GetName();
+    return Results.Json(new
+    {
+        status = "ok",
+        service = "cambrian-api",
+        environment = app.Environment.EnvironmentName,
+        build = new
+        {
+            version = asm.Version?.ToString() ?? "unknown",
+            commit = Environment.GetEnvironmentVariable("GIT_COMMIT")
+                ?? Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT")
+                ?? "unknown",
+        },
+    });
+}).ExcludeFromDescription();
 
 await app.RunMigrationsAsync();
 await app.SeedDataAsync();

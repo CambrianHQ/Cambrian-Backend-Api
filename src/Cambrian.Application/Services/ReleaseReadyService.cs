@@ -32,6 +32,8 @@ public sealed class ReleaseReadyService : IReleaseReadyService
     private readonly IMasteringEngine _engine;
     private readonly IObjectStorage _storage;
     private readonly ITrackRepository _tracks;
+    private readonly ITrackReleasePipelineService _pipeline;
+    private readonly ITrackReadinessCache _readinessCache;
     private readonly ILogger<ReleaseReadyService> _logger;
 
     public ReleaseReadyService(
@@ -41,6 +43,8 @@ public sealed class ReleaseReadyService : IReleaseReadyService
         IMasteringEngine engine,
         IObjectStorage storage,
         ITrackRepository tracks,
+        ITrackReleasePipelineService pipeline,
+        ITrackReadinessCache readinessCache,
         ILogger<ReleaseReadyService> logger)
     {
         _validation = validation;
@@ -49,6 +53,8 @@ public sealed class ReleaseReadyService : IReleaseReadyService
         _engine = engine;
         _storage = storage;
         _tracks = tracks;
+        _pipeline = pipeline;
+        _readinessCache = readinessCache;
         _logger = logger;
     }
 
@@ -178,6 +184,12 @@ public sealed class ReleaseReadyService : IReleaseReadyService
             ct);
 
         await StoreOutputsAsync(job, result, ct);
+
+        // Release-pipeline jobs run their remaining stages once the master is approved
+        // (preview engines reach this path instead of the worker's one-shot path).
+        if (job.Kind == "release_pipeline")
+            await _pipeline.RunPostMasteringStagesAsync(job, ct);
+
         job.Status = "done";
         job.CompletedAt = DateTime.UtcNow;
         await _jobs.UpdateAsync(job, ct);
@@ -281,6 +293,7 @@ public sealed class ReleaseReadyService : IReleaseReadyService
         track.AiGenerated = aiGenerated;
         track.AiDisclosureDdex = aiDisclosure;
         await _tracks.UpdateAsync(track);
+        _readinessCache.Invalidate(trackId);
     }
 
     private JobDto MapToDto(Domain.Entities.MasteringJob job)

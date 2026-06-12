@@ -89,6 +89,36 @@ public interface IPaymentGateway
     /// Delete/deauthorize a connected account.
     /// </summary>
     Task DeleteConnectedAccountAsync(string accountId);
+
+    // ── Connect money-in (direct charges on the artist's connected account) ──
+
+    /// <summary>
+    /// Create a one-time checkout session ON the connected account (direct charge).
+    /// <paramref name="applicationFeeCents"/> of 0 means no platform fee (tips at launch).
+    /// Returns the redirect URL.
+    /// </summary>
+    Task<string> CreateConnectedCheckoutAsync(
+        string connectedAccountId,
+        int amountInCents,
+        string productName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        long applicationFeeCents);
+
+    /// <summary>
+    /// Create a recurring monthly subscription checkout ON the connected account
+    /// (direct charge) with a platform <paramref name="applicationFeePercent"/>
+    /// (e.g. 15 for 15%). Returns the redirect URL.
+    /// </summary>
+    Task<string> CreateConnectedSubscriptionCheckoutAsync(
+        string connectedAccountId,
+        int amountInCents,
+        string productName,
+        string clientReferenceId,
+        string successUrl,
+        string cancelUrl,
+        decimal applicationFeePercent);
 }
 
 /// <summary>

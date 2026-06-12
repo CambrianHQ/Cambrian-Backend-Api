@@ -22,4 +22,14 @@ public interface IMasteringJobRepository
     /// <summary>Race-safely claim the next queued job for the worker (sets status=processing, StartedAt).
     /// Returns null when the queue is empty.</summary>
     Task<MasteringJob?> ClaimNextQueuedAsync(CancellationToken ct = default);
+
+    /// <summary>Most recent job for a catalog track (any status). Null when none exists.</summary>
+    Task<MasteringJob?> GetLatestForTrackAsync(Guid trackId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Most recent non-failed job for (track, content hash) — the release-pipeline
+    /// idempotency probe: an existing live job for unchanged audio means "warn,
+    /// don't re-charge". Null when no such job exists.
+    /// </summary>
+    Task<MasteringJob?> GetActiveByTrackAndHashAsync(Guid trackId, string contentHash, CancellationToken ct = default);
 }

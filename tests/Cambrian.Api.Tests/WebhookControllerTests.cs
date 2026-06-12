@@ -19,18 +19,20 @@ public sealed class WebhookControllerTests
     private readonly WebhookController _controller;
     private readonly WebhookController _controllerWithSecret;
 
-    // A stable test signing key (base64 of 32 random bytes).
-    private const string TestWebhookSecretBase64 = "dGVzdC1zZWNyZXQtMzItYnl0ZXMtZm9yLXVuaXQtdGVzdA==";
+    // A stable FAKE signing key for unit tests — base64 of the literal string
+    // "test-secret-32-bytes-for-unit-test", not a real credential.
+    private const string TestWebhookSecretBase64 = "dGVzdC1zZWNyZXQtMzItYnl0ZXMtZm9yLXVuaXQtdGVzdA=="; // gitleaks:allow
     private const string TestWebhookSecret = "whsec_" + TestWebhookSecretBase64;
 
     public WebhookControllerTests()
     {
         var logger = Substitute.For<ILogger<WebhookController>>();
+        var connectWebhooks = Substitute.For<IConnectWebhookService>();
         var noSecret = Options.Create(new EmailOptions());
-        _controller = new WebhookController(_webhookService, logger, noSecret);
+        _controller = new WebhookController(_webhookService, connectWebhooks, logger, noSecret);
 
         var withSecret = Options.Create(new EmailOptions { ResendWebhookSecret = TestWebhookSecret });
-        _controllerWithSecret = new WebhookController(_webhookService, logger, withSecret);
+        _controllerWithSecret = new WebhookController(_webhookService, connectWebhooks, logger, withSecret);
     }
 
     private void SetupRequest(string body, string? stripeSignature, WebhookController? target = null)

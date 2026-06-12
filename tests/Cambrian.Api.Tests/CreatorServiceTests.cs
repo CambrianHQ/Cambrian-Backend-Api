@@ -77,8 +77,8 @@ public sealed class CreatorServiceTests
         Assert.Equal(3, track.Sales);
         Assert.Equal(9, track.Plays);
         Assert.Equal(4500, track.EarnedCents);
-        _tracks.Received(1).GetDashboardTrackSummariesAsync("creator-1", creatorUuid);
-        _tracks.DidNotReceive().GetByCreatorIdAsync("creator-1", creatorUuid);
+        await _tracks.Received(1).GetDashboardTrackSummariesAsync("creator-1", creatorUuid);
+        await _tracks.DidNotReceive().GetByCreatorIdAsync("creator-1", creatorUuid);
     }
 
     [Fact]
@@ -157,8 +157,8 @@ public sealed class CreatorServiceTests
         Assert.Equal("creator-one", track.CreatorSlug);
         Assert.Equal("profiles/creator-one.jpg", track.CreatorProfileImageUrl);
         Assert.Equal("Creator One", track.Artist);
-        _tracks.Received(1).GetCreatorTrackSummariesAsync("creator-1", creatorUuid);
-        _tracks.DidNotReceive().GetByCreatorIdAsync("creator-1", creatorUuid);
+        await _tracks.Received(1).GetCreatorTrackSummariesAsync("creator-1", creatorUuid);
+        await _tracks.DidNotReceive().GetByCreatorIdAsync("creator-1", creatorUuid);
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class CreatorServiceTests
         var result = await _sut.GetRevenueAsync("creator-1");
 
         Assert.NotNull(result);
-        _tracks.Received(1).GetDashboardTrackSummariesAsync("creator-1", creatorUuid);
-        _tracks.DidNotReceive().GetByCreatorIdAsync("creator-1", creatorUuid);
+        await _tracks.Received(1).GetDashboardTrackSummariesAsync("creator-1", creatorUuid);
+        await _tracks.DidNotReceive().GetByCreatorIdAsync("creator-1", creatorUuid);
     }
 }

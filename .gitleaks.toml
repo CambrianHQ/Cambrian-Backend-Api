@@ -1,0 +1,12 @@
+# Gitleaks configuration — extends the default ruleset.
+# Used by the CI "gitleaks" job and the pre-push hook (when installed).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known fake credentials used by unit tests (not real secrets)"
+regexes = [
+  # WebhookControllerTests: base64 of the literal "test-secret-32-bytes-for-unit-test"
+  '''dGVzdC1zZWNyZXQtMzItYnl0ZXMtZm9yLXVuaXQtdGVzdA==''',
+]

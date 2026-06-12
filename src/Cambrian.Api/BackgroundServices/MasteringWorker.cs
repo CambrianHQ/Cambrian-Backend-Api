@@ -91,7 +91,7 @@ public sealed class MasteringWorker : BackgroundService
             if (engine.RequiresApproval)
                 await RunPreviewEngineAsync(jobs, engine, storage, job, ct);
             else
-                await RunOneShotEngineAsync(jobs, engine, storage, job, ct);
+                await RunOneShotEngineAsync(sp, jobs, engine, storage, job, ct);
         }
         catch (Exception ex)
         {
@@ -99,44 +99,59 @@ public sealed class MasteringWorker : BackgroundService
         }
     }
 
-    // ── ffmpeg (one-shot): master inline, upload WAV+MP3, status=done ──
+    // ── ffmpeg (one-shot): master inline, upload WAV+MP3, run pipeline stages, status=done ──
     private async Task RunOneShotEngineAsync(
-        IMasteringJobRepository jobs, IMasteringEngine engine, IObjectStorage storage,
+        IServiceProvider sp, IMasteringJobRepository jobs, IMasteringEngine engine, IObjectStorage storage,
         MasteringJob job, CancellationToken ct)
     {
-        await FfmpegGate.WaitAsync(ct);
-        try
+        // Resumable: a retried job whose master already uploaded skips the heavy
+        // audio work and goes straight to the remaining pipeline stages.
+        if (string.IsNullOrWhiteSpace(job.MasteredWavKey))
         {
-            using var source = await storage.OpenReadAsync(job.SourceKey)
-                ?? throw new InvalidOperationException($"Source not found at {job.SourceKey}.");
+            await FfmpegGate.WaitAsync(ct);
+            try
+            {
+                using var source = await storage.OpenReadAsync(job.SourceKey)
+                    ?? throw new InvalidOperationException($"Source not found at {job.SourceKey}.");
 
-            var result = await engine.MasterAsync(
-                new MasteringEngineRequest
-                {
-                    Source = source.Stream,
-                    SourceFileName = job.SourceFileName ?? "audio",
-                    TargetLufs = job.TargetLufs,
-                    TargetTruePeakDbtp = job.TargetTruePeakDbtp,
-                },
-                ct);
+                var result = await engine.MasterAsync(
+                    new MasteringEngineRequest
+                    {
+                        Source = source.Stream,
+                        SourceFileName = job.SourceFileName ?? "audio",
+                        TargetLufs = job.TargetLufs,
+                        TargetTruePeakDbtp = job.TargetTruePeakDbtp,
+                    },
+                    ct);
 
-            await UploadMastersAsync(storage, job, result);
-            job.InputLufs = result.InputLufs;
-            job.OutputLufs = result.OutputLufs;
-            job.OutputTruePeakDbtp = result.OutputTruePeakDbtp;
-            job.Status = "done";
-            job.CompletedAt = DateTime.UtcNow;
-            job.Error = null;
-            await jobs.UpdateAsync(job, ct);
-
-            _logger.LogInformation(
-                "EVENT: MasteringJobDone jobId:{JobId} engine:{Engine} wav:{Wav} mp3:{Mp3}",
-                job.Id, engine.Name, job.MasteredWavKey is not null, job.MasteredMp3Key is not null);
+                await UploadMastersAsync(storage, job, result);
+                job.InputLufs = result.InputLufs;
+                job.OutputLufs = result.OutputLufs;
+                job.OutputTruePeakDbtp = result.OutputTruePeakDbtp;
+                await jobs.UpdateAsync(job, ct);
+            }
+            finally
+            {
+                FfmpegGate.Release();
+            }
         }
-        finally
+
+        // Release-pipeline jobs run the Metadata → Cover → Disclosure → Provenance
+        // stages after mastering; each transition persists for GET /api/jobs/{id}.
+        if (job.Kind == "release_pipeline")
         {
-            FfmpegGate.Release();
+            var pipeline = sp.GetRequiredService<ITrackReleasePipelineService>();
+            await pipeline.RunPostMasteringStagesAsync(job, ct);
         }
+
+        job.Status = "done";
+        job.CompletedAt = DateTime.UtcNow;
+        job.Error = null;
+        await jobs.UpdateAsync(job, ct);
+
+        _logger.LogInformation(
+            "EVENT: MasteringJobDone jobId:{JobId} engine:{Engine} kind:{Kind} wav:{Wav} mp3:{Mp3}",
+            job.Id, engine.Name, job.Kind, job.MasteredWavKey is not null, job.MasteredMp3Key is not null);
     }
 
     // ── Tonn (preview): produce a preview, store it, status=awaiting_approval ──

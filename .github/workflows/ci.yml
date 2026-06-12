@@ -93,8 +93,12 @@ jobs:
           restore-keys: ${{ runner.os }}-nuget-
       - name: Restore
         run: dotnet restore Cambrian.sln
+      # dotnet-ef comes from the local tool manifest (.config/dotnet-tools.json).
+      # NOTE: a "restore || install" fallback is a trap here — once a manifest
+      # exists, `dotnet tool restore` succeeds without dotnet-ef and the install
+      # branch never runs.
       - name: Install dotnet-ef
-        run: dotnet tool restore || dotnet tool install --global dotnet-ef
+        run: dotnet tool restore
       - name: Apply all migrations from zero
         run: |
           export PATH="$PATH:$HOME/.dotnet/tools"
@@ -129,7 +133,9 @@ jobs:
           echo "No High/Critical vulnerabilities found."
 
   gitleaks:
-    # Secret scan on pull requests.
+    # Secret scan on pull requests. Runs the MIT-licensed gitleaks CLI directly:
+    # gitleaks-action@v2 refuses to run for organization repos without a paid
+    # GITLEAKS_LICENSE secret, while the CLI itself needs no license.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -137,10 +143,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Gitleaks (PR commits only)
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.21.2 \
+            detect --source /repo --redact --verbose --exit-code 1 \
+            --log-opts "origin/${{ github.base_ref }}..HEAD"
 
   contract-validation:
     needs: build-test

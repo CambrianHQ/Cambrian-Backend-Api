@@ -5,6 +5,7 @@ using Cambrian.Application.DTOs.Billing;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -23,7 +24,17 @@ public sealed class BillingControllerTests
 
     public BillingControllerTests()
     {
-        _controller = new BillingController(_billing, _logger);
+        // Empty config → checkout enabled by default.
+        var config = new ConfigurationBuilder().Build();
+        _controller = new BillingController(_billing, _logger, config);
+    }
+
+    private static BillingController ControllerWithCheckoutDisabled(IBillingService billing, ILogger<BillingController> logger)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Checkout:Enabled"] = "false" })
+            .Build();
+        return new BillingController(billing, logger, config);
     }
 
     private void SetupUser(string userId = "user-1")
@@ -34,6 +45,28 @@ public sealed class BillingControllerTests
             new Claim(ClaimTypes.NameIdentifier, userId)
         }, "Test"));
         _controller.ControllerContext = new ControllerContext { HttpContext = context };
+    }
+
+    // ── Checkout kill switch (residue #6) ──
+
+    [Fact]
+    public async Task Checkout_Returns503_WhenCheckoutDisabled()
+    {
+        var controller = ControllerWithCheckoutDisabled(_billing, _logger);
+        var context = new DefaultHttpContext();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "user-1")
+        }, "Test"));
+        controller.ControllerContext = new ControllerContext { HttpContext = context };
+
+        var result = await controller.Checkout(new BillingCheckoutRequest { Tier = "creator" });
+
+        var obj = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, obj.StatusCode);
+        // Service must never be reached when the kill switch is on.
+        await _billing.DidNotReceive().CreateCheckoutAsync(
+            Arg.Any<BillingCheckoutRequest>(), Arg.Any<string>(), Arg.Any<string?>());
     }
 
     // ── Checkout ──
