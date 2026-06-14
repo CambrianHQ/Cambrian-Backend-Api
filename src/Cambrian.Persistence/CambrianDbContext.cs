@@ -63,6 +63,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<MasteringJob> MasteringJobs => Set<MasteringJob>();
 
+    public DbSet<ReleaseCreditPurchase> ReleaseCreditPurchases => Set<ReleaseCreditPurchase>();
+
     public DbSet<AuthorshipRecord> AuthorshipRecords => Set<AuthorshipRecord>();
 
     public DbSet<EarningsTransaction> EarningsTransactions => Set<EarningsTransaction>();
@@ -366,6 +368,9 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
         // ── Release Ready mastering ──
         builder.ApplyConfiguration(new MasteringJobConfiguration());
+
+        // ── Release Ready credit-pack purchases (never-expiring purchased credits) ──
+        builder.ApplyConfiguration(new ReleaseCreditPurchaseConfiguration());
 
         // ── Release pipeline: paid authorship records + money-in earnings ledger ──
         builder.ApplyConfiguration(new AuthorshipRecordConfiguration());

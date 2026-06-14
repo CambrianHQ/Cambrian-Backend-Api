@@ -86,6 +86,13 @@ public class MasteringJob
     /// </summary>
     public DateTime? ChargedAt { get; set; }
 
+    /// <summary>
+    /// Which credit pool funded this charge: <c>monthly</c> | <c>purchased</c>.
+    /// Null when uncharged (or for legacy rows charged before purchased credits
+    /// existed — treated as monthly). Monthly credits spend first.
+    /// </summary>
+    public string? CreditSource { get; set; }
+
     /// <summary>Worker retry counter — bounded to a single retry.</summary>
     public int RetryCount { get; set; }
 

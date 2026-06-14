@@ -452,10 +452,50 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
+        // ReleaseCreditService sets clientReferenceId = "userId:credits:N" (N = server-resolved
+        // credit count). Payment grants N never-expiring purchased Release Ready credits.
+        if (parts.Length == 3 && parts[1] == "credits" && int.TryParse(parts[2], out var grantCredits) && grantCredits > 0)
+        {
+            await GrantPurchasedCredits(parts[0], grantCredits, amountTotal, stripeSessionId);
+            return;
+        }
+
         _logger.LogWarning(
             "[IGNORED] checkout.session.completed with non-subscription clientReferenceId '{Ref}' — " +
             "track-license purchasing has been removed; nothing to fulfill. StripeSessionId={SessionId}",
             clientReferenceId, stripeSessionId);
+    }
+
+    /// <summary>
+    /// Grant purchased Release Ready credits on a completed credit-pack checkout.
+    /// Idempotent on the Stripe session id (a unique index also backs this) so webhook
+    /// retries and duplicate deliveries never double-grant.
+    /// </summary>
+    private async Task GrantPurchasedCredits(string userId, int credits, long? amountTotal, string? stripeSessionId)
+    {
+        if (!string.IsNullOrEmpty(stripeSessionId)
+            && await _db.ReleaseCreditPurchases.AnyAsync(p => p.StripeSessionId == stripeSessionId))
+        {
+            return; // already granted — idempotent no-op
+        }
+
+        _db.ReleaseCreditPurchases.Add(new Cambrian.Domain.Entities.ReleaseCreditPurchase
+        {
+            Id = Guid.NewGuid(),
+            CreatorId = userId,
+            Credits = credits,
+            AmountCents = (int)(amountTotal ?? 0),
+            Pack = "",
+            Status = "paid",
+            StripeSessionId = stripeSessionId,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "EVENT: ReleaseCreditsPurchased userId:{UserId} credits:{Credits} amountCents:{Amount} sessionId:{SessionId}",
+            userId, credits, amountTotal ?? 0, stripeSessionId);
+        Cambrian.Application.Observability.CambrianMetrics.CheckoutCompleted.Add(1);
     }
 
 

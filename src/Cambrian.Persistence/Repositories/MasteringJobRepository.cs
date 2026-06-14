@@ -46,14 +46,28 @@ public class MasteringJobRepository : IMasteringJobRepository
     }
 
     /// <summary>
-    /// Count credit-charged, non-failed jobs since the month start. Failed jobs are
-    /// excluded so a terminal failure releases the credit (the audit row stays).
+    /// Count MONTHLY credit-charged, non-failed jobs since the month start. Failed jobs
+    /// are excluded so a terminal failure releases the credit (the audit row stays).
+    /// Purchased-funded charges are excluded — they draw from the never-expiring pool,
+    /// not the monthly allowance (legacy null source counts as monthly).
     /// </summary>
     public Task<int> CountChargedThisMonthAsync(string creatorId, DateTime monthStartUtc, CancellationToken ct = default) =>
         _db.MasteringJobs.CountAsync(
             j => j.CreatorId == creatorId
                  && j.ChargedAt != null
                  && j.ChargedAt >= monthStartUtc
+                 && j.Status != "failed"
+                 && (j.CreditSource == null || j.CreditSource != "purchased"),
+            ct);
+
+    /// <summary>
+    /// Count non-failed jobs funded from the PURCHASED credit pool (all time). The
+    /// remaining purchased balance is SUM(purchased credits) − this count.
+    /// </summary>
+    public Task<int> CountPurchasedConsumedAsync(string creatorId, CancellationToken ct = default) =>
+        _db.MasteringJobs.CountAsync(
+            j => j.CreatorId == creatorId
+                 && j.CreditSource == "purchased"
                  && j.Status != "failed",
             ct);
 

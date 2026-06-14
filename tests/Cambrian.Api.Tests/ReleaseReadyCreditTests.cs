@@ -11,6 +11,7 @@ using Cambrian.Infrastructure.Mastering;
 using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -336,6 +337,85 @@ public sealed class ReleaseReadyCreditTests : IClassFixture<RelationalCambrianAp
         (await GetJobAsync(jobId)).ChargedAt.Should().NotBeNull();
     }
 
+    // ── Purchased credit packs (never-expiring pool, spent after monthly) ──
+
+    [Fact]
+    public async Task PurchasedCredits_SpendAfterMonthly_AndAppearInStatus()
+    {
+        var (userId, _) = await SeedCreatorAsync();                       // monthly allowance 3
+        await SeedPurchaseAsync(userId, credits: 2, sessionId: $"cs_{Guid.NewGuid():N}");
+
+        await using var scope = _fixture.Services.CreateAsyncScope();
+        var credits = scope.ServiceProvider.GetRequiredService<IReleaseCreditService>();
+
+        var before = await credits.GetStatusAsync(userId);
+        before.MonthlyRemaining.Should().Be(CreatorAllowance);
+        before.Purchased.Should().Be(2);
+        before.Remaining.Should().Be(CreatorAllowance + 2, "spendable = monthly remaining + purchased");
+
+        // Exhaust the monthly allowance — each of these must draw from the monthly pool.
+        for (var i = 0; i < CreatorAllowance; i++)
+        {
+            var jobId = await SeedJobAsync(userId, status: "validated");
+            (await credits.TryChargeAsync(jobId, userId)).Should().BeTrue();
+            (await GetJobAsync(jobId)).CreditSource.Should().Be("monthly");
+        }
+
+        var afterMonthly = await credits.GetStatusAsync(userId);
+        afterMonthly.MonthlyRemaining.Should().Be(0);
+        afterMonthly.Purchased.Should().Be(2, "the purchased pool is untouched while monthly credits remained");
+        afterMonthly.Remaining.Should().Be(2);
+
+        // The next charge falls back to the purchased pool.
+        var purchasedJob = await SeedJobAsync(userId, status: "validated");
+        (await credits.TryChargeAsync(purchasedJob, userId)).Should().BeTrue();
+        (await GetJobAsync(purchasedJob)).CreditSource.Should().Be("purchased");
+
+        var afterPurchased = await credits.GetStatusAsync(userId);
+        afterPurchased.Used.Should().Be(CreatorAllowance, "monthly usage stays capped at the allowance");
+        afterPurchased.Purchased.Should().Be(1, "exactly one purchased credit was consumed");
+        afterPurchased.Remaining.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task NoMonthlyAndNoPurchased_TryCharge_ReturnsFalse()
+    {
+        var (userId, _) = await SeedUserWithTierAsync(CreatorTier.Free);  // allowance 0, no packs
+        await using var scope = _fixture.Services.CreateAsyncScope();
+        var credits = scope.ServiceProvider.GetRequiredService<IReleaseCreditService>();
+
+        var jobId = await SeedJobAsync(userId, status: "validated");
+        (await credits.TryChargeAsync(jobId, userId)).Should().BeFalse("no monthly allowance and no purchased credits");
+        (await GetJobAsync(jobId)).ChargedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CreateCreditCheckout_UsesServerResolvedPrice_AndReturnsUrl()
+    {
+        var (userId, _) = await SeedCreatorAsync();
+        await using var scope = _fixture.Services.CreateAsyncScope();
+        var credits = scope.ServiceProvider.GetRequiredService<IReleaseCreditService>();
+
+        var result = await credits.CreateCreditCheckoutAsync(userId, "triple");
+        result.CheckoutUrl.Should().NotBeNullOrEmpty();
+
+        // The $24 / 3-credit price is resolved on the server — the client never sets it.
+        var session = _fixture.PaymentGateway.Sessions
+            .Should().ContainSingle(s => s.ClientReferenceId == $"{userId}:credits:3").Which;
+        session.AmountTotal.Should().Be(2400);
+    }
+
+    [Fact]
+    public async Task CreateCreditCheckout_UnknownPack_Throws()
+    {
+        var (userId, _) = await SeedCreatorAsync();
+        await using var scope = _fixture.Services.CreateAsyncScope();
+        var credits = scope.ServiceProvider.GetRequiredService<IReleaseCreditService>();
+
+        var act = async () => await credits.CreateCreditCheckoutAsync(userId, "bogus-pack");
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
     // ── Seeding / assertion helpers ──
 
     private Task<(string userId, string email)> SeedCreatorAsync()
@@ -379,6 +459,24 @@ public sealed class ReleaseReadyCreditTests : IClassFixture<RelationalCambrianAp
         return jobId;
     }
 
+    private async Task SeedPurchaseAsync(string userId, int credits, string sessionId)
+    {
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        db.ReleaseCreditPurchases.Add(new ReleaseCreditPurchase
+        {
+            Id = Guid.NewGuid(),
+            CreatorId = userId,
+            Credits = credits,
+            AmountCents = 0,
+            Pack = "test",
+            Status = "paid",
+            StripeSessionId = sessionId,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
     private async Task SetJobStatusAsync(Guid jobId, string status)
     {
         using var scope = _fixture.Services.CreateScope();
@@ -417,6 +515,9 @@ public sealed class ReleaseReadyCreditTests : IClassFixture<RelationalCambrianAp
         => new(
             sp.GetRequiredService<UserManager<ApplicationUser>>(),
             sp.GetRequiredService<IMasteringJobRepository>(),
+            sp.GetRequiredService<IReleaseCreditPurchaseRepository>(),
+            sp.GetRequiredService<IPaymentGateway>(),
+            sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<ITransactionManager>(),
             new FixedClock(now),
             NullLogger<ReleaseCreditService>.Instance);

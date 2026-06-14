@@ -16,8 +16,11 @@ public interface IMasteringJobRepository
 
     Task<IReadOnlyList<MasteringJob>> ListByCreatorAsync(string creatorId, int take, CancellationToken ct = default);
 
-    /// <summary>Count credit-charged, non-failed jobs since the month start (failed jobs release their credit).</summary>
+    /// <summary>Count MONTHLY credit-charged, non-failed jobs since the month start (failed jobs release their credit; purchased-funded charges excluded).</summary>
     Task<int> CountChargedThisMonthAsync(string creatorId, DateTime monthStartUtc, CancellationToken ct = default);
+
+    /// <summary>Count non-failed jobs funded from the purchased credit pool (all time) — for deriving the remaining purchased balance.</summary>
+    Task<int> CountPurchasedConsumedAsync(string creatorId, CancellationToken ct = default);
 
     /// <summary>Race-safely claim the next queued job for the worker (sets status=processing, StartedAt).
     /// Returns null when the queue is empty.</summary>

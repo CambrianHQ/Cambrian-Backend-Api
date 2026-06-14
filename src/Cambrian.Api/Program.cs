@@ -475,6 +475,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 
 // Release Ready credits, persistence, orchestration + the in-process mastering worker.
 builder.Services.AddScoped<IMasteringJobRepository, MasteringJobRepository>();
+builder.Services.AddScoped<IReleaseCreditPurchaseRepository, ReleaseCreditPurchaseRepository>();
 builder.Services.AddScoped<IReleaseCreditService, ReleaseCreditService>();
 builder.Services.AddScoped<IReleaseReadyService, ReleaseReadyService>();
 // Not in Testing: the worker's 3-second DB poll shares the test host's single

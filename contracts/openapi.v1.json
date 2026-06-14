@@ -5740,6 +5740,38 @@
         }
       }
     },
+    "/release-ready/credits/checkout": {
+      "post": {
+        "tags": [
+          "ReleaseReady"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pack": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/release-ready/validate": {
       "post": {
         "tags": [

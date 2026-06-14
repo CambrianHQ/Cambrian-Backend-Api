@@ -21,4 +21,12 @@ public interface IReleaseCreditService
     /// terminal failure releases the credit (the audit row remains).
     /// </summary>
     Task<bool> TryChargeAsync(Guid jobId, string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Start a one-time credit-pack purchase. Resolves the price from the pack id
+    /// server-side (never the client), creates a Stripe checkout session, and returns
+    /// the redirect URL. Purchased credits are granted by the webhook on completion.
+    /// Throws <see cref="InvalidOperationException"/> for an unknown pack or missing config.
+    /// </summary>
+    Task<CreditCheckoutResponse> CreateCreditCheckoutAsync(string userId, string packId, CancellationToken ct = default);
 }

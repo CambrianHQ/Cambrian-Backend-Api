@@ -3,10 +3,38 @@ namespace Cambrian.Application.DTOs.ReleaseReady;
 /// <summary>Credit balance for the signed-in creator.</summary>
 public sealed class CreditStatusDto
 {
+    /// <summary>Monthly allowance from the plan.</summary>
     public int Allowance { get; init; }
+
+    /// <summary>Monthly credits used this cycle.</summary>
     public int Used { get; init; }
+
+    /// <summary>Total spendable credits right now (monthly remaining + purchased).</summary>
     public int Remaining { get; init; }
+
     public string Plan { get; init; } = "free";
+
+    /// <summary>Monthly credits still available this cycle (spent before purchased).</summary>
+    public int MonthlyRemaining { get; init; }
+
+    /// <summary>Purchased credits remaining — never expire.</summary>
+    public int Purchased { get; init; }
+
+    /// <summary>When the monthly allowance resets (start of next cycle, UTC).</summary>
+    public DateTime? ResetsAt { get; init; }
+}
+
+/// <summary>Request to buy a one-time credit pack. Server resolves price from <see cref="Pack"/>.</summary>
+public sealed class CreditCheckoutRequest
+{
+    /// <summary>Pack id: single | triple | ten.</summary>
+    public string Pack { get; init; } = "";
+}
+
+/// <summary>Stripe checkout URL for a credit-pack purchase.</summary>
+public sealed class CreditCheckoutResponse
+{
+    public string CheckoutUrl { get; init; } = "";
 }
 
 /// <summary>Result of the upload+validate step: a draft job and its validation report.</summary>

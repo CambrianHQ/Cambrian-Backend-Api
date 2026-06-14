@@ -17,11 +17,16 @@ namespace Cambrian.Api.Controllers;
 public sealed class ReleaseReadyController : BaseController
 {
     private readonly IReleaseReadyService _service;
+    private readonly IReleaseCreditService _credits;
     private readonly ILogger<ReleaseReadyController> _logger;
 
-    public ReleaseReadyController(IReleaseReadyService service, ILogger<ReleaseReadyController> logger)
+    public ReleaseReadyController(
+        IReleaseReadyService service,
+        IReleaseCreditService credits,
+        ILogger<ReleaseReadyController> logger)
     {
         _service = service;
+        _credits = credits;
         _logger = logger;
     }
 
@@ -32,6 +37,24 @@ public sealed class ReleaseReadyController : BaseController
         var userId = GetRequiredUserId()!;
         var status = await _service.GetCreditsAsync(userId, ct);
         return OkResponse(status);
+    }
+
+    /// <summary>Buy a one-time Release Ready credit pack. Price is resolved server-side from
+    /// the pack id; returns a Stripe checkout URL. Credits are granted by the webhook on
+    /// completion. Returns 400 for an unknown pack.</summary>
+    [HttpPost("credits/checkout")]
+    public async Task<IActionResult> BuyCredits([FromBody] CreditCheckoutRequest request, CancellationToken ct)
+    {
+        var userId = GetRequiredUserId()!;
+        try
+        {
+            var result = await _credits.CreateCreditCheckoutAsync(userId, request.Pack, ct);
+            return OkResponse(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ErrorResponse(ex.Message); // 400 — unknown pack / misconfiguration
+        }
     }
 
     /// <summary>Upload + validate a master. Stores the source, runs validation, and
