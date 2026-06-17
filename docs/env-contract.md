@@ -31,6 +31,7 @@ Legend: **R** = required, **R(prod)** = required in Production only, **O** = opt
 |-----|-----|-------|--------|-------|
 | `Stripe:SecretKey` | R(prod) | `sk_test_…` (else DevelopmentPaymentGateway) | `sk_live_…`/`sk_test_…` | Empty in dev falls back to a fake gateway. |
 | `Stripe:WebhookSecret` | R(prod) | the `whsec_…` printed by `stripe listen` | `whsec_…` from the Stripe dashboard endpoint | **Local:** only the CLI-printed secret verifies; the dashboard secret is wrong locally. |
+| `Stripe:ConnectWebhookSecret` | R(prod) | the `whsec_…` printed by `stripe listen --forward-to localhost:8080/webhook/stripe/connect` | `whsec_…` from the Stripe Connect webhook endpoint | Separate signing secret for tips and fan subscriptions. |
 | `Stripe:Prices:Creator` | R(billing) | `price_…` for the Creator plan | `price_…` | Must be a real Price id in the **same** Stripe account as `Stripe:SecretKey`. |
 | `Stripe:Prices:Pro` | R(billing) | `price_…` for the Pro plan | `price_…` | Same-account requirement as above. |
 
@@ -119,6 +120,7 @@ Jwt__Issuer=cambrian-api
 Jwt__Audience=cambrian-client
 Stripe__SecretKey=sk_test_…
 Stripe__WebhookSecret=whsec_…           # from `stripe listen`
+Stripe__ConnectWebhookSecret=whsec_…    # from `stripe listen --forward-to localhost:8080/webhook/stripe/connect`
 Stripe__Prices__Creator=price_…          # same Stripe account as SecretKey
 Stripe__Prices__Pro=price_…
 Storage__Provider=local

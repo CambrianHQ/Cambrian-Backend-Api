@@ -128,6 +128,7 @@ Set these in the environment / secrets store (never in source):
 |-----|---------|
 | `Stripe:SecretKey` (`STRIPE_SECRET_KEY`) | Stripe API key (Billing + Connect) |
 | `Stripe:WebhookSecret` (`STRIPE_WEBHOOK_SECRET`) | Webhook signature secret |
+| `Stripe:ConnectWebhookSecret` (`STRIPE_CONNECT_WEBHOOK_SECRET`) | Stripe Connect webhook signature secret for tips/fan subscriptions |
 | `Stripe:Prices:Creator` | Stripe **Price ID** for the $15 Creator plan |
 | `Stripe:Prices:Pro` | Stripe **Price ID** for the $39 Pro/Label plan |
 | `App:FrontendUrl` | Base URL for checkout/portal return redirects |

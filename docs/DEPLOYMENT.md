@@ -32,6 +32,7 @@ Secrets (set in Railway, never commit). `Section__Key` = .NET config binding.
 | `Jwt__Issuer` / `Jwt__Audience` | ✅ | `cambrian-api` / `cambrian-client`. |
 | `Stripe__SecretKey` | ✅ prod | Must be `sk_live_` in Production (startup throws on `sk_test_`). |
 | `Stripe__WebhookSecret` | ✅ prod | `whsec_` from the **live** webhook. Startup throws if missing in prod. |
+| `Stripe__ConnectWebhookSecret` | ✅ prod | `whsec_` from the live `/webhook/stripe/connect` endpoint. Startup throws if missing in prod. |
 | `Stripe__Prices__Creator` | ✅ prod | **price_… ID. Startup throws if a Stripe key is set but this is blank.** (was render.yaml-only) |
 | `Stripe__Prices__Pro` | ✅ prod | price_… ID. Same boot guard. |
 | `Storage__Provider` | ✅ prod | `s3` (Supabase S3 gateway). App refuses to boot with `local` in Production. |
@@ -52,7 +53,7 @@ Secrets (set in Railway, never commit). `Section__Key` = .NET config binding.
 | `App__CorsOrigins` | ✅ | `https://cambrianmusic.com,https://www.cambrianmusic.com`. |
 | `SeedDemoUsers__Password` | ⬜ | Staging/dev only; prod skips demo seeding. |
 
-**Stripe webhook:** point the live endpoint at `https://api.cambrianmusic.com/webhook/stripe`; its signing secret must equal `Stripe__WebhookSecret`.
+**Stripe webhooks:** point the platform endpoint at `https://api.cambrianmusic.com/webhook/stripe`; its signing secret must equal `Stripe__WebhookSecret`. Point the Connect endpoint at `https://api.cambrianmusic.com/webhook/stripe/connect`; its signing secret must equal `Stripe__ConnectWebhookSecret`.
 
 **Removed vars (do NOT carry over):** `App__VercelProjectSlug`, `App__CloudflarePagesSlug` (off Vercel/CF Pages), `Provenance__Anchor__*` (EVM anchoring deleted — see PHASE 3 cleanup), any `R2_*` (storage is Supabase S3).
 

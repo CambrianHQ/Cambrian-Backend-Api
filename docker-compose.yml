@@ -34,6 +34,7 @@ services:
       Jwt__Audience: "cambrian-client"
       Stripe__SecretKey: "${STRIPE_SECRET_KEY:-}"
       Stripe__WebhookSecret: "${STRIPE_WEBHOOK_SECRET:-}"
+      Stripe__ConnectWebhookSecret: "${STRIPE_CONNECT_WEBHOOK_SECRET:-}"
       Storage__Provider: "${STORAGE_PROVIDER:-local}"
       Storage__Endpoint: "${STORAGE_ENDPOINT:-}"
       Storage__Bucket: "${STORAGE_BUCKET:-cambrian-audio}"

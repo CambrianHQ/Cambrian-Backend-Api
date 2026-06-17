@@ -44,6 +44,8 @@ services:
         sync: false
       - key: Stripe__WebhookSecret
         sync: false
+      - key: Stripe__ConnectWebhookSecret
+        sync: false
       - key: Storage__Provider
         sync: false           # must be s3 or r2 -- app refuses to start with local in Production
       - key: Storage__Endpoint
