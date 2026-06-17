@@ -105,6 +105,11 @@ TEST_COVERAGE_ANALYSIS.md
 QA-USER-FLOW-REPORT.md
 CREATOR-IDENTITY-ROLLOUT.md
 audit-artifacts/
+
+# Audio rehydration pipeline — generated manifests/reports contain prod metadata
+reports/
+tools/audio-rehydrate/node_modules/
+tools/audio-rehydrate/.env.local
 contracts/openapi.generated.json
 
 # Local tooling cache (k6 binary, one-off scripts)

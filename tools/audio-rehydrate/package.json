@@ -1,0 +1,18 @@
+{
+  "name": "cambrian-audio-rehydrate",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Safe, deterministic audio rehydration/import pipeline for Cambrian production R2 storage.",
+  "bin": {
+    "audio-rehydrate": "src/rehydrate.mjs"
+  },
+  "scripts": {
+    "scan": "node src/rehydrate.mjs --scan-only",
+    "dry-run": "node src/rehydrate.mjs --dry-run",
+    "apply": "node src/rehydrate.mjs --apply"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
