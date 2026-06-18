@@ -124,6 +124,8 @@ public static class TierManifest
             ["syncPool"] = proOnly,
             ["apiAccess"] = proOnly,
             ["prioritySupport"] = proOnly,
+            // Not implemented on any tier yet — surfaced so the frontend hides the paid CTA.
+            ["commissionsEnabled"] = false,
         };
 }
 

@@ -6,6 +6,12 @@ namespace Cambrian.Persistence.Repositories;
 
 public class StreamRepository : IStreamRepository
 {
+    /// <summary>
+    /// Repeat starts by the same user on the same track within this window collapse into a
+    /// single play, so refreshes / replays / double-clicks can't inflate play counts.
+    /// </summary>
+    private const int DebounceWindowSeconds = 30;
+
     private readonly CambrianDbContext _db;
 
     public StreamRepository(CambrianDbContext db)
@@ -15,6 +21,18 @@ public class StreamRepository : IStreamRepository
 
     public async Task<StreamSession> StartAsync(Guid trackId, string? userId)
     {
+        // Debounce identified users (anonymous plays can't be attributed, so they're not deduped).
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var cutoff = DateTime.UtcNow.AddSeconds(-DebounceWindowSeconds);
+            var recent = await _db.StreamSessions
+                .Where(s => s.TrackId == trackId && s.UserId == userId && s.StartedAt >= cutoff)
+                .OrderByDescending(s => s.StartedAt)
+                .FirstOrDefaultAsync();
+            if (recent is not null)
+                return recent;
+        }
+
         var track = await _db.Tracks.FindAsync(trackId);
 
         var session = new StreamSession

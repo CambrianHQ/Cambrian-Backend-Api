@@ -4,6 +4,7 @@ using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -47,6 +48,7 @@ public class BillingController : BaseController
         });
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(BillingCheckoutRequest request)
     {
@@ -76,6 +78,7 @@ public class BillingController : BaseController
         }
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("checkout-session")]
     public async Task<IActionResult> CheckoutSession(BillingCheckoutRequest request)
     {
@@ -85,6 +88,7 @@ public class BillingController : BaseController
     // ───── Spec-canonical /api routes (frontend contract) ─────
 
     /// <summary>POST /api/billing/checkout { tier } → { checkoutUrl }.</summary>
+    [EnableRateLimiting("auth")]
     [HttpPost("/api/billing/checkout")]
     public async Task<IActionResult> ApiCheckout(BillingCheckoutRequest request)
     {
@@ -114,6 +118,7 @@ public class BillingController : BaseController
     }
 
     /// <summary>POST /api/billing/portal → { portalUrl } (Stripe Customer Portal).</summary>
+    [EnableRateLimiting("auth")]
     [HttpPost("/api/billing/portal")]
     public async Task<IActionResult> ApiPortal()
     {

@@ -177,6 +177,12 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         var track = await _tracks.GetByCambrianTrackIdAsync(trackId);
         if (track is null && Guid.TryParse(trackId, out var guid))
             track = await _tracks.GetByIdAsync(guid);
+
+        // AI discovery is anonymous. Only expose public tracks — mirror SearchAsync's
+        // public-only filter so hidden/limited tracks can't be enumerated by id.
+        if (track is null || !string.Equals(track.Visibility, "public", StringComparison.OrdinalIgnoreCase))
+            return null;
+
         return track;
     }
 }

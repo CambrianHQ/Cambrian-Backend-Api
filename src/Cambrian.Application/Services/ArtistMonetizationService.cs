@@ -19,6 +19,7 @@ public sealed class ArtistMonetizationService : IArtistMonetizationService
     private readonly UserManager<ApplicationUser> _users;
     private readonly ICreatorIdentityRepository _creators;
     private readonly IFanSubscriptionRepository _fanSubs;
+    private readonly IEarningsRepository _earnings;
     private readonly IPaymentGateway _gateway;
     private readonly IConfiguration _config;
     private readonly ILogger<ArtistMonetizationService> _logger;
@@ -27,6 +28,7 @@ public sealed class ArtistMonetizationService : IArtistMonetizationService
         UserManager<ApplicationUser> users,
         ICreatorIdentityRepository creators,
         IFanSubscriptionRepository fanSubs,
+        IEarningsRepository earnings,
         IPaymentGateway gateway,
         IConfiguration config,
         ILogger<ArtistMonetizationService> logger)
@@ -34,6 +36,7 @@ public sealed class ArtistMonetizationService : IArtistMonetizationService
         _users = users;
         _creators = creators;
         _fanSubs = fanSubs;
+        _earnings = earnings;
         _gateway = gateway;
         _config = config;
         _logger = logger;
@@ -46,6 +49,12 @@ public sealed class ArtistMonetizationService : IArtistMonetizationService
             throw new ArgumentException($"Tip amount must be between {MinTipCents} and {MaxTipCents} cents.");
 
         var artist = await ResolveArtistAsync(artistIdentifier);
+
+        // Mirror the self-subscribe guard: a creator cannot tip themselves (no self-dealing /
+        // metric inflation, and it would pollute the earnings ledger).
+        if (string.Equals(artist.Id, payerUserId, StringComparison.Ordinal))
+            throw new ArgumentException("You cannot tip yourself.");
+
         var accountId = await RequirePayoutsEnabledAsync(artist);
 
         var frontendUrl = FrontendUrl();
@@ -127,6 +136,9 @@ public sealed class ArtistMonetizationService : IArtistMonetizationService
             "EVENT: FanSubscriptionPriceSet artistId:{ArtistId} priceCents:{Price}",
             artistUserId, priceCents);
     }
+
+    public Task<CreatorSupportSummaryResponse> GetSupportSummaryAsync(string artistUserId, CancellationToken ct = default)
+        => _earnings.GetSummaryForArtistAsync(artistUserId, recentTake: 20, ct);
 
     // ── Helpers ──
 

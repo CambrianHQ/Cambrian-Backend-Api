@@ -39,10 +39,6 @@ public class TrackResponse
 
     public decimal NonExclusivePrice { get; set; }
 
-    public decimal ExclusivePrice { get; set; }
-
-    public decimal CopyrightBuyoutPrice { get; set; }
-
     /// <summary>Platform fee rate applied to each sale (0.15 = 15%).</summary>
     public decimal PlatformFeePercent { get; set; } = 0.15m;
 
@@ -52,27 +48,8 @@ public class TrackResponse
     /// <summary>Creator earnings in dollars for a non-exclusive sale.</summary>
     public decimal NonExclusiveCreatorEarnings { get; set; }
 
-    /// <summary>Platform fee in dollars for the exclusive price.</summary>
-    public decimal ExclusivePlatformFee { get; set; }
-
-    /// <summary>Creator earnings in dollars for an exclusive sale.</summary>
-    public decimal ExclusiveCreatorEarnings { get; set; }
-
-    /// <summary>Platform fee in dollars for the copyright buyout price.</summary>
-    public decimal CopyrightBuyoutPlatformFee { get; set; }
-
-    /// <summary>Creator earnings in dollars for a copyright buyout sale.</summary>
-    public decimal CopyrightBuyoutCreatorEarnings { get; set; }
-
-    public bool ExclusiveSold { get; set; }
-
-    /// <summary>Track availability status: available, exclusive_sold, copyright_transferred.</summary>
+    /// <summary>Track availability status (e.g. available).</summary>
     public string Status { get; set; } = "available";
-
-    /// <summary>Whether the copyright has been transferred via buyout (true = no longer available).</summary>
-    public bool IsCopyrightTransferred { get; set; }
-
-    public string? LicenseType { get; set; }
 
     public string? Duration { get; set; }
 

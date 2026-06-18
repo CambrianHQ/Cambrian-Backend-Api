@@ -138,13 +138,9 @@ public class CatalogService : ICatalogService
 
     private static TrackResponse BuildTrackResponse(Track t, decimal feeRate, string? creatorSlug, string? creatorProfileImageUrl)
     {
-        // Fallback: if *PriceCents fields are 0, use legacy Price field (matches checkout logic)
+        // Fallback: if NonExclusivePriceCents is 0, use legacy Price field (matches checkout logic)
         var legacyPriceDollars = t.Price;
         var nonExPrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : legacyPriceDollars;
-        var exPrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : legacyPriceDollars;
-        var buyoutPrice = t.CopyrightBuyoutPriceCents > 0
-            ? t.CopyrightBuyoutPriceCents / 100m
-            : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : legacyPriceDollars);
 
         // Canonical slug: prefer Creator.Username (new identity), fall back to CreatorProfile.Slug
         var canonicalSlug = t.CreatorEntity?.Username ?? creatorSlug;
@@ -166,19 +162,10 @@ public class CatalogService : ICatalogService
             Visibility = t.Visibility,
             Price = nonExPrice,
             NonExclusivePrice = nonExPrice,
-            ExclusivePrice = exPrice,
-            CopyrightBuyoutPrice = buyoutPrice,
             PlatformFeePercent = feeRate,
             NonExclusivePlatformFee = Math.Round(nonExPrice * feeRate, 2),
             NonExclusiveCreatorEarnings = Math.Round(nonExPrice * (1 - feeRate), 2),
-            ExclusivePlatformFee = Math.Round(exPrice * feeRate, 2),
-            ExclusiveCreatorEarnings = Math.Round(exPrice * (1 - feeRate), 2),
-            CopyrightBuyoutPlatformFee = Math.Round(buyoutPrice * feeRate, 2),
-            CopyrightBuyoutCreatorEarnings = Math.Round(buyoutPrice * (1 - feeRate), 2),
-            ExclusiveSold = t.ExclusiveSold,
-            Status = t.Status ?? "available",
-            IsCopyrightTransferred = t.CopyrightOwnerId != null,
-            LicenseType = t.LicenseType,
+            Status = t.Status == "exclusive_sold" || t.Status == "copyright_transferred" ? "available" : (t.Status ?? "available"),
             Duration = t.Duration,
             AudioUrl = t.AudioUrl,
             CoverArtUrl = t.CoverArtUrl,

@@ -75,8 +75,6 @@ public sealed class CatalogServiceTests
         Assert.Equal("Beat 1", result.Title);
         Assert.Equal(29.99m, result.Price);
         Assert.Equal(29.99m, result.NonExclusivePrice);
-        Assert.Equal(499.00m, result.ExclusivePrice);
-        Assert.False(result.ExclusiveSold);
         Assert.Equal("DJ Test", result.Artist);
         Assert.Equal("Lo-fi", result.Genre);
     }
@@ -127,8 +125,6 @@ public sealed class CatalogServiceTests
         Assert.NotNull(result);
         Assert.Equal(19.99m, result!.Price);
         Assert.Equal(19.99m, result.NonExclusivePrice);
-        Assert.Equal(49.99m, result.ExclusivePrice);
-        Assert.Equal(99.99m, result.CopyrightBuyoutPrice);
     }
 
     [Fact]
@@ -187,6 +183,5 @@ public sealed class CatalogServiceTests
 
         Assert.Equal(0m, result!.Price);
         Assert.Equal(0m, result.NonExclusivePrice);
-        Assert.Equal(0m, result.ExclusivePrice);
     }
 }

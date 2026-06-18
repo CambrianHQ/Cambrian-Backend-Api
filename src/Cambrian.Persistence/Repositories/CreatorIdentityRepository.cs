@@ -162,14 +162,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 Genre = t.Genre ?? "",
                 Price = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
                 NonExclusivePrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
-                ExclusivePrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price,
-                CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents > 0
-                    ? t.CopyrightBuyoutPriceCents / 100m
-                    : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price),
-                ExclusiveSold = t.ExclusiveSold,
-                Status = t.Status ?? "available",
-                IsCopyrightTransferred = t.CopyrightOwnerId != null,
-                LicenseType = t.LicenseType,
+                Status = t.Status == "exclusive_sold" || t.Status == "copyright_transferred" ? "available" : (t.Status ?? "available"),
                 Duration = t.Duration,
                 AudioUrl = t.AudioUrl,
                 CoverArtUrl = t.CoverArtUrl,
@@ -237,14 +230,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 Genre = t.Genre ?? "",
                 Price = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
                 NonExclusivePrice = t.NonExclusivePriceCents > 0 ? t.NonExclusivePriceCents / 100m : t.Price,
-                ExclusivePrice = t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price,
-                CopyrightBuyoutPrice = t.CopyrightBuyoutPriceCents > 0
-                    ? t.CopyrightBuyoutPriceCents / 100m
-                    : (t.ExclusivePriceCents > 0 ? t.ExclusivePriceCents / 100m : t.Price),
-                ExclusiveSold = t.ExclusiveSold,
-                Status = t.Status ?? "available",
-                IsCopyrightTransferred = t.CopyrightOwnerId != null,
-                LicenseType = t.LicenseType,
+                Status = t.Status == "exclusive_sold" || t.Status == "copyright_transferred" ? "available" : (t.Status ?? "available"),
                 Duration = t.Duration,
                 AudioUrl = t.AudioUrl,
                 CoverArtUrl = t.CoverArtUrl,

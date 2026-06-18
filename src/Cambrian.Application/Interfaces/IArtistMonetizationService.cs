@@ -23,6 +23,12 @@ public interface IArtistMonetizationService
 
     /// <summary>Artist-side configuration of the monthly fan-subscription price.</summary>
     Task SetSubscriptionPriceAsync(string artistUserId, int? priceCents, CancellationToken ct = default);
+
+    /// <summary>
+    /// Creator-facing money-in summary (tips + fan subscriptions), strictly scoped to the
+    /// calling artist. This is the read side of the earnings ledger written by the Connect webhook.
+    /// </summary>
+    Task<CreatorSupportSummaryResponse> GetSupportSummaryAsync(string artistUserId, CancellationToken ct = default);
 }
 
 /// <summary>Data access for <see cref="FanSubscription"/> (repository-pattern governance).</summary>
@@ -36,4 +42,16 @@ public interface IFanSubscriptionRepository
 
     Task AddAsync(FanSubscription subscription, CancellationToken ct = default);
     Task UpdateAsync(FanSubscription subscription, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Read access to the append-only money-in ledger (<see cref="EarningsTransaction"/>) for the
+/// creator dashboard. Aggregation/scoping live in the repository (governance: services and
+/// controllers do not query the DbContext directly).
+/// </summary>
+public interface IEarningsRepository
+{
+    /// <summary>Aggregate tip/subscription totals + recent events for a single artist.</summary>
+    Task<CreatorSupportSummaryResponse> GetSummaryForArtistAsync(
+        string artistUserId, int recentTake = 20, CancellationToken ct = default);
 }

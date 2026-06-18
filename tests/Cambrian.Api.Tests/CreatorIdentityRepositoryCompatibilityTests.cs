@@ -81,8 +81,6 @@ public sealed class CreatorIdentityRepositoryCompatibilityTests : IDisposable
         Assert.Equal("Trap", track.Genre);
         Assert.Equal(29.99m, track.Price);
         Assert.Equal(29.99m, track.NonExclusivePrice);
-        Assert.Equal(49.99m, track.ExclusivePrice);
-        Assert.Equal(49.99m, track.CopyrightBuyoutPrice);
         Assert.Equal("aiden", track.CreatorSlug);
         Assert.Equal("Aiden", track.Artist);
         Assert.Equal("profile.jpg", track.CreatorProfileImageUrl);

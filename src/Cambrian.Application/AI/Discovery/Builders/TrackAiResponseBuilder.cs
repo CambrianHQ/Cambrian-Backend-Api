@@ -74,15 +74,13 @@ public static class TrackAiResponseBuilder
 
         options.Add(new AiLicenseOptionDto
         {
-            LicenseType = "non_exclusive",
-            DisplayName = "Non-Exclusive License",
+            DisplayName = "Standard Usage",
             Price = nonExCents / 100m,
             Currency = "USD",
             CommercialUse = true,
             AttributionRequired = true,
             InstantDownload = true,
-            Exclusivity = "non_exclusive",
-            Summary = "Use this track in unlimited projects. Other creators can also license it.",
+            Summary = "Use this track in unlimited projects across video, podcasts, and social media.",
             AllowedUseCases = new List<string>
             {
                 "YouTube / video content",
@@ -92,9 +90,8 @@ public static class TrackAiResponseBuilder
             },
             Restrictions = new List<string>
             {
-                "Credit to original creator required",
-                "No resale of license",
-                "Track remains available on marketplace"
+                "Credit to the original creator required",
+                "No reselling the track as your own"
             },
             RecommendedFor = new List<string>
             {
@@ -103,53 +100,6 @@ public static class TrackAiResponseBuilder
                 "Social media marketers"
             }
         });
-
-        if (!track.ExclusiveSold)
-        {
-            var exCents = track.ExclusivePriceCents > 0
-                ? track.ExclusivePriceCents
-                : nonExCents;
-
-            // Copyright buyout takes the highest price tier
-            var buyoutCents = track.CopyrightBuyoutPriceCents > 0
-                ? track.CopyrightBuyoutPriceCents
-                : (track.ExclusivePriceCents > 0 ? track.ExclusivePriceCents : nonExCents);
-
-            var price = track.CopyrightOwnerId == null ? buyoutCents : exCents;
-
-            options.Add(new AiLicenseOptionDto
-            {
-                LicenseType = "exclusive_buyout",
-                DisplayName = track.CopyrightOwnerId == null ? "Exclusive Buyout (Full Copyright Transfer)" : "Exclusive License",
-                Price = price / 100m,
-                Currency = "USD",
-                CommercialUse = true,
-                AttributionRequired = false,
-                InstantDownload = true,
-                Exclusivity = "exclusive",
-                Summary = track.CopyrightOwnerId == null
-                    ? "Full copyright ownership transfer. Track is permanently removed from the marketplace."
-                    : "Exclusive rights — track is removed from the marketplace after purchase.",
-                AllowedUseCases = new List<string>
-                {
-                    "Exclusive commercial use",
-                    "Perpetual license",
-                    "Unlimited projects",
-                    "Global distribution"
-                },
-                Restrictions = new List<string>
-                {
-                    "Existing non-exclusive licenses remain valid after an exclusive buyout",
-                    "No sublicensing without separate agreement"
-                },
-                RecommendedFor = new List<string>
-                {
-                    "Brands and agencies",
-                    "Film and TV producers",
-                    "Creators needing fast commercial licensing"
-                }
-            });
-        }
 
         return options;
     }
@@ -218,7 +168,10 @@ public static class TrackAiResponseBuilder
     public static AiTrackPreviewDto BuildPreview(Track track) => new()
     {
         Available = !string.IsNullOrEmpty(track.AudioUrl),
-        Url = track.AudioUrl,
+        // Never expose the raw object-storage key (e.g. "tracks/{creator}/{guid}.mp3") — it
+        // leaks bucket layout/creator ids and isn't directly playable. Emit the public stream
+        // proxy route instead, matching the REST controllers' URL rewriting.
+        Url = string.IsNullOrEmpty(track.AudioUrl) ? null : $"/stream/{track.Id}/audio",
         DurationSeconds = ParseDurationSeconds(track.Duration),
         Format = InferFormat(track.AudioUrl)
     };
@@ -230,9 +183,7 @@ public static class TrackAiResponseBuilder
 
         var notes = new List<string>();
         if (cheapest?.CommercialUse == true)
-            notes.Add("Commercial use permitted under this license.");
-        if (!track.ExclusiveSold && track.CopyrightOwnerId == null)
-            notes.Add("Full copyright buyout is available.");
+            notes.Add("Commercial use is permitted.");
 
         // Clarity: 1.0 when prices are set and options are clear
         var clarity = options.Count > 0 && cheapest?.Price > 0 ? 1.0 : 0.5;

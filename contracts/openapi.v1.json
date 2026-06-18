@@ -6275,6 +6275,21 @@
         }
       }
     },
+    "/api/artists/me/support": {
+      "get": {
+        "tags": [
+          "ArtistMonetization"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/webhook/stripe/connect": {
       "post": {
         "tags": [
@@ -7349,14 +7364,6 @@
             "type": "number",
             "format": "double"
           },
-          "exclusivePrice": {
-            "type": "number",
-            "format": "double"
-          },
-          "copyrightBuyoutPrice": {
-            "type": "number",
-            "format": "double"
-          },
           "platformFeePercent": {
             "type": "number",
             "format": "double"
@@ -7369,33 +7376,7 @@
             "type": "number",
             "format": "double"
           },
-          "exclusivePlatformFee": {
-            "type": "number",
-            "format": "double"
-          },
-          "exclusiveCreatorEarnings": {
-            "type": "number",
-            "format": "double"
-          },
-          "copyrightBuyoutPlatformFee": {
-            "type": "number",
-            "format": "double"
-          },
-          "copyrightBuyoutCreatorEarnings": {
-            "type": "number",
-            "format": "double"
-          },
-          "exclusiveSold": {
-            "type": "boolean"
-          },
           "status": {
-            "type": "string",
-            "nullable": true
-          },
-          "isCopyrightTransferred": {
-            "type": "boolean"
-          },
-          "licenseType": {
             "type": "string",
             "nullable": true
           },

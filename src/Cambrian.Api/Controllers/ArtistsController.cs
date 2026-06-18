@@ -53,6 +53,18 @@ public sealed class ArtistsController : BaseController
         catch (ArgumentException ex) { return ErrorResponse(ex.Message); }
     }
 
+    /// <summary>
+    /// Creator dashboard: the caller's own money-in summary (tips + fan subscriptions).
+    /// Strictly scoped to the authenticated user — never another creator's earnings.
+    /// </summary>
+    [HttpGet("me/support")]
+    public async Task<IActionResult> Support(CancellationToken ct)
+    {
+        var userId = GetRequiredUserId()!;
+        var summary = await _monetization.GetSupportSummaryAsync(userId, ct);
+        return OkResponse(summary);
+    }
+
     /// <summary>Set (or clear) the caller's monthly fan-subscription price.</summary>
     [HttpPut("me/subscription-price")]
     public async Task<IActionResult> SetSubscriptionPrice([FromBody] SetSubscriptionPriceRequest request, CancellationToken ct)

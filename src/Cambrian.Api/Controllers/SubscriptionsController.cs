@@ -3,6 +3,7 @@ using Cambrian.Application.DTOs.Subscriptions;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cambrian.Api.Controllers;
 
@@ -33,6 +34,7 @@ public class SubscriptionsController : BaseController
         return OkResponse(current);
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("update")]
     public async Task<IActionResult> Update(UpdateSubscriptionRequest request)
     {
@@ -52,6 +54,7 @@ public class SubscriptionsController : BaseController
         return OkResponse(result, "Subscription updated.");
     }
 
+    [EnableRateLimiting("auth")]
     [HttpPost("cancel")]
     public async Task<IActionResult> Cancel()
     {

@@ -343,10 +343,18 @@ public class UploadService : IUploadService
             throw new ArgumentException(
                 $"Cover art content does not match expected format for '{imgExt}'. The file may be corrupted or disguised.");
 
-        return await _storage.UploadAsync(
+        await _storage.UploadAsync(
             coverStream,
             coverKey,
             string.IsNullOrWhiteSpace(imgMime) ? "image/jpeg" : imgMime);
+
+        // Persist the bare object key (e.g. "covers/{creatorId}/{guid}.png"), NOT
+        // the storage-specific "/uploads/covers/..." URL returned by UploadAsync.
+        // The read-side image resolver (BaseController.ResolveImageUrl) maps bare
+        // "covers/..." keys to the served "/images/covers/..." proxy route, exactly
+        // as seed data does. "/uploads/covers/..." is not served and 404s, which
+        // left every newly-uploaded track cover broken (falling back to initials).
+        return coverKey;
     }
 
     private async Task<TrackCollectionDto?> AssignTrackToCollectionAsync(UploadTrackRequest request, Track track)

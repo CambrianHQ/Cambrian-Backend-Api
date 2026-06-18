@@ -2,6 +2,8 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Cambrian.Api.Tests.Fixtures;
+using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Enums;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -65,6 +67,52 @@ public sealed class StripeWebhookSignatureTests : IClassFixture<SignedStripeWebh
         Assert.NotNull(sub);
         Assert.Equal("active", sub.Status);
         Assert.Equal("creator", sub.Plan);
+    }
+
+    [Fact]
+    public async Task CreatorSubscription_Webhook_GrantsCreatorTier_AndThreeMonthlyCredits()
+    {
+        // End-to-end launch invariant: a paid Creator subscription must flip the user's tier
+        // AND make the tier's included monthly Release Ready credits (3) immediately available.
+        var email = $"sub-credit-{Guid.NewGuid():N}@cambrian.com";
+        await _fixture.RegisterUserAsync(email, "Test1234!@");
+        var userId = await _fixture.GetUserIdAsync(email);
+
+        var payload = $$"""
+        {
+            "object": "event",
+            "id": "evt_subcred_{{Guid.NewGuid():N}}",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "object": "checkout.session",
+                    "id": "cs_subcred_{{Guid.NewGuid():N}}",
+                    "client_reference_id": "{{userId}}:subscription:creator",
+                    "customer": "cus_subcred_{{Guid.NewGuid():N}}"
+                }
+            }
+        }
+        """;
+
+        using var client = _fixture.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/webhook/stripe")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("Stripe-Signature", CreateStripeSignature(payload));
+
+        using var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.AsNoTracking().FirstAsync(u => u.Id == userId);
+        Assert.Equal(CreatorTier.Creator, user.CreatorTier);
+
+        var credits = scope.ServiceProvider.GetRequiredService<IReleaseCreditService>();
+        var status = await credits.GetStatusAsync(userId);
+        Assert.Equal(3, status.Allowance);        // Creator plan includes 3 credits/month
+        Assert.Equal(3, status.MonthlyRemaining); // none consumed yet
     }
 
     [Fact]

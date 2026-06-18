@@ -214,6 +214,62 @@ public class ArtistMonetizationTests : IClassFixture<CambrianApiFixture>
         }
     }
 
+    // ── Self-dealing guard ──
+
+    [Fact]
+    public async Task Tip_ToSelf_Returns400()
+    {
+        var (artistId, artistClient) = await SeedConnectedArtistWithClientAsync();
+
+        var res = await artistClient.PostAsJsonAsync($"/api/artists/{artistId}/tip", new { amountCents = 500 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+    }
+
+    // ── Creator support dashboard (GET /api/artists/me/support) ──
+
+    [Fact]
+    public async Task Support_ReturnsOwnTipEarnings_Scoped()
+    {
+        var (artistId, artistClient) = await SeedConnectedArtistWithClientAsync();
+        var sessionId = $"cs_tip_{Guid.NewGuid():N}";
+
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            "evt_support_tip_" + sessionId, "checkout.session.completed", "acct_fake_123",
+            clientReferenceId: $"fan-user-support:tip:{artistId}",
+            sessionId: sessionId,
+            amountTotal: 700));
+
+        var res = await artistClient.GetAsync("/api/artists/me/support");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal(700, data.GetProperty("tipNetCents").GetInt64());     // tips carry no fee
+        Assert.Equal(700, data.GetProperty("totalNetCents").GetInt64());
+        Assert.Equal(1, data.GetProperty("tipCount").GetInt32());
+        Assert.True(data.GetProperty("recent").GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task Support_DoesNotLeakOtherArtistsEarnings()
+    {
+        var (artistAId, _) = await SeedConnectedArtistWithClientAsync();
+        var (_, artistBClient) = await SeedConnectedArtistWithClientAsync();
+
+        var sessionId = $"cs_tip_{Guid.NewGuid():N}";
+        await ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+            "evt_leak_" + sessionId, "checkout.session.completed", "acct_fake_123",
+            clientReferenceId: $"fan-leak:tip:{artistAId}",
+            sessionId: sessionId,
+            amountTotal: 900));
+
+        // Artist B must never see artist A's money-in.
+        var res = await artistBClient.GetAsync("/api/artists/me/support");
+        var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal(0, data.GetProperty("totalNetCents").GetInt64());
+        Assert.Equal(0, data.GetProperty("tipCount").GetInt32());
+    }
+
     // ── Helpers ──
 
     private FakePaymentGateway Gateway() =>
@@ -236,6 +292,22 @@ public class ArtistMonetizationTests : IClassFixture<CambrianApiFixture>
         user.FanSubscriptionPriceCents = subscriptionPriceCents;
         await db.SaveChangesAsync();
         return userId;
+    }
+
+    /// <summary>Register a connected artist AND return an authenticated client for that same user.</summary>
+    private async Task<(string userId, HttpClient client)> SeedConnectedArtistWithClientAsync(int? subscriptionPriceCents = null)
+    {
+        var email = $"artist-self-{Guid.NewGuid():N}@cambrian.com";
+        var client = await _fixture.CreateAuthenticatedClientAsync(email);
+        var userId = await _fixture.GetUserIdAsync(email);
+
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Id == userId);
+        user.StripeAccountId = "acct_fake_123";
+        user.FanSubscriptionPriceCents = subscriptionPriceCents;
+        await db.SaveChangesAsync();
+        return (userId, client);
     }
 
     private async Task ProcessConnectEventAsync(Func<StripeConnectWebhookService, Task> action)

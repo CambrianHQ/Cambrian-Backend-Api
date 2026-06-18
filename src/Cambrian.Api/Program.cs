@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Cambrian.Api;
 using Cambrian.Api.Common;
+using Cambrian.Api.E2e;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.Configuration;
 using Cambrian.Infrastructure.Diagnostics;
@@ -497,6 +498,7 @@ builder.Services.AddScoped<IAuthorshipRecordIssuer>(sp => sp.GetRequiredService<
 
 // Connect money-in: tips + fan subscriptions on artists' connected accounts.
 builder.Services.AddScoped<IFanSubscriptionRepository, FanSubscriptionRepository>();
+builder.Services.AddScoped<IEarningsRepository, EarningsRepository>();
 builder.Services.AddScoped<IArtistMonetizationService, ArtistMonetizationService>();
 builder.Services.AddScoped<IConnectWebhookService, Cambrian.Infrastructure.Stripe.StripeConnectWebhookService>();
 
@@ -564,6 +566,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
+
+// Test-only E2E support service — registered ONLY when the surface is enabled (Testing, or
+// Development with Cambrian:E2E:Enabled=true). Never present in Production/Staging.
+if (E2eSupport.IsEnabled(builder.Environment, builder.Configuration))
+{
+    builder.Services.AddScoped<E2eScenarioService>();
+}
 
 var app = builder.Build();
 
@@ -749,6 +758,25 @@ app.MapGet("/healthz", () =>
         },
     });
 }).ExcludeFromDescription();
+
+// Commissions / collabs are not implemented yet. Expose an explicit, authenticated
+// 501 so clients get a clear "not implemented" signal; the frontend also reads
+// commissionsEnabled=false from /api/me/entitlements to hide the paid CTA pre-launch.
+// Kept out of the OpenAPI contract (like /healthz, /charts/weekly) until it ships.
+app.MapPost("/commissions", () =>
+    Results.Json(
+        new { success = false, data = (object?)null, message = (string?)null, error = "commissions_not_implemented" },
+        statusCode: 501))
+    .RequireAuthorization()
+    .ExcludeFromDescription();
+
+// Test-only E2E control plane (reset/seed/state/stripe-simulation). Mapped ONLY in Testing or
+// explicitly-enabled Development — NEVER Production/Staging — and kept out of the OpenAPI
+// contract. Authenticated per-request by a constant-time-compared x-e2e-secret header.
+if (E2eSupport.IsEnabled(app.Environment, app.Configuration))
+{
+    app.MapE2e();
+}
 
 await app.RunMigrationsAsync();
 await app.SeedDataAsync();

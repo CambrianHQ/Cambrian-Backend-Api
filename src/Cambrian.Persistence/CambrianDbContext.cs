@@ -213,6 +213,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasKey(s => s.Id);
             e.Property(s => s.StripeSubscriptionId).HasMaxLength(255);
             e.Property(s => s.StripeCustomerId).HasMaxLength(255);
+            // invoice.paid / subscription.* webhooks resolve the user by Stripe customer id;
+            // without this index every renewal does a full Subscriptions table scan.
+            e.HasIndex(s => s.StripeCustomerId);
+            e.HasIndex(s => s.StripeSubscriptionId);
             e.HasOne(s => s.User)
                 .WithMany()
                 .HasForeignKey(s => s.UserId)

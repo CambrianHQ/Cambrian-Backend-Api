@@ -2,6 +2,7 @@ using Cambrian.Application.DTOs.Wallet;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cambrian.Api.Controllers;
 
@@ -25,6 +26,7 @@ public class WalletController : BaseController
     }
 
     [Authorize(Policy = "VerifiedEmail")]
+    [EnableRateLimiting("auth")]
     [HttpPost("withdraw")]
     public async Task<IActionResult> Withdraw([FromBody] WithdrawRequest request)
     {

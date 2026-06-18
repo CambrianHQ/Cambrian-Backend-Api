@@ -72,6 +72,12 @@ public sealed class EntitlementMatrixTests
         Assert.True(pro["apiAccess"]);
         Assert.True(pro["syncPool"]);
         Assert.True(pro["copyrightOfficeAssist"]);
+
+        // Commissions/collabs are not implemented on any tier — surfaced so the frontend
+        // hides the paid CTA before launch.
+        Assert.False(free["commissionsEnabled"]);
+        Assert.False(creator["commissionsEnabled"]);
+        Assert.False(pro["commissionsEnabled"]);
     }
 
     // ── PlanEntitlementService resolution ──

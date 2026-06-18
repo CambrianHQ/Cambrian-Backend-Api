@@ -57,7 +57,10 @@ public class DownloadController : BaseController
         using (var probe = await _storage.OpenReadAsync(track.AudioUrl))
         {
             if (probe is null)
-                return NotFoundResponse($"Audio file not found on storage. audioUrl={track.AudioUrl}");
+            {
+                _logger.LogWarning("Download: storage object missing for trackId={TrackId} key={AudioKey}", trackId, track.AudioUrl);
+                return NotFoundResponse("Audio file not found on storage.");
+            }
 
             contentType = probe.ContentType;
         }
@@ -100,7 +103,10 @@ public class DownloadController : BaseController
 
         var file = await _storage.OpenReadAsync(track.AudioUrl);
         if (file is null)
-            return NotFoundResponse($"Audio file not found on storage. audioUrl={track.AudioUrl}");
+        {
+            _logger.LogWarning("Download file: storage object missing for trackId={TrackId} key={AudioKey}", trackId, track.AudioUrl);
+            return NotFoundResponse("Audio file not found on storage.");
+        }
 
         // Build a user-friendly filename from the track title
         var fileName = BuildDownloadFilename(track.Title, track.AudioUrl, file.ContentType);
