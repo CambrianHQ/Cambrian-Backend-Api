@@ -101,17 +101,20 @@ public sealed class CoverArtUploadTests
     // ── Happy path ──
 
     [Fact]
-    public async Task Upload_WithCoverArt_StoresCoverArtUrl()
+    public async Task Upload_WithCoverArt_StoresBareCoverKey()
     {
-        _storage.UploadAsync(Arg.Any<Stream>(), Arg.Is<string>(k => k.StartsWith("covers/")), Arg.Any<string>())
-            .Returns("https://cdn.test/covers/cover.jpg");
-
         var request = MakeRequest(MakeAudioFile(), MakeImageFile());
 
         await _sut.Upload(request);
 
+        // Persist the bare object key ("covers/{creatorId}/{guid}.ext"), NOT UploadAsync's
+        // storage-specific return value: the read-side resolver maps bare "covers/..." keys to
+        // the served /images/ proxy, whereas the "/uploads/covers/..." form 404s and left every
+        // newly-uploaded cover broken (see UploadService.UploadCoverArtAsync).
         await _tracks.Received(1).AddAsync(Arg.Is<Track>(t =>
-            t.CoverArtUrl == "https://cdn.test/covers/cover.jpg"));
+            t.CoverArtUrl != null
+            && t.CoverArtUrl.StartsWith("covers/creator-1/")
+            && t.CoverArtUrl.EndsWith(".jpg")));
     }
 
     [Fact]

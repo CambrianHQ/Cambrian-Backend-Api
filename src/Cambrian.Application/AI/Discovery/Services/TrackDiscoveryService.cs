@@ -17,6 +17,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository _profiles;
     private readonly ITrackRankingService _ranking;
+    private readonly IObjectStorage _storage;
     private readonly ILogger<TrackDiscoveryService> _logger;
 
     public TrackDiscoveryService(
@@ -25,6 +26,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         ICreatorIdentityRepository creators,
         ICreatorProfileRepository profiles,
         ITrackRankingService ranking,
+        IObjectStorage storage,
         ILogger<TrackDiscoveryService> logger)
     {
         _tracks = tracks;
@@ -32,6 +34,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         _creators = creators;
         _profiles = profiles;
         _ranking = ranking;
+        _storage = storage;
         _logger = logger;
     }
 
@@ -107,7 +110,11 @@ public class TrackDiscoveryService : ITrackDiscoveryService
 
         var creator = await _users.FindByIdAsync(track.CreatorId);
 
-        return TrackAiResponseBuilder.BuildDetails(track, creator);
+        var details = TrackAiResponseBuilder.BuildDetails(track, creator);
+        // Single-track read: replace the optimistic key-presence flag with a real existence
+        // check so a track whose object is missing (the rehydration gap) reports unplayable.
+        details.Preview.Available = await StreamObjectExistsAsync(track);
+        return details;
     }
 
     public async Task<AiTrackPreviewDto?> GetPreviewAsync(string trackId)
@@ -115,7 +122,21 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         var track = await ResolveTrackAsync(trackId);
         if (track is null) return null;
 
-        return TrackAiResponseBuilder.BuildPreview(track);
+        var preview = TrackAiResponseBuilder.BuildPreview(track);
+        preview.Available = await StreamObjectExistsAsync(track);
+        return preview;
+    }
+
+    /// <summary>
+    /// True only when the track's audio key resolves to a real stored object — the same
+    /// "playable iff object exists" contract the stream endpoint enforces. Bounded to a single
+    /// probe; used only on the single-track detail/preview reads, not on search results.
+    /// </summary>
+    private async Task<bool> StreamObjectExistsAsync(Track track)
+    {
+        if (string.IsNullOrWhiteSpace(track.AudioUrl)) return false;
+        using var file = await _storage.OpenReadAsync(track.AudioUrl);
+        return file is not null;
     }
 
     public async Task<AiCreatorProfileDto?> GetCreatorProfileAsync(string creatorId)

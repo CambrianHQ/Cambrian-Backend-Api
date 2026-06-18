@@ -168,6 +168,7 @@ public class CatalogService : ICatalogService
             Status = t.Status == "exclusive_sold" || t.Status == "copyright_transferred" ? "available" : (t.Status ?? "available"),
             Duration = t.Duration,
             AudioUrl = t.AudioUrl,
+            StreamAvailable = !string.IsNullOrWhiteSpace(t.AudioUrl),
             CoverArtUrl = t.CoverArtUrl,
             CreatorId = t.CreatorId,
             CreatorSlug = canonicalSlug,

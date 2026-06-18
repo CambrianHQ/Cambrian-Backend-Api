@@ -16,6 +16,13 @@ public class Subscription
 
     public string? StripeCustomerId { get; set; }
 
+    /// <summary>
+    /// The Stripe Checkout session that created this subscription. Backed by a
+    /// unique filtered index so a duplicate/retried checkout.session.completed
+    /// webhook cannot create a second subscription for the same session.
+    /// </summary>
+    public string? StripeSessionId { get; set; }
+
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? ExpiresAt { get; set; }

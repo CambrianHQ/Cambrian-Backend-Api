@@ -52,10 +52,10 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
 
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
 
-        // Legacy Price is $29.99, so all price tiers should fall back to it
+        // Legacy Price is $29.99; the public track detail exposes only the standard
+        // (non-exclusive) price. Exclusive/copyright-buyout pricing was retired with the
+        // licensing model and must NOT appear here (see LicensingLeakRegressionTests).
         Assert.Equal(29.99m, data.GetProperty("nonExclusivePrice").GetDecimal());
-        Assert.Equal(29.99m, data.GetProperty("exclusivePrice").GetDecimal());
-        Assert.Equal(29.99m, data.GetProperty("copyrightBuyoutPrice").GetDecimal());
     }
 
     [Fact]
@@ -74,10 +74,10 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
 
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
 
+        // Only the standard (non-exclusive) price is exposed publicly; exclusive/buyout
+        // pricing was retired with the licensing model.
         Assert.Equal(19.99m, data.GetProperty("price").GetDecimal());
         Assert.Equal(19.99m, data.GetProperty("nonExclusivePrice").GetDecimal());
-        Assert.Equal(49.99m, data.GetProperty("exclusivePrice").GetDecimal());
-        Assert.Equal(99.99m, data.GetProperty("copyrightBuyoutPrice").GetDecimal());
     }
 
     [Fact]
@@ -96,14 +96,11 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
 
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
 
-        // Verify fee fields exist and are non-zero
+        // The (non-exclusive) fee breakdown is present and non-zero. Exclusive/buyout fee
+        // fields were retired with the licensing model and are intentionally absent.
         Assert.True(data.GetProperty("platformFeePercent").GetDecimal() > 0);
         Assert.True(data.GetProperty("nonExclusivePlatformFee").GetDecimal() > 0);
         Assert.True(data.GetProperty("nonExclusiveCreatorEarnings").GetDecimal() > 0);
-        Assert.True(data.GetProperty("exclusivePlatformFee").GetDecimal() > 0);
-        Assert.True(data.GetProperty("exclusiveCreatorEarnings").GetDecimal() > 0);
-        Assert.True(data.GetProperty("copyrightBuyoutPlatformFee").GetDecimal() > 0);
-        Assert.True(data.GetProperty("copyrightBuyoutCreatorEarnings").GetDecimal() > 0);
     }
 
     [Fact]

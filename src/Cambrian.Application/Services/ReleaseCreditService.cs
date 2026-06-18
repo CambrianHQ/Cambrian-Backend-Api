@@ -84,6 +84,28 @@ public sealed class ReleaseCreditService : IReleaseCreditService
     /// </summary>
     public async Task<bool> TryChargeAsync(Guid jobId, string userId, CancellationToken ct = default)
     {
+        // Under Postgres SERIALIZABLE, two concurrent last-credit charges make the loser fail
+        // with 40001 (serialization_failure) — transient. Retry a bounded number of times so the
+        // caller gets a clean result instead of a 500. Each attempt re-checks job.ChargedAt, so a
+        // retry can never double-charge.
+        const int maxAttempts = 3;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await TryChargeOnceAsync(jobId, userId, ct);
+            }
+            catch (Exception ex) when (attempt < maxAttempts && IsTransientSerializationFailure(ex))
+            {
+                _logger.LogWarning(
+                    "EVENT: ReleaseReadyChargeRetry userId:{UserId} jobId:{JobId} attempt:{Attempt}/{Max} reason:serialization_conflict",
+                    userId, jobId, attempt, maxAttempts);
+            }
+        }
+    }
+
+    private async Task<bool> TryChargeOnceAsync(Guid jobId, string userId, CancellationToken ct)
+    {
         var tier = await ResolveTierAsync(userId);
         var allowance = tier.ReleaseReadyCreditsPerMonth;
 
@@ -178,6 +200,20 @@ public sealed class ReleaseCreditService : IReleaseCreditService
             userId, pack.Id, pack.Credits, pack.PriceCents);
 
         return new CreditCheckoutResponse { CheckoutUrl = checkoutUrl };
+    }
+
+    /// <summary>
+    /// True for Postgres serialization_failure (40001) / deadlock_detected (40P01). Reflects on the
+    /// SqlState property so the Application layer doesn't take a hard Npgsql dependency.
+    /// </summary>
+    private static bool IsTransientSerializationFailure(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e.GetType().GetProperty("SqlState")?.GetValue(e) as string is "40001" or "40P01")
+                return true;
+        }
+        return false;
     }
 
     private async Task<TierConfig> ResolveTierAsync(string userId)

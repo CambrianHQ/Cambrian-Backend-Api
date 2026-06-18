@@ -55,6 +55,13 @@ public class TrackResponse
 
     public string? AudioUrl { get; set; }
 
+    /// <summary>
+    /// Whether this track has a streamable audio source. Lets the UI distinguish a
+    /// playable track from one whose audio is absent / not yet processed instead of
+    /// guessing client-side. True when an audio source is present.
+    /// </summary>
+    public bool StreamAvailable { get; set; }
+
     public string? CoverArtUrl { get; set; }
 
     public string CreatorId { get; set; } = string.Empty;

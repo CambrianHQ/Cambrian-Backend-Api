@@ -213,10 +213,18 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasKey(s => s.Id);
             e.Property(s => s.StripeSubscriptionId).HasMaxLength(255);
             e.Property(s => s.StripeCustomerId).HasMaxLength(255);
+            e.Property(s => s.StripeSessionId).HasMaxLength(255);
             // invoice.paid / subscription.* webhooks resolve the user by Stripe customer id;
             // without this index every renewal does a full Subscriptions table scan.
             e.HasIndex(s => s.StripeCustomerId);
             e.HasIndex(s => s.StripeSubscriptionId);
+            // Webhook idempotency: at most one subscription per Stripe checkout
+            // session, so a duplicate/retried checkout.session.completed cannot
+            // create duplicate subscriptions or re-overwrite the user's tier.
+            // Mirrors ReleaseCreditPurchase / Purchase session idempotency.
+            e.HasIndex(s => s.StripeSessionId)
+                .IsUnique()
+                .HasFilter("\"StripeSessionId\" IS NOT NULL");
             e.HasOne(s => s.User)
                 .WithMany()
                 .HasForeignKey(s => s.UserId)

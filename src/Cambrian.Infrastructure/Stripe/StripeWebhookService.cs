@@ -432,7 +432,7 @@ public class StripeWebhookService : IWebhookService
         var parts = clientReferenceId.Split(':');
         if (parts.Length >= 3 && parts[1] == "subscription")
         {
-            await HandleSubscriptionCheckout(parts[0], parts[2], stripeCustomerId, stripeSubscriptionId);
+            await HandleSubscriptionCheckout(parts[0], parts[2], stripeCustomerId, stripeSubscriptionId, stripeSessionId);
             return;
         }
 
@@ -503,11 +503,21 @@ public class StripeWebhookService : IWebhookService
     /// Handle a subscription checkout: create or update the user's Subscription record
     /// and upgrade their tier on the ApplicationUser.
     /// </summary>
-    private async Task HandleSubscriptionCheckout(string userId, string tier, string? stripeCustomerId, string? stripeSubscriptionId = null)
+    private async Task HandleSubscriptionCheckout(string userId, string tier, string? stripeCustomerId, string? stripeSubscriptionId = null, string? stripeSessionId = null)
     {
         // Normalize the tier slug to a known tier config (creator/pro/free).
         var tierConfig = TierManifest.For(tier);
         tier = tierConfig.Slug;
+
+        // Webhook idempotency: if this exact checkout session was already fulfilled,
+        // do nothing. A duplicate/retried checkout.session.completed must not create a
+        // second subscription or re-apply the tier. A unique filtered index on
+        // StripeSessionId also enforces this at the DB level (mirrors GrantPurchasedCredits).
+        if (!string.IsNullOrEmpty(stripeSessionId)
+            && await _db.Subscriptions.AnyAsync(s => s.StripeSessionId == stripeSessionId))
+        {
+            return; // already fulfilled — idempotent no-op
+        }
 
         // Cancel any existing subscription for this user
         var existing = await _db.Subscriptions
@@ -528,6 +538,7 @@ public class StripeWebhookService : IWebhookService
             Status = "active",
             StripeCustomerId = stripeCustomerId,
             StripeSubscriptionId = stripeSubscriptionId,
+            StripeSessionId = stripeSessionId,
             StartedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddMonths(1)
         };

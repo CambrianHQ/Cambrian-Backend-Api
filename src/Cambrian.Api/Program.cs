@@ -722,7 +722,7 @@ app.MapMethods("/sse", new[] { "GET", "POST", "DELETE" }, (HttpContext ctx) =>
 {
     var query = ctx.Request.QueryString.Value ?? "";
     return Results.Redirect($"/mcp{query}", permanent: false, preserveMethod: true);
-});
+}).ExcludeFromDescription();
 
 // Alias: /charts/weekly → same payload as /api/charts/weekly. Kept out of the
 // OpenAPI contract (the canonical /api path is the documented one). (residue R17)
