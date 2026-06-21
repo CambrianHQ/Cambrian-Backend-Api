@@ -188,6 +188,12 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<Payout>(e =>
         {
             e.HasKey(p => p.Id);
+            e.Property(p => p.StripeIdempotencyKey).HasMaxLength(255);
+            e.Property(p => p.StripeTransferId).HasMaxLength(255);
+            e.HasIndex(p => p.StripeIdempotencyKey)
+                .IsUnique()
+                .HasFilter("\"StripeIdempotencyKey\" IS NOT NULL");
+            e.HasIndex(p => new { p.CreatorId, p.Status });
             e.HasOne(p => p.Creator)
                 .WithMany(u => u.Payouts)
                 .HasForeignKey(p => p.CreatorId)

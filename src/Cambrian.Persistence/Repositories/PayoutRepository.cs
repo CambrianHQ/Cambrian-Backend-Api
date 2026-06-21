@@ -28,6 +28,12 @@ public class PayoutRepository : IPayoutRepository
             .FirstOrDefaultAsync(p => p.Id == id);
     }
 
+    public Task<Payout?> GetOutstandingAsync(string creatorId) =>
+        _db.Payouts
+            .Where(p => p.CreatorId == creatorId && p.Status == "pending")
+            .OrderBy(p => p.RequestedAt)
+            .FirstOrDefaultAsync();
+
     public async Task AddAsync(Payout payout)
     {
         _db.Payouts.Add(payout);

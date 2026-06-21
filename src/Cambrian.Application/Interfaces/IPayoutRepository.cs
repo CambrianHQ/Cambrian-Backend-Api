@@ -8,6 +8,8 @@ public interface IPayoutRepository
 
     Task<Payout?> GetByIdAsync(Guid id);
 
+    Task<Payout?> GetOutstandingAsync(string creatorId);
+
     Task AddAsync(Payout payout);
 
     Task UpdateAsync(Payout payout);

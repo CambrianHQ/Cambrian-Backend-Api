@@ -21,4 +21,8 @@ public static class CreditPackCatalog
     /// <summary>Resolve a pack by id (case-insensitive); null when unknown.</summary>
     public static CreditPack? Find(string? id) =>
         id is null ? null : Packs.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Resolve the server-authoritative pack represented by a webhook grant count.</summary>
+    public static CreditPack? FindByCredits(int credits) =>
+        Packs.FirstOrDefault(p => p.Credits == credits);
 }

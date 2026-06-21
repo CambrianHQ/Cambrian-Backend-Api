@@ -1,5 +1,6 @@
 using Cambrian.Application.DTOs.Authorship;
 using Cambrian.Application.Interfaces;
+using Cambrian.Api.Middleware;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,6 +21,7 @@ public sealed class AuthorshipRecordsController : BaseController
     }
 
     /// <summary>Submit evidence for a release and get a checkout URL for the record fee.</summary>
+    [RequireCheckoutEnabled]
     [HttpPost("/api/releases/{id:guid}/authorship-record")]
     public async Task<IActionResult> Create(Guid id, [FromBody] CreateAuthorshipRecordRequest request, CancellationToken ct)
     {

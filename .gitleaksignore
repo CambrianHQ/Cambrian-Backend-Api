@@ -9,6 +9,9 @@ b3758eb18ec71a2a60755441d0460e93e7dbaf39:jwt-diagnostic-output.txt:jwt:551
 # Test-only JWT key in test fixture (not a real secret)
 b3758eb18ec71a2a60755441d0460e93e7dbaf39:tests/Cambrian.Api.Tests/Fixtures/CambrianApiFixture.cs:generic-api-key:24
 
+# Test-only E2E fixture secret used only in the in-process Testing environment
+fba52fca03701356f5422815cca5347b5931ad6e:tests/Cambrian.Api.Tests/Fixtures/E2eApiFixture.cs:generic-api-key:23
+
 # Stripe placeholder values in .env.example files (never contained real keys)
 de5a5eecf422386b40ce422f4382429a0711072d:config/.env.example:stripe-access-token:37
 2a1e745766ffe2599b7cdd686de5fb5ec3643052:.env.example:stripe-access-token:21

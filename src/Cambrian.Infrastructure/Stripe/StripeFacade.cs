@@ -254,7 +254,7 @@ public class StripeFacade : IPaymentGateway
     }
 
     public async Task<string> CreateTransferAsync(
-        string destinationAccountId, long amountCents, string description)
+        string destinationAccountId, long amountCents, string description, string idempotencyKey)
     {
         var service = new TransferService();
         var transfer = await service.CreateAsync(new TransferCreateOptions
@@ -263,7 +263,7 @@ public class StripeFacade : IPaymentGateway
             Currency = "usd",
             Destination = destinationAccountId,
             Description = description
-        });
+        }, new RequestOptions { IdempotencyKey = idempotencyKey });
         return transfer.Id;
     }
 

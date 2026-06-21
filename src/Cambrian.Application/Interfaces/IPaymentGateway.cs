@@ -83,7 +83,11 @@ public interface IPaymentGateway
     /// <summary>
     /// Transfer funds to a connected account. Returns the transfer ID.
     /// </summary>
-    Task<string> CreateTransferAsync(string destinationAccountId, long amountCents, string description);
+    Task<string> CreateTransferAsync(
+        string destinationAccountId,
+        long amountCents,
+        string description,
+        string idempotencyKey);
 
     /// <summary>
     /// Delete/deauthorize a connected account.

@@ -119,7 +119,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
         await svc.ProcessEventAsync(
             eventId: eventId,
-            eventType: "checkout.session.completed",
+            eventType: "customer.created",
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: null,
@@ -177,17 +177,21 @@ public sealed class StripeWebhookServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ProcessEventAsync_NullClientReferenceId_DoesNotThrow()
+    public async Task ProcessEventAsync_NullClientReferenceId_RemainsFailedForRetry()
     {
         var svc = CreateService();
-        await svc.ProcessEventAsync(
-            eventId: UniqueEventId(),
+        var eventId = UniqueEventId();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ProcessEventAsync(
+            eventId: eventId,
             eventType: "checkout.session.completed",
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: null,
-            stripeSessionId: null);
-        // No exception = handled gracefully when clientReferenceId is null
+            stripeSessionId: "cs_missing_ref"));
+
+        var evt = await _db.StripeWebhookEvents.SingleAsync(e => e.EventId == eventId);
+        Assert.Equal("failed", evt.Status);
+        Assert.False(evt.Processed);
     }
 
     [Fact]
@@ -223,7 +227,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
             clientReferenceId: $"{userId}:subscription:creator",
             amountTotal: null,
             stripeCustomerId: null,
-            stripeSessionId: null);
+            stripeSessionId: "cs_subscription_upgrade");
 
         var user = await _db.Users.FindAsync(userId);
         Assert.Equal("creator", user!.Tier);
@@ -256,7 +260,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
             clientReferenceId: $"{userId}:subscription:creator",
             amountTotal: null,
             stripeCustomerId: null,
-            stripeSessionId: null);
+            stripeSessionId: "cs_subscription_existing_upgrade");
 
         var subs = await _db.Subscriptions
             .Where(s => s.UserId == userId)
@@ -335,6 +339,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
         var svc = CreateService();
         var eventId = "evt_replay_subscription";
+        const string sessionId = "cs_replay_subscription";
 
         await svc.ProcessEventAsync(
             eventId: eventId,
@@ -342,7 +347,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
             clientReferenceId: $"{userId}:subscription:creator",
             amountTotal: null,
             stripeCustomerId: null,
-            stripeSessionId: null);
+            stripeSessionId: sessionId);
 
         // Second call with same eventId
         await svc.ProcessEventAsync(
@@ -351,7 +356,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
             clientReferenceId: $"{userId}:subscription:creator",
             amountTotal: null,
             stripeCustomerId: null,
-            stripeSessionId: null);
+            stripeSessionId: sessionId);
 
         var subscriptions = await _db.Subscriptions
             .Where(s => s.UserId == userId)
@@ -550,5 +555,24 @@ public sealed class StripeWebhookServiceTests : IDisposable
             stripeCustomerId: null,
             stripeSessionId: null);
         // No exception = handles missing customer ID gracefully
+    }
+
+    [Fact]
+    public async Task ProcessEventAsync_InvoicePaid_UnknownCustomer_RemainsFailedForRetry()
+    {
+        var svc = CreateService();
+        var eventId = UniqueEventId();
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => svc.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "invoice.paid",
+            clientReferenceId: null,
+            amountTotal: null,
+            stripeCustomerId: "cus_unknown_paid",
+            stripeSessionId: null));
+
+        var evt = await _db.StripeWebhookEvents.SingleAsync(e => e.EventId == eventId);
+        Assert.Equal("failed", evt.Status);
+        Assert.False(evt.Processed);
     }
 }

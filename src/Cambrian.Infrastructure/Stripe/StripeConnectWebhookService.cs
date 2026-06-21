@@ -114,7 +114,11 @@ public class StripeConnectWebhookService : IConnectWebhookService
         long? amountPaid = null,
         string? subscriptionId = null)
     {
-        var normalizedEventId = string.IsNullOrWhiteSpace(eventId) ? $"connect-{Guid.NewGuid():N}" : eventId!;
+        if (string.IsNullOrWhiteSpace(eventId))
+            throw new InvalidOperationException(
+                "Stripe Connect webhook rejected: event ID is required for idempotency.");
+
+        var normalizedEventId = eventId;
 
         // Idempotency: skip events already completed (shared ledger with the platform webhook).
         var existing = await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == normalizedEventId);
@@ -149,13 +153,15 @@ public class StripeConnectWebhookService : IConnectWebhookService
             switch (eventType)
             {
                 case "checkout.session.completed":
-                    await HandleCheckoutCompletedAsync(clientReferenceId, sessionId, amountTotal, sessionSubscriptionId);
+                    await HandleCheckoutCompletedAsync(
+                        connectedAccountId, clientReferenceId, sessionId, amountTotal, sessionSubscriptionId);
                     break;
                 case "invoice.paid":
-                    await HandleInvoicePaidAsync(invoiceId, invoiceSubscriptionId, billingReason, amountPaid);
+                    await HandleInvoicePaidAsync(
+                        connectedAccountId, invoiceId, invoiceSubscriptionId, billingReason, amountPaid);
                     break;
                 case "customer.subscription.deleted":
-                    await HandleSubscriptionDeletedAsync(subscriptionId);
+                    await HandleSubscriptionDeletedAsync(connectedAccountId, subscriptionId);
                     break;
                 default:
                     _logger.LogInformation("Connect webhook event type {EventType} not handled.", eventType);
@@ -207,14 +213,19 @@ public class StripeConnectWebhookService : IConnectWebhookService
 
     // ── checkout.session.completed: tips + fan-sub activation/first payment ──
     private async Task HandleCheckoutCompletedAsync(
-        string? clientReferenceId, string? sessionId, long? amountTotal, string? sessionSubscriptionId)
+        string? connectedAccountId,
+        string? clientReferenceId,
+        string? sessionId,
+        long? amountTotal,
+        string? sessionSubscriptionId)
     {
         if (string.IsNullOrWhiteSpace(clientReferenceId))
         {
-            _logger.LogWarning(
-                "[IGNORED] Connect checkout.session.completed without clientReferenceId. Session={SessionId}",
+            _logger.LogError(
+                "[DEAD-LETTER] Connect checkout.session.completed without clientReferenceId. Session={SessionId}",
                 sessionId);
-            return;
+            throw new InvalidOperationException(
+                "Connect checkout cannot be fulfilled because client_reference_id is missing.");
         }
 
         var parts = clientReferenceId.Split(':');
@@ -222,18 +233,21 @@ public class StripeConnectWebhookService : IConnectWebhookService
         // "{payerUserId}:tip:{artistUserId}"
         if (parts.Length == 3 && parts[1] == "tip")
         {
+            if (string.IsNullOrWhiteSpace(sessionId))
+                throw new InvalidOperationException("Tip checkout is missing its Stripe session ID.");
             if (amountTotal is not long gross || gross <= 0)
             {
                 _logger.LogError("[DEAD-LETTER] Tip session {SessionId} has no amount.", sessionId);
-                return;
+                throw new InvalidOperationException($"Tip session {sessionId} has no valid amount.");
             }
 
+            await RequireConnectedAccountAsync(connectedAccountId, parts[2], $"tip session {sessionId}");
             await AddEarningsOnceAsync(
                 artistUserId: parts[2],
                 source: "tip",
                 grossCents: gross,
                 feeCents: 0, // launch: tips carry no platform fee
-                externalRef: sessionId ?? clientReferenceId,
+                externalRef: sessionId,
                 payerUserId: parts[0]);
             return;
         }
@@ -245,8 +259,20 @@ public class StripeConnectWebhookService : IConnectWebhookService
             if (fanSub is null)
             {
                 _logger.LogError("[DEAD-LETTER] Fan-sub session {SessionId} references unknown row {FanSubId}.", sessionId, fanSubId);
-                return;
+                throw new KeyNotFoundException(
+                    $"Fan subscription checkout references unknown row {fanSubId}.");
             }
+            if (string.IsNullOrWhiteSpace(sessionId))
+                throw new InvalidOperationException("Fan subscription checkout is missing its Stripe session ID.");
+            if (string.IsNullOrWhiteSpace(sessionSubscriptionId))
+                throw new InvalidOperationException(
+                    "Fan subscription checkout is missing its Stripe subscription ID.");
+            if (amountTotal is not long gross || gross != fanSub.PriceCents)
+                throw new InvalidOperationException(
+                    $"Fan subscription amount does not match the configured price for {fanSubId}.");
+
+            await RequireConnectedAccountAsync(
+                connectedAccountId, fanSub.ArtistUserId, $"fan subscription session {sessionId}");
 
             if (fanSub.Status != "active")
             {
@@ -258,25 +284,30 @@ public class StripeConnectWebhookService : IConnectWebhookService
             }
 
             // First-period earnings keyed by session id; renewals come via invoice.paid.
-            var gross = amountTotal ?? fanSub.PriceCents;
             await AddEarningsOnceAsync(
                 artistUserId: fanSub.ArtistUserId,
                 source: "sub",
                 grossCents: gross,
                 feeCents: SubscriptionFee(gross),
-                externalRef: sessionId ?? clientReferenceId,
+                externalRef: sessionId,
                 payerUserId: fanSub.FanUserId);
             return;
         }
 
         _logger.LogWarning(
-            "[IGNORED] Connect checkout.session.completed with unrecognized clientReferenceId '{Ref}'. Session={SessionId}",
+            "[DEAD-LETTER] Connect checkout.session.completed with unrecognized clientReferenceId '{Ref}'. Session={SessionId}",
             clientReferenceId, sessionId);
+        throw new InvalidOperationException(
+            $"Connect checkout cannot be fulfilled because client_reference_id '{clientReferenceId}' is not recognized.");
     }
 
     // ── invoice.paid: fan-sub renewals ──
     private async Task HandleInvoicePaidAsync(
-        string? invoiceId, string? invoiceSubscriptionId, string? billingReason, long? amountPaid)
+        string? connectedAccountId,
+        string? invoiceId,
+        string? invoiceSubscriptionId,
+        string? billingReason,
+        long? amountPaid)
     {
         // The first period is recorded from checkout.session.completed — only cycles here.
         if (!string.Equals(billingReason, "subscription_cycle", StringComparison.Ordinal))
@@ -287,10 +318,14 @@ public class StripeConnectWebhookService : IConnectWebhookService
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(invoiceSubscriptionId) || amountPaid is not long gross || gross <= 0)
+        if (string.IsNullOrWhiteSpace(invoiceId)
+            || string.IsNullOrWhiteSpace(invoiceSubscriptionId)
+            || amountPaid is not long gross
+            || gross <= 0)
         {
-            _logger.LogWarning("[IGNORED] Connect invoice.paid missing subscription or amount. Invoice={InvoiceId}", invoiceId);
-            return;
+            _logger.LogError("[DEAD-LETTER] Connect invoice.paid missing invoice, subscription, or amount. Invoice={InvoiceId}", invoiceId);
+            throw new InvalidOperationException(
+                "Connect invoice.paid is missing required fulfillment identifiers or amount.");
         }
 
         var fanSub = await _db.FanSubscriptions
@@ -300,34 +335,42 @@ public class StripeConnectWebhookService : IConnectWebhookService
             _logger.LogError(
                 "[DEAD-LETTER] Connect invoice.paid for unknown subscription {SubscriptionId}. Invoice={InvoiceId}",
                 invoiceSubscriptionId, invoiceId);
-            return;
+            throw new KeyNotFoundException(
+                $"Connect invoice.paid references unknown subscription {invoiceSubscriptionId}.");
         }
 
+        await RequireConnectedAccountAsync(
+            connectedAccountId, fanSub.ArtistUserId, $"invoice {invoiceId}");
         await AddEarningsOnceAsync(
             artistUserId: fanSub.ArtistUserId,
             source: "sub",
             grossCents: gross,
             feeCents: SubscriptionFee(gross),
-            externalRef: invoiceId ?? $"sub-cycle-{invoiceSubscriptionId}-{DateTime.UtcNow:yyyyMM}",
+            externalRef: invoiceId,
             payerUserId: fanSub.FanUserId);
     }
 
     // ── customer.subscription.deleted: fan-sub cancellation ──
-    private async Task HandleSubscriptionDeletedAsync(string? stripeSubscriptionId)
+    private async Task HandleSubscriptionDeletedAsync(
+        string? connectedAccountId, string? stripeSubscriptionId)
     {
         if (string.IsNullOrWhiteSpace(stripeSubscriptionId))
-            return;
+            throw new InvalidOperationException(
+                "Connect subscription deletion is missing its Stripe subscription ID.");
 
         var fanSub = await _db.FanSubscriptions
             .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscriptionId);
         if (fanSub is null)
         {
             _logger.LogWarning(
-                "[IGNORED] Connect subscription.deleted for unknown subscription {SubscriptionId}.",
+                "[DEAD-LETTER] Connect subscription.deleted for unknown subscription {SubscriptionId}.",
                 stripeSubscriptionId);
-            return;
+            throw new KeyNotFoundException(
+                $"Connect subscription deletion references unknown subscription {stripeSubscriptionId}.");
         }
 
+        await RequireConnectedAccountAsync(
+            connectedAccountId, fanSub.ArtistUserId, $"subscription {stripeSubscriptionId}");
         if (fanSub.Status != "cancelled")
         {
             fanSub.Status = "cancelled";
@@ -372,6 +415,21 @@ public class StripeConnectWebhookService : IConnectWebhookService
         _logger.LogInformation(
             "EVENT: EarningsRecorded artistId:{ArtistId} source:{Source} grossCents:{Gross} feeCents:{Fee} ref:{Ref}",
             artistUserId, source, grossCents, feeCents, externalRef);
+    }
+
+    private async Task RequireConnectedAccountAsync(
+        string? eventAccountId, string artistUserId, string context)
+    {
+        if (string.IsNullOrWhiteSpace(eventAccountId))
+            throw new InvalidOperationException(
+                $"Stripe Connect account is missing for {context}.");
+
+        var artist = await _db.Users.FindAsync(artistUserId)
+            ?? throw new KeyNotFoundException(
+                $"Artist {artistUserId} referenced by {context} does not exist.");
+        if (!string.Equals(artist.StripeAccountId, eventAccountId, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"Stripe Connect account mismatch for {context}.");
     }
 
     /// <summary>Net is floored (platform invariant: never round the artist's share up).</summary>

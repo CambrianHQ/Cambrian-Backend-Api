@@ -423,7 +423,8 @@ public class StripeWebhookService : IWebhookService
         if (clientReferenceId is null)
         {
             _logger.LogError("[DEAD-LETTER] Checkout session completed but no ClientReferenceId — paid session cannot be fulfilled. StripeSessionId={SessionId}", stripeSessionId);
-            return;
+            throw new InvalidOperationException(
+                "Paid checkout cannot be fulfilled because client_reference_id is missing.");
         }
 
         // BillingController sets clientReferenceId = "userId:subscription:tier".
@@ -432,6 +433,9 @@ public class StripeWebhookService : IWebhookService
         var parts = clientReferenceId.Split(':');
         if (parts.Length >= 3 && parts[1] == "subscription")
         {
+            if (string.IsNullOrWhiteSpace(stripeSessionId))
+                throw new InvalidOperationException(
+                    "Subscription payment cannot be fulfilled because the Stripe session ID is missing.");
             await HandleSubscriptionCheckout(parts[0], parts[2], stripeCustomerId, stripeSubscriptionId, stripeSessionId);
             return;
         }
@@ -445,10 +449,15 @@ public class StripeWebhookService : IWebhookService
                 _logger.LogError(
                     "[DEAD-LETTER] Authorship payment received but no issuer is registered. RecordId={RecordId} StripeSessionId={SessionId}",
                     recordId, stripeSessionId);
-                return;
+                throw new InvalidOperationException(
+                    "Authorship payment cannot be fulfilled because the issuer is unavailable.");
             }
 
-            await _authorshipIssuer.IssueForSessionAsync(recordId, stripeSessionId ?? "");
+            if (string.IsNullOrWhiteSpace(stripeSessionId))
+                throw new InvalidOperationException(
+                    "Authorship payment cannot be fulfilled because the Stripe session ID is missing.");
+
+            await _authorshipIssuer.IssueForSessionAsync(recordId, stripeSessionId);
             return;
         }
 
@@ -460,10 +469,24 @@ public class StripeWebhookService : IWebhookService
             return;
         }
 
+        // Explicitly retired track-license checkout shape. No current endpoint can
+        // create one, but historical Stripe event replays should be acknowledged
+        // without recreating the removed licensing model.
+        if (parts.Length == 3
+            && Guid.TryParse(parts[1], out _)
+            && parts[2] is "non-exclusive" or "exclusive" or "copyright-buyout")
+        {
+            _logger.LogWarning(
+                "[IGNORED-RETIRED] Track-license checkout replay ignored. StripeSessionId={SessionId}",
+                stripeSessionId);
+            return;
+        }
+
         _logger.LogWarning(
-            "[IGNORED] checkout.session.completed with non-subscription clientReferenceId '{Ref}' — " +
-            "track-license purchasing has been removed; nothing to fulfill. StripeSessionId={SessionId}",
+            "[DEAD-LETTER] checkout.session.completed has an unrecognized clientReferenceId '{Ref}'. StripeSessionId={SessionId}",
             clientReferenceId, stripeSessionId);
+        throw new InvalidOperationException(
+            $"Paid checkout cannot be fulfilled because client_reference_id '{clientReferenceId}' is not recognized.");
     }
 
     /// <summary>
@@ -473,6 +496,20 @@ public class StripeWebhookService : IWebhookService
     /// </summary>
     private async Task GrantPurchasedCredits(string userId, int credits, long? amountTotal, string? stripeSessionId)
     {
+        if (string.IsNullOrWhiteSpace(stripeSessionId))
+            throw new InvalidOperationException(
+                "Release credit payment cannot be fulfilled because the Stripe session ID is missing.");
+
+        var pack = CreditPackCatalog.FindByCredits(credits)
+            ?? throw new InvalidOperationException(
+                $"Release credit payment references unsupported credit count {credits}.");
+        if (amountTotal != pack.PriceCents)
+            throw new InvalidOperationException(
+                $"Release credit payment amount mismatch for {credits} credits.");
+        if (!await _db.Users.AnyAsync(u => u.Id == userId))
+            throw new KeyNotFoundException(
+                $"Release credit payment references unknown user {userId}.");
+
         if (!string.IsNullOrEmpty(stripeSessionId)
             && await _db.ReleaseCreditPurchases.AnyAsync(p => p.StripeSessionId == stripeSessionId))
         {
@@ -485,7 +522,7 @@ public class StripeWebhookService : IWebhookService
             CreatorId = userId,
             Credits = credits,
             AmountCents = (int)(amountTotal ?? 0),
-            Pack = "",
+            Pack = pack.Id,
             Status = "paid",
             StripeSessionId = stripeSessionId,
             CreatedAt = DateTime.UtcNow,
@@ -571,7 +608,8 @@ public class StripeWebhookService : IWebhookService
         if (string.IsNullOrEmpty(stripeCustomerId))
         {
             _logger.LogWarning("invoice.paid received without customer ID");
-            return;
+            throw new InvalidOperationException(
+                "invoice.paid cannot be fulfilled because the Stripe customer ID is missing.");
         }
 
         var user = await FindUserByStripeCustomerAsync(stripeCustomerId);
@@ -580,7 +618,8 @@ public class StripeWebhookService : IWebhookService
             _logger.LogWarning(
                 "invoice.paid: could not match Stripe customer {CustomerId} to a local user.",
                 stripeCustomerId);
-            return;
+            throw new KeyNotFoundException(
+                $"invoice.paid references unknown Stripe customer {stripeCustomerId}.");
         }
 
         var latestSubscription = await _db.Subscriptions
@@ -847,7 +886,8 @@ public class StripeWebhookService : IWebhookService
         if (string.IsNullOrEmpty(stripePaymentIntentId))
         {
             _logger.LogWarning("charge.refunded received without payment_intent ID");
-            return;
+            throw new InvalidOperationException(
+                "charge.refunded cannot be reconciled because the payment intent ID is missing.");
         }
 
         // Look up the checkout session via the payment intent.
@@ -862,14 +902,16 @@ public class StripeWebhookService : IWebhookService
         if (session is null)
         {
             _logger.LogWarning("charge.refunded: no checkout session found for PaymentIntent {PI}", stripePaymentIntentId);
-            return;
+            throw new KeyNotFoundException(
+                $"charge.refunded cannot find a checkout session for payment intent {stripePaymentIntentId}.");
         }
 
         var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
         if (purchase is null)
         {
             _logger.LogWarning("charge.refunded: no purchase found for session {SessionId}", session.Id);
-            return;
+            throw new KeyNotFoundException(
+                $"charge.refunded cannot find a local purchase for session {session.Id}.");
         }
 
         purchase.Status = PurchaseStatuses.Refunded;
@@ -996,7 +1038,8 @@ public class StripeWebhookService : IWebhookService
         if (string.IsNullOrEmpty(stripePaymentIntentId))
         {
             _logger.LogWarning("charge.dispute.created received without payment_intent ID");
-            return;
+            throw new InvalidOperationException(
+                "charge.dispute.created cannot be reconciled because the payment intent ID is missing.");
         }
 
         var sessionService = new SessionService();
@@ -1009,14 +1052,16 @@ public class StripeWebhookService : IWebhookService
         if (session is null)
         {
             _logger.LogWarning("charge.dispute.created: no checkout session found for PaymentIntent {PI}", stripePaymentIntentId);
-            return;
+            throw new KeyNotFoundException(
+                $"charge.dispute.created cannot find a checkout session for payment intent {stripePaymentIntentId}.");
         }
 
         var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
         if (purchase is null)
         {
             _logger.LogWarning("charge.dispute.created: no purchase found for session {SessionId}", session.Id);
-            return;
+            throw new KeyNotFoundException(
+                $"charge.dispute.created cannot find a local purchase for session {session.Id}.");
         }
 
         purchase.Status = PurchaseStatuses.Disputed;

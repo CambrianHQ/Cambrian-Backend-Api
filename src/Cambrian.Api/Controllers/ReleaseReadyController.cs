@@ -1,6 +1,7 @@
 using Cambrian.Application.DTOs.ReleaseReady;
 using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
+using Cambrian.Api.Middleware;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -42,6 +43,7 @@ public sealed class ReleaseReadyController : BaseController
     /// <summary>Buy a one-time Release Ready credit pack. Price is resolved server-side from
     /// the pack id; returns a Stripe checkout URL. Credits are granted by the webhook on
     /// completion. Returns 400 for an unknown pack.</summary>
+    [RequireCheckoutEnabled]
     [HttpPost("credits/checkout")]
     public async Task<IActionResult> BuyCredits([FromBody] CreditCheckoutRequest request, CancellationToken ct)
     {

@@ -42,6 +42,7 @@ public sealed class ConcurrencyTests : IClassFixture<CambrianApiFixture>
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "id": "cs_conc_{{eventId}}",
                     "client_reference_id": "{{userId}}:subscription:creator",
                     "customer": "cus_conc"
                 }

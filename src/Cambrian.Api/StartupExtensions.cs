@@ -425,10 +425,11 @@ internal static class StartupExtensions
                 "Stripe:WebhookSecret must be configured in Production. "
                 + "Without it, webhook signature verification is bypassed, allowing spoofed events.");
 
-        // Note: Stripe:ConnectWebhookSecret is intentionally NOT a boot guard. Connect
-        // webhooks (tips / fan subscriptions) fail closed at request time —
-        // StripeConnectWebhookService throws if the secret is missing, so spoofed events
-        // are never processed — and prod can boot before Connect money-in is configured.
+        var connectWebhookSecret = builder.Configuration["Stripe:ConnectWebhookSecret"] ?? "";
+        if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(connectWebhookSecret))
+            throw new InvalidOperationException(
+                "Stripe:ConnectWebhookSecret must be configured in Production. "
+                + "Tips and fan subscriptions cannot be fulfilled safely without verified Connect webhooks.");
 
         // Subscription tiers (Creator/Pro) require pre-created Stripe Price IDs. These are only
         // needed when a real Stripe key is configured (the Development gateway stubs checkout).

@@ -141,15 +141,15 @@ public sealed class WebhookControllerTests
     // ── Resend email webhook signature verification ────────────────────────
 
     [Fact]
-    public async Task Email_ReturnsOk_WhenNoSecretConfigured()
+    public async Task Email_Returns503_WhenNoSecretConfigured()
     {
-        // Without a webhook secret configured the endpoint accepts any payload (backwards-compat).
         var body = "{\"type\":\"email.delivered\",\"data\":{\"email_id\":\"abc\"}}";
         SetupEmailRequest(body);
 
         var result = await _controller.Email();
 
-        Assert.IsType<OkObjectResult>(result);
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
     }
 
     [Fact]

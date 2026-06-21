@@ -56,6 +56,7 @@ public sealed class ExceptionMiddleware
 
             context.Response.StatusCode = ex switch
             {
+                PayoutPendingException       => (int)HttpStatusCode.ServiceUnavailable,
                 ForbiddenException          => (int)HttpStatusCode.Forbidden,
                 UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
                 KeyNotFoundException        => (int)HttpStatusCode.NotFound,
@@ -67,7 +68,10 @@ public sealed class ExceptionMiddleware
             // ArgumentException and InvalidOperationException carry user-facing validation
             // messages (e.g. "Audio file is required.", "MIME type not allowed") that are
             // safe to surface in production. Only internal 5xx errors use generic text.
-            var message = _isProduction && ex is not ArgumentException && ex is not InvalidOperationException
+            var message = _isProduction
+                && ex is not ArgumentException
+                && ex is not InvalidOperationException
+                && ex is not PayoutPendingException
                 ? context.Response.StatusCode switch
                 {
                     500 => "An unexpected error occurred.",

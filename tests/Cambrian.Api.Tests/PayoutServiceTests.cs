@@ -1,4 +1,5 @@
 using Cambrian.Application.DTOs.Payouts;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
 using Cambrian.Domain.Entities;
@@ -81,7 +82,7 @@ public sealed class PayoutServiceTests
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
         _wallet.GetBalanceAsync("c1").Returns(500L);
-        _gateway.CreateTransferAsync("acct_1", 500L, Arg.Any<string>())
+        _gateway.CreateTransferAsync("acct_1", 500L, Arg.Any<string>(), Arg.Any<string>())
             .Returns("tr_1");
 
         // $5.00 — exactly at minimum
@@ -134,7 +135,7 @@ public sealed class PayoutServiceTests
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
         _wallet.GetBalanceAsync("c1").Returns(10000L); // $100 available
-        _gateway.CreateTransferAsync("acct_1", 5000L, Arg.Any<string>())
+        _gateway.CreateTransferAsync("acct_1", 5000L, Arg.Any<string>(), Arg.Any<string>())
             .Returns("tr_123");
 
         var result = await _sut.RequestAsync(new PayoutRequest { Amount = 50m }, "c1");
@@ -147,7 +148,8 @@ public sealed class PayoutServiceTests
             Arg.Is<WalletTransaction>(t => t.AmountCents == -5000L && t.Type == "withdrawal"));
 
         // Verify Stripe transfer was initiated
-        await _gateway.Received(1).CreateTransferAsync("acct_1", 5000L, Arg.Any<string>());
+        await _gateway.Received(1).CreateTransferAsync(
+            "acct_1", 5000L, Arg.Any<string>(), Arg.Is<string>(k => k.StartsWith("cambrian-payout-")));
 
         // Transaction committed
         await _transactions.Received(1).CommitAsync();
@@ -163,7 +165,8 @@ public sealed class PayoutServiceTests
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
         _wallet.GetBalanceAsync("c1").Returns(10000L);
-        _gateway.CreateTransferAsync(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<string>())
+        _gateway.CreateTransferAsync(
+                Arg.Any<string>(), Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns("tr_ok");
 
         await _sut.RequestAsync(new PayoutRequest { Amount = 50m }, "c1");
@@ -175,31 +178,88 @@ public sealed class PayoutServiceTests
         await _transactions.DidNotReceive().RollbackAsync();
     }
 
-    // ── Failed transfer refunds wallet ──
+    // ── Unconfirmed transfer remains resumable ──
 
     [Fact]
-    public async Task RequestAsync_RefundsWallet_WhenStripeTransferFails()
+    public async Task RequestAsync_RetainsPendingPayout_WhenStripeTransferResultIsUnconfirmed()
     {
         var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
         _users.FindByIdAsync("c1").Returns(user);
         _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
             { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
         _wallet.GetBalanceAsync("c1").Returns(10000L);
-        _gateway.CreateTransferAsync("acct_1", Arg.Any<long>(), Arg.Any<string>())
+        _gateway.CreateTransferAsync(
+                "acct_1", Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>())
             .Throws(new Exception("Stripe transfer failed"));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<PayoutPendingException>(() =>
             _sut.RequestAsync(new PayoutRequest { Amount = 50m }, "c1"));
 
-        Assert.Contains("transfer failed", ex.Message);
+        Assert.Contains("still processing", ex.Message);
 
-        // Wallet should have been refunded (credit transaction after the debit committed)
-        await _wallet.Received(1).AddTransactionAsync(
-            Arg.Is<WalletTransaction>(t => t.Type == "credit" && t.AmountCents == 5000L));
-
-        // Payout record should be marked failed
+        // An uncertain provider result must never refund the wallet: Stripe may have
+        // accepted the transfer before the connection failed.
+        await _wallet.DidNotReceive().AddTransactionAsync(
+            Arg.Is<WalletTransaction>(t => t.Type == "credit"));
         await _payouts.Received(1).UpdateAsync(
-            Arg.Is<Payout>(p => p.Status == "failed"));
+            Arg.Is<Payout>(p => p.Status == "pending"
+                && p.FailureReason == "Stripe transfer failed"
+                && p.StripeIdempotencyKey != null));
+    }
+
+    [Fact]
+    public async Task RequestAsync_ResumesPendingPayout_WithoutSecondWalletDebit()
+    {
+        var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
+        _users.FindByIdAsync("c1").Returns(user);
+        _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
+            { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
+
+        var pending = new Payout
+        {
+            Id = Guid.NewGuid(),
+            CreatorId = "c1",
+            AmountCents = 5000,
+            Status = "pending",
+            StripeIdempotencyKey = "cambrian-payout-existing"
+        };
+        _payouts.GetOutstandingAsync("c1").Returns(pending);
+        _gateway.CreateTransferAsync(
+                "acct_1", 5000L, Arg.Any<string>(), "cambrian-payout-existing")
+            .Returns("tr_recovered");
+
+        var result = await _sut.RequestAsync(new PayoutRequest { Amount = 50m }, "c1");
+
+        Assert.Equal("completed", result.Status);
+        Assert.Equal(pending.Id, result.Id);
+        await _wallet.DidNotReceive().AddTransactionAsync(Arg.Any<WalletTransaction>());
+        await _payouts.DidNotReceive().AddAsync(Arg.Any<Payout>());
+        await _payouts.Received().UpdateAsync(
+            Arg.Is<Payout>(p => p.StripeTransferId == "tr_recovered" && p.Status == "completed"));
+    }
+
+    [Fact]
+    public async Task RequestAsync_RejectsDifferentAmount_WhilePayoutIsPending()
+    {
+        var user = new ApplicationUser { Id = "c1", StripeAccountId = "acct_1" };
+        _users.FindByIdAsync("c1").Returns(user);
+        _gateway.GetConnectAccountStatusAsync("acct_1").Returns(new ConnectAccountStatus
+            { AccountId = "acct_1", Status = "active", ChargesEnabled = true, PayoutsEnabled = true });
+        _payouts.GetOutstandingAsync("c1").Returns(new Payout
+        {
+            Id = Guid.NewGuid(),
+            CreatorId = "c1",
+            AmountCents = 5000,
+            Status = "pending"
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.RequestAsync(new PayoutRequest { Amount = 60m }, "c1"));
+
+        Assert.Contains("already processing", ex.Message);
+        await _wallet.DidNotReceive().AddTransactionAsync(Arg.Any<WalletTransaction>());
+        await _gateway.DidNotReceive().CreateTransferAsync(
+            Arg.Any<string>(), Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     // ── Earnings ──

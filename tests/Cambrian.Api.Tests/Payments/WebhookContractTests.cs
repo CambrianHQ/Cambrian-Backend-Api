@@ -146,10 +146,8 @@ public sealed class WebhookContractTests : IClassFixture<CambrianApiFixture>
         var content = new StringContent(payload, Encoding.UTF8, "application/json");
         var response = await client.PostAsync("/webhook/stripe", content);
 
-        // Should handle gracefully — either succeed or return controlled error,
-        // never 500 crash
-        Assert.True(
-            response.StatusCode is HttpStatusCode.OK or HttpStatusCode.BadRequest,
-            $"Expected 200 or 400 for missing metadata, got {response.StatusCode}");
+        // A paid event without fulfillment metadata must remain retryable. Returning
+        // 500 tells Stripe to retry while the failed event is retained in the ledger.
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }
 }

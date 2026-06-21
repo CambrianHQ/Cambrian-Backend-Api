@@ -133,7 +133,12 @@ public class WebhookController : BaseController
         //   signature      = base64(HMAC-SHA256(base64url-decoded(secret[6:]), signed_content))
         //   header value   = "v1,{signature}"
         var webhookSecret = _emailOptions.ResendWebhookSecret;
-        if (!string.IsNullOrWhiteSpace(webhookSecret))
+        if (string.IsNullOrWhiteSpace(webhookSecret))
+        {
+            _logger.LogError("EVENT: ResendWebhookRejected — Email:ResendWebhookSecret not configured");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Webhook verification is not configured.");
+        }
+        else
         {
             var svixId        = Request.Headers["svix-id"].ToString();
             var svixTimestamp = Request.Headers["svix-timestamp"].ToString();
@@ -182,10 +187,6 @@ public class WebhookController : BaseController
                 _logger.LogWarning("EVENT: ResendWebhookFailed — signature mismatch");
                 return StatusCode(400, "Invalid webhook signature.");
             }
-        }
-        else
-        {
-            _logger.LogDebug("EVENT: ResendWebhookSignatureSkipped — Email:ResendWebhookSecret not configured");
         }
 
         ResendWebhookEvent? evt;

@@ -6504,7 +6504,8 @@
       "ProvenanceVerifyRequest": {
         "required": [
           "contentHash",
-          "signature"
+          "signature",
+          "signedAt"
         ],
         "type": "object",
         "properties": {

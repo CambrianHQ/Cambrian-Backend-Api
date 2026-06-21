@@ -101,7 +101,8 @@ public sealed class AuthorshipRecordService : IAuthorshipRecordService
             _logger.LogError(
                 "[DEAD-LETTER] Authorship payment for unknown record {RecordId} (session {SessionId}).",
                 recordId, stripeSessionId);
-            return;
+            throw new KeyNotFoundException(
+                $"Authorship payment cannot be fulfilled because record {recordId} does not exist.");
         }
 
         // Idempotent: webhook retries and duplicate sessions are no-ops.

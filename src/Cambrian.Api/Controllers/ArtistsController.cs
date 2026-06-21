@@ -1,6 +1,7 @@
 using Cambrian.Application.DTOs.Monetization;
 using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
+using Cambrian.Api.Middleware;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,6 +24,7 @@ public sealed class ArtistsController : BaseController
     }
 
     /// <summary>Create a tip checkout session on the artist's connected account (no platform fee at launch).</summary>
+    [RequireCheckoutEnabled]
     [HttpPost("{id}/tip")]
     public async Task<IActionResult> Tip(string id, [FromBody] TipRequest request, CancellationToken ct)
     {
@@ -38,6 +40,7 @@ public sealed class ArtistsController : BaseController
     }
 
     /// <summary>Create a monthly fan-subscription checkout at the artist-set price (15% platform fee).</summary>
+    [RequireCheckoutEnabled]
     [HttpPost("{id}/subscribe")]
     public async Task<IActionResult> Subscribe(string id, CancellationToken ct)
     {

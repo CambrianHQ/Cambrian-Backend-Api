@@ -111,7 +111,8 @@ public sealed class DevelopmentPaymentGateway : IPaymentGateway
     public Task<string> CreateExpressDashboardLinkAsync(string accountId)
         => Task.FromResult($"{_frontendUrl}/settings/payouts?account={Uri.EscapeDataString(accountId)}");
 
-    public Task<string> CreateTransferAsync(string destinationAccountId, long amountCents, string description)
+    public Task<string> CreateTransferAsync(
+        string destinationAccountId, long amountCents, string description, string idempotencyKey)
         => Task.FromResult($"tr_dev_{Guid.NewGuid():N}");
 
     public Task DeleteConnectedAccountAsync(string accountId)

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Net;
 using Cambrian.Api.Tests.Fixtures;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,7 @@ namespace Cambrian.Api.Tests.Payments;
 /// Gate coverage for the purchased-credit webhook grant path
 /// (StripeWebhookService.GrantPurchasedCredits) — previously untested. A completed
 /// credit-pack checkout grants exactly N never-expiring purchased Release Ready
-/// credits, the amount comes from the signed Stripe amount_total (never the client),
+/// credits, the signed Stripe amount_total must match the server-side pack price,
 /// and duplicate deliveries are idempotent on the Stripe session id.
 /// </summary>
 public sealed class CreditPackGrantWebhookTests : IClassFixture<CambrianApiFixture>
@@ -64,7 +65,7 @@ public sealed class CreditPackGrantWebhookTests : IClassFixture<CambrianApiFixtu
 
         var row = Assert.Single(rows);
         Assert.Equal(3, row.Credits);
-        Assert.Equal(2400, row.AmountCents); // trusts the signed amount_total, not the client
+        Assert.Equal(2400, row.AmountCents);
         Assert.Equal("paid", row.Status);
         Assert.Equal(sessionId, row.StripeSessionId);
     }
@@ -106,17 +107,45 @@ public sealed class CreditPackGrantWebhookTests : IClassFixture<CambrianApiFixtu
     }
 
     [Fact]
-    public async Task CreditCheckout_ZeroCredits_GrantsNothing()
+    public async Task CreditCheckout_ZeroCredits_FailsAndGrantsNothing()
     {
         var (userId, client) = await NewUserAsync();
 
         // Guard: grantCredits must be > 0. A malformed ":credits:0" must not create a grant.
-        await PostAsync(client, CheckoutPayload($"evt_{Guid.NewGuid():N}", $"cs_credits_{Guid.NewGuid():N}", $"{userId}:credits:0", 0));
+        var payload = CheckoutPayload(
+            $"evt_{Guid.NewGuid():N}",
+            $"cs_credits_{Guid.NewGuid():N}",
+            $"{userId}:credits:0",
+            0);
+        var response = await client.PostAsync(
+            "/webhook/stripe",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
         var count = await db.ReleaseCreditPurchases.CountAsync(p => p.CreatorId == userId);
 
         Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public async Task CreditCheckout_AmountMismatch_FailsAndGrantsNothing()
+    {
+        var (userId, client) = await NewUserAsync();
+        var payload = CheckoutPayload(
+            $"evt_{Guid.NewGuid():N}",
+            $"cs_credits_{Guid.NewGuid():N}",
+            $"{userId}:credits:3",
+            1);
+
+        var response = await client.PostAsync(
+            "/webhook/stripe",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        Assert.False(await db.ReleaseCreditPurchases.AnyAsync(p => p.CreatorId == userId));
     }
 }

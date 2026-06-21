@@ -513,7 +513,8 @@ internal sealed class FakePaymentGateway : IPaymentGateway
     public Task<string> CreateExpressDashboardLinkAsync(string accountId)
         => Task.FromResult($"https://connect.stripe.com/fake-dashboard?account={accountId}");
 
-    public Task<string> CreateTransferAsync(string destinationAccountId, long amountCents, string description)
+    public Task<string> CreateTransferAsync(
+        string destinationAccountId, long amountCents, string description, string idempotencyKey)
         => Task.FromResult("tr_fake_123");
 
     public Task DeleteConnectedAccountAsync(string accountId)

@@ -46,6 +46,13 @@ services:
         sync: false
       - key: Stripe__ConnectWebhookSecret
         sync: false
+      - key: Stripe__Prices__Creator
+        sync: false
+      - key: Stripe__Prices__Pro
+        sync: false
+      # Emergency kill switch for every endpoint that can create a charge.
+      - key: Checkout__Enabled
+        value: "false"
       - key: Storage__Provider
         sync: false           # must be s3 or r2 -- app refuses to start with local in Production
       - key: Storage__Endpoint
@@ -73,6 +80,8 @@ services:
       - key: Email__FromName
         value: "Cambrian Music"
       - key: Email__ResendApiKey
+        sync: false
+      - key: Email__ResendWebhookSecret
         sync: false
       # Admin seed account
       - key: Admin__Email

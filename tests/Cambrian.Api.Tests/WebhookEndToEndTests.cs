@@ -94,6 +94,7 @@ public sealed class WebhookEndToEndTests : IClassFixture<CambrianApiFixture>
             "type": "checkout.session.completed",
             "data": {
                 "object": {
+                    "id": "cs_wh_sub_{{Guid.NewGuid():N}}",
                     "client_reference_id": "{{userId}}:subscription:creator"
                 }
             }

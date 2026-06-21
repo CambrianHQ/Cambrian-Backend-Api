@@ -1,4 +1,5 @@
 using Cambrian.Application.DTOs.Payouts;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Pricing;
 using Cambrian.Domain.Constants;
@@ -121,69 +122,100 @@ public class PayoutService : IPayoutService
                 "Your Stripe account onboarding is incomplete. " +
                 "Please finish setting up your account before requesting a payout.");
 
-        // ── Atomic balance check + debit + payout creation in one Serializable transaction ──
-        // Serializable isolation prevents phantom reads / double-withdrawal races.
-        // Both the wallet debit and the payout record commit together — neither can orphan.
-        var payout = new Payout
-        {
-            Id = Guid.NewGuid(),
-            CreatorId = creatorId,
-            AmountCents = (int)requestCents,
-            Status = "pending",
-            RequestedAt = DateTime.UtcNow
-        };
-
+        // ── Atomic balance check + debit + resumable payout creation ──
+        // An existing pending payout is resumed instead of debiting the wallet again.
+        // The Stripe idempotency key is derived from the durable payout ID, so a crash
+        // after Stripe accepted the transfer but before the response was persisted is safe:
+        // the next same-amount request receives the same Stripe transfer.
+        Payout payout;
+        var created = false;
+        var committed = false;
         await using var txHandle = await _transactions.BeginSerializableTransactionAsync();
         try
         {
-            var balance = await _wallet.GetBalanceAsync(creatorId);
-            if (balance < requestCents)
+            var outstanding = await _payouts.GetOutstandingAsync(creatorId);
+            if (outstanding is not null)
             {
-                await _transactions.RollbackAsync();
-                throw new InvalidOperationException("Insufficient balance for this payout.");
+                if (outstanding.AmountCents != requestCents)
+                    throw new InvalidOperationException(
+                        "A payout is already processing. Retry that payout before requesting a different amount.");
+
+                payout = outstanding;
+                payout.StripeIdempotencyKey ??= $"cambrian-payout-{payout.Id:N}";
+                await _payouts.UpdateAsync(payout);
+                _logger.LogWarning(
+                    "Resuming pending payout {PayoutId} for creator {CreatorId}; wallet will not be debited again",
+                    payout.Id, creatorId);
+            }
+            else
+            {
+                var balance = await _wallet.GetBalanceAsync(creatorId);
+                if (balance < requestCents)
+                    throw new InvalidOperationException("Insufficient balance for this payout.");
+
+                payout = new Payout
+                {
+                    Id = Guid.NewGuid(),
+                    CreatorId = creatorId,
+                    AmountCents = (int)requestCents,
+                    Status = "pending",
+                    RequestedAt = DateTime.UtcNow,
+                };
+                payout.StripeIdempotencyKey = $"cambrian-payout-{payout.Id:N}";
+
+                // Both writes flush inside the active transaction; only CommitAsync
+                // makes the debit and payout row durable.
+                await _wallet.AddTransactionAsync(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = creatorId,
+                    AmountCents = -requestCents,
+                    Type = "withdrawal",
+                    Description = $"Payout {payout.Id}: ${request.Amount:F2}",
+                    CreatedAt = DateTime.UtcNow
+                });
+                await _payouts.AddAsync(payout);
+                created = true;
             }
 
-            // Both AddTransactionAsync and AddAsync call SaveChangesAsync internally.
-            // With an active ITransactionManager transaction those saves flush to the DB
-            // but do NOT commit — the commit happens only at CommitAsync() below.
-            await _wallet.AddTransactionAsync(new WalletTransaction
-            {
-                Id = Guid.NewGuid(),
-                UserId = creatorId,
-                AmountCents = -requestCents,
-                Type = "withdrawal",
-                Description = $"Payout ${request.Amount:F2}",
-                CreatedAt = DateTime.UtcNow
-            });
-
-            await _payouts.AddAsync(payout);
-
             await _transactions.CommitAsync();
-            Observability.CambrianMetrics.PayoutCreated.Add(1);
-            _logger.LogInformation(
-                "Payout {PayoutId} debit+record committed atomically: {AmountCents}c for creator {CreatorId}",
-                payout.Id, requestCents, creatorId);
+            committed = true;
+
+            if (created)
+            {
+                Observability.CambrianMetrics.PayoutCreated.Add(1);
+                _logger.LogInformation(
+                    "Payout {PayoutId} debit+record committed atomically: {AmountCents}c for creator {CreatorId}",
+                    payout.Id, requestCents, creatorId);
+            }
         }
         catch (InvalidOperationException)
         {
-            // Validation error (insufficient balance) — already rolled back above, re-throw.
+            if (!committed)
+                await _transactions.RollbackAsync();
             throw;
         }
         catch (Exception ex)
         {
-            await _transactions.RollbackAsync();
+            if (!committed)
+                await _transactions.RollbackAsync();
             _logger.LogError(ex, "Payout transaction failed for creator {CreatorId} — wallet unchanged", creatorId);
             throw new InvalidOperationException("Payout could not be processed. Please try again later.");
         }
 
-        // Initiate Stripe transfer (outside the DB transaction — Stripe calls cannot be transacted)
+        // Stripe is outside the DB transaction. Provider idempotency plus the durable
+        // pending row makes the operation resumable across timeouts and process crashes.
         try
         {
             var transferId = await _gateway.CreateTransferAsync(
-                user.StripeAccountId, requestCents,
-                $"Cambrian payout {payout.Id}");
+                user.StripeAccountId,
+                payout.AmountCents,
+                $"Cambrian payout {payout.Id}",
+                payout.StripeIdempotencyKey!);
 
+            payout.StripeTransferId = transferId;
             payout.Status = "completed";
+            payout.FailureReason = null;
             payout.CompletedAt = DateTime.UtcNow;
             await _payouts.UpdateAsync(payout);
             Observability.CambrianMetrics.PayoutApproved.Add(1);
@@ -195,32 +227,36 @@ public class PayoutService : IPayoutService
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Payout {PayoutId} Stripe transfer failed — refunding wallet",
+                "Payout {PayoutId} Stripe transfer result is unconfirmed; retaining pending row for idempotent retry",
                 payout.Id);
 
-            // Compensate: credit the wallet back since the Stripe transfer failed
-            await _wallet.AddTransactionAsync(new WalletTransaction
+            // Do not refund here: a transport error can occur after Stripe accepted the
+            // transfer. Refunding would let the creator keep both the transfer and wallet
+            // balance. Retain the pending row and retry with the same provider key.
+            payout.Status = "pending";
+            payout.FailureReason = ex.Message.Length > 1000 ? ex.Message[..1000] : ex.Message;
+            try
             {
-                Id = Guid.NewGuid(),
-                UserId = creatorId,
-                AmountCents = requestCents,
-                Type = "credit",
-                Description = $"Payout refund (transfer failed): ${request.Amount:F2}",
-                CreatedAt = DateTime.UtcNow
-            });
+                await _payouts.UpdateAsync(payout);
+            }
+            catch (Exception persistEx)
+            {
+                _logger.LogCritical(
+                    persistEx,
+                    "Failed to persist pending status for payout {PayoutId}; manual reconciliation required",
+                    payout.Id);
+            }
 
-            payout.Status = "failed";
-            payout.FailureReason = ex.Message;
-            await _payouts.UpdateAsync(payout);
-
-            throw new InvalidOperationException(
-                "Payout transfer failed. Your balance has been refunded. Please try again later.");
+            throw new PayoutPendingException();
         }
 
         return new PayoutResponse
         {
-            Amount = request.Amount,
-            Status = payout.Status
+            Id = payout.Id,
+            Amount = payout.AmountCents / 100m,
+            Status = payout.Status,
+            RequestedAt = payout.RequestedAt,
+            CompletedAt = payout.CompletedAt,
         };
     }
 
@@ -230,6 +266,7 @@ public class PayoutService : IPayoutService
 
         return payouts.Take(take).Select(p => new PayoutResponse
         {
+            Id = p.Id,
             Amount = p.AmountCents / 100m,
             Status = p.Status,
             RequestedAt = p.RequestedAt,

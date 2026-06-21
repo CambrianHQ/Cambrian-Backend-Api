@@ -214,6 +214,45 @@ public class ArtistMonetizationTests : IClassFixture<CambrianApiFixture>
         }
     }
 
+    [Fact]
+    public async Task ConnectWebhook_MissingEventId_IsRejectedBeforeProcessing()
+    {
+        var artistId = await SeedArtistAsync(connected: true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+                null,
+                "checkout.session.completed",
+                "acct_fake_123",
+                clientReferenceId: $"fan-user:tip:{artistId}",
+                sessionId: $"cs_tip_{Guid.NewGuid():N}",
+                amountTotal: 500)));
+    }
+
+    [Fact]
+    public async Task ConnectWebhook_AccountMismatch_RemainsFailedAndCreditsNothing()
+    {
+        var artistId = await SeedArtistAsync(connected: true);
+        var eventId = $"evt_mismatch_{Guid.NewGuid():N}";
+        var sessionId = $"cs_mismatch_{Guid.NewGuid():N}";
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ProcessConnectEventAsync(svc => svc.ProcessEventAsync(
+                eventId,
+                "checkout.session.completed",
+                "acct_wrong_artist",
+                clientReferenceId: $"fan-user:tip:{artistId}",
+                sessionId: sessionId,
+                amountTotal: 500)));
+
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        Assert.False(await db.EarningsTransactions.AnyAsync(t => t.ExternalRef == sessionId));
+        var webhookEvent = await db.StripeWebhookEvents.SingleAsync(e => e.EventId == eventId);
+        Assert.Equal("failed", webhookEvent.Status);
+        Assert.False(webhookEvent.Processed);
+    }
+
     // ── Self-dealing guard ──
 
     [Fact]

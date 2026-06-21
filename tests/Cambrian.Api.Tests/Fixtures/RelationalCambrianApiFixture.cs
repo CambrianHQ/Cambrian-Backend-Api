@@ -23,7 +23,8 @@ namespace Cambrian.Api.Tests.Fixtures;
 
 /// <summary>
 /// Relational integration-test host that prefers PostgreSQL via Testcontainers and
-/// falls back to in-memory SQLite when Docker is unavailable in the environment.
+/// falls back to a temporary SQLite file when Docker is unavailable. Each DI scope
+/// receives an independent connection so concurrency tests never share one connection.
 /// </summary>
 public class RelationalCambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
@@ -33,6 +34,7 @@ public class RelationalCambrianApiFixture : WebApplicationFactory<Program>, IAsy
 
     private PostgreSqlContainer? _postgres;
     private DbConnection? _fallbackConnection;
+    private string? _fallbackDatabasePath;
     private string? _connectionString;
 
     public bool UsingPostgres => _postgres is not null;
@@ -77,7 +79,7 @@ public class RelationalCambrianApiFixture : WebApplicationFactory<Program>, IAsy
             else
             {
                 services.AddDbContext<CambrianDbContext>(options =>
-                    options.UseSqlite((SqliteConnection)_fallbackConnection!));
+                    options.UseSqlite(_connectionString));
             }
 
             services.RemoveAll<IPaymentGateway>();
@@ -115,10 +117,19 @@ public class RelationalCambrianApiFixture : WebApplicationFactory<Program>, IAsy
         {
             FallbackReason = ex.Message;
             _postgres = null;
-            var sqlite = new SqliteConnection("Data Source=:memory:");
+            _fallbackDatabasePath = Path.Combine(
+                Path.GetTempPath(),
+                $"cambrian-relational-tests-{Guid.NewGuid():N}.db");
+            _connectionString =
+                $"Data Source={_fallbackDatabasePath};Cache=Shared;Pooling=False;Default Timeout=30";
+            var sqlite = new SqliteConnection(_connectionString);
             await sqlite.OpenAsync();
+            await using (var command = sqlite.CreateCommand())
+            {
+                command.CommandText = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=30000;";
+                await command.ExecuteNonQueryAsync();
+            }
             _fallbackConnection = sqlite;
-            _connectionString = sqlite.ConnectionString;
         }
 
         using var scope = Services.CreateScope();
@@ -141,6 +152,20 @@ public class RelationalCambrianApiFixture : WebApplicationFactory<Program>, IAsy
         if (_fallbackConnection is not null)
         {
             await _fallbackConnection.DisposeAsync();
+        }
+
+        if (_fallbackDatabasePath is not null)
+        {
+            try
+            {
+                File.Delete(_fallbackDatabasePath);
+                File.Delete(_fallbackDatabasePath + "-shm");
+                File.Delete(_fallbackDatabasePath + "-wal");
+            }
+            catch (IOException)
+            {
+                // Best-effort cleanup. The OS temp directory will remove leftovers.
+            }
         }
 
         if (_postgres is not null)
@@ -438,7 +463,8 @@ public sealed class RecordingPaymentGateway : IPaymentGateway
     public Task<string> CreateExpressDashboardLinkAsync(string accountId)
         => Task.FromResult($"https://connect.stripe.test/dashboard/{accountId}");
 
-    public Task<string> CreateTransferAsync(string destinationAccountId, long amountCents, string description)
+    public Task<string> CreateTransferAsync(
+        string destinationAccountId, long amountCents, string description, string idempotencyKey)
         => Task.FromResult($"tr_{Guid.NewGuid():N}");
 
     public Task DeleteConnectedAccountAsync(string accountId)

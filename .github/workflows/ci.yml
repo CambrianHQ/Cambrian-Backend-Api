@@ -79,8 +79,8 @@ jobs:
       # The app reads either ConnectionStrings__DefaultConnection or DATABASE_URL
       # (ADO.NET form; postgres:// URIs are also accepted but converted). Use the
       # ADO.NET form so no SSL is required against the local service container.
-      DATABASE_URL: "***REDACTED***"
-      ConnectionStrings__DefaultConnection: "***REDACTED***"
+      DATABASE_URL: "Host=localhost;Port=5432;Database=cambrian;Username=cambrian;Password=cambrian"
+      ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=cambrian;Username=cambrian;Password=cambrian"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

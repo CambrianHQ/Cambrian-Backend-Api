@@ -18,4 +18,10 @@ public class Payout
     public DateTime? CompletedAt { get; set; }
 
     public string? FailureReason { get; set; }
+
+    /// <summary>Stable key reused for every Stripe transfer attempt.</summary>
+    public string? StripeIdempotencyKey { get; set; }
+
+    /// <summary>Stripe transfer ID persisted once completion is confirmed.</summary>
+    public string? StripeTransferId { get; set; }
 }

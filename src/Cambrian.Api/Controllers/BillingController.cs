@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Billing;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -49,6 +50,7 @@ public class BillingController : BaseController
     }
 
     [EnableRateLimiting("auth")]
+    [RequireCheckoutEnabled]
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout(BillingCheckoutRequest request)
     {
@@ -79,6 +81,7 @@ public class BillingController : BaseController
     }
 
     [EnableRateLimiting("auth")]
+    [RequireCheckoutEnabled]
     [HttpPost("checkout-session")]
     public async Task<IActionResult> CheckoutSession(BillingCheckoutRequest request)
     {
@@ -89,6 +92,7 @@ public class BillingController : BaseController
 
     /// <summary>POST /api/billing/checkout { tier } → { checkoutUrl }.</summary>
     [EnableRateLimiting("auth")]
+    [RequireCheckoutEnabled]
     [HttpPost("/api/billing/checkout")]
     public async Task<IActionResult> ApiCheckout(BillingCheckoutRequest request)
     {

@@ -88,7 +88,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
 
         await svc.ProcessEventAsync(
             eventId: eventId,
-            eventType: "checkout.session.completed",
+            eventType: "customer.created",
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: null,
@@ -96,7 +96,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
 
         await svc.ProcessEventAsync(
             eventId: eventId,
-            eventType: "checkout.session.completed",
+            eventType: "customer.created",
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: null,

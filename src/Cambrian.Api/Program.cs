@@ -36,12 +36,14 @@ if (args.Contains("--generate"))
 }
 // --- END TEMPORARY ---
 
-// Error monitoring. Binds the "Sentry" config section (DSN, sample rates, env).
-// With no DSN set the SDK initialises disabled, so non-prod environments without
-// a DSN are a safe no-op. Captures unhandled exceptions + failed requests; the
-// Stripe webhook handler also captures explicitly so a silent grant-Pro failure
-// alerts us instead of only landing in the log stream.
-builder.WebHost.UseSentry();
+// Error monitoring. Newer Sentry SDK versions reject a null DSN while the host is
+// being constructed, which also breaks design-time tooling such as `dotnet swagger`.
+// Register Sentry only when a real DSN is configured; an empty DSN is an intentional
+// disabled state for tests, local tooling, and environments that do not use Sentry.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Sentry:Dsn"]))
+{
+    builder.WebHost.UseSentry();
+}
 
 // CLI: `dotnet run -- --seed` — run migrations + seed, then exit.
 // Useful for CI/CD pipelines and manual staging environment setup.
@@ -55,6 +57,16 @@ if (args.Contains("--seed"))
 }
 
 const string TestingEnvironment = "Testing";
+
+// Windows' default host logging includes Event Log, which requires privileges
+// unavailable to ordinary developer/test processes. A harmless startup warning
+// (for example, Swagger running without a web root) must not crash tooling.
+if (builder.Environment.IsEnvironment(TestingEnvironment) && OperatingSystem.IsWindows())
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.AddDebug();
+}
 
 // Database
 var connectionString = builder.ResolveConnectionString();
@@ -841,20 +853,26 @@ catch (Exception ex)
     app.Logger.LogError(ex, "[STORAGE-DIAG] Startup probe threw unexpectedly.");
 }
 
-// ── Activity backfill (idempotent — safe on every startup) ──
-try
+// ── Activity backfill (idempotent — safe on every runtime startup) ──
+// Testing hosts are also used by WebApplicationFactory and `dotnet swagger`.
+// They replace or intentionally omit the runtime database, so startup must stay
+// free of database side effects until a test request or fixture initializes it.
+if (!app.Environment.IsEnvironment(TestingEnvironment))
 {
-    using var scope = app.Services.CreateScope();
-    var backfill = scope.ServiceProvider.GetRequiredService<IActivityBackfillService>();
-    await backfill.BackfillAsync(CancellationToken.None);
-}
-catch (Exception ex) when (ex.GetType().Name.Contains("Postgres") || ex is InvalidOperationException)
-{
-    app.Logger.LogWarning(ex, "Activity backfill skipped (table may not exist yet).");
-}
-catch (Exception ex)
-{
-    app.Logger.LogError(ex, "Activity backfill failed unexpectedly.");
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var backfill = scope.ServiceProvider.GetRequiredService<IActivityBackfillService>();
+        await backfill.BackfillAsync(CancellationToken.None);
+    }
+    catch (Exception ex) when (ex.GetType().Name.Contains("Postgres") || ex is InvalidOperationException)
+    {
+        app.Logger.LogWarning(ex, "Activity backfill skipped (table may not exist yet).");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Activity backfill failed unexpectedly.");
+    }
 }
 
 await app.RunAsync();
