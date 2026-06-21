@@ -4457,6 +4457,24 @@
         }
       }
     },
+    "/health/details": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
     "/health/storage": {
       "get": {
         "tags": [

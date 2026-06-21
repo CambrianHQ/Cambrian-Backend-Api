@@ -17,10 +17,18 @@ public class HealthController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Get()
+    public IActionResult Get()
+    {
+        // Public liveness only. Never expose environment, row counts, storage,
+        // Stripe, or database details on the unauthenticated health route.
+        return Ok(new { status = "ok" });
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpGet("details")]
+    public async Task<IActionResult> Details()
     {
         var result = await _health.GetHealthAsync();
-        // Always return 200 so Render health-check passes and routes traffic
         return Ok(result);
     }
 

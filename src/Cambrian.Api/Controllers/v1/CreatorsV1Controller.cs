@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Cambrian.Api.Security;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +13,7 @@ namespace Cambrian.Api.Controllers.v1;
 [ApiController]
 [Route("api/v1")]
 [EnableRateLimiting("api_key_free")]
+[AllowApiKey]
 public class CreatorsV1Controller : ControllerBase
 {
     private readonly ICreatorIdentityRepository _creators;

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Cambrian.Application.Validation;
 
 namespace Cambrian.Application.DTOs.Creators;
 
@@ -16,9 +17,11 @@ public class UpdateCreatorProfileRequest
     public string? Username { get; set; }
 
     [StringLength(100)]
+    [SafeMetadata]
     public string? DisplayName { get; set; }
 
     [StringLength(2000)]
+    [SafeMetadata]
     public string? Bio { get; set; }
 
     [StringLength(500)]
@@ -97,6 +100,7 @@ public class CreatorImageUploadResponse
 {
     public string UploadUrl { get; set; } = "";
     public string PublicUrl { get; set; } = "";
+    public DateTimeOffset? ExpiresAt { get; set; }
 }
 
 /// <summary>
@@ -104,7 +108,12 @@ public class CreatorImageUploadResponse
 /// </summary>
 public class CreateImageUploadRequest
 {
+    [RegularExpression("(?i)^(profile|cover|profile-image|cover-image)$")]
     public string? Type { get; set; }
+
+    [RegularExpression("(?i)^image/(jpeg|png|webp)$")]
     public string? ContentType { get; set; }
+
+    [StringLength(255)]
     public string? FileName { get; set; }
 }

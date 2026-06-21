@@ -37,7 +37,7 @@ public sealed class ResendEmailService : IEmailService
         {
             from = $"{_options.FromName} <{_options.FromAddress}>",
             to = new[] { to },
-            subject,
+            subject = EmailTemplateEncoding.Subject(subject),
             html = htmlBody
         };
 
@@ -73,9 +73,10 @@ public sealed class ResendEmailService : IEmailService
 
     public Task SendPasswordResetAsync(string to, string code)
     {
+        var safeCode = EmailTemplateEncoding.Text(code);
         var html = $"""
             <h2>Password Reset</h2>
-            <p>Your password reset code is: <strong>{code}</strong></p>
+            <p>Your password reset code is: <strong>{safeCode}</strong></p>
             <p>This code expires in 15 minutes.</p>
             <p>If you didn't request this, you can safely ignore this email.</p>
             """;
@@ -84,9 +85,10 @@ public sealed class ResendEmailService : IEmailService
 
     public Task SendVerificationCodeAsync(string to, string code)
     {
+        var safeCode = EmailTemplateEncoding.Text(code);
         var html = $"""
             <h2>Verification Code</h2>
-            <p>Your verification code is: <strong>{code}</strong></p>
+            <p>Your verification code is: <strong>{safeCode}</strong></p>
             <p>This code expires in 15 minutes.</p>
             """;
         return SendAsync(to, "Cambrian — Verification Code", html);
@@ -94,8 +96,9 @@ public sealed class ResendEmailService : IEmailService
 
     public Task SendWelcomeAsync(string to, string displayName)
     {
+        var safeDisplayName = EmailTemplateEncoding.Text(displayName);
         var html = $"""
-            <h2>Welcome to Cambrian, {displayName}!</h2>
+            <h2>Welcome to Cambrian, {safeDisplayName}!</h2>
             <p>Your account has been created successfully.</p>
             <p>Start exploring AI-generated music on the marketplace.</p>
             """;
@@ -104,26 +107,30 @@ public sealed class ResendEmailService : IEmailService
 
     public Task SendPurchaseConfirmationAsync(string to, string trackTitle, string licenseType, decimal pricePaid, string licenseUrl)
     {
+        var safeTrackTitle = EmailTemplateEncoding.Text(trackTitle);
+        var safeLicenseType = EmailTemplateEncoding.Text(licenseType);
+        var safeLicenseUrl = EmailTemplateEncoding.Href(licenseUrl);
         var html = $"""
             <h2>Purchase Confirmed</h2>
             <p>Thank you for your purchase on Cambrian!</p>
             <table style="border-collapse:collapse;">
-              <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">Track</td><td>{trackTitle}</td></tr>
-              <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">License</td><td>{licenseType}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">Track</td><td>{safeTrackTitle}</td></tr>
+              <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">License</td><td>{safeLicenseType}</td></tr>
               <tr><td style="padding:4px 12px 4px 0;font-weight:bold;">Amount</td><td>${pricePaid:F2} USD</td></tr>
             </table>
-            <p style="margin-top:16px;"><a href="{licenseUrl}">View your license in your hub</a></p>
+            <p style="margin-top:16px;"><a href="{safeLicenseUrl}">View your license in your hub</a></p>
             """;
-        return SendAsync(to, $"Cambrian — Purchase Confirmed: {trackTitle}", html);
+        return SendAsync(to, $"Cambrian — Purchase Confirmed: {EmailTemplateEncoding.Subject(trackTitle)}", html);
     }
 
     public Task SendEmailChangeVerificationAsync(string newEmail, string verificationLink)
     {
+        var safeVerificationLink = EmailTemplateEncoding.Href(verificationLink);
         var html = $"""
             <h2>Confirm your new email address</h2>
             <p>Someone requested an email change for your Cambrian account.</p>
             <p>Click the link below to confirm. The link expires in 24 hours.</p>
-            <p><a href="{verificationLink}">Confirm email change</a></p>
+            <p><a href="{safeVerificationLink}">Confirm email change</a></p>
             <p>If you did not request this, you can ignore this email.</p>
             """;
         return SendAsync(newEmail, "Cambrian — Confirm your new email address", html);
@@ -131,9 +138,10 @@ public sealed class ResendEmailService : IEmailService
 
     public Task SendEmailChangeNotificationAsync(string oldEmail, string newEmail)
     {
+        var safeNewEmail = EmailTemplateEncoding.Text(newEmail);
         var html = $"""
             <h2>Email change requested for your Cambrian account</h2>
-            <p>A request was made to change your account email to <strong>{newEmail}</strong>.</p>
+            <p>A request was made to change your account email to <strong>{safeNewEmail}</strong>.</p>
             <p>If you did not request this change, please contact support immediately.</p>
             """;
         return SendAsync(oldEmail, "Cambrian — Email change requested", html);

@@ -1,5 +1,6 @@
 using Cambrian.Api.Common;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Validation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -92,7 +93,15 @@ public class UsersController : BaseController
         if (body.Bio is not null)
         {
             // Empty string explicitly clears the field
-            var trimmed = body.Bio.Trim();
+            string trimmed;
+            try
+            {
+                trimmed = MetadataSanitizer.NormalizeAllowEmpty(body.Bio, "Bio");
+            }
+            catch (System.ComponentModel.DataAnnotations.ValidationException ex)
+            {
+                return ErrorResponse(ex.Message);
+            }
             if (trimmed.Length > 500)
                 return ErrorResponse("Bio must be 500 characters or fewer.");
             user.Bio = trimmed.Length == 0 ? null : trimmed;

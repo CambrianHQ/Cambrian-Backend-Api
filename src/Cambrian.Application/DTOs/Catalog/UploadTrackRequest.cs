@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Cambrian.Application.Validation;
 using Microsoft.AspNetCore.Http;
 
 namespace Cambrian.Application.DTOs.Catalog;
@@ -12,26 +13,33 @@ public class UploadTrackRequest
 
     [Required]
     [MaxLength(200)]
+    [SafeMetadata]
     public string Title { get; set; } = string.Empty;
 
     [MaxLength(2000)]
+    [SafeMetadata]
     public string? Description { get; set; }
 
     [MaxLength(60)]
+    [SafeMetadata]
     public string? Genre { get; set; }
 
     [MaxLength(60)]
+    [SafeMetadata]
     public string? PrimaryGenre { get; set; }
 
     [MaxLength(60)]
+    [SafeMetadata]
     public string? Subgenre { get; set; }
 
     public decimal? Price { get; set; }
 
     [MaxLength(200)]
+    [SafeMetadata]
     public string? LicenseType { get; set; }
 
     [MaxLength(500)]
+    [SafeMetadata]
     public string? Tags { get; set; }
 
     [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
@@ -61,9 +69,11 @@ public class UploadTrackRequest
     public Guid? CollectionId { get; set; }
 
     [MaxLength(200)]
+    [SafeMetadata]
     public string? NewAlbumTitle { get; set; }
 
     [MaxLength(2000)]
+    [SafeMetadata]
     public string? NewAlbumDescription { get; set; }
 
     public string? CreatorId { get; set; }

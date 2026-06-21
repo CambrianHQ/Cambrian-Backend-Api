@@ -6,6 +6,7 @@ using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -235,7 +236,11 @@ public sealed class AuthControllerTests
     [Fact]
     public void CsrfToken_ReturnsOk()
     {
-        var result = _controller.CsrfToken();
+        var antiforgery = Substitute.For<IAntiforgery>();
+        antiforgery.GetAndStoreTokens(Arg.Any<HttpContext>())
+            .Returns(new AntiforgeryTokenSet("request-token", "cookie-token", "__RequestVerificationToken", "X-CSRF-TOKEN"));
+
+        var result = _controller.CsrfToken(antiforgery);
 
         Assert.IsType<OkObjectResult>(result);
     }

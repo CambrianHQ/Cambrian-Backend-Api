@@ -11,8 +11,8 @@
 
 import fs from "fs";
 import path from "path";
+import crypto from "node:crypto";
 import yaml from "yaml";
-import openapiToPostman from "openapi-to-postmanv2";
 
 const ROOT = process.cwd();
 const OPENAPI_CANDIDATES = [
@@ -115,27 +115,100 @@ function addDefaultTests(items = []) {
 /*  Conversion                                                        */
 /* ------------------------------------------------------------------ */
 
-async function convertOpenApiToPostman(spec) {
-  return new Promise((resolve, reject) => {
-    openapiToPostman.convert(
-      { type: "json", data: JSON.stringify(spec) },
-      {
-        folderStrategy: "tags",
-        requestNameSource: "fallback",
-        schemaFaker: true,
-        includeAuthInfoInExample: true,
-        enableOptionalParameters: true,
-        optimizeConversion: true,
-      },
-      (err, result) => {
-        if (err) return reject(err);
-        if (!result.result) {
-          return reject(new Error(result.reason || "Postman conversion failed."));
-        }
-        resolve(result.output[0].data);
-      }
+function sampleForSchema(schema, spec, depth = 0) {
+  if (!schema || depth > 5) return {};
+  if (schema.example !== undefined) return schema.example;
+  if (schema.default !== undefined) return schema.default;
+  if (schema.$ref) {
+    const target = schema.$ref
+      .replace(/^#\//, "")
+      .split("/")
+      .reduce((value, key) => value?.[key], spec);
+    return sampleForSchema(target, spec, depth + 1);
+  }
+  if (schema.enum?.length) return schema.enum[0];
+  if (schema.type === "array") return [sampleForSchema(schema.items, spec, depth + 1)];
+  if (schema.type === "object" || schema.properties) {
+    return Object.fromEntries(
+      Object.entries(schema.properties ?? {}).map(([key, value]) => [
+        key,
+        sampleForSchema(value, spec, depth + 1),
+      ])
     );
-  });
+  }
+  if (schema.type === "boolean") return false;
+  if (schema.type === "integer" || schema.type === "number") return 0;
+  return "";
+}
+
+function convertOpenApiToPostman(spec) {
+  const folders = new Map();
+  const httpMethods = new Set([
+    "get", "post", "put", "patch", "delete", "head", "options",
+  ]);
+
+  for (const [route, pathItem] of Object.entries(spec.paths ?? {})) {
+    for (const [method, operation] of Object.entries(pathItem ?? {})) {
+      if (!httpMethods.has(method.toLowerCase())) continue;
+
+      const tag = operation.tags?.[0] ?? "Other";
+      if (!folders.has(tag)) folders.set(tag, []);
+
+      const parameters = [
+        ...(pathItem.parameters ?? []),
+        ...(operation.parameters ?? []),
+      ];
+      const query = parameters
+        .filter((parameter) => parameter.in === "query")
+        .map((parameter) => ({
+          key: parameter.name,
+          value: String(parameter.example ?? parameter.schema?.default ?? ""),
+          disabled: !parameter.required,
+        }));
+      const postmanPath = route.replaceAll(/{([^}]+)}/g, ":$1");
+      const rawQuery = query.length
+        ? `?${query.map(({ key, value }) => `${key}=${encodeURIComponent(value)}`).join("&")}`
+        : "";
+
+      const request = {
+        method: method.toUpperCase(),
+        header: [],
+        url: {
+          raw: `{{baseUrl}}${postmanPath}${rawQuery}`,
+          host: ["{{baseUrl}}"],
+          path: postmanPath.split("/").filter(Boolean),
+          query,
+        },
+        description: operation.description ?? operation.summary ?? "",
+      };
+
+      const jsonBody = operation.requestBody?.content?.["application/json"];
+      if (jsonBody) {
+        request.header.push({ key: "Content-Type", value: "application/json" });
+        request.body = {
+          mode: "raw",
+          raw: JSON.stringify(sampleForSchema(jsonBody.schema, spec), null, 2),
+          options: { raw: { language: "json" } },
+        };
+      }
+
+      folders.get(tag).push({
+        name: operation.summary ?? operation.operationId ?? `${method.toUpperCase()} ${route}`,
+        request,
+        response: [],
+      });
+    }
+  }
+
+  return {
+    info: {
+      _postman_id: crypto.randomUUID(),
+      name: spec.info?.title ?? "Cambrian API",
+      description: spec.info?.description ?? "",
+      schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    },
+    item: [...folders.entries()].map(([name, item]) => ({ name, item })),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -151,7 +224,7 @@ async function main() {
   const spec = normalizeServers(readSpec(openApiPath));
 
   console.log("Converting to Postman collection…");
-  const collection = await convertOpenApiToPostman(spec);
+  const collection = convertOpenApiToPostman(spec);
 
   collection.info.name = "Cambrian API";
   collection.info.description =

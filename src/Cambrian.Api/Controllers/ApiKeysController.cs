@@ -1,5 +1,6 @@
 using Cambrian.Application.DTOs.ApiKeys;
 using Cambrian.Application.Interfaces;
+using Cambrian.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +11,7 @@ namespace Cambrian.Api.Controllers;
 /// Requires JWT or cookie auth — API keys cannot be used to manage other API keys.
 /// </summary>
 [Route("api/v1/keys")]
-[Authorize]
+[Authorize(Policy = AuthenticationConstants.InteractiveUserPolicy)]
 public class ApiKeysController : BaseController
 {
     private readonly IApiKeyService _service;

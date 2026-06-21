@@ -96,7 +96,11 @@ public sealed class E2eSupportEndpointsTests : IClassFixture<E2eApiFixture>
             E2eScenarioService.EmptyCreatorEmail,
         })
         {
-            var login = await client.PostAsJsonAsync("/auth/login",
+            // Use a fresh browser session per account. A successful login sets
+            // auth_token; reusing that cookie for a later state-changing login
+            // correctly requires antiforgery protection.
+            using var loginClient = _fixture.CreateClient();
+            var login = await loginClient.PostAsJsonAsync("/auth/login",
                 new { email, password = E2eScenarioService.SeedPassword });
             Assert.True(login.IsSuccessStatusCode, $"login failed for {email}: {login.StatusCode}");
         }

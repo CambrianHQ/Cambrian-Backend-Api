@@ -91,9 +91,13 @@
 
 ### `GET /auth/csrf-token`
 
-**Response (201):**
+Issues the request token and matching HttpOnly antiforgery cookie used by
+cookie-authenticated state-changing requests. Send the token in
+`X-CSRF-TOKEN` and include a trusted `Origin` or `Referer`.
+
+**Response (200):**
 ```json
-{ "csrfToken": "..." }
+{ "token": "...", "headerName": "X-CSRF-TOKEN" }
 ```
 
 ### `POST /auth/forgot-password`
@@ -203,7 +207,10 @@ Upload an image to object storage and receive back its current access URL. Under
 **Current flow:** Upload → get URL → `PATCH /users/me` with URL
 **Response (200):**
 
-Create a direct-upload URL for a creator profile or cover image.
+### `POST /api/uploads/creator-image-url` (Authorized, Creator role)
+
+Create a five-minute, one-time upload grant for the current creator. The grant
+binds the user, exact key, purpose, MIME type, size limit, expiry, and nonce.
 
 **Request:**
 ```json
@@ -217,16 +224,22 @@ Create a direct-upload URL for a creator profile or cover image.
 **Response (200):**
 ```json
 {
-  "uploadUrl": "https://storage.example.com/...",
-  "publicUrl": "https://cdn.example.com/creator-profiles/..."
+  "uploadUrl": "https://cambrian-backend-api.onrender.com/api/uploads/creator-image/creator-profiles/{userId}/{nonce}.png?grant=...",
+  "publicUrl": "https://cdn.example.com/creator-profiles/{userId}/{nonce}.png",
+  "expiresAt": "2026-06-18T12:05:00Z"
 }
 ```
 
 ### `PUT /api/uploads/creator-image/{**key}` (Authorized)
 
-Local-storage proxy endpoint used when direct signed uploads are not supported.
+Consumes the server-issued one-time grant. Caller-selected keys, cross-account
+keys, expired/replayed grants, invalid MIME/magic bytes, oversized bodies, path
+traversal, and excessive dimensions are rejected.
 
-**Response (200):** Empty body.
+**Response (200):**
+```json
+{ "publicUrl": "https://cdn.example.com/creator-profiles/{userId}/{nonce}.png" }
+```
 
 ### `POST /api/uploads/creator-image` (Authorized, Creator role)
 
@@ -1466,10 +1479,14 @@ Manage tags.
 
 **Response (200):**
 ```json
-{ "status": "healthy", "environment": "Production" }
+{ "status": "ok" }
 ```
 
-### `GET /health/storage`
+### `GET /health/details` (Admin only)
+
+Detailed dependency health.
+
+### `GET /health/storage` (Admin only)
 
 **Response (200):** Storage diagnostics.
 

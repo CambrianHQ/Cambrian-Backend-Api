@@ -1,10 +1,12 @@
 using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Cambrian.Api;
 using Cambrian.Api.Common;
 using Cambrian.Api.E2e;
 using Cambrian.Api.Middleware;
+using Cambrian.Api.Security;
 using Cambrian.Application.Configuration;
 using Cambrian.Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -16,7 +18,6 @@ using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Stripe;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -69,6 +70,9 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
         options.Password.RequireNonAlphanumeric = true;
         options.Password.RequiredLength = 8;
         options.User.RequireUniqueEmail = true;
+        options.Lockout.AllowedForNewUsers = true;
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     })
     .AddEntityFrameworkStores<CambrianDbContext>()
     .AddTokenProvider<Microsoft.AspNetCore.Identity.DataProtectorTokenProvider<ApplicationUser>>(
@@ -102,7 +106,7 @@ Console.WriteLine("[Startup] Governance contract version: 2.1.0 — see policy/P
 // or an HttpOnly cookie that carries the same JWT (cookie transport).
 // The SmartScheme policy scheme selects the correct handler at request time.
 const string SmartScheme = "SmartScheme";
-const string CookieSchemeName = "Cookies";
+const string CookieSchemeName = "CookieJwt";
 
 builder.Services.AddAuthentication(options =>
 {
@@ -121,85 +125,46 @@ builder.Services.AddAuthentication(options =>
     };
 })
 .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { })
-.AddCookie(CookieSchemeName, options =>
-{
-    options.Cookie.Name     = "auth_token";
-    options.Cookie.HttpOnly = true;
-    options.Cookie.SecurePolicy  = CookieSecurePolicy.SameAsRequest; // Always in prod via HTTPS
-    options.Cookie.SameSite = SameSiteMode.Lax;  // Lax allows cross-site top-level nav (Stripe redirect)
-    options.ExpireTimeSpan  = TimeSpan.FromDays(7);
-    options.SlidingExpiration = false;
-
-    // Cookie auth reads the token from the cookie and validates it as a JWT.
-    // This makes cookie and bearer interchangeable — same token, different transport.
-    options.Events = new CookieAuthenticationEvents
-    {
-        // Return 401/403 directly — API clients cannot follow login redirects.
-        OnRedirectToLogin = ctx =>
-        {
-            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return Task.CompletedTask;
-        },
-        OnRedirectToAccessDenied = ctx =>
-        {
-            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return Task.CompletedTask;
-        },
-        OnValidatePrincipal = async ctx =>
-        {
-            // Extract the JWT stored in the cookie and send it through JWT validation.
-            // This reuses the existing JwtBearerOptions without duplicating key config.
-            var token = ctx.Request.Cookies["auth_token"];
-            if (string.IsNullOrEmpty(token))
-            {
-                ctx.RejectPrincipal();
-                return;
-            }
-            // Re-validate the JWT using the same parameters configured for Bearer.
-            var jwtOpts  = ctx.HttpContext.RequestServices
-                .GetRequiredService<IOptionsSnapshot<JwtBearerOptions>>()
-                .Get(JwtBearerDefaults.AuthenticationScheme);
-            var handler  = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-            try
-            {
-                ctx.Principal = handler.ValidateToken(
-                    token,
-                    jwtOpts.TokenValidationParameters,
-                    out _);
-                // No explicit ctx.Success() — setting Principal is sufficient;
-                // omitting it suppresses the CS1061 compile error.
-            }
-            catch
-            {
-                ctx.RejectPrincipal();
-            }
-            await Task.CompletedTask;
-        }
-    };
-});
+.AddJwtBearer(CookieSchemeName, _ => { });
 
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
     .Configure<IOptions<JwtSettings>>((options, jwtOptions) =>
     {
-        var jwt = jwtOptions.Value;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwt.Issuer,
-            ValidAudience = jwt.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
-            // Tightened from 2 minutes — expired tokens were valid for 120s after expiry,
-            // giving an attacker a wide replay window. 30s tolerates clock drift between
-            // Render's nodes without meaningfully extending token lifetime.
-            ClockSkew = TimeSpan.FromSeconds(30)
-        };
+        JwtAuthenticationConfiguration.Configure(
+            options,
+            jwtOptions.Value,
+            AuthenticationConstants.AuthTransportBearer);
+    });
+
+builder.Services.AddOptions<JwtBearerOptions>(CookieSchemeName)
+    .Configure<IOptions<JwtSettings>>((options, jwtOptions) =>
+    {
+        JwtAuthenticationConfiguration.Configure(
+            options,
+            jwtOptions.Value,
+            AuthenticationConstants.AuthTransportCookie,
+            "auth_token");
     });
 
 builder.Services.AddAuthorization(options =>
 {
+    var interactiveUserPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireAssertion(ctx => Program.IsInteractiveUser(ctx.User))
+        .Build();
+
+    // Generic [Authorize] is deliberately interactive-user-only. API keys must
+    // opt into the ApiKeyIntegration policy and AllowApiKey endpoint metadata.
+    options.DefaultPolicy = interactiveUserPolicy;
+    options.AddPolicy(AuthenticationConstants.InteractiveUserPolicy, interactiveUserPolicy);
+    options.AddPolicy(AuthenticationConstants.ApiKeyIntegrationPolicy, policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireClaim(
+            AuthenticationConstants.AuthMethodClaim,
+            AuthenticationConstants.AuthMethodApiKey);
+    });
+
     // "VerifiedEmail" — applied via [Authorize(Policy = "VerifiedEmail")] on
     // high-stakes write endpoints (Upload, Checkout, Payouts, ApiKeys, Wallet)
     // so an unverified registration cannot trigger purchases or payouts.
@@ -207,6 +172,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("VerifiedEmail", policy =>
     {
         policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx => Program.IsInteractiveUser(ctx.User));
         policy.RequireAssertion(ctx =>
             ctx.User.HasClaim(c => c.Type == "email_verified" && c.Value == "true"));
     });
@@ -216,35 +182,50 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("CanUploadTrack", policy =>
     {
         policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx => Program.IsInteractiveUser(ctx.User));
         policy.RequireAssertion(ctx =>
             HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.TrackUpload));
     });
     options.AddPolicy("CanEditOwnTrack", policy =>
     {
         policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx => Program.IsInteractiveUser(ctx.User));
         policy.RequireAssertion(ctx =>
             HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.TrackEditOwn));
     });
     options.AddPolicy("CanDeleteOwnTrack", policy =>
     {
         policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx => Program.IsInteractiveUser(ctx.User));
         policy.RequireAssertion(ctx =>
             HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.TrackDeleteOwn));
     });
     options.AddPolicy("CanRequestPayout", policy =>
     {
         policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx => Program.IsInteractiveUser(ctx.User));
         policy.RequireAssertion(ctx =>
             HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.PayoutRequest));
     });
     options.AddPolicy("CanPurchaseLicense", policy =>
     {
         policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(ctx => Program.IsInteractiveUser(ctx.User));
         policy.RequireAssertion(ctx =>
             HasCapability(ctx.Resource as HttpContext, Cambrian.Domain.Auth.Capabilities.LicensePurchase));
     });
 });
 builder.Services.AddMemoryCache();
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<CreatorImageUploadGrantService>();
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-CSRF-TOKEN";
+    options.Cookie.Name = "cambrian_csrf";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+});
 
 // OpenTelemetry metrics → Prometheus scraping endpoint at GET /metrics.
 //  - AspNetCore/HttpClient instrumentation feed the http_server_* / http_client_*
@@ -326,7 +307,7 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            partitionKey: ClientRateLimitKey.FromConnection(ctx),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = globalLimit,
@@ -335,7 +316,7 @@ builder.Services.AddRateLimiter(options =>
             }));
     options.AddPolicy("auth", ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            partitionKey: ClientRateLimitKey.FromConnection(ctx),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = authLimit,
@@ -349,7 +330,7 @@ builder.Services.AddRateLimiter(options =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ctx.Request.Headers.TryGetValue("X-API-Key", out var k) && !string.IsNullOrEmpty(k)
                 ? k.ToString()
-                : ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                : ClientRateLimitKey.FromConnection(ctx),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 100,
@@ -361,7 +342,18 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("community", ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                ?? ClientRateLimitKey.FromConnection(ctx),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    options.AddPolicy("mcp", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? ClientRateLimitKey.FromConnection(ctx),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 30,
@@ -551,21 +543,16 @@ builder.AddStorageProvider();
 builder.AddEmailProvider();
 builder.AddSmsProvider();
 
-// Forwarded headers — Render terminates TLS at its load balancer and forwards
-// requests as HTTP internally.  Without this, Request.Scheme returns "http"
-// and all URLs generated by ResolveAbsoluteUrl would cause HTTP→HTTPS redirects.
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+// Forwarded headers are enabled only when the deployment supplies an explicit
+// trusted proxy/network allow-list. An empty allow-list must never mean
+// "trust every direct client".
+var trustedForwardersConfigured =
+    ForwardedHeaderConfiguration.HasTrustedForwarders(builder.Configuration);
+if (trustedForwardersConfigured)
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    // Trust only one hop: the Render load balancer directly in front of us.
-    // ForwardLimit = 1 means we read only the rightmost X-Forwarded-For value
-    // (added by Render's LB), ignoring any client-supplied ones further left.
-    // We clear default known-network restrictions because Render's LB IP is
-    // dynamic; instead we rely on the hop count to bound trust.
-    options.ForwardLimit = 1;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        ForwardedHeaderConfiguration.Configure(options, builder.Configuration));
+}
 
 // Test-only E2E support service — registered ONLY when the surface is enabled (Testing, or
 // Development with Cambrian:E2E:Enabled=true). Never present in Production/Staging.
@@ -577,7 +564,22 @@ if (E2eSupport.IsEnabled(builder.Environment, builder.Configuration))
 var app = builder.Build();
 
 // Must be first — before any middleware that reads Request.Scheme or Request.Host.
-app.UseForwardedHeaders();
+if (trustedForwardersConfigured)
+{
+    app.UseForwardedHeaders();
+}
+else if (app.Environment.IsProduction())
+{
+    // Render's public service is HTTPS-only. Force the canonical scheme without
+    // trusting spoofable X-Forwarded-* values from direct-origin clients.
+    app.Use((context, next) =>
+    {
+        context.Request.Scheme = Uri.UriSchemeHttps;
+        return next();
+    });
+    app.Logger.LogWarning(
+        "Forwarded headers disabled: configure ForwardedHeaders:KnownProxies or KnownNetworks before relying on client IP forwarding.");
+}
 
 {
     var jwt = app.Services.GetRequiredService<IOptions<JwtSettings>>().Value;
@@ -697,6 +699,27 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseRateLimiter();
 app.UseMiddleware<VerifiedEmailForbiddenResponseMiddleware>();
 
+// Bound MCP request bodies even when Content-Length is omitted/chunked.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/mcp")
+        || context.Request.Path.StartsWithSegments("/sse"))
+    {
+        const long maxMcpBodySize = 1024 * 1024;
+        var feature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+        if (feature is { IsReadOnly: false })
+            feature.MaxRequestBodySize = maxMcpBodySize;
+
+        if (context.Request.ContentLength is > maxMcpBodySize)
+        {
+            context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+            return;
+        }
+    }
+
+    await next();
+});
+
 // DevAuthMiddleware grants admin via "Bearer test-audit-token" for local audits.
 // It MUST never be reachable from non-Development pipelines, even though the middleware
 // itself short-circuits on env check — defense in depth.
@@ -707,10 +730,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyMiddleware>();
+app.UseMiddleware<CookieCsrfProtectionMiddleware>();
 app.UseMiddleware<Cambrian.Api.Middleware.CapabilityMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
-app.MapMcp();
+app.MapMcp("/mcp")
+    .WithMetadata(new AllowApiKeyAttribute())
+    .RequireAuthorization(AuthenticationConstants.ApiKeyIntegrationPolicy)
+    .RequireRateLimiting("mcp");
 
 // Prometheus scrape target: GET /metrics. Anonymous and outside the OpenAPI contract
 // (like /sse and /mcp) so it is internally scrapable without a token. In production this
@@ -722,7 +749,11 @@ app.MapMethods("/sse", new[] { "GET", "POST", "DELETE" }, (HttpContext ctx) =>
 {
     var query = ctx.Request.QueryString.Value ?? "";
     return Results.Redirect($"/mcp{query}", permanent: false, preserveMethod: true);
-}).ExcludeFromDescription();
+})
+    .WithMetadata(new AllowApiKeyAttribute())
+    .RequireAuthorization(AuthenticationConstants.ApiKeyIntegrationPolicy)
+    .RequireRateLimiting("mcp")
+    .ExcludeFromDescription();
 
 // Alias: /charts/weekly → same payload as /api/charts/weekly. Kept out of the
 // OpenAPI contract (the canonical /api path is the documented one). (residue R17)
@@ -843,4 +874,10 @@ public partial class Program
             return list.Contains(capability);
         return false;
     }
+
+    internal static bool IsInteractiveUser(ClaimsPrincipal user) =>
+        user.Identity?.IsAuthenticated == true
+        && !user.HasClaim(
+            AuthenticationConstants.AuthMethodClaim,
+            AuthenticationConstants.AuthMethodApiKey);
 }

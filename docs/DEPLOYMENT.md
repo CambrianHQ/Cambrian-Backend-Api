@@ -11,7 +11,7 @@
 
 | Service | Repo | Build | Start | Health |
 |---|---|---|---|---|
-| `cambrian-api` | `Cambrian-Backend-Api` | Docker (`./Dockerfile`, multi-stage, non-root uid 1001, ffmpeg installed for Release Ready) | container entrypoint binds Railway `PORT` | `GET /health` (always-200) + `GET /qa-preflight` (503 if DB/Storage/Stripe down) |
+| `cambrian-api` | `Cambrian-Backend-Api` | Docker (`./Dockerfile`, multi-stage, non-root uid 1001, ffmpeg installed for Release Ready) | container entrypoint binds Railway `PORT` | public `GET /health` liveness + admin-authenticated `GET /qa-preflight` |
 | `cambrian-web` | `cambrian` | Next.js 15 (Node 22) | `npm run build` → `npm run start:next` | `/` |
 | Postgres | Railway plugin | — | — | — |
 
@@ -49,11 +49,12 @@ Secrets (set in Railway, never commit). `Section__Key` = .NET config binding.
 | `Mastering__Engine` | ⬜ | `ffmpeg` (default) or `tonn`. Leave `ffmpeg` until the RoEx key is provisioned. |
 | `Mastering__Tonn__ApiKey` | ⬜ | RoEx key; only needed when `Mastering__Engine=tonn`. |
 | `RateLimiting__GlobalPermitLimit` / `RateLimiting__AuthPermitLimit` | ⬜ | Prod `100` / `10`. |
+| `ForwardedHeaders__KnownProxies` / `ForwardedHeaders__KnownNetworks` | ⬜ | Comma-separated trusted proxy IPs/CIDRs. Leave unset rather than trusting arbitrary forwarded headers. |
 | `App__FrontendUrl` | ✅ | `https://cambrianmusic.com`. |
 | `App__CorsOrigins` | ✅ | `https://cambrianmusic.com,https://www.cambrianmusic.com`. |
 | `SeedDemoUsers__Password` | ⬜ | Staging/dev only; prod skips demo seeding. |
 
-**Stripe webhooks:** point the platform endpoint at `https://api.cambrianmusic.com/webhook/stripe`; its signing secret must equal `Stripe__WebhookSecret`. Point the Connect endpoint at `https://api.cambrianmusic.com/webhook/stripe/connect`; its signing secret must equal `Stripe__ConnectWebhookSecret`.
+**Stripe webhooks:** point the platform endpoint at `https://cambrian-backend-api.onrender.com/webhook/stripe`; its signing secret must equal `Stripe__WebhookSecret`. Point the Connect endpoint at `https://cambrian-backend-api.onrender.com/webhook/stripe/connect`; its signing secret must equal `Stripe__ConnectWebhookSecret`.
 
 **Removed vars (do NOT carry over):** `App__VercelProjectSlug`, `App__CloudflarePagesSlug` (off Vercel/CF Pages), `Provenance__Anchor__*` (EVM anchoring deleted — see PHASE 3 cleanup), any `R2_*` (storage is Supabase S3).
 
@@ -65,7 +66,7 @@ Secrets (set in Railway, never commit). `Section__Key` = .NET config binding.
 
 | Var | Required | Notes |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | ✅ | `https://api.cambrianmusic.com`. |
+| `NEXT_PUBLIC_API_BASE_URL` | ✅ | `https://cambrian-backend-api.onrender.com`. |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | ✅ | Google OAuth. |
 | `NEXT_PUBLIC_SENTRY_DSN` | ⬜ | Frontend Sentry. |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | ✅ | Cloudflare Turnstile (login CAPTCHA — unrelated to R2). |

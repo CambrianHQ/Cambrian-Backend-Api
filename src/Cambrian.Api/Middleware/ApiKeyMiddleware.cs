@@ -1,14 +1,16 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Cambrian.Api.Security;
 using Cambrian.Application.Interfaces;
 
 namespace Cambrian.Api.Middleware;
 
 /// <summary>
 /// Authenticates requests that carry an X-API-Key header.
-/// Runs AFTER UseAuthentication — skips silently if the request is already authenticated
-/// via JWT Bearer or cookie. Sets context.User so downstream [Authorize] works normally.
+/// Runs AFTER UseAuthentication and only activates for endpoints carrying
+/// <see cref="AllowApiKeyAttribute"/> metadata. It never turns an API key into
+/// generic account authentication.
 /// </summary>
 public class ApiKeyMiddleware
 {
@@ -36,7 +38,25 @@ public class ApiKeyMiddleware
             return;
         }
 
+        if (context.GetEndpoint()?.Metadata.GetMetadata<AllowApiKeyAttribute>() is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                success = false,
+                error = "API keys are not accepted on this route."
+            });
+            return;
+        }
+
         var rawKey = rawKeyValues.ToString();
+        if (string.IsNullOrWhiteSpace(rawKey))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { success = false, error = "Invalid API key." });
+            return;
+        }
+
         var keyHash = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(rawKey))
         ).ToLower();
@@ -50,10 +70,8 @@ public class ApiKeyMiddleware
             return;
         }
 
-        // Update LastUsedAt fire-and-forget using a dedicated scope so the scoped
-        // repository (and DbContext) lifetime is independent of the request lifetime.
         var keyId = apiKey.Id;
-        _ = Task.Run(async () =>
+        context.Response.OnCompleted(async () =>
         {
             try
             {
@@ -70,7 +88,8 @@ public class ApiKeyMiddleware
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, apiKey.UserId),
-            new Claim("auth_method", "api_key"),
+            new Claim(AuthenticationConstants.AuthMethodClaim, AuthenticationConstants.AuthMethodApiKey),
+            new Claim("api_key_prefix", apiKey.KeyPrefix),
         };
         context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "ApiKey"));
 

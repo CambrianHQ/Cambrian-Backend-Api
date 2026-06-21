@@ -13,7 +13,7 @@
 #
 # Usage:
 #   pwsh scripts/staging-smoke.ps1 -BaseUrl https://staging.api.cambrianmusic.com
-#   pwsh scripts/staging-smoke.ps1 -BaseUrl https://api.cambrianmusic.com
+#   pwsh scripts/staging-smoke.ps1 -BaseUrl https://cambrian-backend-api.onrender.com -AdminToken $env:CAMBRIAN_ADMIN_TOKEN
 #
 # Exit codes:
 #   0  all checks passed
@@ -23,6 +23,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$BaseUrl,
+
+    [Parameter(Mandatory = $true)]
+    [string]$AdminToken,
 
     [int]$TimeoutSec = 20
 )
@@ -51,6 +54,7 @@ Write-Host ""
 # ── 1. /qa-preflight — every dependency must report ok or skip ──
 Invoke-SmokeCheck 'qa-preflight reports all dependencies healthy' {
     $res = Invoke-WebRequest "$BaseUrl/qa-preflight" `
+        -Headers @{ Authorization = "Bearer $AdminToken" } `
         -UseBasicParsing -TimeoutSec $TimeoutSec -SkipHttpErrorCheck
     if ($res.StatusCode -ne 200) {
         throw "expected 200, got $($res.StatusCode). Body: $($res.Content)"

@@ -1,4 +1,5 @@
 using Cambrian.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Cambrian.Api.Controllers;
@@ -10,6 +11,7 @@ namespace Cambrian.Api.Controllers;
 /// endpoint and fail the release if it does not return 200.
 /// </summary>
 [Route("qa-preflight")]
+[Authorize(Roles = "Admin")]
 public sealed class QaPreflightController : ControllerBase
 {
     private readonly IPreflightService _preflight;

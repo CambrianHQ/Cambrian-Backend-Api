@@ -4,6 +4,7 @@ using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Provenance;
+using Cambrian.Application.Validation;
 using Cambrian.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http;
@@ -156,6 +157,15 @@ public class UploadService : IUploadService
 
     public async Task<UploadTrackResponse> Upload(UploadTrackRequest request)
     {
+        request.Title = MetadataSanitizer.NormalizeRequired(request.Title, "Track title");
+        request.Description = MetadataSanitizer.NormalizeOptional(request.Description, "Track description");
+        request.PrimaryGenre = MetadataSanitizer.NormalizeOptional(request.PrimaryGenre, "Primary genre");
+        request.Subgenre = MetadataSanitizer.NormalizeOptional(request.Subgenre, "Subgenre");
+        request.Genre = MetadataSanitizer.NormalizeOptional(request.Genre, "Genre");
+        request.Tags = MetadataSanitizer.NormalizeOptional(request.Tags, "Tags");
+        request.NewAlbumTitle = MetadataSanitizer.NormalizeOptional(request.NewAlbumTitle, "Album title");
+        request.NewAlbumDescription = MetadataSanitizer.NormalizeOptional(request.NewAlbumDescription, "Album description");
+
         if (request.Audio is null || request.Audio.Length == 0)
             throw new ArgumentException("Audio file is required.");
 

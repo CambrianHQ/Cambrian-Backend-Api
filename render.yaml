@@ -95,6 +95,13 @@ services:
         value: "https://cambrianmusic.com,https://www.cambrianmusic.com"
       - key: App__VercelProjectSlug
         value: ""
+      # Configure only when Render publishes stable trusted proxy addresses.
+      # Leaving these unset disables forwarded-header trust and prevents direct
+      # clients from forging X-Forwarded-For rate-limit identities.
+      - key: ForwardedHeaders__KnownProxies
+        value: ""
+      - key: ForwardedHeaders__KnownNetworks
+        value: ""
     buildFilter:
       paths:
         - src/**

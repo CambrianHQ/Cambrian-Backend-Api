@@ -4,9 +4,11 @@ using Cambrian.Application.Auth;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Validation;
 using Cambrian.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -414,7 +416,7 @@ public class AuthController : BaseController
             var displayName = user.DisplayName;
             if (string.IsNullOrWhiteSpace(displayName))
             {
-                displayName = request.Username.Trim(); // preserve original casing
+                displayName = MetadataSanitizer.NormalizeRequired(request.Username, "Display name");
                 user.DisplayName = displayName;
             }
 
@@ -532,17 +534,18 @@ public class AuthController : BaseController
     }
 
     /// <summary>
-    /// CSRF token endpoint — returns a no-op token for backward compatibility.
-    /// JWT Bearer auth is used for all mutating requests; CSRF tokens are unnecessary.
-    /// The frontend may call this on startup — return 200 so it doesn't block auth flows.
+    /// Issues a real antiforgery request token and stores the matching HttpOnly
+    /// antiforgery cookie. Cookie-authenticated mutations must echo this token in
+    /// the X-CSRF-TOKEN header.
     /// </summary>
     [HttpGet("csrf-token")]
-    public IActionResult CsrfToken()
+    public IActionResult CsrfToken([FromServices] IAntiforgery antiforgery)
     {
+        var tokens = antiforgery.GetAndStoreTokens(HttpContext);
         return OkResponse(new
         {
-            token = "jwt-bearer-no-csrf-needed",
-            note = "This API uses JWT Bearer authentication. CSRF tokens are not required."
+            token = tokens.RequestToken,
+            headerName = "X-CSRF-TOKEN"
         });
     }
 
@@ -716,9 +719,15 @@ public class AuthController : BaseController
     [HttpPut("/settings/display-name")]
     public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateDisplayNameRequest request)
     {
-        var trimmed = request.DisplayName.Trim();
-        if (string.IsNullOrWhiteSpace(trimmed))
-            return ErrorResponse("Display name is required.");
+        string trimmed;
+        try
+        {
+            trimmed = MetadataSanitizer.NormalizeRequired(request.DisplayName, "Display name");
+        }
+        catch (Exception ex) when (ex is ArgumentException or System.ComponentModel.DataAnnotations.ValidationException)
+        {
+            return ErrorResponse(ex.Message);
+        }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var user = await _userManager.FindByIdAsync(userId);

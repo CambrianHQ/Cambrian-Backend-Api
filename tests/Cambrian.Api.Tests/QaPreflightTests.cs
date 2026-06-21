@@ -25,7 +25,10 @@ public sealed class QaPreflightTests : IClassFixture<CambrianApiFixture>
     [Fact]
     public async Task Returns_200_When_All_Dependencies_Healthy()
     {
-        using var client = _fixture.CreateClient();
+        using var client = await _fixture.CreateRoleClientAsync(
+            $"preflight-ok-{Guid.NewGuid():N}@test.com",
+            "Test1234!@",
+            "Admin");
         var res = await client.GetAsync("/qa-preflight");
 
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
@@ -46,7 +49,10 @@ public sealed class QaPreflightTests : IClassFixture<CambrianApiFixture>
 
         try
         {
-            using var client = failingFixture.CreateClient();
+            using var client = await failingFixture.CreateRoleClientAsync(
+                $"preflight-fail-{Guid.NewGuid():N}@test.com",
+                "Test1234!@",
+                "Admin");
             var res = await client.GetAsync("/qa-preflight");
 
             Assert.Equal(HttpStatusCode.ServiceUnavailable, res.StatusCode);
@@ -66,7 +72,10 @@ public sealed class QaPreflightTests : IClassFixture<CambrianApiFixture>
     [Fact]
     public async Task Response_Shape_Has_Required_Fields()
     {
-        using var client = _fixture.CreateClient();
+        using var client = await _fixture.CreateRoleClientAsync(
+            $"preflight-shape-{Guid.NewGuid():N}@test.com",
+            "Test1234!@",
+            "Admin");
         var res = await client.GetAsync("/qa-preflight");
 
         var body = await res.Content.ReadFromJsonAsync<JsonElement>();

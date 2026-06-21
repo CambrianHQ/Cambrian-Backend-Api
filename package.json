@@ -12,7 +12,6 @@
     "check:drift": "node scripts/check-contract-drift.cjs"
   },
   "devDependencies": {
-    "openapi-to-postmanv2": "^4.23.0",
-    "yaml": "^1.10.2"
+    "yaml": "^2.9.0"
   }
 }

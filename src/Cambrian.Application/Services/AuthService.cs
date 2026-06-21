@@ -5,6 +5,7 @@ using System.Text;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Validation;
 using Cambrian.Domain.Entities;
 using Cambrian.Domain.Enums;
 using Google.Apis.Auth;
@@ -71,13 +72,23 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid credentials");
         }
 
+        if (await _users.IsLockedOutAsync(user))
+        {
+            _logger.LogWarning("Login blocked by account lockout for {UserId}", user.Id);
+            throw new UnauthorizedAccessException("Invalid credentials");
+        }
+
         var valid = await _users.CheckPasswordAsync(user, request.Password);
 
         if (!valid)
         {
+            await _users.AccessFailedAsync(user);
             _logger.LogWarning("Login failed: bad password for {UserId}", user.Id);
             throw new UnauthorizedAccessException("Invalid credentials");
         }
+
+        if (user.AccessFailedCount > 0)
+            await _users.ResetAccessFailedCountAsync(user);
 
         var sub = await _subscriptions.GetActiveAsync(user.Id);
         var resolvedTier = sub?.Plan ?? (user.CreatorTier == CreatorTier.Pro ? "pro" : "free");
@@ -122,7 +133,9 @@ public class AuthService : IAuthService
         {
             Email = request.Email,
             UserName = request.Email,
-            DisplayName = request.DisplayName ?? request.Email.Split('@')[0],
+            DisplayName = MetadataSanitizer.NormalizeRequired(
+                request.DisplayName ?? request.Email.Split('@')[0],
+                "Display name"),
             Tier = "free",
             Role = resolvedRole,
             CreatorTier = CreatorTier.Free,
@@ -348,7 +361,7 @@ public class AuthService : IAuthService
             await _email.SendAsync(
                 user.Email!,
                 "Cambrian - Your Username",
-                $"<p>Your display name is: <strong>{displayName}</strong></p>");
+                $"<p>Your display name is: <strong>{System.Net.WebUtility.HtmlEncode(displayName)}</strong></p>");
         }
     }
 

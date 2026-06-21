@@ -183,12 +183,12 @@
 
       // ── Swagger UI setup ─────────────────────────────────────
       // Hosted explorer — point at the live API spec.
-      // CORS is enabled on api.cambrianmusic.com so the browser can fetch it directly.
+      // CORS is enabled on the live Render API so the browser can fetch it directly.
       //
       // To use this against a local dev backend, change LIVE_SPEC_URL to
       //   http://localhost:10000/openapi.json
       // and serve this file from any static server (a file:// URL works too).
-      const LIVE_SPEC_URL = "https://api.cambrianmusic.com/openapi.json";
+      const LIVE_SPEC_URL = "https://cambrian-backend-api.onrender.com/openapi.json";
 
       window.onload = () => {
         window.ui = SwaggerUIBundle({

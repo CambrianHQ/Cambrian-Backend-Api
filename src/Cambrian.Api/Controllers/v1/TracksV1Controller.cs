@@ -1,4 +1,5 @@
 using Cambrian.Api.Middleware;
+using Cambrian.Api.Security;
 using Cambrian.Application.DTOs.V1;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -18,6 +19,7 @@ namespace Cambrian.Api.Controllers.v1;
 [Route("api/v1")]
 [EnableRateLimiting("api_key_free")]
 [ServiceFilter(typeof(ApiUsageActionFilter))]
+[AllowApiKey]
 public class TracksV1Controller : ControllerBase
 {
     private readonly ICatalogService _catalog;

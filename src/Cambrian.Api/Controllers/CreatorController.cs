@@ -3,6 +3,7 @@ using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Validation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -90,13 +91,22 @@ public class CreatorController : BaseController
         var ownsUuid = creatorUuid.HasValue && track.CreatorUuid == creatorUuid.Value;
         if (!ownsLegacy && !ownsUuid) return ForbiddenResponse("You can only edit your own tracks.");
 
-        if (request.Title is not null) track.Title = request.Title;
-        if (request.Description is not null) track.Description = request.Description;
+        if (request.Title is not null)
+            track.Title = MetadataSanitizer.NormalizeRequired(request.Title, "Track title");
+        if (request.Description is not null)
+            track.Description = MetadataSanitizer.NormalizeOptional(request.Description, "Track description");
         if (request.PrimaryGenre is not null || request.Subgenre is not null || request.Genre is not null)
             ApplyGenreUpdates(track, request.PrimaryGenre, request.Subgenre, request.Genre);
-        if (request.Mood is not null) track.Mood = request.Mood;
-        if (request.Tempo is not null) track.Tempo = request.Tempo;
-        if (request.Tags is not null) track.Tags = request.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (request.Mood is not null)
+            track.Mood = MetadataSanitizer.NormalizeOptional(request.Mood, "Mood");
+        if (request.Tempo is not null)
+            track.Tempo = MetadataSanitizer.NormalizeOptional(request.Tempo, "Tempo");
+        if (request.Tags is not null)
+        {
+            var tags = MetadataSanitizer.NormalizeOptional(request.Tags, "Tags");
+            track.Tags = tags?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
+                ?? new List<string>();
+        }
         if (request.NonExclusivePriceCents.HasValue)
         {
             track.NonExclusivePriceCents = request.NonExclusivePriceCents.Value;
@@ -245,5 +255,5 @@ public class CreatorController : BaseController
     }
 
 private static string? NormalizeNullableText(string? value) =>
-    string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    MetadataSanitizer.NormalizeOptional(value, "Genre metadata");
 }

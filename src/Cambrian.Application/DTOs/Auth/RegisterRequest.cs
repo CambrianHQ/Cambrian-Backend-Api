@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Cambrian.Application.Validation;
 
 namespace Cambrian.Application.DTOs.Auth;
 
@@ -15,6 +16,7 @@ public class RegisterRequest
     public string Password { get; set; } = string.Empty;
 
     [MaxLength(100)]
+    [SafeMetadata]
     public string? DisplayName { get; set; }
 
     /// <summary>
