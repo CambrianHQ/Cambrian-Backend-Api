@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generatedAt": "2026-06-18T15:13:36.141Z",
+  "generatedAt": "2026-06-30T19:57:00.493Z",
   "endpoints": [
     {
       "method": "GET",
@@ -278,14 +278,15 @@
     {
       "method": "GET",
       "path": "/ai/playlist",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Ai"
     },
     {
       "method": "GET",
       "path": "/analytics/events",
-      "requiresAuth": false,
-      "tag": "Analytics"
+      "requiresAuth": true,
+      "tag": "Analytics",
+      "requiresRole": "Admin"
     },
     {
       "method": "POST",
@@ -296,55 +297,56 @@
     {
       "method": "GET",
       "path": "/analytics/summary",
-      "requiresAuth": false,
-      "tag": "Analytics"
+      "requiresAuth": true,
+      "tag": "Analytics",
+      "requiresRole": "Admin"
     },
     {
       "method": "POST",
       "path": "/analytics/track",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Analytics"
     },
     {
       "method": "POST",
       "path": "/api/artists/{id}/subscribe",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ArtistMonetization"
     },
     {
       "method": "POST",
       "path": "/api/artists/{id}/tip",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ArtistMonetization"
     },
     {
       "method": "PUT",
       "path": "/api/artists/me/subscription-price",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ArtistMonetization"
     },
     {
       "method": "GET",
       "path": "/api/artists/me/support",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ArtistMonetization"
     },
     {
       "method": "GET",
       "path": "/api/authorship-records/{id}",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "AuthorshipRecords"
     },
     {
       "method": "POST",
       "path": "/api/billing/checkout",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Billing"
     },
     {
       "method": "POST",
       "path": "/api/billing/portal",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Billing"
     },
     {
@@ -356,14 +358,16 @@
     {
       "method": "GET",
       "path": "/api/creator/me",
-      "requiresAuth": false,
-      "tag": "Creators"
+      "requiresAuth": true,
+      "tag": "Creators",
+      "requiresRole": "Creator"
     },
     {
       "method": "PUT",
       "path": "/api/creator/me",
-      "requiresAuth": false,
-      "tag": "Creators"
+      "requiresAuth": true,
+      "tag": "Creators",
+      "requiresRole": "Creator"
     },
     {
       "method": "GET",
@@ -374,19 +378,19 @@
     {
       "method": "DELETE",
       "path": "/api/creators/{creatorId}/follow",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Creators"
     },
     {
       "method": "GET",
       "path": "/api/creators/{creatorId}/follow",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Creators"
     },
     {
       "method": "POST",
       "path": "/api/creators/{creatorId}/follow",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Creators"
     },
     {
@@ -404,8 +408,9 @@
     {
       "method": "GET",
       "path": "/api/creators/dashboard",
-      "requiresAuth": false,
-      "tag": "Creators"
+      "requiresAuth": true,
+      "tag": "Creators",
+      "requiresRole": "Admin,Creator"
     },
     {
       "method": "GET",
@@ -422,37 +427,39 @@
     {
       "method": "DELETE",
       "path": "/api/entitlements/{id}",
-      "requiresAuth": false,
-      "tag": "Entitlements"
+      "requiresAuth": true,
+      "tag": "Entitlements",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/api/entitlements/access",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Entitlements"
     },
     {
       "method": "POST",
       "path": "/api/entitlements/grant",
-      "requiresAuth": false,
-      "tag": "Entitlements"
+      "requiresAuth": true,
+      "tag": "Entitlements",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/api/entitlements/me",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Entitlements"
     },
     {
       "method": "GET",
       "path": "/api/jobs/{id}",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleasePipeline"
     },
     {
       "method": "GET",
       "path": "/api/me/entitlements",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Me"
     },
     {
@@ -474,9 +481,105 @@
       "tag": "Provenance"
     },
     {
+      "method": "GET",
+      "path": "/api/public/authorship",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/creator-guide",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/creators/{slug}",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/creators/search",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/faq",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/featured-creators",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/genres",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/genres/{genre}",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/latest",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/pricing",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/release-ready",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/sitemap",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/stats",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/tracks/{trackId}",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/tracks/search",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/trending",
+      "requiresAuth": false,
+      "tag": "Public"
+    },
+    {
       "method": "POST",
       "path": "/api/releases/{id}/authorship-record",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "AuthorshipRecords"
     },
     {
@@ -488,49 +591,51 @@
     {
       "method": "POST",
       "path": "/api/tracks",
-      "requiresAuth": false,
-      "tag": "Upload"
+      "requiresAuth": true,
+      "tag": "Upload",
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanUploadTrack,VerifiedEmail"
     },
     {
       "method": "GET",
       "path": "/api/tracks/{id}/authorship",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Provenance"
     },
     {
       "method": "POST",
       "path": "/api/tracks/{id}/authorship",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Provenance"
     },
     {
       "method": "GET",
       "path": "/api/tracks/{id}/compliance-score",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Provenance"
     },
     {
       "method": "GET",
       "path": "/api/tracks/{id}/creator-detail",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Provenance"
     },
     {
       "method": "GET",
       "path": "/api/tracks/{id}/provenance",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Provenance"
     },
     {
       "method": "GET",
       "path": "/api/tracks/{id}/readiness",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleasePipeline"
     },
     {
       "method": "POST",
       "path": "/api/tracks/{id}/release-ready",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleasePipeline"
     },
     {
@@ -562,19 +667,20 @@
     {
       "method": "GET",
       "path": "/api/v1/keys",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ApiKeys"
     },
     {
       "method": "POST",
       "path": "/api/v1/keys",
-      "requiresAuth": false,
-      "tag": "ApiKeys"
+      "requiresAuth": true,
+      "tag": "ApiKeys",
+      "requiresPolicy": "VerifiedEmail"
     },
     {
       "method": "DELETE",
       "path": "/api/v1/keys/{id}",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ApiKeys"
     },
     {
@@ -604,7 +710,7 @@
     {
       "method": "PUT",
       "path": "/auth/display-name",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Auth"
     },
     {
@@ -682,7 +788,7 @@
     {
       "method": "POST",
       "path": "/auth/send-verification-email",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Auth"
     },
     {
@@ -815,19 +921,22 @@
       "method": "PUT",
       "path": "/creator-profile/me",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "POST",
       "path": "/creator-profile/me/avatar",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "POST",
       "path": "/creator-profile/me/banner",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "GET",
@@ -839,55 +948,64 @@
       "method": "POST",
       "path": "/creator-profile/me/collections",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "DELETE",
       "path": "/creator-profile/me/collections/{collectionId}",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "PUT",
       "path": "/creator-profile/me/collections/{collectionId}",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "POST",
       "path": "/creator-profile/me/cover-image-upload",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "PUT",
       "path": "/creator-profile/me/pinned-tracks",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "POST",
       "path": "/creator-profile/me/profile-image-upload",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "PATCH",
       "path": "/creator-profile/me/settings",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "GET",
       "path": "/creator/revenue",
-      "requiresAuth": false,
-      "tag": "Creator"
+      "requiresAuth": true,
+      "tag": "Creator",
+      "requiresRole": "Creator"
     },
     {
       "method": "GET",
       "path": "/creator/tracks",
-      "requiresAuth": false,
-      "tag": "Creator"
+      "requiresAuth": true,
+      "tag": "Creator",
+      "requiresRole": "Creator"
     },
     {
       "method": "GET",
@@ -898,20 +1016,26 @@
     {
       "method": "DELETE",
       "path": "/creator/tracks/{trackId}",
-      "requiresAuth": false,
-      "tag": "Creator"
+      "requiresAuth": true,
+      "tag": "Creator",
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanDeleteOwnTrack"
     },
     {
       "method": "PUT",
       "path": "/creator/tracks/{trackId}",
-      "requiresAuth": false,
-      "tag": "Creator"
+      "requiresAuth": true,
+      "tag": "Creator",
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanEditOwnTrack"
     },
     {
       "method": "PUT",
       "path": "/creator/tracks/{trackId}/cover-art",
-      "requiresAuth": false,
-      "tag": "Creator"
+      "requiresAuth": true,
+      "tag": "Creator",
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanEditOwnTrack"
     },
     {
       "method": "GET",
@@ -946,74 +1070,85 @@
     {
       "method": "GET",
       "path": "/data/account",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Data"
     },
     {
       "method": "GET",
       "path": "/data/secrets",
-      "requiresAuth": false,
-      "tag": "Data"
+      "requiresAuth": true,
+      "tag": "Data",
+      "requiresRole": "Admin"
     },
     {
       "method": "POST",
       "path": "/data/secrets",
-      "requiresAuth": false,
-      "tag": "Data"
+      "requiresAuth": true,
+      "tag": "Data",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/data/songs",
-      "requiresAuth": false,
-      "tag": "Data"
+      "requiresAuth": true,
+      "tag": "Data",
+      "requiresRole": "Admin"
     },
     {
       "method": "POST",
       "path": "/data/songs",
-      "requiresAuth": false,
-      "tag": "Data"
+      "requiresAuth": true,
+      "tag": "Data",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/data/system",
-      "requiresAuth": false,
-      "tag": "Data"
+      "requiresAuth": true,
+      "tag": "Data",
+      "requiresRole": "Admin"
     },
     {
       "method": "POST",
       "path": "/data/system",
-      "requiresAuth": false,
-      "tag": "Data"
+      "requiresAuth": true,
+      "tag": "Data",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/debug/consistency",
-      "requiresAuth": false,
-      "tag": "Debug"
+      "requiresAuth": true,
+      "tag": "Debug",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/debug/dev/deliveries",
-      "requiresAuth": false,
-      "tag": "Debug"
+      "requiresAuth": true,
+      "tag": "Debug",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/debug/dev/password-reset",
-      "requiresAuth": false,
-      "tag": "Debug"
+      "requiresAuth": true,
+      "tag": "Debug",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/debug/user/{userId}",
-      "requiresAuth": false,
-      "tag": "Debug"
+      "requiresAuth": true,
+      "tag": "Debug",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/debug/webhooks",
-      "requiresAuth": false,
-      "tag": "Debug"
+      "requiresAuth": true,
+      "tag": "Debug",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
@@ -1049,31 +1184,34 @@
     {
       "method": "GET",
       "path": "/feature-flags",
-      "requiresAuth": false,
-      "tag": "FeatureFlags"
+      "requiresAuth": true,
+      "tag": "FeatureFlags",
+      "requiresRole": "Admin"
     },
     {
       "method": "DELETE",
       "path": "/feature-flags/{name}",
-      "requiresAuth": false,
-      "tag": "FeatureFlags"
+      "requiresAuth": true,
+      "tag": "FeatureFlags",
+      "requiresRole": "Admin"
     },
     {
       "method": "PUT",
       "path": "/feature-flags/{name}",
-      "requiresAuth": false,
-      "tag": "FeatureFlags"
+      "requiresAuth": true,
+      "tag": "FeatureFlags",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/feature-flags/check/{name}",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "FeatureFlags"
     },
     {
       "method": "POST",
       "path": "/generate",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Ai"
     },
     {
@@ -1085,43 +1223,47 @@
     {
       "method": "GET",
       "path": "/health/audio-audit",
-      "requiresAuth": false,
-      "tag": "Health"
+      "requiresAuth": true,
+      "tag": "Health",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/health/details",
-      "requiresAuth": false,
-      "tag": "Health"
+      "requiresAuth": true,
+      "tag": "Health",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/health/storage",
-      "requiresAuth": false,
-      "tag": "Health"
+      "requiresAuth": true,
+      "tag": "Health",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/health/storage-probe",
-      "requiresAuth": false,
-      "tag": "Health"
+      "requiresAuth": true,
+      "tag": "Health",
+      "requiresRole": "Admin"
     },
     {
       "method": "GET",
       "path": "/invoices",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Invoice"
     },
     {
       "method": "GET",
       "path": "/invoices/{invoiceId}",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Invoice"
     },
     {
       "method": "GET",
       "path": "/invoices/{invoiceId}/download",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Invoice"
     },
     {
@@ -1215,7 +1357,8 @@
       "path": "/payouts/request",
       "requiresAuth": true,
       "tag": "Payout",
-      "requiresRole": "Creator"
+      "requiresRole": "Creator",
+      "requiresPolicy": "VerifiedEmail"
     },
     {
       "method": "GET",
@@ -1227,49 +1370,49 @@
     {
       "method": "GET",
       "path": "/release-ready/credits",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleaseReady"
     },
     {
       "method": "POST",
       "path": "/release-ready/credits/checkout",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleaseReady"
     },
     {
       "method": "GET",
       "path": "/release-ready/jobs",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleaseReady"
     },
     {
       "method": "GET",
       "path": "/release-ready/jobs/{id}",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleaseReady"
     },
     {
       "method": "POST",
       "path": "/release-ready/jobs/{id}/approve",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleaseReady"
     },
     {
       "method": "GET",
       "path": "/release-ready/jobs/{id}/download",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleaseReady"
     },
     {
       "method": "POST",
       "path": "/release-ready/jobs/{id}/submit",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleaseReady"
     },
     {
       "method": "POST",
       "path": "/release-ready/validate",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "ReleaseReady"
     },
     {
@@ -1312,18 +1455,19 @@
       "method": "POST",
       "path": "/settings/profile/avatar",
       "requiresAuth": true,
-      "tag": "CreatorProfile"
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
     },
     {
       "method": "GET",
       "path": "/stream",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Stream"
     },
     {
       "method": "GET",
       "path": "/stream/{trackId}",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Stream"
     },
     {
@@ -1335,13 +1479,13 @@
     {
       "method": "POST",
       "path": "/stream/start",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Stream"
     },
     {
       "method": "POST",
       "path": "/stream/stop",
-      "requiresAuth": false,
+      "requiresAuth": true,
       "tag": "Stream"
     },
     {
@@ -1365,7 +1509,7 @@
     {
       "method": "GET",
       "path": "/subscriptions/plans",
-      "requiresAuth": true,
+      "requiresAuth": false,
       "tag": "Subscriptions"
     },
     {
@@ -1401,8 +1545,9 @@
     {
       "method": "DELETE",
       "path": "/tracks/{trackId}/boost",
-      "requiresAuth": false,
-      "tag": "Community"
+      "requiresAuth": true,
+      "tag": "Community",
+      "requiresPolicy": "VerifiedEmail"
     },
     {
       "method": "GET",
@@ -1413,8 +1558,9 @@
     {
       "method": "POST",
       "path": "/tracks/{trackId}/boost",
-      "requiresAuth": false,
-      "tag": "Community"
+      "requiresAuth": true,
+      "tag": "Community",
+      "requiresPolicy": "VerifiedEmail"
     },
     {
       "method": "GET",
@@ -1433,7 +1579,8 @@
       "path": "/upload",
       "requiresAuth": true,
       "tag": "Upload",
-      "requiresRole": "Creator"
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanUploadTrack,VerifiedEmail"
     },
     {
       "method": "POST",
@@ -1475,7 +1622,8 @@
       "method": "POST",
       "path": "/wallet/withdraw",
       "requiresAuth": true,
-      "tag": "Wallet"
+      "tag": "Wallet",
+      "requiresPolicy": "VerifiedEmail"
     },
     {
       "method": "POST",

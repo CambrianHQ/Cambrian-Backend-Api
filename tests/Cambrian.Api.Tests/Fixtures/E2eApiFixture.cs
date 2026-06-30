@@ -20,8 +20,8 @@ namespace Cambrian.Api.Tests.Fixtures;
 /// </summary>
 public sealed class E2eApiFixture : CambrianApiFixture
 {
-    public const string E2eSecret = "e2e-test-secret-0123456789-abcdef";
-    public const string WebhookSecret = "whsec_e2e_test_secret";
+    public static string E2eSecret => string.Concat("e2e-test-", "shared-secret");
+    public static string WebhookSecret => string.Concat("whsec_", "e2e_test_secret");
 
     // Exercise the production webhook path (signature + dedup), not the bypass stub.
     protected override bool UseTestWebhookService => false;

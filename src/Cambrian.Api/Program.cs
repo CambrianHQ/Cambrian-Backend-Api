@@ -380,6 +380,9 @@ builder.AddCorsPolicy();
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
+// Public, read-only discovery surface for the external MCP server / SEO / AI crawlers.
+builder.Services.AddSingleton<IPublicUrlResolver, PublicUrlResolver>();
+builder.Services.AddScoped<IPublicApiService, PublicApiService>();
 builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<IPayoutService, PayoutService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
@@ -542,6 +545,7 @@ builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
+builder.Services.AddScoped<IPublicDirectoryRepository, PublicDirectoryRepository>();
 builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
 builder.Services.AddScoped<IEntitlementRepository, EntitlementRepository>();
@@ -620,22 +624,11 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/openapi.json", () => Results.Redirect("/swagger/v1/swagger.json", permanent: false))
    .ExcludeFromDescription();
 
-// Endpoint manifest: derived from the live Swagger document
-app.MapGet("/manifest.json", (Swashbuckle.AspNetCore.Swagger.ISwaggerProvider swaggerProvider) =>
-{
-    var doc = swaggerProvider.GetSwagger("v1");
-    var endpoints = new List<object>();
-    foreach (var (pathKey, pathItem) in doc.Paths)
-    {
-        foreach (var (method, operation) in pathItem.Operations)
-        {
-            var hasBearerSecurity = operation.Security?.Any(r => r.Keys.Any(k => k.Reference?.Id == "Bearer")) == true;
-            var tag = operation.Tags?.FirstOrDefault()?.Name ?? "Other";
-            endpoints.Add(new { method = method.ToString().ToUpperInvariant(), path = pathKey, requiresAuth = hasBearerSecurity, tag });
-        }
-    }
-    return Results.Json(new { version = "v1", generatedAt = DateTime.UtcNow, endpoints });
-}).ExcludeFromDescription();
+// Endpoint manifest: derived from ASP.NET endpoint metadata, not Swagger security.
+// Swagger can describe contracts, but authorization truth lives on endpoint metadata.
+app.MapGet("/manifest.json", (IEnumerable<EndpointDataSource> endpointDataSources) =>
+    Results.Json(EndpointManifestFactory.Build(endpointDataSources, DateTimeOffset.UtcNow)))
+    .ExcludeFromDescription();
 
 // Normalize double-slash paths (e.g. //health → /health)
 // Prevents 404s when VITE_BACKEND_API has a trailing slash.

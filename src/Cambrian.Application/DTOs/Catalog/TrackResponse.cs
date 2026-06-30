@@ -74,5 +74,31 @@ public class TrackResponse
 
     public string? Artist { get; set; }
 
+    /// <summary>
+    /// Lifetime play count — number of recorded stream sessions for this track
+    /// (preview + full plays, including anonymous listeners). Sourced live from
+    /// the StreamSessions table; 0 when the track has never been streamed.
+    /// </summary>
+    public int Plays { get; set; }
+
+    /// <summary>
+    /// Number of completed (paid) purchases for this track. Sourced live from the
+    /// Purchases table filtered to Status == "completed"; 0 until the track sells.
+    /// </summary>
+    public int Sales { get; set; }
+
+    /// <summary>
+    /// Whether the creator disclosed this track as AI-generated/assisted (DDEX disclosure).
+    /// </summary>
+    public bool AiGenerated { get; set; }
+
+    /// <summary>
+    /// Real provenance state derived from the §9 pipeline: "none" (no hash), "hashed"
+    /// (content hash recorded), "stamped" (free ECDSA provenance stamp issued), or
+    /// "verified" (stamped + commercial-rights attestation). Never exposes the raw
+    /// content hash or signature.
+    /// </summary>
+    public string ProvenanceStatus { get; set; } = "none";
+
     public DateTime CreatedAt { get; set; }
 }
