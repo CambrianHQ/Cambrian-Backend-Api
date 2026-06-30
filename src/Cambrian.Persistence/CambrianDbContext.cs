@@ -71,6 +71,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<FanSubscription> FanSubscriptions => Set<FanSubscription>();
 
+    public DbSet<TrackStat> TrackStats => Set<TrackStat>();
+
+    public DbSet<CreatorStat> CreatorStats => Set<CreatorStat>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -394,6 +398,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.ApplyConfiguration(new AuthorshipRecordConfiguration());
         builder.ApplyConfiguration(new EarningsTransactionConfiguration());
         builder.ApplyConfiguration(new FanSubscriptionConfiguration());
+
+        // ── Denormalized public-metrics counters (track + creator stats) ──
+        builder.ApplyConfiguration(new TrackStatConfiguration());
+        builder.ApplyConfiguration(new CreatorStatConfiguration());
 
         // ── API keys ──
         builder.Entity<ApiKey>(e =>

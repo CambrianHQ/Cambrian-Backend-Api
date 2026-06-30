@@ -1,5 +1,6 @@
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.DTOs.Creator;
+using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -209,6 +210,38 @@ public class TrackRepository : ITrackRepository
                 includeTagSearch: _db.Database.IsRelational());
             return await query.CountAsync();
         }
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, TrackStats>> GetTrackStatsAsync(IReadOnlyCollection<Guid> trackIds)
+    {
+        var result = new Dictionary<Guid, TrackStats>(trackIds.Count);
+        foreach (var id in trackIds)
+            result[id] = new TrackStats();
+
+        if (trackIds.Count == 0)
+            return result;
+
+        var ids = trackIds as IList<Guid> ?? trackIds.ToList();
+
+        // Plays — one grouped count over all stream sessions for the page's tracks.
+        var plays = await _db.StreamSessions
+            .Where(s => ids.Contains(s.TrackId))
+            .GroupBy(s => s.TrackId)
+            .Select(g => new { TrackId = g.Key, Count = g.Count() })
+            .ToListAsync();
+        foreach (var row in plays)
+            if (result.TryGetValue(row.TrackId, out var stats)) stats.Plays = row.Count;
+
+        // Sales — completed purchases only.
+        var sales = await _db.Purchases
+            .Where(p => ids.Contains(p.TrackId) && p.Status == "completed")
+            .GroupBy(p => p.TrackId)
+            .Select(g => new { TrackId = g.Key, Count = g.Count() })
+            .ToListAsync();
+        foreach (var row in sales)
+            if (result.TryGetValue(row.TrackId, out var stats)) stats.Sales = row.Count;
+
+        return result;
     }
 
     private IQueryable<Track> BuildTrackQuery()

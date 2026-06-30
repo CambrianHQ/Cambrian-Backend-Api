@@ -267,6 +267,17 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
                     && t.Id == p.TrackId)
                              && p.Status == "completed");
 
+        // Lifetime plays across all of the creator's tracks (StreamSessions).
+        var totalPlays = await _db.StreamSessions
+            .CountAsync(s => _db.Tracks.Any(t =>
+                (t.CreatorId == userId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                && t.Id == s.TrackId));
+
+        // Follower count — CreatorFollows keyed by the canonical Creator UUID.
+        var followerCount = creatorUuid != null
+            ? await _db.CreatorFollows.CountAsync(f => f.CreatorId == creatorUuid)
+            : 0;
+
         // Use wallet transaction credits as the source of truth for earnings.
         // These are already post-fee, per-purchase-floored values matching the
         // withdrawable balance (consistent with PayoutService.GetEarningsAsync).
@@ -277,6 +288,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return new CreatorStatsDto
         {
             TotalDownloads = totalSales,
+            TotalPlays = totalPlays,
+            FollowerCount = followerCount,
             TotalEarnings = totalEarningsCents / 100m,
         };
     }

@@ -1,5 +1,6 @@
 using Cambrian.Domain.Entities;
 using Cambrian.Application.DTOs.Creator;
+using Cambrian.Application.DTOs.Catalog;
 
 namespace Cambrian.Application.Interfaces;
 
@@ -33,6 +34,13 @@ public interface ITrackRepository
     /// <summary>Count tracks matching the given filters (for pagination metadata).</summary>
     Task<int> CountAsync(string? genre = null, string? search = null,
         string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null);
+
+    /// <summary>
+    /// Aggregate live engagement counts (plays, completed sales) for a set of tracks
+    /// in two grouped queries — no per-track round-trips. Track IDs with no activity
+    /// are returned with zeroed counts so callers can index every id safely.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, TrackStats>> GetTrackStatsAsync(IReadOnlyCollection<Guid> trackIds);
 
     Task AddAsync(Track track);
 

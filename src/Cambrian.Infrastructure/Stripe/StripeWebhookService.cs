@@ -84,7 +84,11 @@ public class StripeWebhookService : IWebhookService
 
         try
         {
-            var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
+            // Stripe.net pins an expected API version; events delivered under a newer
+            // account/CLI API version must not hard-fail signature construction. The fields
+            // we read (id, type, customer, subscription, client_reference_id, metadata,
+            // amounts) are stable across these versions, so we disable the version throw.
+            var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret, throwOnApiVersionMismatch: false);
             eventType = stripeEvent.Type;
             eventId = stripeEvent.Id;
             clientReferenceId = null;
@@ -372,6 +376,21 @@ public class StripeWebhookService : IWebhookService
             // Clear it so the failed-marker save starts from a clean baseline.
             _db.ChangeTracker.Clear();
 
+            // Concurrent duplicate delivery: Stripe (or a doubled forwarder/retry) can
+            // deliver the same event twice close together. Both requests pass the
+            // "already-completed" check (neither has committed yet) and both INSERT the
+            // event row, so the loser hits a unique-violation on IX_StripeWebhookEvents_EventId.
+            // That is benign — the concurrent winner owns processing — so treat it as a
+            // duplicate and return success. Otherwise this 500s and Stripe retries forever.
+            if (IsDuplicateEventInsert(ex))
+            {
+                _logger.LogInformation(
+                    "Stripe webhook event {EventId} {EventType} lost a concurrent insert race — already being processed by the winning delivery; skipping (idempotent).",
+                    normalizedEventId, eventType);
+                Cambrian.Application.Observability.CambrianMetrics.WebhookDuplicate.Add(1);
+                return;
+            }
+
             // Record failure for observability — this is a best-effort, non-transactional save.
             try
             {
@@ -416,6 +435,37 @@ public class StripeWebhookService : IWebhookService
                 await transaction.DisposeAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// True when the exception chain is a Postgres unique-violation (SQLSTATE 23505)
+    /// on one of our idempotency guards — the webhook event row
+    /// (IX_StripeWebhookEvents_EventId) or a fulfillment dedup key keyed by the Stripe
+    /// session/event (e.g. ux_release_credit_purchases_session). These fire only when a
+    /// concurrent/duplicate delivery already processed the same event, so the work is
+    /// already done — treat as a benign duplicate and return success instead of 500
+    /// (which would make Stripe retry forever). Matched on the message to avoid a hard
+    /// Npgsql dependency here.
+    /// </summary>
+    private static bool IsDuplicateEventInsert(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            var m = e.Message;
+            var isUniqueViolation = m.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("23505", StringComparison.Ordinal);
+            if (!isUniqueViolation) continue;
+
+            // Idempotency guards keyed by the Stripe event / session. A collision here
+            // means another delivery already fulfilled this event.
+            if (m.Contains("IX_StripeWebhookEvents_EventId", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("_session", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("_event", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private async Task HandleCheckoutCompleted(string? clientReferenceId, long? amountTotal, string? stripeSessionId, string? stripeCustomerId, string? stripeSubscriptionId = null)
@@ -909,9 +959,14 @@ public class StripeWebhookService : IWebhookService
         var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
         if (purchase is null)
         {
-            _logger.LogWarning("charge.refunded: no purchase found for session {SessionId}", session.Id);
-            throw new KeyNotFoundException(
-                $"charge.refunded cannot find a local purchase for session {session.Id}.");
+            // Not a tracked track Purchase — e.g. a subscription invoice or a
+            // Release Ready credit-pack refund (those have no Purchase row to claw
+            // back here). There is nothing to reconcile, so succeed instead of
+            // throwing (a 400/exception makes Stripe retry the refund webhook forever).
+            _logger.LogInformation(
+                "charge.refunded: no track Purchase for session {SessionId} (likely a subscription or credit-pack refund) — nothing to claw back, treating as no-op.",
+                session.Id);
+            return;
         }
 
         purchase.Status = PurchaseStatuses.Refunded;
@@ -1059,9 +1114,13 @@ public class StripeWebhookService : IWebhookService
         var purchase = await _db.Purchases.FirstOrDefaultAsync(p => p.StripeSessionId == session.Id);
         if (purchase is null)
         {
-            _logger.LogWarning("charge.dispute.created: no purchase found for session {SessionId}", session.Id);
-            throw new KeyNotFoundException(
-                $"charge.dispute.created cannot find a local purchase for session {session.Id}.");
+            // No tracked track Purchase (e.g. a subscription or credit-pack charge) —
+            // nothing to reconcile here; succeed so Stripe does not retry the dispute
+            // webhook indefinitely.
+            _logger.LogInformation(
+                "charge.dispute.created: no track Purchase for session {SessionId} (subscription/credit-pack) — no-op.",
+                session.Id);
+            return;
         }
 
         purchase.Status = PurchaseStatuses.Disputed;

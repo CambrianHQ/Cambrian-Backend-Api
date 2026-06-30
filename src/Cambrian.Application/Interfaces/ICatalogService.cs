@@ -21,4 +21,15 @@ public interface ICatalogService
         string? mood, string? tempo, bool? instrumental, string? duration);
 
     Task<TrackResponse?> GetTrackAsync(string trackId);
+
+    /// <summary>
+    /// Trending page ranked by a REAL signal: recent public tracks ordered by lifetime
+    /// play count (descending), then newest. The legacy <c>sort=trending</c> ordering is a
+    /// no-op over the unpopulated <c>TrendingScore</c> column and is intentionally not used.
+    /// </summary>
+    Task<PagedResult<TrackResponse>> GetTrendingPagedAsync(int page, int pageSize,
+        string? genre, string? mood, string? tempo, bool? instrumental, string? duration);
+
+    /// <summary>Public, storefront-safe tracks for a single creator, paged (newest first).</summary>
+    Task<PagedResult<TrackResponse>> GetByCreatorPagedAsync(string creatorId, Guid? creatorUuid, int page, int pageSize);
 }

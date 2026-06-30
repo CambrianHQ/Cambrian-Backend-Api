@@ -77,6 +77,57 @@ public class CatalogService : ICatalogService
         return track is null ? null : await MapToResponseAsync(track);
     }
 
+    /// <summary>
+    /// Trending = recent public tracks re-ranked by REAL lifetime plays. We fetch a bounded
+    /// window of the newest tracks (so the query stays cheap and uses the existing public
+    /// filters), map them — which attaches live play counts — then order by plays.
+    /// </summary>
+    private const int TrendingWindow = 250;
+
+    public async Task<PagedResult<TrackResponse>> GetTrendingPagedAsync(int page, int pageSize,
+        string? genre, string? mood, string? tempo, bool? instrumental, string? duration)
+    {
+        var candidates = await _tracks.BrowseAsync(1, TrendingWindow, genre, null, "newest",
+            mood, tempo, instrumental, duration);
+        var mapped = await MapBatchAsync(candidates);
+
+        var ranked = mapped
+            .OrderByDescending(t => t.Plays)
+            .ThenByDescending(t => t.CreatedAt)
+            .ToList();
+
+        var pageItems = ranked
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return new PagedResult<TrackResponse>
+        {
+            Items = pageItems,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = ranked.Count
+        };
+    }
+
+    public async Task<PagedResult<TrackResponse>> GetByCreatorPagedAsync(string creatorId, Guid? creatorUuid, int page, int pageSize)
+    {
+        var all = await _tracks.GetStorefrontTracksAsync(creatorId, creatorUuid);
+        var pageSlice = all
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+        var items = await MapBatchAsync(pageSlice);
+
+        return new PagedResult<TrackResponse>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = all.Count
+        };
+    }
+
     /// <summary>Batch-map a page of tracks — 2 queries total instead of 2×N.</summary>
     private async Task<List<TrackResponse>> MapBatchAsync(List<Track> tracks)
     {
@@ -98,17 +149,22 @@ public class CatalogService : ICatalogService
         // Single query: load all profile slugs/images for this page
         var profileMap = await _profiles.GetSlugsByUserIdsAsync(creatorIds);
 
+        // Two grouped queries: live play/sale counts for every track on this page
+        var statsMap = await _tracks.GetTrackStatsAsync(tracks.Select(t => t.Id).ToList())
+            ?? new Dictionary<Guid, TrackStats>();
+
         var result = new List<TrackResponse>(tracks.Count);
         foreach (var t in tracks)
         {
             creators.TryGetValue(t.CreatorId, out var creator);
             profileMap.TryGetValue(t.CreatorId, out var profileInfo);
+            statsMap.TryGetValue(t.Id, out var stats);
 
             var feeRate = creator is not null
                 ? TierManifest.For(creator.CreatorTier).FeeRate
                 : TierManifest.Free.FeeRate;
 
-            result.Add(BuildTrackResponse(t, feeRate, profileInfo.Slug, profileInfo.ProfileImageUrl));
+            result.Add(BuildTrackResponse(t, feeRate, profileInfo.Slug, profileInfo.ProfileImageUrl, stats));
         }
         return result;
     }
@@ -133,10 +189,14 @@ public class CatalogService : ICatalogService
             }
         }
 
-        return BuildTrackResponse(t, feeRate, creatorSlug, creatorProfileImageUrl);
+        var statsMap = await _tracks.GetTrackStatsAsync(new[] { t.Id })
+            ?? new Dictionary<Guid, TrackStats>();
+        statsMap.TryGetValue(t.Id, out var stats);
+
+        return BuildTrackResponse(t, feeRate, creatorSlug, creatorProfileImageUrl, stats);
     }
 
-    private static TrackResponse BuildTrackResponse(Track t, decimal feeRate, string? creatorSlug, string? creatorProfileImageUrl)
+    private static TrackResponse BuildTrackResponse(Track t, decimal feeRate, string? creatorSlug, string? creatorProfileImageUrl, TrackStats? stats = null)
     {
         // Fallback: if NonExclusivePriceCents is 0, use legacy Price field (matches checkout logic)
         var legacyPriceDollars = t.Price;
@@ -178,7 +238,26 @@ public class CatalogService : ICatalogService
                 : t.CreatorEntity?.Username
                   ?? t.Creator?.DisplayName
                   ?? "Unknown Artist",
+            Plays = stats?.Plays ?? 0,
+            Sales = stats?.Sales ?? 0,
+            AiGenerated = t.AiGenerated,
+            ProvenanceStatus = DeriveProvenanceStatus(t),
             CreatedAt = t.CreatedAt,
         };
+    }
+
+    /// <summary>
+    /// Derive the public provenance status from the §9 signing fields. Returns a status
+    /// string only — the raw <see cref="Track.ContentHash"/> / <see cref="Track.Signature"/>
+    /// are never surfaced to public consumers.
+    /// </summary>
+    private static string DeriveProvenanceStatus(Track t)
+    {
+        var hasHash = !string.IsNullOrEmpty(t.ContentHash);
+        var hasStamp = !string.IsNullOrEmpty(t.Signature) && t.SignedAt is not null;
+        if (hasStamp && t.CommercialRightsVerified) return "verified";
+        if (hasStamp) return "stamped";
+        if (hasHash) return "hashed";
+        return "none";
     }
 }

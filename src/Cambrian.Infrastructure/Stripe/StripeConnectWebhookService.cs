@@ -54,7 +54,10 @@ public class StripeConnectWebhookService : IConnectWebhookService
             throw new InvalidOperationException(
                 "Stripe Connect webhook signature verification failed. Stripe-Signature header is missing.");
 
-        var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
+        // Disable the API-version throw: events may arrive under a newer account/CLI API
+        // version than Stripe.net pins. The Connect fields we read (client_reference_id,
+        // subscription, amount_total) are stable across these versions.
+        var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret, throwOnApiVersionMismatch: false);
 
         string? clientReferenceId = null, sessionId = null, sessionSubscriptionId = null;
         long? amountTotal = null;
