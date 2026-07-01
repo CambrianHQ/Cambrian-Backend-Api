@@ -215,6 +215,7 @@ public sealed class PublicApiService : IPublicApiService
             CreatorCount = counts.CreatorCount,
             GenreCount = counts.GenreCount,
             TotalPlays = counts.TotalPlays,
+            AuthorshipRecordCount = counts.AuthorshipRecordCount,
             Title = "Cambrian platform statistics",
             Description = $"{counts.TrackCount} tracks from {counts.CreatorCount} creators across {counts.GenreCount} genres.",
             CanonicalUrl = _urls.SiteUrl("about"),

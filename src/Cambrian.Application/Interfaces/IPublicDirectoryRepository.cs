@@ -26,7 +26,7 @@ public interface IPublicDirectoryRepository
 }
 
 /// <summary>Aggregate public platform counts.</summary>
-public sealed record PublicPlatformCounts(int TrackCount, int CreatorCount, int GenreCount, int TotalPlays);
+public sealed record PublicPlatformCounts(int TrackCount, int CreatorCount, int GenreCount, int TotalPlays, int AuthorshipRecordCount);
 
 /// <summary>A genre and its public track count.</summary>
 public sealed record PublicGenreCount(string Name, int TrackCount);

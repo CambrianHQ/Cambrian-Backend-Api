@@ -41,8 +41,12 @@ public sealed class PublicDirectoryRepository : IPublicDirectoryRepository
             .Select(g => g!.ToLower())
             .Distinct()
             .CountAsync();
+        var authorshipRecordCount = await _db.AuthorshipRecords
+            .AsNoTracking()
+            .Where(r => r.Status == "issued")
+            .CountAsync();
 
-        return new PublicPlatformCounts(trackCount, creatorCount, genreCount, totalPlays);
+        return new PublicPlatformCounts(trackCount, creatorCount, genreCount, totalPlays, authorshipRecordCount);
     }
 
     public async Task<IReadOnlyList<PublicGenreCount>> GetGenreCountsAsync()
