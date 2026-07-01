@@ -180,6 +180,22 @@ public sealed class PublicApiTests : IClassFixture<CambrianApiFixture>
     }
 
     [Fact]
+    public async Task Stats_ExposesAuthorshipRecordCount_CountingOnlyIssuedRecords()
+    {
+        var creatorId = await CreateCreatorUserAsync();
+        var (trackId, _) = await SeedTrackAsync(creatorId, t => t.Title = Unique("authorship-stats"));
+        var before = await GetDataAsync("/api/public/stats");
+        var beforeCount = before.GetProperty("authorshipRecordCount").GetInt32();
+
+        await SeedAuthorshipRecordAsync(trackId, creatorId, status: "issued");
+        await SeedAuthorshipRecordAsync(trackId, creatorId, status: "pending_payment");
+        await SeedAuthorshipRecordAsync(trackId, creatorId, status: "failed");
+
+        var after = await GetDataAsync("/api/public/stats");
+        Assert.Equal(beforeCount + 1, after.GetProperty("authorshipRecordCount").GetInt32());
+    }
+
+    [Fact]
     public async Task Pricing_ExposesPlans_WithoutStripePriceIds()
     {
         var res = await _fixture.CreateClient().GetAsync("/api/public/pricing");
@@ -375,6 +391,23 @@ public sealed class PublicApiTests : IClassFixture<CambrianApiFixture>
             Id = Guid.NewGuid(),
             TrackId = trackId,
             StartedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedAuthorshipRecordAsync(Guid trackId, string creatorId, string status)
+    {
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        db.AuthorshipRecords.Add(new AuthorshipRecord
+        {
+            Id = Guid.NewGuid(),
+            TrackId = trackId,
+            CreatorId = creatorId,
+            ArtistName = "Test Artist",
+            Status = status,
+            CreatedAt = DateTime.UtcNow,
+            IssuedAt = status == "issued" ? DateTime.UtcNow : null,
         });
         await db.SaveChangesAsync();
     }

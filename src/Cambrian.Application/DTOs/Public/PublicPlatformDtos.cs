@@ -17,6 +17,9 @@ public sealed class PublicPlatformStatsDto : PublicSeoResource
 
     /// <summary>Lifetime plays across the platform (stream sessions).</summary>
     public int TotalPlays { get; set; }
+
+    /// <summary>Number of issued (paid, signed) authorship records.</summary>
+    public int AuthorshipRecordCount { get; set; }
 }
 
 /// <summary>
