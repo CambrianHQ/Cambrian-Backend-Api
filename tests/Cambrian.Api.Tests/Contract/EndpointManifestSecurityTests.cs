@@ -69,11 +69,12 @@ public sealed partial class EndpointManifestSecurityTests : IClassFixture<Cambri
         AssertProtected(endpoints, "GET", "/feature-flags", "Admin");
         AssertProtected(endpoints, "GET", "/health/details", "Admin");
         AssertProtected(endpoints, "POST", "/release-ready/credits/checkout");
-        AssertProtected(endpoints, "POST", "/stream/start");
 
         AssertPublic(endpoints, "POST", "/auth/login");
         AssertPublic(endpoints, "GET", "/health");
         AssertPublic(endpoints, "POST", "/webhook/stripe");
+        // F7/F1: anonymous listeners' plays are counted, so /stream/start is public.
+        AssertPublic(endpoints, "POST", "/stream/start");
     }
 
     private static void AssertProtected(

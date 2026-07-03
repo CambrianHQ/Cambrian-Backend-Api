@@ -3,6 +3,7 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
@@ -14,14 +15,16 @@ public class StreamController : BaseController
     private readonly IObjectStorage _storage;
     private readonly IStreamRepository _streams;
     private readonly ITrackVisibilityPolicy _visibility;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<StreamController> _logger;
 
-    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams, ITrackVisibilityPolicy visibility, ILogger<StreamController> logger)
+    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams, ITrackVisibilityPolicy visibility, IMemoryCache cache, ILogger<StreamController> logger)
     {
         _tracks = tracks;
         _storage = storage;
         _streams = streams;
         _visibility = visibility;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -181,7 +184,15 @@ public class StreamController : BaseController
         return new EmptyResult();
     }
 
-    [Authorize]
+    /// <summary>
+    /// Records the start of a play. Anonymous is allowed (F7/F1): logged-out listeners'
+    /// plays are counted, attributed to no user. To keep anonymous counts honest, they are
+    /// rate-limited to one counted play per (track, client IP) per hour, so refreshes and
+    /// fire-and-forget retries can't inflate the count. This endpoint is fast (in-process
+    /// dedup + a single insert) and must never gate playback — the frontend fires it
+    /// independently of the &lt;audio&gt; element.
+    /// </summary>
+    [AllowAnonymous]
     [HttpPost("start")]
     public async Task<IActionResult> Start([FromBody] StreamStartRequest? body = null, [FromQuery] string? trackId = null)
     {
@@ -194,9 +205,22 @@ public class StreamController : BaseController
         if (track is null)
             return NotFoundResponse("Track not found.");
 
-        // C4: enforce visibility via shared policy.
+        // C4: enforce visibility via shared policy (anonymous users allowed for public tracks).
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, userId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
+
+        // Anonymous plays are not deduped by the repository (no user to attribute to), so
+        // rate-limit them here: at most one counted play per (track, client IP) per hour.
+        // In-process cache — no extra DB round-trip on the hot path. Authenticated plays
+        // fall through to the repository's own 30-second debounce.
+        if (string.IsNullOrEmpty(userId))
+        {
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var dedupeKey = $"anonplay:{parsedTrackId}:{clientIp}";
+            if (_cache.TryGetValue(dedupeKey, out _))
+                return OkResponse(new { streamId = (string?)null, status = "already_counted" });
+            _cache.Set(dedupeKey, true, TimeSpan.FromHours(1));
+        }
 
         // Audio availability is checked when the client actually streams via
         // GET /stream/{trackId}/audio. Verifying here was redundant and caused

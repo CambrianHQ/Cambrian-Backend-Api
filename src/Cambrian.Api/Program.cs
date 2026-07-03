@@ -7,6 +7,7 @@ using Cambrian.Api.Common;
 using Cambrian.Api.E2e;
 using Cambrian.Api.Middleware;
 using Cambrian.Api.Security;
+using Cambrian.Api.Services;
 using Cambrian.Application.Configuration;
 using Cambrian.Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -24,9 +25,11 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.AspNetCore;
 using OpenTelemetry.Metrics;
+using QuestPDF.Infrastructure;
 using Sentry.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+QuestPDF.Settings.License = LicenseType.Community;
 
 // --- TEMPORARY: generate controller stubs from OpenAPI spec ---
 if (args.Contains("--generate"))
@@ -400,6 +403,24 @@ builder.Services.AddSingleton<IFeeService, FeeService>();
 builder.Services.AddSingleton<ITierService, TierService>();
 // Weekly "The Scene" charts — singleton cache, admin-triggered aggregation (R17).
 builder.Services.AddSingleton<IWeeklyChartService, WeeklyChartService>();
+builder.Services.AddScoped<IWeeklyChartRepository, WeeklyChartRepository>();
+// Weekly creator digest (creator-audit fix 10). The worker is double-gated:
+// Digest:Enabled (default false) AND not Testing. DryRun defaults true, so
+// even an enabled deploy logs recipients instead of emailing until DryRun is
+// explicitly flipped off.
+builder.Services.AddScoped<IWeeklyDigestRepository, WeeklyDigestRepository>();
+builder.Services.AddScoped<ICreatorMilestoneRepository, CreatorMilestoneRepository>();
+builder.Services.AddSingleton<IWeeklyDigestService, WeeklyDigestService>();
+if (builder.Configuration.GetValue("Digest:Enabled", false)
+    && builder.Environment.EnvironmentName != TestingEnvironment)
+{
+    builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.WeeklyDigestWorker>();
+}
+// Scheduled weekly-chart recompute (idempotent per week; admin POST stays as a
+// manual trigger). Not in Testing for the same reason as MasteringWorker: the
+// periodic DB touch would share the test host's single SQLite connection.
+if (builder.Environment.EnvironmentName != TestingEnvironment)
+    builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.WeeklyChartWorker>();
 builder.Services.AddScoped<IStorefrontService, StorefrontService>();
 builder.Services.AddScoped<ICreatorConnectService, CreatorConnectService>();
 
@@ -502,6 +523,7 @@ builder.Services.AddScoped<ITrackReleasePipelineService, TrackReleasePipelineSer
 builder.Services.AddScoped<IAuthorshipRecordRepository, AuthorshipRecordRepository>();
 builder.Services.AddScoped<IAuthorshipRecordService, AuthorshipRecordService>();
 builder.Services.AddScoped<IAuthorshipRecordIssuer>(sp => sp.GetRequiredService<IAuthorshipRecordService>());
+builder.Services.AddScoped<IAuthorshipCertificatePdfService, AuthorshipCertificatePdfService>();
 
 // Connect money-in: tips + fan subscriptions on artists' connected accounts.
 builder.Services.AddScoped<IFanSubscriptionRepository, FanSubscriptionRepository>();
@@ -512,10 +534,15 @@ builder.Services.AddScoped<IConnectWebhookService, Cambrian.Infrastructure.Strip
 // Growth features
 builder.Services.Configure<Cambrian.Infrastructure.Options.GrowthFeaturesOptions>(
     builder.Configuration.GetSection("GrowthFeatures"));
+builder.Services.AddHttpClient<IPurchaseAnalyticsService, Cambrian.Infrastructure.Analytics.PostHogPurchaseAnalyticsService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(2);
+});
 builder.Services.AddScoped<IFeatureFlagService, Cambrian.Infrastructure.FeatureFlags.ConfigurationFeatureFlagService>();
 builder.Services.AddScoped<IActivityService, Cambrian.Persistence.Services.ActivityService>();
 builder.Services.AddScoped<IAnalyticsService, Cambrian.Persistence.Services.AnalyticsService>();
 builder.Services.AddScoped<IActivityBackfillService, Cambrian.Persistence.Services.ActivityBackfillService>();
+builder.Services.AddScoped<INewsletterService, Cambrian.Persistence.Services.NewsletterService>();
 
 // AI Discovery
 builder.Services.AddSingleton<Cambrian.Application.AI.Discovery.Ranking.ITrackRankingService,
@@ -767,6 +794,38 @@ app.MapGet("/charts/weekly", async (IWeeklyChartService charts, CancellationToke
     var chart = await charts.GetCurrentAsync(ct);
     return Results.Json(new { success = true, data = chart, message = (string?)null, error = (string?)null });
 }).ExcludeFromDescription();
+
+// One-click weekly-digest unsubscribe (linked from the digest email).
+// HMAC-validated, no login, idempotent, and deliberately generic in both
+// directions: an invalid token and an unknown user get the same responses,
+// so the endpoint can't be used to probe which user ids exist.
+app.MapGet("/email/unsubscribe", async (string? uid, string? token, IWeeklyDigestRepository digestRepo, IConfiguration config, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(uid) || string.IsNullOrWhiteSpace(token))
+        return Results.BadRequest(new { success = false, error = "Invalid unsubscribe link." });
+
+    var expected = Cambrian.Application.Services.WeeklyDigestService.ComputeUnsubscribeToken(uid, config["Jwt:Key"] ?? string.Empty);
+    if (!CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(expected),
+            System.Text.Encoding.UTF8.GetBytes(token.ToLowerInvariant())))
+        return Results.BadRequest(new { success = false, error = "Invalid unsubscribe link." });
+
+    await digestRepo.SetDigestOptOutAsync(uid, true, ct);
+    return Results.Content(
+        "<html><body style=\"font-family:Arial;background:#000;color:#fff;text-align:center;padding-top:80px\">" +
+        "<h2>You're unsubscribed.</h2><p>You won't receive the weekly creator digest anymore.</p>" +
+        "<p><a href=\"https://cambrianmusic.com/studio\" style=\"color:#00c896\">Back to your Studio</a></p></body></html>",
+        "text/html");
+}).ExcludeFromDescription();
+
+// Admin trigger for the digest — supports ?dryRun=true for a safe test pass.
+app.MapPost("/admin/digest/run", async (bool? dryRun, IWeeklyDigestService digest, CancellationToken ct) =>
+{
+    var result = await digest.RunAsync(dryRun ?? true, ct);
+    return Results.Json(new { success = true, data = result, message = (string?)null, error = (string?)null });
+})
+    .RequireAuthorization(new Microsoft.AspNetCore.Authorization.AuthorizeAttribute { Roles = "Admin" })
+    .ExcludeFromDescription();
 
 // Legacy readiness path → canonical /api/tracks/{id}/readiness (residue F7).
 // The readiness endpoint has only ever lived under /api; this 308 makes the old

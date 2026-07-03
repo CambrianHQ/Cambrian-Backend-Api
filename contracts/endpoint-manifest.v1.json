@@ -1479,7 +1479,7 @@
     {
       "method": "POST",
       "path": "/stream/start",
-      "requiresAuth": true,
+      "requiresAuth": false,
       "tag": "Stream"
     },
     {

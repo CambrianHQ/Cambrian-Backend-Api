@@ -22,6 +22,13 @@ public interface IAuthorshipRecordService : IAuthorshipRecordIssuer
 
     /// <summary>Public verification view — issued records only, no PII beyond artist name.</summary>
     Task<AuthorshipCertificate?> GetPublicCertificateAsync(Guid recordId, CancellationToken ct = default);
+
+    /// <summary>Owner-scoped certificate PDF data. Null when absent, not owned, or not issued.</summary>
+    Task<AuthorshipCertificateDocument?> GetCertificateDocumentForOwnerAsync(
+        Guid recordId, string userId, CancellationToken ct = default);
+
+    /// <summary>Public hash verification view for the frontend /verify page.</summary>
+    Task<AuthorshipHashVerificationResponse?> VerifyByHashAsync(string hash, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -43,6 +50,7 @@ public interface IAuthorshipRecordRepository
 {
     Task<AuthorshipRecord?> GetAsync(Guid id, CancellationToken ct = default);
     Task<AuthorshipRecord?> GetForOwnerAsync(Guid id, string creatorId, CancellationToken ct = default);
+    Task<AuthorshipRecord?> GetByHashAsync(string recordHash, CancellationToken ct = default);
     Task AddAsync(AuthorshipRecord record, CancellationToken ct = default);
     Task UpdateAsync(AuthorshipRecord record, CancellationToken ct = default);
 }

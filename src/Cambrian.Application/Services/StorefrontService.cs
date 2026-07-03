@@ -12,20 +12,17 @@ public sealed class StorefrontService : IStorefrontService
     private readonly ICreatorProfileRepository _profiles;
     private readonly ITrackRepository _tracks;
     private readonly IPurchaseRepository _purchases;
-    private readonly UserManager<ApplicationUser> _users;
     private readonly ICreatorIdentityRepository _creators;
 
     public StorefrontService(
         ICreatorProfileRepository profiles,
         ITrackRepository tracks,
         IPurchaseRepository purchases,
-        UserManager<ApplicationUser> users,
         ICreatorIdentityRepository creators)
     {
         _profiles = profiles;
         _tracks = tracks;
         _purchases = purchases;
-        _users = users;
         _creators = creators;
     }
 
@@ -52,24 +49,15 @@ public sealed class StorefrontService : IStorefrontService
         var collections = await _profiles.GetCollectionsAsync(profile.UserId);
         var purchases = await _purchases.GetByCreatorIdAsync(profile.UserId, creatorUuid);
 
-        // Resolve creator fee rate
-        var creator = await _users.FindByIdAsync(profile.UserId);
-        var feeRate = creator is not null
-            ? TierManifest.For(creator.CreatorTier).FeeRate
-            : TierManifest.Free.FeeRate;
-
         // Map tracks to responses (pass profile for image fallback when CreatorEntity is null)
-        var trackResponses = tracks.Select(t => MapTrack(t, feeRate, profile)).ToList();
+        var trackResponses = tracks.Select(t => MapTrack(t, profile)).ToList();
 
-        // Build stats from completed purchases — use per-purchase floor to match wallet credits
+        // Build stats from completed purchases. Earnings are intentionally NOT
+        // included here — this storefront is served anonymously (F18).
         var completedPurchases = purchases.Where(p => p.Status == "completed").ToList();
-        var totalEarnedCents = completedPurchases.Sum(p => (long)Math.Floor(p.AmountCents * (1 - feeRate)));
         var stats = new CreatorStatsDto
         {
-            TotalDownloads = completedPurchases.Count,
-            TotalEarnings = profile.ShowEarnings
-                ? totalEarnedCents / 100m
-                : 0m
+            TotalDownloads = completedPurchases.Count
         };
 
         // Resolve pinned tracks: creator-managed order, falling back to most recent
@@ -111,7 +99,7 @@ public sealed class StorefrontService : IStorefrontService
         return allTracks.Take(5).ToList();
     }
 
-    private static TrackResponse MapTrack(Track t, decimal feeRate, CreatorProfileDto? profile = null)
+    private static TrackResponse MapTrack(Track t, CreatorProfileDto? profile = null)
     {
         // Fallback: if NonExclusivePriceCents is 0, use legacy Price field (matches checkout logic)
         var legacyPriceDollars = t.Price;
@@ -128,9 +116,6 @@ public sealed class StorefrontService : IStorefrontService
             Subgenre = t.Subgenre,
             Price = nonExPrice,
             NonExclusivePrice = nonExPrice,
-            PlatformFeePercent = feeRate,
-            NonExclusivePlatformFee = Math.Round(nonExPrice * feeRate, 2),
-            NonExclusiveCreatorEarnings = Math.Round(nonExPrice * (1 - feeRate), 2),
             Status = t.Status == "exclusive_sold" || t.Status == "copyright_transferred" ? "available" : (t.Status ?? "available"),
             Duration = t.Duration,
             AudioUrl = t.AudioUrl,

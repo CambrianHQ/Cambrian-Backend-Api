@@ -39,14 +39,10 @@ public class TrackResponse
 
     public decimal NonExclusivePrice { get; set; }
 
-    /// <summary>Platform fee rate applied to each sale (0.15 = 15%).</summary>
-    public decimal PlatformFeePercent { get; set; } = 0.15m;
-
-    /// <summary>Platform fee in dollars for the non-exclusive price.</summary>
-    public decimal NonExclusivePlatformFee { get; set; }
-
-    /// <summary>Creator earnings in dollars for a non-exclusive sale.</summary>
-    public decimal NonExclusiveCreatorEarnings { get; set; }
+    // F18: per-track platform fee and creator earnings are deliberately NOT on this
+    // DTO. They were being serialized on anonymous catalog/track/storefront routes,
+    // letting any visitor scrape each creator's take-home. A creator's earnings are
+    // owner-only and read from the authenticated wallet (PayoutService.GetEarningsAsync).
 
     /// <summary>Track availability status (e.g. available).</summary>
     public string Status { get; set; } = "available";

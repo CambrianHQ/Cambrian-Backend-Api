@@ -80,3 +80,37 @@ public sealed class AuthorshipCertificate
     /// <summary>Human/machine instructions for independent verification.</summary>
     public string VerificationInstructions { get; init; } = "";
 }
+
+/// <summary>Internal data needed to render the owner-only PDF certificate.</summary>
+public sealed class AuthorshipCertificateDocument
+{
+    public Guid RecordId { get; init; }
+    public Guid TrackId { get; init; }
+    public string TrackTitle { get; init; } = "";
+    public string TrackCode { get; init; } = "";
+    public string CreatorName { get; init; } = "";
+    public string RecordHash { get; init; } = "";
+    public string Signature { get; init; } = "";
+    public string Algorithm { get; init; } = "";
+    public string KeyId { get; init; } = "";
+    public string? ChainAnchor { get; init; }
+    public string AuthorshipSummary { get; init; } = "";
+    public DateTime CreatedAt { get; init; }
+    public DateTime IssuedAt { get; init; }
+    public string VerificationDisplayUrl { get; init; } = "";
+    public string VerificationQrUrl { get; init; } = "";
+
+    /// <summary>Stable storage version. Changes when the signed record changes.</summary>
+    public string Version => string.IsNullOrWhiteSpace(RecordHash) ? "pending" : RecordHash;
+}
+
+/// <summary>Public response for GET /api/verify/{hash}. No auth and no PII.</summary>
+public sealed class AuthorshipHashVerificationResponse
+{
+    public bool Found { get; init; }
+    public string TrackTitle { get; init; } = "";
+    public string CreatorName { get; init; } = "";
+    public DateTime CreatedAt { get; init; }
+    public string? ChainAnchor { get; init; }
+    public string RecordUrl { get; init; } = "";
+}

@@ -110,6 +110,18 @@ public class ApplicationUser : IdentityUser
     /// <summary>UTC expiry of the email verification token (24 hours from issuance).</summary>
     public DateTime? EmailVerificationTokenExpiry { get; set; }
 
+    // ── Weekly creator digest (see WeeklyDigestService) ──
+
+    /// <summary>True when the user opted out of the weekly creator digest email.</summary>
+    public bool WeeklyDigestOptOut { get; set; }
+
+    /// <summary>
+    /// UTC timestamp of the last weekly digest sent to this user. Per-user
+    /// idempotence: a run skips anyone already stamped inside the current
+    /// chart week, so re-runs and restarts never double-send.
+    /// </summary>
+    public DateTime? LastWeeklyDigestAtUtc { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Track> Tracks { get; set; } = new List<Track>();

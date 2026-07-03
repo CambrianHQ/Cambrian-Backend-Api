@@ -81,10 +81,14 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
     }
 
     [Fact]
-    public async Task TrackDetail_IncludesFeeBreakdown()
+    public async Task TrackDetail_PublicRoute_OmitsFeeAndEarningsBreakdown()
     {
+        // F18: the anonymous /tracks/{id} route must NOT expose the platform fee or
+        // per-track creator earnings — that let any visitor scrape each creator's
+        // take-home. These fields were removed from the public track projection; a
+        // creator's earnings are owner-only (authenticated wallet).
         var email = $"ct-fee-{Guid.NewGuid():N}@test.com";
-        var client = await CreateCreatorClientAsync(email);
+        await CreateCreatorClientAsync(email);
         var userId = await _fixture.GetUserIdAsync(email);
 
         var trackId = await SeedTrackWithPriceCentsAsync(userId, "Fee Beat",
@@ -96,11 +100,12 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
 
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
 
-        // The (non-exclusive) fee breakdown is present and non-zero. Exclusive/buyout fee
-        // fields were retired with the licensing model and are intentionally absent.
-        Assert.True(data.GetProperty("platformFeePercent").GetDecimal() > 0);
-        Assert.True(data.GetProperty("nonExclusivePlatformFee").GetDecimal() > 0);
-        Assert.True(data.GetProperty("nonExclusiveCreatorEarnings").GetDecimal() > 0);
+        // Public list price stays (a marketplace must show the sale price)...
+        Assert.True(data.GetProperty("nonExclusivePrice").GetDecimal() > 0);
+        // ...but the fee / earnings breakdown must be absent on the anonymous route.
+        Assert.False(data.TryGetProperty("platformFeePercent", out _));
+        Assert.False(data.TryGetProperty("nonExclusivePlatformFee", out _));
+        Assert.False(data.TryGetProperty("nonExclusiveCreatorEarnings", out _));
     }
 
     [Fact]
@@ -486,8 +491,12 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
     // ────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task VisibilityFlags_StorefrontRespects_ShowEarnings()
+    public async Task Storefront_NeverExposesCreatorEarnings()
     {
+        // F18: creator earnings are never exposed on the anonymous storefront —
+        // not even when the creator has toggled showEarnings on and has real sales.
+        // The showEarnings flag is retained as a profile setting but no longer drives
+        // any public earnings field; a creator's earnings are owner-only (wallet).
         var email = $"ct-vis-{Guid.NewGuid():N}@test.com";
         var client = await CreateCreatorClientAsync(email);
         var userId = await _fixture.GetUserIdAsync(email);
@@ -504,27 +513,17 @@ public sealed class ContractTruthTests : IClassFixture<CambrianApiFixture>, IAsy
         var trackId = await _fixture.SeedTrackAsync(userId, "Vis Beat");
         await SeedCompletedPurchaseAsync(userId, trackId, 2000);
 
-        // Verify earnings visible
         var publicClient = _fixture.CreateClient();
-        var res1 = await publicClient.GetAsync($"/creator-profile/{slug}/storefront");
-        res1.EnsureSuccessStatusCode();
-        var stats1 = (await res1.Content.ReadFromJsonAsync<JsonElement>())
-            .GetProperty("data").GetProperty("stats");
-        Assert.True(stats1.GetProperty("totalEarnings").GetDecimal() > 0);
+        var res = await publicClient.GetAsync($"/creator-profile/{slug}/storefront");
+        res.EnsureSuccessStatusCode();
+        var body = await res.Content.ReadAsStringAsync();
+        var stats = JsonDocument.Parse(body).RootElement.GetProperty("data").GetProperty("stats");
 
-        // Toggle off via PATCH
-        var patchRes = await client.PatchAsJsonAsync("/creator-profile/me/settings", new
-        {
-            showEarnings = false,
-        });
-        patchRes.EnsureSuccessStatusCode();
-
-        // Verify earnings now hidden
-        var res2 = await publicClient.GetAsync($"/creator-profile/{slug}/storefront");
-        res2.EnsureSuccessStatusCode();
-        var stats2 = (await res2.Content.ReadFromJsonAsync<JsonElement>())
-            .GetProperty("data").GetProperty("stats");
-        Assert.Equal(0m, stats2.GetProperty("totalEarnings").GetDecimal());
+        // Even with showEarnings=true and a completed sale, no earnings field appears.
+        Assert.False(stats.TryGetProperty("totalEarnings", out _));
+        Assert.DoesNotContain("totalEarnings", body, StringComparison.OrdinalIgnoreCase);
+        // Non-financial public stats remain.
+        Assert.True(stats.TryGetProperty("totalDownloads", out _));
     }
 
     // ────────────────────────────────────────────────────────────

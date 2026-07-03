@@ -15,6 +15,24 @@ public sealed class MasteringEngineRequest
     public double TargetLufs { get; init; } = -14.0;
 
     public double TargetTruePeakDbtp { get; init; } = -1.0;
+
+    /// <summary>Release tags to write into final exports when the engine supports it.</summary>
+    public ReleaseMetadata? Metadata { get; init; }
+
+    /// <summary>Validated cover art to embed where the output container supports it.</summary>
+    public Stream? CoverArt { get; init; }
+
+    public string? CoverArtFileName { get; init; }
+}
+
+public sealed class ReleaseMetadata
+{
+    public string? Title { get; init; }
+    public string? Artist { get; init; }
+    public string? Album { get; init; }
+    public string? Date { get; init; }
+    public string? Genre { get; init; }
+    public string? Comment { get; init; }
 }
 
 /// <summary>Output of an <c>IMasteringEngine</c>.</summary>

@@ -13,6 +13,16 @@ public sealed class CatalogQueryRequest
     [FromQuery(Name = "pageSize")]
     public int PageSize { get; set; } = 50;
 
+    /// <summary>Frontend infinite-scroll contract: number of items to skip. When set (with
+    /// <see cref="Limit"/>), takes precedence over page/pageSize. Interpreted in pages of
+    /// <see cref="Limit"/> (offset = pageIndex × limit), which is how infinite scroll pages.</summary>
+    [FromQuery(Name = "offset")]
+    public int? Offset { get; set; }
+
+    /// <summary>Frontend infinite-scroll contract: page size (capped at 60).</summary>
+    [FromQuery(Name = "limit")]
+    public int? Limit { get; set; }
+
     [FromQuery(Name = "genre")]
     public string? Genre { get; set; }
 

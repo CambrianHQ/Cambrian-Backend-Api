@@ -286,6 +286,9 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<string>("GoogleId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("LastWeeklyDigestAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
@@ -371,6 +374,9 @@ namespace Cambrian.Persistence.Migrations
 
                     b.Property<long>("WalletBalanceCents")
                         .HasColumnType("bigint");
+
+                    b.Property<bool>("WeeklyDigestOptOut")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 
@@ -473,6 +479,10 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("CreatorId")
                         .HasDatabaseName("IX_AuthorshipRecords_CreatorId");
+
+                    b.HasIndex("RecordHash")
+                        .HasDatabaseName("IX_AuthorshipRecords_RecordHash")
+                        .HasFilter("\"RecordHash\" IS NOT NULL");
 
                     b.HasIndex("StripeSessionId")
                         .IsUnique()
@@ -987,6 +997,10 @@ namespace Cambrian.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("CoverArtKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1020,6 +1034,9 @@ namespace Cambrian.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("mastering");
 
+                    b.Property<DateTime?>("LastHeartbeatAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("MasteredMp3Key")
                         .HasColumnType("text");
 
@@ -1034,6 +1051,15 @@ namespace Cambrian.Persistence.Migrations
 
                     b.Property<string>("PreviewKey")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("ProcessingLeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProcessingLeaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ProcessingStartedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("RetryCount")
                         .HasColumnType("integer");
@@ -1087,10 +1113,48 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("IX_MasteringJobs_Status_CreatedAt");
 
+                    b.HasIndex("Status", "ProcessingLeaseExpiresAt")
+                        .HasDatabaseName("IX_MasteringJobs_Status_ProcessingLeaseExpiresAt");
+
                     b.HasIndex("TrackId", "ContentHash")
                         .HasDatabaseName("IX_MasteringJobs_TrackId_ContentHash");
 
+                    b.HasIndex("CreatorId", "Kind", "ContentHash")
+                        .HasDatabaseName("IX_MasteringJobs_Creator_Kind_ContentHash");
+
                     b.ToTable("MasteringJobs", (string)null);
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.NewsletterSubscriber", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<bool>("ProviderSynced")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("ux_newsletter_subscribers_email");
+
+                    b.ToTable("NewsletterSubscribers", (string)null);
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.Payout", b =>
@@ -1787,6 +1851,75 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("WalletTransactions");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.WeeklyChartSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Artist")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("ComputedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CoverArtUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreatorId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int?>("DeltaRank")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PlaysInWindow")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PreviousRank")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Score")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("TrackId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("WeekEndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("WeekStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WeekStartUtc", "Rank")
+                        .IsUnique()
+                        .HasDatabaseName("ux_weekly_chart_week_rank");
+
+                    b.HasIndex("WeekStartUtc", "TrackId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_weekly_chart_week_track");
+
+                    b.ToTable("WeeklyChartSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>

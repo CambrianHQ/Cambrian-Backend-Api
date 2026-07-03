@@ -23,6 +23,7 @@ public sealed class AuthorshipRecordService : IAuthorshipRecordService
 
     private readonly IAuthorshipRecordRepository _records;
     private readonly ITrackRepository _tracks;
+    private readonly IProvenanceAnchorRepository _anchors;
     private readonly UserManager<ApplicationUser> _users;
     private readonly IPaymentGateway _gateway;
     private readonly IObjectStorage _storage;
@@ -33,6 +34,7 @@ public sealed class AuthorshipRecordService : IAuthorshipRecordService
     public AuthorshipRecordService(
         IAuthorshipRecordRepository records,
         ITrackRepository tracks,
+        IProvenanceAnchorRepository anchors,
         UserManager<ApplicationUser> users,
         IPaymentGateway gateway,
         IObjectStorage storage,
@@ -42,6 +44,7 @@ public sealed class AuthorshipRecordService : IAuthorshipRecordService
     {
         _records = records;
         _tracks = tracks;
+        _anchors = anchors;
         _users = users;
         _gateway = gateway;
         _storage = storage;
@@ -183,7 +186,68 @@ public sealed class AuthorshipRecordService : IAuthorshipRecordService
         return record is { Status: "issued" } ? BuildCertificate(record) : null;
     }
 
+    public async Task<AuthorshipCertificateDocument?> GetCertificateDocumentForOwnerAsync(
+        Guid recordId, string userId, CancellationToken ct = default)
+    {
+        var record = await _records.GetForOwnerAsync(recordId, userId, ct);
+        if (record is not { Status: "issued" })
+            return null;
+
+        return await BuildCertificateDocumentAsync(record, ct);
+    }
+
+    public async Task<AuthorshipHashVerificationResponse?> VerifyByHashAsync(string hash, CancellationToken ct = default)
+    {
+        var normalizedHash = (hash ?? "").Trim().ToLowerInvariant();
+        if (normalizedHash.Length != 64 || normalizedHash.Any(c => !Uri.IsHexDigit(c)))
+            return null;
+
+        var record = await _records.GetByHashAsync(normalizedHash, ct);
+        if (record is null)
+            return null;
+
+        var track = await _tracks.GetByIdAsync(record.TrackId);
+        var anchor = await _anchors.GetByTrackIdAsync(record.TrackId, ct);
+
+        return new AuthorshipHashVerificationResponse
+        {
+            Found = true,
+            TrackTitle = track?.Title ?? "Unknown Track",
+            CreatorName = record.ArtistName,
+            CreatedAt = DateTime.SpecifyKind(record.CreatedAt, DateTimeKind.Utc),
+            ChainAnchor = ResolveChainAnchor(record, anchor),
+            RecordUrl = BuildVerificationQrUrl(normalizedHash),
+        };
+    }
+
     // ── Helpers ──
+
+    private async Task<AuthorshipCertificateDocument> BuildCertificateDocumentAsync(
+        AuthorshipRecord record, CancellationToken ct)
+    {
+        var track = await _tracks.GetByIdAsync(record.TrackId);
+        var anchor = await _anchors.GetByTrackIdAsync(record.TrackId, ct);
+        var recordHash = record.RecordHash ?? "";
+
+        return new AuthorshipCertificateDocument
+        {
+            RecordId = record.Id,
+            TrackId = record.TrackId,
+            TrackTitle = track?.Title ?? "Unknown Track",
+            TrackCode = track?.CambrianTrackId ?? record.TrackId.ToString(),
+            CreatorName = record.ArtistName,
+            RecordHash = recordHash,
+            Signature = record.Signature ?? "",
+            Algorithm = record.SignatureAlgorithm ?? "",
+            KeyId = record.KeyId ?? "",
+            ChainAnchor = ResolveChainAnchor(record, anchor),
+            AuthorshipSummary = BuildAuthorshipSummary(record),
+            CreatedAt = DateTime.SpecifyKind(record.CreatedAt, DateTimeKind.Utc),
+            IssuedAt = DateTime.SpecifyKind(record.IssuedAt ?? record.CreatedAt, DateTimeKind.Utc),
+            VerificationDisplayUrl = BuildVerificationDisplayUrl(recordHash),
+            VerificationQrUrl = BuildVerificationQrUrl(recordHash),
+        };
+    }
 
     private AuthorshipCertificate BuildCertificate(AuthorshipRecord record) => new()
     {
@@ -231,4 +295,48 @@ public sealed class AuthorshipRecordService : IAuthorshipRecordService
 
     private static DateTime TruncateToSeconds(DateTime utc) =>
         new(utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
+
+    private static string BuildAuthorshipSummary(AuthorshipRecord record)
+    {
+        var evidence = ParseEvidence(record.EvidenceJson);
+        var sections = new List<string>();
+
+        if (evidence.Declarations.Count > 0)
+            sections.Add("Declared contribution: " + string.Join(" ", evidence.Declarations));
+
+        if (!string.IsNullOrWhiteSpace(evidence.Narrative))
+            sections.Add("Creation narrative: " + evidence.Narrative.Trim());
+
+        if (evidence.Generator is { } generator)
+        {
+            var tool = string.Join(" ", new[] { generator.Tool, generator.Version }.Where(v => !string.IsNullOrWhiteSpace(v)));
+            var prompts = generator.Prompts.Count > 0
+                ? " Prompts: " + string.Join(" | ", generator.Prompts)
+                : "";
+            if (!string.IsNullOrWhiteSpace(tool) || !string.IsNullOrWhiteSpace(prompts))
+                sections.Add($"AI/tooling disclosure: {tool}.{prompts}".Trim());
+        }
+
+        return sections.Count == 0
+            ? "No additional authorship narrative was supplied for this record."
+            : string.Join(Environment.NewLine, sections);
+    }
+
+    private static string? ResolveChainAnchor(AuthorshipRecord record, ProvenanceAnchor? anchor)
+    {
+        if (anchor is { Status: "anchored" } && !string.IsNullOrWhiteSpace(anchor.RootTxRef))
+        {
+            return string.IsNullOrWhiteSpace(anchor.Chain)
+                ? anchor.RootTxRef
+                : $"{anchor.Chain}:{anchor.RootTxRef}";
+        }
+
+        return string.IsNullOrWhiteSpace(record.KeyId) ? null : $"stamp:{record.KeyId}";
+    }
+
+    private string BuildVerificationDisplayUrl(string recordHash)
+        => $"cambrianmusic.com/verify/{recordHash}";
+
+    private string BuildVerificationQrUrl(string recordHash)
+        => $"https://cambrianmusic.com/verify/{recordHash}";
 }

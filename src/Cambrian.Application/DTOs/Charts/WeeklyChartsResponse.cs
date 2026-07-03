@@ -12,6 +12,16 @@ public sealed class WeeklyChartsResponse
     public IReadOnlyList<ChartEntryResponse> Entries { get; set; } = Array.Empty<ChartEntryResponse>();
 
     public TrackOfTheWeekResponse? TrackOfTheWeek { get; set; }
+
+    /// <summary>
+    /// What the ranking was computed from: "weekly_plays" (stream sessions
+    /// inside the chart week) or "catalog_trending" (bootstrap fallback while
+    /// the week has no plays). Lets the frontend label the chart honestly.
+    /// </summary>
+    public string Basis { get; set; } = "weekly_plays";
+
+    /// <summary>UTC timestamp of the last recompute, null when never computed.</summary>
+    public string? ComputedAt { get; set; }
 }
 
 public sealed class ChartEntryResponse

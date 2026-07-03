@@ -1,6 +1,9 @@
+using System.Text.Json;
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.ReleaseReady;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Options;
 using Sentry;
 
 namespace Cambrian.Api.BackgroundServices;
@@ -33,11 +36,13 @@ public sealed class MasteringWorker : BackgroundService
     private const string PreviewKeyFmt = "release-ready/preview/{0}/preview.wav";
 
     private readonly IServiceScopeFactory _scopes;
+    private readonly MasteringOptions _options;
     private readonly ILogger<MasteringWorker> _logger;
 
-    public MasteringWorker(IServiceScopeFactory scopes, ILogger<MasteringWorker> logger)
+    public MasteringWorker(IServiceScopeFactory scopes, IOptions<MasteringOptions> options, ILogger<MasteringWorker> logger)
     {
         _scopes = scopes;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -85,24 +90,34 @@ public sealed class MasteringWorker : BackgroundService
         var jobs = sp.GetRequiredService<IMasteringJobRepository>();
         var engine = sp.GetRequiredService<IMasteringEngine>();
         var storage = sp.GetRequiredService<IObjectStorage>();
+        var leaseId = job.ProcessingLeaseId
+            ?? throw new InvalidOperationException($"Claimed mastering job {job.Id} has no processing lease.");
 
         try
         {
-            if (engine.RequiresApproval)
-                await RunPreviewEngineAsync(jobs, engine, storage, job, ct);
-            else
-                await RunOneShotEngineAsync(sp, jobs, engine, storage, job, ct);
+            await RunWithHeartbeatAsync(
+                jobs,
+                job,
+                leaseId,
+                async runCt =>
+                {
+                    if (engine.RequiresApproval)
+                        await RunPreviewEngineAsync(sp, jobs, engine, storage, job, leaseId, runCt);
+                    else
+                        await RunOneShotEngineAsync(sp, jobs, engine, storage, job, leaseId, runCt);
+                },
+                ct);
         }
         catch (Exception ex)
         {
-            await HandleFailureAsync(jobs, job, ex, ct);
+            await HandleFailureAsync(jobs, job, leaseId, ex, ct);
         }
     }
 
     // ── ffmpeg (one-shot): master inline, upload WAV+MP3, run pipeline stages, status=done ──
     private async Task RunOneShotEngineAsync(
         IServiceProvider sp, IMasteringJobRepository jobs, IMasteringEngine engine, IObjectStorage storage,
-        MasteringJob job, CancellationToken ct)
+        MasteringJob job, Guid leaseId, CancellationToken ct)
     {
         // Resumable: a retried job whose master already uploaded skips the heavy
         // audio work and goes straight to the remaining pipeline stages.
@@ -113,6 +128,8 @@ public sealed class MasteringWorker : BackgroundService
             {
                 using var source = await storage.OpenReadAsync(job.SourceKey)
                     ?? throw new InvalidOperationException($"Source not found at {job.SourceKey}.");
+                using var cover = await OpenCoverArtAsync(sp, storage, job, ct);
+                var metadata = await BuildReleaseMetadataAsync(sp, job, ct);
 
                 var result = await engine.MasterAsync(
                     new MasteringEngineRequest
@@ -121,6 +138,9 @@ public sealed class MasteringWorker : BackgroundService
                         SourceFileName = job.SourceFileName ?? "audio",
                         TargetLufs = job.TargetLufs,
                         TargetTruePeakDbtp = job.TargetTruePeakDbtp,
+                        Metadata = metadata,
+                        CoverArt = cover?.Stream,
+                        CoverArtFileName = Path.GetFileName(job.CoverArtKey),
                     },
                     ct);
 
@@ -128,7 +148,8 @@ public sealed class MasteringWorker : BackgroundService
                 job.InputLufs = result.InputLufs;
                 job.OutputLufs = result.OutputLufs;
                 job.OutputTruePeakDbtp = result.OutputTruePeakDbtp;
-                await jobs.UpdateAsync(job, ct);
+                if (!await jobs.UpdateLeaseOwnedAsync(job, leaseId, ct))
+                    throw new InvalidOperationException("Mastering job processing lease was lost before outputs were saved.");
             }
             finally
             {
@@ -147,7 +168,8 @@ public sealed class MasteringWorker : BackgroundService
         job.Status = "done";
         job.CompletedAt = DateTime.UtcNow;
         job.Error = null;
-        await jobs.UpdateAsync(job, ct);
+        if (!await jobs.MarkDoneAsync(job, leaseId, ct))
+            throw new InvalidOperationException("Mastering job processing lease was lost before completion.");
 
         _logger.LogInformation(
             "EVENT: MasteringJobDone jobId:{JobId} engine:{Engine} kind:{Kind} wav:{Wav} mp3:{Mp3}",
@@ -156,11 +178,12 @@ public sealed class MasteringWorker : BackgroundService
 
     // ── Tonn (preview): produce a preview, store it, status=awaiting_approval ──
     private async Task RunPreviewEngineAsync(
-        IMasteringJobRepository jobs, IMasteringEngine engine, IObjectStorage storage,
-        MasteringJob job, CancellationToken ct)
+        IServiceProvider sp, IMasteringJobRepository jobs, IMasteringEngine engine, IObjectStorage storage,
+        MasteringJob job, Guid leaseId, CancellationToken ct)
     {
         // RoEx fetches the source from a signed URL.
         var sourceUrl = storage.GenerateSignedUrl(job.SourceKey);
+        var metadata = await BuildReleaseMetadataAsync(sp, job, ct);
 
         var result = await engine.MasterAsync(
             new MasteringEngineRequest
@@ -169,6 +192,7 @@ public sealed class MasteringWorker : BackgroundService
                 SourceFileName = job.SourceFileName ?? "audio",
                 TargetLufs = job.TargetLufs,
                 TargetTruePeakDbtp = job.TargetTruePeakDbtp,
+                Metadata = metadata,
             },
             ct);
 
@@ -189,7 +213,8 @@ public sealed class MasteringWorker : BackgroundService
         job.EngineRef = result.EngineRef;
         job.Status = "awaiting_approval";
         job.Error = null;
-        await jobs.UpdateAsync(job, ct);
+        if (!await jobs.MarkAwaitingApprovalAsync(job, leaseId, ct))
+            throw new InvalidOperationException("Mastering job processing lease was lost before preview completion.");
 
         _logger.LogInformation(
             "EVENT: MasteringPreviewReady jobId:{JobId} engine:{Engine} engineRef:{EngineRef}",
@@ -216,27 +241,129 @@ public sealed class MasteringWorker : BackgroundService
     }
 
     // ── One retry, then failed + Sentry ──
-    private async Task HandleFailureAsync(IMasteringJobRepository jobs, MasteringJob job, Exception ex, CancellationToken ct)
+    private async Task HandleFailureAsync(IMasteringJobRepository jobs, MasteringJob job, Guid leaseId, Exception ex, CancellationToken ct)
     {
-        if (job.RetryCount < 1)
+        if (job.RetryCount < Math.Max(0, _options.MaxRetryCount))
         {
-            job.RetryCount += 1;
-            job.Status = "queued";
-            job.StartedAt = null;
-            job.Error = Truncate(ex.Message);
-            await jobs.UpdateAsync(job, ct);
+            var nextRetryCount = job.RetryCount + 1;
+            if (!await jobs.RequeueForRetryAsync(job.Id, leaseId, nextRetryCount, Truncate(ex.Message), ct))
+            {
+                _logger.LogWarning(
+                    "EVENT: MasteringJobRetrySkippedLeaseLost jobId:{JobId} retryCount:{Retry}",
+                    job.Id, nextRetryCount);
+                return;
+            }
+            job.RetryCount = nextRetryCount;
             _logger.LogWarning(ex, "EVENT: MasteringJobRetry jobId:{JobId} retryCount:{Retry}", job.Id, job.RetryCount);
             return;
         }
 
-        job.Status = "failed";
-        job.Error = Truncate(ex.Message);
-        job.CompletedAt = DateTime.UtcNow;
-        await jobs.UpdateAsync(job, ct);
+        if (!await jobs.MarkFailedAsync(job.Id, leaseId, Truncate(ex.Message), ct))
+        {
+            _logger.LogWarning("EVENT: MasteringJobFailSkippedLeaseLost jobId:{JobId}", job.Id);
+            return;
+        }
 
         SentrySdk.CaptureException(ex);
         _logger.LogError(ex, "EVENT: MasteringJobFailed jobId:{JobId}", job.Id);
     }
 
     private static string Truncate(string s) => s.Length <= 1000 ? s : s[..1000];
+
+    private async Task RunWithHeartbeatAsync(
+        IMasteringJobRepository jobs,
+        MasteringJob job,
+        Guid leaseId,
+        Func<CancellationToken, Task> work,
+        CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var workTask = work(linked.Token);
+        var heartbeatTask = HeartbeatLoopAsync(jobs, job.Id, leaseId, linked.Token);
+
+        var completed = await Task.WhenAny(workTask, heartbeatTask);
+        if (completed == heartbeatTask)
+        {
+            linked.Cancel();
+            await heartbeatTask;
+        }
+
+        try
+        {
+            await workTask;
+        }
+        finally
+        {
+            linked.Cancel();
+            try { await heartbeatTask; }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested || linked.IsCancellationRequested) { }
+        }
+    }
+
+    private async Task HeartbeatLoopAsync(IMasteringJobRepository jobs, Guid jobId, Guid leaseId, CancellationToken ct)
+    {
+        var interval = TimeSpan.FromSeconds(Math.Max(5, _options.ProcessingHeartbeatSeconds));
+        using var timer = new PeriodicTimer(interval);
+        while (await timer.WaitForNextTickAsync(ct))
+        {
+            if (!await jobs.HeartbeatAsync(jobId, leaseId, ct))
+                throw new InvalidOperationException($"Processing lease for mastering job {jobId} is no longer active.");
+        }
+    }
+
+    private static async Task<ReleaseMetadata> BuildReleaseMetadataAsync(IServiceProvider sp, MasteringJob job, CancellationToken ct)
+    {
+        Track? track = null;
+        if (job.TrackId is Guid trackId)
+        {
+            var tracks = sp.GetRequiredService<ITrackRepository>();
+            track = await tracks.GetByIdAsync(trackId);
+        }
+
+        var report = DeserializeValidation(job.ValidationReportJson);
+        return new ReleaseMetadata
+        {
+            Title = FirstNonEmpty(track?.Title, report?.Metadata.Title),
+            Artist = FirstNonEmpty(track?.Creator?.DisplayName, track?.CreatorEntity?.DisplayName, report?.Metadata.Artist),
+            Album = FirstNonEmpty(report?.Metadata.Album, track?.Title),
+            Date = job.CreatedAt.Year.ToString(),
+            Genre = FirstNonEmpty(track?.PrimaryGenre, track?.Genre, track?.Subgenre),
+            Comment = "Release Ready Beta: loudness-normalized export with embedded MP3 metadata/artwork.",
+        };
+    }
+
+    private static async Task<StorageFile?> OpenCoverArtAsync(
+        IServiceProvider sp,
+        IObjectStorage storage,
+        MasteringJob job,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(job.CoverArtKey))
+            return await storage.OpenReadAsync(job.CoverArtKey!);
+
+        if (job.TrackId is not Guid trackId)
+            return null;
+
+        var tracks = sp.GetRequiredService<ITrackRepository>();
+        var track = await tracks.GetByIdAsync(trackId);
+        return string.IsNullOrWhiteSpace(track?.CoverArtUrl)
+            ? null
+            : await storage.OpenReadAsync(track.CoverArtUrl!);
+    }
+
+    private static ValidationReport? DeserializeValidation(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try { return JsonSerializer.Deserialize<ValidationReport>(json, JsonOpts); }
+        catch (JsonException) { return null; }
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 }

@@ -8,6 +8,32 @@ public class CreatorDashboardResponse
     public int TotalSales { get; set; }
     public decimal ConversionRate { get; set; }
     public List<TrackStatsDto> Tracks { get; set; } = new();
+
+    /// <summary>
+    /// Creator lifecycle milestones (first_play_received / first_fan_event).
+    /// Timestamps + source labels only — never a listener/fan identity.
+    /// Null members mean the milestone has not happened yet.
+    /// </summary>
+    public CreatorMilestonesDto Milestones { get; set; } = new();
+}
+
+public class CreatorMilestonesDto
+{
+    public MilestoneFirstPlayDto? FirstPlay { get; set; }
+    public MilestoneFirstFanDto? FirstFan { get; set; }
+}
+
+public class MilestoneFirstPlayDto
+{
+    public DateTime At { get; set; }
+    public string TrackId { get; set; } = "";
+}
+
+public class MilestoneFirstFanDto
+{
+    public DateTime At { get; set; }
+    /// <summary>"follow" | "save" | "support" | "subscription".</summary>
+    public string Source { get; set; } = "";
 }
 
 public class TrackStatsDto

@@ -18,6 +18,7 @@ public class CreatorService : ICreatorService
     private readonly UserManager<ApplicationUser> _users;
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository _profiles;
+    private readonly ICreatorMilestoneRepository _milestones;
     private readonly ILogger<CreatorService> _logger;
 
     public CreatorService(
@@ -29,6 +30,7 @@ public class CreatorService : ICreatorService
         UserManager<ApplicationUser> users,
         ICreatorIdentityRepository creators,
         ICreatorProfileRepository profiles,
+        ICreatorMilestoneRepository milestones,
         ILogger<CreatorService> logger)
     {
         _tracks = tracks;
@@ -39,6 +41,7 @@ public class CreatorService : ICreatorService
         _users = users;
         _creators = creators;
         _profiles = profiles;
+        _milestones = milestones;
         _logger = logger;
     }
 
@@ -48,12 +51,8 @@ public class CreatorService : ICreatorService
         var tracks = await _tracks.GetCreatorTrackSummariesAsync(userId, creatorUuid);
         _logger.LogInformation("Creator dashboard: User={UserId} tracks={Count}", userId, tracks.Count);
 
-        // Resolve creator's actual fee rate from TierManifest
         var creator = await _users.FindByIdAsync(userId);
         var profile = await _profiles.GetByUserIdAsync(userId);
-        var feeRate = creator is not null
-            ? TierManifest.For(creator.CreatorTier).FeeRate
-            : TierManifest.Free.FeeRate;
 
         var items = tracks
             .Skip((page - 1) * pageSize)
@@ -80,9 +79,6 @@ public class CreatorService : ICreatorService
                     Visibility = t.Visibility,
                     Price = nonExPrice,
                     NonExclusivePrice = nonExPrice,
-                    PlatformFeePercent = feeRate,
-                    NonExclusivePlatformFee = Math.Round(nonExPrice * feeRate, 2),
-                    NonExclusiveCreatorEarnings = Math.Round(nonExPrice * (1 - feeRate), 2),
                     AudioUrl = t.AudioUrl ?? "",
                     CoverArtUrl = t.CoverArtUrl,
                     Status = t.Status == "exclusive_sold" || t.Status == "copyright_transferred" ? "available" : (t.Status ?? "available"),
@@ -194,6 +190,11 @@ public class CreatorService : ICreatorService
             EarnedCents = earnedByTrack.GetValueOrDefault(t.Id),
         }).ToList();
 
+        // Lifecycle milestones — earliest-ever timestamps, so re-reads are
+        // stable (idempotent) and the frontend emitter can dedupe safely.
+        var firstPlay = await _milestones.GetFirstPlayAsync(userId);
+        var firstFan = await _milestones.GetFirstFanEventAsync(userId);
+
         return new CreatorDashboardResponse
         {
             EarningsCents = totalEarnings,
@@ -202,6 +203,19 @@ public class CreatorService : ICreatorService
             TotalSales = totalSales,
             ConversionRate = conversion,
             Tracks = trackStats,
+            Milestones = new CreatorMilestonesDto
+            {
+                FirstPlay = firstPlay is null ? null : new MilestoneFirstPlayDto
+                {
+                    At = firstPlay.AtUtc,
+                    TrackId = firstPlay.TrackId.ToString(),
+                },
+                FirstFan = firstFan is null ? null : new MilestoneFirstFanDto
+                {
+                    At = firstFan.AtUtc,
+                    Source = firstFan.Source,
+                },
+            },
         };
     }
 }

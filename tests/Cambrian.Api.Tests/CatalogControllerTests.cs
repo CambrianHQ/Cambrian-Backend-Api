@@ -123,7 +123,7 @@ public sealed class CatalogControllerTests
         var result = await _controller.Catalog(new CatalogQueryRequest());
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var envelope = Assert.IsType<CatalogPageResponse>(ok.Value);
+        var envelope = Assert.IsType<PublicCatalogPageResponse>(ok.Value);
         Assert.True(envelope.Success);
         Assert.Single(envelope.Data);
         Assert.Equal(50, envelope.PageSize);
@@ -159,7 +159,7 @@ public sealed class CatalogControllerTests
         var result = await _controller.Catalog(new CatalogQueryRequest());
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var envelope = Assert.IsType<CatalogPageResponse>(ok.Value);
+        var envelope = Assert.IsType<PublicCatalogPageResponse>(ok.Value);
         var item = Assert.Single(envelope.Data);
         Assert.Equal("https://api.example.com/images/covers/user-1/beat.jpg", item.CoverArtUrl);
         Assert.DoesNotContain("/images/images/", item.CoverArtUrl, StringComparison.OrdinalIgnoreCase);

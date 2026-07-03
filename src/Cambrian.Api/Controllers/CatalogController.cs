@@ -48,23 +48,35 @@ public class CatalogController : BaseController
             return await _catalog.GetDiscoverPagedAsync(page, pageSize, genre, search, mood, tempo, instrumental, duration);
         });
         ResolveTrackUrls(result!.Items);
-        return Ok(ToPaginatedEnvelope(result));
+        return Ok(ToPublicEnvelope(result));
     }
 
     [HttpGet("catalog")]
-    [ProducesResponseType(typeof(CatalogPageResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<CatalogPageResponse>> Catalog([FromQuery] CatalogQueryRequest query)
+    [ProducesResponseType(typeof(PublicCatalogPageResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PublicCatalogPageResponse>> Catalog([FromQuery] CatalogQueryRequest query)
     {
-        query.Page = Math.Max(query.Page, 1);
-        query.PageSize = query.PageSize is < 1 or > 100 ? 50 : query.PageSize;
+        // Frontend infinite-scroll (offset+limit) takes precedence over legacy page/pageSize.
+        // Offset is page-aligned (offset = pageIndex × limit) — exactly how infinite scroll
+        // requests pages — and limit caps at 60. Legacy page/pageSize keeps its existing 100 cap.
+        int page, pageSize;
+        if (query.Offset.HasValue || query.Limit.HasValue)
+        {
+            pageSize = Math.Clamp(query.Limit ?? 60, 1, 60);
+            page = (Math.Max(0, query.Offset ?? 0) / pageSize) + 1;
+        }
+        else
+        {
+            page = Math.Max(query.Page, 1);
+            pageSize = query.PageSize is < 1 or > 100 ? 50 : query.PageSize;
+        }
 
-        var cacheKey = $"catalog:paged:{query.Page}:{query.PageSize}:{query.Genre}:{query.Search}:{query.Sort}:{query.Mood}:{query.Tempo}:{query.Instrumental}:{query.Duration}";
+        var cacheKey = $"catalog:paged:{page}:{pageSize}:{query.Genre}:{query.Search}:{query.Sort}:{query.Mood}:{query.Tempo}:{query.Instrumental}:{query.Duration}";
         var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
             return await _catalog.GetCatalogPagedAsync(
-                query.Page,
-                query.PageSize,
+                page,
+                pageSize,
                 query.Genre,
                 query.Search,
                 query.Sort,
@@ -74,19 +86,23 @@ public class CatalogController : BaseController
                 query.Duration);
         });
         ResolveTrackUrls(result!.Items);
-        return Ok(ToPaginatedEnvelope(result));
+        return Ok(ToPublicEnvelope(result));
     }
 
     /// <summary>
-    /// Backward-compatible paginated envelope: "data" remains the track array
-    /// so existing clients are unaffected, and pagination metadata is added as
-    /// sibling fields.
+    /// Anonymous-safe paginated envelope. "data" remains the track array so
+    /// existing clients are unaffected, but each item is projected through
+    /// <see cref="PublicTrackDto"/> (no platform fee / creator earnings — F18) and
+    /// total/offset/limit are added for the frontend infinite-scroll contract.
     /// </summary>
-    private static CatalogPageResponse ToPaginatedEnvelope(PagedResult<TrackResponse> paged) => new()
+    private static PublicCatalogPageResponse ToPublicEnvelope(PagedResult<TrackResponse> paged) => new()
     {
-        Data = paged.Items,
+        Data = paged.Items.Select(PublicCatalogTrackDto.From).ToList(),
         Page = paged.Page,
         PageSize = paged.PageSize,
+        Offset = (paged.Page - 1) * paged.PageSize,
+        Limit = paged.PageSize,
+        Total = paged.TotalCount,
         TotalCount = paged.TotalCount,
         TotalPages = paged.TotalPages,
         HasNextPage = paged.HasNextPage,
@@ -109,7 +125,8 @@ public class CatalogController : BaseController
         result.AudioUrl = ResolveAbsoluteUrl($"/stream/{result.Id}/audio");
         if (!string.IsNullOrEmpty(result.CoverArtUrl))
             result.CoverArtUrl = ResolveCoverArtUrl(result.CoverArtUrl);
-        return OkResponse(result);
+        // Project to the anonymous-safe DTO — this route is public (F18).
+        return OkResponse(PublicCatalogTrackDto.From(result));
     }
 
     // Frontend "checkout restore" hits /catalog/{id} expecting a single track. The
@@ -132,7 +149,7 @@ public class CatalogController : BaseController
         if (pageSize is < 1 or > 100) pageSize = 20;
         var items = await _catalog.GetDiscoverAsync(page, pageSize, genre, null, mood, tempo, instrumental, duration);
         ResolveTrackUrls(items);
-        return OkResponse(items);
+        return OkResponse(items.Select(PublicCatalogTrackDto.From).ToList());
     }
 
     [HttpGet("tracks")]
@@ -140,7 +157,7 @@ public class CatalogController : BaseController
     {
         var items = await _catalog.GetCatalogAsync();
         ResolveTrackUrls(items);
-        return OkResponse(items);
+        return OkResponse(items.Select(PublicCatalogTrackDto.From).ToList());
     }
 
     [HttpGet("tracks/trending")]

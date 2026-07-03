@@ -40,7 +40,7 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
     }
 
     [Fact]
-    public async Task UpsertProfile_ReturnsExpectedShape()
+    public async Task UpsertProfile_ReturnsPublicSafeStatsShape()
     {
         // Register a creator-tier user
         var email = $"creator-contract-{Guid.NewGuid():N}@test.com";
@@ -82,7 +82,7 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         // Verify stats sub-object shape
         var stats = data.GetProperty("stats");
         Assert.True(stats.TryGetProperty("totalDownloads", out _), "Missing 'stats.totalDownloads'");
-        Assert.True(stats.TryGetProperty("totalEarnings", out _), "Missing 'stats.totalEarnings'");
+        Assert.False(stats.TryGetProperty("totalEarnings", out _), "Public profile stats must not expose creator earnings");
 
         // Verify values match what we sent
         Assert.Equal(slug, data.GetProperty("slug").GetString());

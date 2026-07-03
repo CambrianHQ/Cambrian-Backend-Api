@@ -62,6 +62,8 @@ public sealed class TrackReleasePipelineService : ITrackReleasePipelineService
         if (string.IsNullOrWhiteSpace(track.AudioUrl))
             throw new InvalidOperationException("This track has no stored audio to master.");
 
+        EnsureReleaseInputsPresent(track);
+
         // Resolve the content hash for idempotency. Tracks uploaded before §9 may
         // not be hashed yet — hash the stored bytes once and persist.
         var contentHash = track.ContentHash;
@@ -244,6 +246,25 @@ public sealed class TrackReleasePipelineService : ITrackReleasePipelineService
         return missing.Count == 0
             ? "All metadata fields present."
             : $"Metadata incomplete — missing: {string.Join(", ", missing)}.";
+    }
+
+    private static void EnsureReleaseInputsPresent(Track track)
+    {
+        var missing = new List<string>();
+        if (string.IsNullOrWhiteSpace(track.Title)) missing.Add("title");
+        if (string.IsNullOrWhiteSpace(track.PrimaryGenre) &&
+            string.IsNullOrWhiteSpace(track.Genre) &&
+            string.IsNullOrWhiteSpace(track.Subgenre)) missing.Add("genre");
+        if (string.IsNullOrWhiteSpace(track.Description)) missing.Add("description");
+        if (string.IsNullOrWhiteSpace(track.Mood)) missing.Add("mood");
+        if (string.IsNullOrWhiteSpace(track.Tempo)) missing.Add("tempo");
+
+        if (missing.Count > 0)
+            throw new InvalidOperationException(
+                $"Release Ready requires complete track metadata before mastering. Missing: {string.Join(", ", missing)}.");
+
+        if (string.IsNullOrWhiteSpace(track.CoverArtUrl))
+            throw new InvalidOperationException("Release Ready requires cover art before mastering.");
     }
 
     private async Task<string> CoverDetailAsync(Track track)

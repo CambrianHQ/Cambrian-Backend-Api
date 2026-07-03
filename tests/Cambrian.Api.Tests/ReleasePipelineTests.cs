@@ -208,6 +208,38 @@ public class ReleasePipelineTests : IClassFixture<ReleasePipelineFixture>
     }
 
     [Fact]
+    public async Task ReleaseReady_MissingCover_Returns409_AndDoesNotCharge()
+    {
+        var email = $"missingcover-{Guid.NewGuid():N}@cambrian.com";
+        var client = await _fixture.CreateAuthenticatedClientAsync(email);
+        await _fixture.SetCreatorTierAsync(email, Cambrian.Domain.Enums.CreatorTier.Pro);
+        var userId = await _fixture.GetUserIdAsync(email);
+        var trackId = await SeedTrackAsync(userId, t => t.CoverArtUrl = null);
+
+        var res = await client.PostAsync($"/api/tracks/{trackId}/release-ready", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+        Assert.Equal(0, await CountChargedJobsAsync(userId));
+        Assert.Equal(0, await CountJobsForTrackAsync(trackId));
+    }
+
+    [Fact]
+    public async Task ReleaseReady_MissingMetadata_Returns409_AndDoesNotCharge()
+    {
+        var email = $"missingmeta-{Guid.NewGuid():N}@cambrian.com";
+        var client = await _fixture.CreateAuthenticatedClientAsync(email);
+        await _fixture.SetCreatorTierAsync(email, Cambrian.Domain.Enums.CreatorTier.Pro);
+        var userId = await _fixture.GetUserIdAsync(email);
+        var trackId = await SeedTrackAsync(userId, t => t.Description = null);
+
+        var res = await client.PostAsync($"/api/tracks/{trackId}/release-ready", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+        Assert.Equal(0, await CountChargedJobsAsync(userId));
+        Assert.Equal(0, await CountJobsForTrackAsync(trackId));
+    }
+
+    [Fact]
     public async Task ReleaseReady_SameAudioRerun_Warns_WithoutDoubleCharge()
     {
         var email = $"idem-{Guid.NewGuid():N}@cambrian.com";
@@ -317,5 +349,12 @@ public class ReleasePipelineTests : IClassFixture<ReleasePipelineFixture>
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
         return await db.MasteringJobs.CountAsync(
             j => j.CreatorId == userId && j.ChargedAt != null && j.Status != "failed");
+    }
+
+    private async Task<int> CountJobsForTrackAsync(Guid trackId)
+    {
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        return await db.MasteringJobs.CountAsync(j => j.TrackId == trackId);
     }
 }

@@ -20,7 +20,8 @@ public sealed class StreamControllerTests
     public StreamControllerTests()
     {
         var logger = Substitute.For<ILogger<StreamController>>();
-        _controller = new StreamController(_tracks, _storage, _streams, new TrackVisibilityPolicy(), logger);
+        _controller = new StreamController(_tracks, _storage, _streams, new TrackVisibilityPolicy(),
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()), logger);
     }
 
     private void SetAuthenticatedUser(string userId)

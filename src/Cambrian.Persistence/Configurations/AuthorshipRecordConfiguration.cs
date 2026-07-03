@@ -23,6 +23,9 @@ public sealed class AuthorshipRecordConfiguration : IEntityTypeConfiguration<Aut
 
         builder.HasIndex(x => x.CreatorId).HasDatabaseName("IX_AuthorshipRecords_CreatorId");
         builder.HasIndex(x => x.TrackId).HasDatabaseName("IX_AuthorshipRecords_TrackId");
+        builder.HasIndex(x => x.RecordHash)
+            .HasFilter("\"RecordHash\" IS NOT NULL")
+            .HasDatabaseName("IX_AuthorshipRecords_RecordHash");
 
         // One issued record per checkout session — webhook retries are no-ops.
         builder.HasIndex(x => x.StripeSessionId)

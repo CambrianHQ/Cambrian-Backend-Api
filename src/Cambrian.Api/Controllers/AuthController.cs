@@ -253,6 +253,12 @@ public class AuthController : BaseController
             // forms on these. Mirrors what /auth/login and /auth/register already return.
             hasPassword = !string.IsNullOrEmpty(user?.PasswordHash),
             googleLinked = !string.IsNullOrEmpty(user?.GoogleId),
+            // Verification + signup timestamp — the frontend surfaces a verification
+            // banner (Studio/Upload) from emailVerified instead of discovering the
+            // VerifiedEmail 403 at publish time, and uses createdAt for analytics
+            // (signup_date person property, minutes_from_signup on upload milestones).
+            emailVerified = user?.EmailVerified ?? false,
+            createdAt = user?.CreatedAt,
             capabilities
         });
     }

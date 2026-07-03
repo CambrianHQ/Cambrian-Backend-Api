@@ -13,6 +13,8 @@ public sealed class ValidationReport
 public sealed class MetadataValidationResult
 {
     public bool Passed { get; set; }
+    public bool DecodableAudio { get; set; }
+    public double? DurationSeconds { get; set; }
     public string? Title { get; set; }
     public string? Artist { get; set; }
     public string? Album { get; set; }

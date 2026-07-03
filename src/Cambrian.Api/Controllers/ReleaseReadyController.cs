@@ -10,8 +10,8 @@ namespace Cambrian.Api.Controllers;
 /// <summary>
 /// Release Ready mastering: upload+validate → submit (ffmpeg) or approve (Tonn) →
 /// poll status → download. A thin HTTP adapter over <see cref="IReleaseReadyService"/>;
-/// typed exceptions map to the envelope error codes
-/// (<c>not_found</c> / <c>invalid_state</c> / <c>insufficient_credits</c> / <c>validation</c>).
+/// typed exceptions map to frontend-stable error codes
+/// (<c>not_found</c> / <c>invalid_state</c> / <c>insufficient_credits</c> / <c>validation_failed</c>).
 /// </summary>
 [Route("release-ready")]
 [Authorize]
@@ -66,7 +66,10 @@ public sealed class ReleaseReadyController : BaseController
     public async Task<IActionResult> Validate([FromForm] ReleaseReadyValidateRequest request, CancellationToken ct)
     {
         if (request.Audio is null || request.Audio.Length == 0)
-            return ErrorResponse("An audio file is required.");
+            return ReleaseReadyBadRequest(
+                ReleaseReadyErrorCodes.ValidationFailed,
+                "An audio file is required.",
+                new[] { new ReleaseReadyError { Code = ReleaseReadyErrorCodes.InvalidAudio, Message = "An audio file is required.", Field = "audio" } });
 
         var userId = GetRequiredUserId()!;
 
@@ -92,9 +95,23 @@ public sealed class ReleaseReadyController : BaseController
             var result = await _service.ValidateAndCreateAsync(input, ct);
             return OkResponse(result);
         }
+        catch (ReleaseReadyValidationException ex)
+        {
+            return BadRequest(new ReleaseReadyErrorResponse
+            {
+                Error = new ReleaseReadyError
+                {
+                    Code = ReleaseReadyErrorCodes.ValidationFailed,
+                    Message = ex.Message,
+                    Details = new { errorCount = ex.Errors.Count },
+                },
+                Errors = ex.Errors,
+                Validation = ex.Validation,
+            });
+        }
         catch (InvalidOperationException ex)
         {
-            return ErrorResponse(ex.Message); // 400 validation
+            return ReleaseReadyBadRequest(ReleaseReadyErrorCodes.ValidationFailed, ex.Message);
         }
     }
 
@@ -109,7 +126,7 @@ public sealed class ReleaseReadyController : BaseController
             return OkResponse(job);
         }
         catch (KeyNotFoundException) { return NotFoundResponse("Mastering job not found."); }
-        catch (InsufficientCreditsException ex) { return ForbiddenResponse(ex.Message); }
+        catch (InsufficientCreditsException ex) { return ReleaseReadyForbidden(ReleaseReadyErrorCodes.InsufficientCredits, ex.Message); }
         catch (InvalidOperationException ex) { return ConflictResponse(ex.Message); }
     }
 
@@ -124,7 +141,7 @@ public sealed class ReleaseReadyController : BaseController
             return OkResponse(job);
         }
         catch (KeyNotFoundException) { return NotFoundResponse("Mastering job not found."); }
-        catch (InsufficientCreditsException ex) { return ForbiddenResponse(ex.Message); }
+        catch (InsufficientCreditsException ex) { return ReleaseReadyForbidden(ReleaseReadyErrorCodes.InsufficientCredits, ex.Message); }
         catch (InvalidOperationException ex) { return ConflictResponse(ex.Message); }
     }
 
@@ -175,4 +192,21 @@ public sealed class ReleaseReadyController : BaseController
         ms.Position = 0;
         return ms;
     }
+
+    private IActionResult ReleaseReadyBadRequest(
+        string code,
+        string message,
+        IReadOnlyList<ReleaseReadyError>? errors = null) =>
+        BadRequest(new ReleaseReadyErrorResponse
+        {
+            Error = new ReleaseReadyError { Code = code, Message = message },
+            Errors = errors ?? new[] { new ReleaseReadyError { Code = code, Message = message } },
+        });
+
+    private IActionResult ReleaseReadyForbidden(string code, string message) =>
+        StatusCode(403, new ReleaseReadyErrorResponse
+        {
+            Error = new ReleaseReadyError { Code = code, Message = message },
+            Errors = new[] { new ReleaseReadyError { Code = code, Message = message } },
+        });
 }

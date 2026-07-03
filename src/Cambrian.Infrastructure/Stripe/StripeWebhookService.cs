@@ -32,6 +32,7 @@ public class StripeWebhookService : IWebhookService
     private readonly string _webhookSecret;
     private readonly ILogger<StripeWebhookService> _logger;
     private readonly IAuthorshipRecordIssuer? _authorshipIssuer;
+    private readonly IPurchaseAnalyticsService? _purchaseAnalytics;
 
     public StripeWebhookService(
         CambrianDbContext db,
@@ -39,7 +40,8 @@ public class StripeWebhookService : IWebhookService
         IConfiguration configuration,
         ILogger<StripeWebhookService> logger,
         IHostEnvironment env,
-        IAuthorshipRecordIssuer? authorshipIssuer = null)
+        IAuthorshipRecordIssuer? authorshipIssuer = null,
+        IPurchaseAnalyticsService? purchaseAnalytics = null)
     {
         _db = db;
         _email = email;
@@ -47,6 +49,7 @@ public class StripeWebhookService : IWebhookService
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "";
         _logger = logger;
         _authorshipIssuer = authorshipIssuer;
+        _purchaseAnalytics = purchaseAnalytics;
     }
 
     public async Task HandleStripeAsync(string payload, string signature)
@@ -314,16 +317,19 @@ public class StripeWebhookService : IWebhookService
 
         _logger.LogInformation("Stripe event processing: {EventId} {EventType}", normalizedEventId, eventType);
 
+        PurchaseAnalyticsEvent? purchaseAnalyticsEvent = null;
+
         try
         {
             // ── Step 4: Process inside transaction ──
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
-                await HandleCheckoutCompleted(clientReferenceId, amountTotal, stripeSessionId, stripeCustomerId, stripeSubscriptionId);
+                purchaseAnalyticsEvent = await HandleCheckoutCompleted(
+                    normalizedEventId, clientReferenceId, amountTotal, stripeSessionId, stripeCustomerId, stripeSubscriptionId);
             }
             else if (eventType == EventSubscriptionDeleted)
             {
-                await HandleSubscriptionDeleted(stripeCustomerId);
+                purchaseAnalyticsEvent = await HandleSubscriptionDeleted(normalizedEventId, stripeCustomerId);
             }
             else if (eventType == EventSubscriptionUpdated)
             {
@@ -364,6 +370,7 @@ public class StripeWebhookService : IWebhookService
 
             _logger.LogInformation("Stripe event completed: {EventId} {EventType}", normalizedEventId, eventType);
             Cambrian.Application.Observability.CambrianMetrics.WebhookProcessed.Add(1);
+            CapturePurchaseAnalytics(purchaseAnalyticsEvent);
         }
         catch (Exception ex)
         {
@@ -468,7 +475,30 @@ public class StripeWebhookService : IWebhookService
         return false;
     }
 
-    private async Task HandleCheckoutCompleted(string? clientReferenceId, long? amountTotal, string? stripeSessionId, string? stripeCustomerId, string? stripeSubscriptionId = null)
+    private void CapturePurchaseAnalytics(PurchaseAnalyticsEvent? purchaseEvent)
+    {
+        if (purchaseEvent is null || _purchaseAnalytics is null)
+            return;
+
+        try
+        {
+            _ = _purchaseAnalytics.CaptureAsync(purchaseEvent, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Purchase analytics dispatch failed open for {EventName}.",
+                purchaseEvent.EventName);
+        }
+    }
+
+    private async Task<PurchaseAnalyticsEvent?> HandleCheckoutCompleted(
+        string eventId,
+        string? clientReferenceId,
+        long? amountTotal,
+        string? stripeSessionId,
+        string? stripeCustomerId,
+        string? stripeSubscriptionId = null)
     {
         if (clientReferenceId is null)
         {
@@ -486,8 +516,8 @@ public class StripeWebhookService : IWebhookService
             if (string.IsNullOrWhiteSpace(stripeSessionId))
                 throw new InvalidOperationException(
                     "Subscription payment cannot be fulfilled because the Stripe session ID is missing.");
-            await HandleSubscriptionCheckout(parts[0], parts[2], stripeCustomerId, stripeSubscriptionId, stripeSessionId);
-            return;
+            return await HandleSubscriptionCheckout(
+                eventId, parts[0], parts[2], stripeCustomerId, stripeSubscriptionId, stripeSessionId);
         }
 
         // AuthorshipRecordService sets clientReferenceId = "userId:authorship:recordId".
@@ -508,15 +538,26 @@ public class StripeWebhookService : IWebhookService
                     "Authorship payment cannot be fulfilled because the Stripe session ID is missing.");
 
             await _authorshipIssuer.IssueForSessionAsync(recordId, stripeSessionId);
-            return;
+            return new PurchaseAnalyticsEvent
+            {
+                EventName = "authorship_record_purchased",
+                StripeEventId = eventId,
+                DistinctId = parts[0],
+                Properties = new Dictionary<string, object?>
+                {
+                    ["record_id"] = recordId,
+                    ["stripe_session_id"] = stripeSessionId,
+                    ["amount_cents"] = amountTotal,
+                    ["amount_source"] = "stripe_checkout_session_amount_total"
+                }
+            };
         }
 
         // ReleaseCreditService sets clientReferenceId = "userId:credits:N" (N = server-resolved
         // credit count). Payment grants N never-expiring purchased Release Ready credits.
         if (parts.Length == 3 && parts[1] == "credits" && int.TryParse(parts[2], out var grantCredits) && grantCredits > 0)
         {
-            await GrantPurchasedCredits(parts[0], grantCredits, amountTotal, stripeSessionId);
-            return;
+            return await GrantPurchasedCredits(eventId, parts[0], grantCredits, amountTotal, stripeSessionId);
         }
 
         // Explicitly retired track-license checkout shape. No current endpoint can
@@ -529,7 +570,7 @@ public class StripeWebhookService : IWebhookService
             _logger.LogWarning(
                 "[IGNORED-RETIRED] Track-license checkout replay ignored. StripeSessionId={SessionId}",
                 stripeSessionId);
-            return;
+            return null;
         }
 
         _logger.LogWarning(
@@ -544,7 +585,12 @@ public class StripeWebhookService : IWebhookService
     /// Idempotent on the Stripe session id (a unique index also backs this) so webhook
     /// retries and duplicate deliveries never double-grant.
     /// </summary>
-    private async Task GrantPurchasedCredits(string userId, int credits, long? amountTotal, string? stripeSessionId)
+    private async Task<PurchaseAnalyticsEvent?> GrantPurchasedCredits(
+        string eventId,
+        string userId,
+        int credits,
+        long? amountTotal,
+        string? stripeSessionId)
     {
         if (string.IsNullOrWhiteSpace(stripeSessionId))
             throw new InvalidOperationException(
@@ -563,7 +609,7 @@ public class StripeWebhookService : IWebhookService
         if (!string.IsNullOrEmpty(stripeSessionId)
             && await _db.ReleaseCreditPurchases.AnyAsync(p => p.StripeSessionId == stripeSessionId))
         {
-            return; // already granted — idempotent no-op
+            return null; // already granted — idempotent no-op
         }
 
         _db.ReleaseCreditPurchases.Add(new Cambrian.Domain.Entities.ReleaseCreditPurchase
@@ -583,6 +629,21 @@ public class StripeWebhookService : IWebhookService
             "EVENT: ReleaseCreditsPurchased userId:{UserId} credits:{Credits} amountCents:{Amount} sessionId:{SessionId}",
             userId, credits, amountTotal ?? 0, stripeSessionId);
         Cambrian.Application.Observability.CambrianMetrics.CheckoutCompleted.Add(1);
+
+        return new PurchaseAnalyticsEvent
+        {
+            EventName = "credit_pack_purchased",
+            StripeEventId = eventId,
+            DistinctId = userId,
+            Properties = new Dictionary<string, object?>
+            {
+                ["pack"] = pack.Id,
+                ["size"] = credits,
+                ["amount_cents"] = amountTotal,
+                ["amount_source"] = "stripe_checkout_session_amount_total",
+                ["stripe_session_id"] = stripeSessionId
+            }
+        };
     }
 
 
@@ -590,7 +651,13 @@ public class StripeWebhookService : IWebhookService
     /// Handle a subscription checkout: create or update the user's Subscription record
     /// and upgrade their tier on the ApplicationUser.
     /// </summary>
-    private async Task HandleSubscriptionCheckout(string userId, string tier, string? stripeCustomerId, string? stripeSubscriptionId = null, string? stripeSessionId = null)
+    private async Task<PurchaseAnalyticsEvent?> HandleSubscriptionCheckout(
+        string eventId,
+        string userId,
+        string tier,
+        string? stripeCustomerId,
+        string? stripeSubscriptionId = null,
+        string? stripeSessionId = null)
     {
         // Normalize the tier slug to a known tier config (creator/pro/free).
         var tierConfig = TierManifest.For(tier);
@@ -603,7 +670,7 @@ public class StripeWebhookService : IWebhookService
         if (!string.IsNullOrEmpty(stripeSessionId)
             && await _db.Subscriptions.AnyAsync(s => s.StripeSessionId == stripeSessionId))
         {
-            return; // already fulfilled — idempotent no-op
+            return null; // already fulfilled — idempotent no-op
         }
 
         // Cancel any existing subscription for this user
@@ -646,6 +713,21 @@ public class StripeWebhookService : IWebhookService
             "Subscription activated: User={UserId} Plan={Plan}",
             userId, tier);
         Cambrian.Application.Observability.CambrianMetrics.CheckoutCompleted.Add(1);
+
+        return new PurchaseAnalyticsEvent
+        {
+            EventName = "subscription_started",
+            StripeEventId = eventId,
+            DistinctId = userId,
+            Properties = new Dictionary<string, object?>
+            {
+                ["plan"] = tier,
+                ["interval"] = "month",
+                ["stripe_customer_id"] = stripeCustomerId,
+                ["stripe_subscription_id"] = stripeSubscriptionId,
+                ["stripe_session_id"] = stripeSessionId
+            }
+        };
     }
 
     /// <summary>
@@ -699,12 +781,12 @@ public class StripeWebhookService : IWebhookService
     /// Handle customer.subscription.deleted — downgrade user to free tier.
     /// Matches the Stripe customer email to the local user account.
     /// </summary>
-    private async Task HandleSubscriptionDeleted(string? stripeCustomerId)
+    private async Task<PurchaseAnalyticsEvent?> HandleSubscriptionDeleted(string eventId, string? stripeCustomerId)
     {
         if (string.IsNullOrEmpty(stripeCustomerId))
         {
             _logger.LogWarning("customer.subscription.deleted received without customer ID");
-            return;
+            return null;
         }
 
         var user = await FindUserByStripeCustomerAsync(stripeCustomerId);
@@ -713,7 +795,7 @@ public class StripeWebhookService : IWebhookService
             _logger.LogWarning(
                 "customer.subscription.deleted: could not match Stripe customer {CustomerId} to a local user. Manual review needed.",
                 stripeCustomerId);
-            return;
+            return null;
         }
 
         var activeSub = await _db.Subscriptions
@@ -725,6 +807,7 @@ public class StripeWebhookService : IWebhookService
             activeSub.ExpiresAt = DateTime.UtcNow;
         }
 
+        var previousPlan = user.Tier;
         var wasPro = user.Tier is "pro" or "paid";
         user.Tier = "free";
         user.CreatorTier = CreatorTier.Free;
@@ -735,6 +818,18 @@ public class StripeWebhookService : IWebhookService
         _logger.LogInformation(
             "Subscription deleted via webhook: User={UserId} StripeCustomer={CustomerId} downgraded from {OldTier} to {NewTier}",
             user.Id, stripeCustomerId, wasPro ? "pro" : "paid", user.Tier);
+
+        return new PurchaseAnalyticsEvent
+        {
+            EventName = "subscription_canceled",
+            StripeEventId = eventId,
+            DistinctId = user.Id,
+            Properties = new Dictionary<string, object?>
+            {
+                ["plan"] = previousPlan,
+                ["stripe_customer_id"] = stripeCustomerId
+            }
+        };
     }
 
     /// <summary>

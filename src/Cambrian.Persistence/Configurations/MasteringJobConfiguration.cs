@@ -16,6 +16,7 @@ public sealed class MasteringJobConfiguration : IEntityTypeConfiguration<Masteri
         builder.Property(x => x.Status).HasMaxLength(20).IsRequired();
         builder.Property(x => x.SourceKey).IsRequired();
         builder.Property(x => x.SourceFileName).HasMaxLength(512);
+        builder.Property(x => x.CoverArtKey).HasMaxLength(512);
         builder.Property(x => x.EngineRef).HasMaxLength(256);
         builder.Property(x => x.Kind).HasMaxLength(20).IsRequired().HasDefaultValue("mastering");
         builder.Property(x => x.ContentHash).HasMaxLength(64);
@@ -29,6 +30,14 @@ public sealed class MasteringJobConfiguration : IEntityTypeConfiguration<Masteri
         // Worker poll: claim queued jobs oldest-first.
         builder.HasIndex(x => new { x.Status, x.CreatedAt })
             .HasDatabaseName("IX_MasteringJobs_Status_CreatedAt");
+
+        // Worker recovery: find expired processing leases without scanning every job.
+        builder.HasIndex(x => new { x.Status, x.ProcessingLeaseExpiresAt })
+            .HasDatabaseName("IX_MasteringJobs_Status_ProcessingLeaseExpiresAt");
+
+        // Classic upload idempotency: coalesce repeat submits from the same creator/content.
+        builder.HasIndex(x => new { x.CreatorId, x.Kind, x.ContentHash })
+            .HasDatabaseName("IX_MasteringJobs_Creator_Kind_ContentHash");
 
         builder.HasIndex(x => x.CreatorId)
             .HasDatabaseName("IX_MasteringJobs_CreatorId");

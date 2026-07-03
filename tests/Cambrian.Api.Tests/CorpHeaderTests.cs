@@ -1,4 +1,5 @@
 using Cambrian.Api.Tests.Fixtures;
+using System.Net;
 
 namespace Cambrian.Api.Tests;
 
@@ -27,6 +28,40 @@ public sealed class CorpHeaderTests : IClassFixture<CambrianApiFixture>
             "CORP header missing from /images/* response");
         Assert.Equal("cross-origin",
             string.Join("", res.Headers.GetValues("Cross-Origin-Resource-Policy")));
+    }
+
+    [Fact]
+    public async Task ImageProxyResponse_HasImmutableCacheHeaders_StrongEtag_AndAllowedCorsOrigin()
+    {
+        var client = _factory.CreateClient();
+        var request = new HttpRequestMessage(HttpMethod.Get, "/images/covers/test-cover.jpg");
+        request.Headers.Add("Origin", "https://cambrianmusic.com");
+
+        var res = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.Equal("public, max-age=31536000, immutable", res.Headers.CacheControl?.ToString());
+        Assert.NotNull(res.Headers.ETag);
+        Assert.False(res.Headers.ETag!.IsWeak);
+        Assert.Equal("https://cambrianmusic.com", string.Join("", res.Headers.GetValues("Access-Control-Allow-Origin")));
+    }
+
+    [Fact]
+    public async Task ImageProxyConditionalRequest_Returns304_WithCacheHeaders()
+    {
+        var client = _factory.CreateClient();
+        var first = await client.GetAsync("/images/covers/test-cover.jpg");
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.NotNull(first.Headers.ETag);
+
+        var conditional = new HttpRequestMessage(HttpMethod.Get, "/images/covers/test-cover.jpg");
+        conditional.Headers.TryAddWithoutValidation("If-None-Match", first.Headers.ETag!.ToString());
+
+        var second = await client.SendAsync(conditional);
+
+        Assert.Equal(HttpStatusCode.NotModified, second.StatusCode);
+        Assert.Equal("public, max-age=31536000, immutable", second.Headers.CacheControl?.ToString());
+        Assert.Equal(first.Headers.ETag, second.Headers.ETag);
     }
 
     [Fact]

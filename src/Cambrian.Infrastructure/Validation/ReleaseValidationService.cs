@@ -1,7 +1,9 @@
 using System.Text.RegularExpressions;
+using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.ReleaseReady;
 using Cambrian.Application.Interfaces;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
 
 namespace Cambrian.Infrastructure.Validation;
@@ -26,9 +28,14 @@ public sealed class ReleaseValidationService : IReleaseValidationService
         "ai", "a.i.", "artificial intelligence", "chatgpt", "openai",
     };
 
+    private readonly MasteringOptions _options;
     private readonly ILogger<ReleaseValidationService> _logger;
 
-    public ReleaseValidationService(ILogger<ReleaseValidationService> logger) => _logger = logger;
+    public ReleaseValidationService(IOptions<MasteringOptions> options, ILogger<ReleaseValidationService> logger)
+    {
+        _options = options.Value;
+        _logger = logger;
+    }
 
     public MetadataValidationResult ValidateMetadata(Stream audio, string fileName)
     {
@@ -39,6 +46,24 @@ public sealed class ReleaseValidationService : IReleaseValidationService
             var name = string.IsNullOrWhiteSpace(fileName) ? "audio.mp3" : fileName;
             using var tagFile = TagLib.File.Create(new StreamFileAbstraction(name, audio));
             var tag = tagFile.Tag;
+            var duration = tagFile.Properties.Duration;
+
+            if (duration > TimeSpan.Zero)
+            {
+                r.DecodableAudio = true;
+                r.DurationSeconds = duration.TotalSeconds;
+
+                var minSeconds = Math.Max(3, _options.MinDurationSeconds);
+                var maxSeconds = Math.Max(minSeconds, _options.MaxDurationSeconds);
+                if (duration.TotalSeconds < minSeconds)
+                    r.Issues.Add($"Audio must be at least {minSeconds} seconds.");
+                if (duration.TotalSeconds > maxSeconds)
+                    r.Issues.Add($"Release Ready currently supports tracks up to {maxSeconds / 60} minutes.");
+            }
+            else
+            {
+                r.Issues.Add("Could not determine audio duration — re-export the file and try again.");
+            }
 
             r.Title = Clean(tag.Title);
             r.Artist = Clean(tag.FirstPerformer);
@@ -61,13 +86,21 @@ public sealed class ReleaseValidationService : IReleaseValidationService
                 r.Stripped.Add("artist");
             }
 
+            if (string.IsNullOrWhiteSpace(r.Album))
+                r.Issues.Add("Missing release or album name.");
+
             r.Passed = r.Issues.Count == 0;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "EVENT: MetadataValidationError file:{File}", fileName);
             r.Passed = false;
+            r.DecodableAudio = false;
             r.Issues.Add("Could not read audio metadata — re-export the file and try again.");
+        }
+        finally
+        {
+            if (audio.CanSeek) audio.Position = 0;
         }
         return r;
     }

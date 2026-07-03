@@ -19,6 +19,7 @@ public sealed class CreatorServiceTests
     private readonly IStreamRepository _streams = Substitute.For<IStreamRepository>();
     private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
     private readonly ICreatorProfileRepository _profiles = Substitute.For<ICreatorProfileRepository>();
+    private readonly ICreatorMilestoneRepository _milestones = Substitute.For<ICreatorMilestoneRepository>();
     private readonly CreatorService _sut;
 
     public CreatorServiceTests()
@@ -35,6 +36,7 @@ public sealed class CreatorServiceTests
             users,
             _creators,
             _profiles,
+            _milestones,
             Substitute.For<ILogger<CreatorService>>());
     }
 
@@ -110,6 +112,7 @@ public sealed class CreatorServiceTests
             users,
             _creators,
             _profiles,
+            _milestones,
             Substitute.For<ILogger<CreatorService>>());
 
         _tracks.GetCreatorTrackSummariesAsync("creator-1", creatorUuid).Returns(

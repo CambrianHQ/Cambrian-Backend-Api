@@ -14,9 +14,8 @@ public class CreatorStatsDto
     /// <summary>Number of users following this creator. Sourced from CreatorFollows.</summary>
     public int FollowerCount { get; set; }
 
-    /// <summary>
-    /// Lifetime net earnings in dollars (post-platform-fee, per-purchase floored).
-    /// Sourced from wallet credit transactions. Hidden (returns 0) when ShowEarnings is false.
-    /// </summary>
-    public decimal TotalEarnings { get; set; }
+    // F18: lifetime creator earnings are NOT exposed here. This DTO is serialized on
+    // the anonymous storefront/profile routes, so a `totalEarnings` field let any
+    // visitor scrape each creator's take-home. Earnings are owner-only and read from
+    // the authenticated wallet (PayoutService.GetEarningsAsync).
 }

@@ -55,7 +55,7 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
     }
 
     [Fact]
-    public async Task Storefront_ReturnsFullShape()
+    public async Task Storefront_ReturnsPublicShape_WithoutCreatorEarnings()
     {
         // Arrange: creator with profile + one public track
         var email = $"sf-shape-{Guid.NewGuid():N}@test.com";
@@ -91,7 +91,7 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
         // Assert: stats sub-object
         Assert.True(data.TryGetProperty("stats", out var stats));
         Assert.True(stats.TryGetProperty("totalDownloads", out _));
-        Assert.True(stats.TryGetProperty("totalEarnings", out _));
+        Assert.False(stats.TryGetProperty("totalEarnings", out _));
 
         // Assert: tracks array
         Assert.True(data.TryGetProperty("tracks", out var tracks));
@@ -252,7 +252,7 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
     }
 
     [Fact]
-    public async Task Storefront_Stats_HidesEarnings_WhenToggled()
+    public async Task Storefront_Stats_NeverExposeEarnings_WhenToggleOff()
     {
         var email = $"sf-earn-{Guid.NewGuid():N}@test.com";
         var client = await CreateCreatorClientAsync(email);
@@ -275,14 +275,12 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
         var stats = (await res.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("data").GetProperty("stats");
 
-        // earnings should be 0 because ShowEarnings is false
-        Assert.Equal(0m, stats.GetProperty("totalEarnings").GetDecimal());
-        // downloads should still count
+        Assert.False(stats.TryGetProperty("totalEarnings", out _));
         Assert.Equal(1, stats.GetProperty("totalDownloads").GetInt32());
     }
 
     [Fact]
-    public async Task Storefront_Stats_ShowsEarnings_WhenEnabled()
+    public async Task Storefront_Stats_NeverExposeEarnings_WhenToggleOn()
     {
         var email = $"sf-earny-{Guid.NewGuid():N}@test.com";
         var client = await CreateCreatorClientAsync(email);
@@ -304,9 +302,7 @@ public sealed class StorefrontTests : IClassFixture<CambrianApiFixture>, IAsyncL
         var stats = (await res.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("data").GetProperty("stats");
 
-        // Earnings should reflect net (post-fee) amount, not gross.
-        // Free tier fee = 35%, so $50.00 gross → floor(5000 × 0.65) = 3250 → $32.50 net.
-        Assert.Equal(32.5m, stats.GetProperty("totalEarnings").GetDecimal());
+        Assert.False(stats.TryGetProperty("totalEarnings", out _));
         Assert.Equal(1, stats.GetProperty("totalDownloads").GetInt32());
     }
 

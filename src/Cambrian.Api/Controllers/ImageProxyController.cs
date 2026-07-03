@@ -21,6 +21,8 @@ namespace Cambrian.Api.Controllers;
 [AllowAnonymous]
 public class ImageProxyController : BaseController
 {
+    private const string ImmutableImageCacheControl = "public, max-age=31536000, immutable";
+
     private readonly IObjectStorage _storage;
     private readonly IMemoryCache _cache;
     private readonly ILogger<ImageProxyController> _logger;
@@ -36,6 +38,13 @@ public class ImageProxyController : BaseController
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"
     };
 
+    private static readonly HashSet<string> AllowedCorsOrigins = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "https://cdn.cambrianmusic.com",
+        "https://cambrianmusic.com",
+        "https://www.cambrianmusic.com"
+    };
+
     public ImageProxyController(IObjectStorage storage, IMemoryCache cache, ILogger<ImageProxyController> logger)
     {
         _storage = storage;
@@ -49,9 +58,11 @@ public class ImageProxyController : BaseController
     // (OpenAPI cannot cleanly represent ASP.NET Core's {**key} catch-all).
     [ApiExplorerSettings(IgnoreApi = true)]
     [HttpGet("{**key}")]
-    [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
+    [ResponseCache(Duration = 31536000, Location = ResponseCacheLocation.Any)]
     public async Task<IActionResult> GetImage(string key)
     {
+        ApplyCorsHeaders();
+
         if (string.IsNullOrWhiteSpace(key))
             return NotFoundResponse("No image key provided.");
 
@@ -72,7 +83,8 @@ public class ImageProxyController : BaseController
         // ETag based on the key — same key always serves the same content.
         // Allows browsers to skip re-download on subsequent renders.
         var etag = $"\"{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key)))[..16]}\"";
-        if (Request.Headers.IfNoneMatch.ToString() == etag)
+        ApplyCacheHeaders(etag);
+        if (MatchesIfNoneMatch(etag, Request.Headers.IfNoneMatch.ToString()))
             return StatusCode(304);
 
         StorageFile? file;
@@ -99,7 +111,38 @@ public class ImageProxyController : BaseController
         if (file.Length > 0)
             Response.ContentLength = file.Length;
 
-        Response.Headers.ETag = etag;
         return File(file.Stream, file.ContentType);
+    }
+
+    private void ApplyCorsHeaders()
+    {
+        var origin = Request.Headers.Origin.ToString();
+        if (string.IsNullOrWhiteSpace(origin) || !AllowedCorsOrigins.Contains(origin))
+            return;
+
+        Response.Headers["Access-Control-Allow-Origin"] = origin;
+        Response.Headers["Access-Control-Allow-Methods"] = "GET";
+        Response.Headers["Access-Control-Expose-Headers"] = "Cache-Control, ETag, Content-Length, Content-Type";
+        Response.Headers.Vary = "Origin";
+    }
+
+    private void ApplyCacheHeaders(string etag)
+    {
+        Response.Headers.CacheControl = ImmutableImageCacheControl;
+        Response.Headers.ETag = etag;
+    }
+
+    private static bool MatchesIfNoneMatch(string etag, string ifNoneMatch)
+    {
+        if (string.IsNullOrWhiteSpace(ifNoneMatch))
+            return false;
+
+        foreach (var candidate in ifNoneMatch.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (candidate == "*" || string.Equals(candidate, etag, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
     }
 }

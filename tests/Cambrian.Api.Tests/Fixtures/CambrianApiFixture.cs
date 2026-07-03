@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -550,8 +551,15 @@ internal sealed class FakePaymentGateway : IPaymentGateway
 
 internal sealed class FakeObjectStorage : IObjectStorage
 {
-    public Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
-        => Task.FromResult($"fake://{key}");
+    private readonly ConcurrentDictionary<string, StoredObject> _objects = new();
+
+    public async Task<string> UploadAsync(Stream file, string key, string contentType = "audio/mpeg")
+    {
+        using var copy = new MemoryStream();
+        await file.CopyToAsync(copy);
+        _objects[key] = new StoredObject(copy.ToArray(), contentType);
+        return $"fake://{key}";
+    }
 
     public string GenerateSignedUrl(string key)
         => $"https://fake-cdn.cambrian.test/{key}?signed=true";
@@ -560,13 +568,27 @@ internal sealed class FakeObjectStorage : IObjectStorage
         => $"https://fake-cdn.cambrian.test/{key}";
 
     public Task<StorageFile?> OpenReadAsync(string key)
-        => Task.FromResult<StorageFile?>(new StorageFile
+    {
+        if (_objects.TryGetValue(key, out var stored))
+        {
+            return Task.FromResult<StorageFile?>(new StorageFile
+            {
+                Stream = new MemoryStream(stored.Bytes),
+                ContentType = stored.ContentType,
+                Length = stored.Bytes.Length
+            });
+        }
+
+        return Task.FromResult<StorageFile?>(new StorageFile
         {
             Stream = new MemoryStream(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }),
             ContentType = "audio/mpeg",
             Length = 4
         });
+    }
 
     public Task DeleteAsync(string key)
         => Task.CompletedTask;
+
+    private sealed record StoredObject(byte[] Bytes, string ContentType);
 }

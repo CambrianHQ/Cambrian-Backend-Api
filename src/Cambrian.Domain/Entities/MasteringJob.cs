@@ -54,6 +54,9 @@ public class MasteringJob
 
     public string? SourceFileName { get; set; }
 
+    /// <summary>Validated cover-art object used for embedding into release exports.</summary>
+    public string? CoverArtKey { get; set; }
+
     /// <summary>Mastered 44.1k/16-bit WAV output (new key; original untouched).</summary>
     public string? MasteredWavKey { get; set; }
 
@@ -95,6 +98,18 @@ public class MasteringJob
 
     /// <summary>Worker retry counter — bounded to a single retry.</summary>
     public int RetryCount { get; set; }
+
+    /// <summary>Current processing lease holder. Only this lease may heartbeat or finish the job.</summary>
+    public Guid? ProcessingLeaseId { get; set; }
+
+    /// <summary>UTC instant when the current processing lease expires.</summary>
+    public DateTime? ProcessingLeaseExpiresAt { get; set; }
+
+    /// <summary>UTC instant when the current processing attempt started.</summary>
+    public DateTime? ProcessingStartedAt { get; set; }
+
+    /// <summary>Last UTC heartbeat from the active worker lease holder.</summary>
+    public DateTime? LastHeartbeatAt { get; set; }
 
     /// <summary>Top-level failure message (also captured to Sentry).</summary>
     public string? Error { get; set; }

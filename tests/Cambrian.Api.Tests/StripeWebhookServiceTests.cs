@@ -26,7 +26,9 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private StripeWebhookService CreateService(string webhookSecret = "whsec_test")
+    private StripeWebhookService CreateService(
+        string webhookSecret = "whsec_test",
+        IPurchaseAnalyticsService? purchaseAnalytics = null)
     {
         var config = Substitute.For<IConfiguration>();
         config["Stripe:WebhookSecret"].Returns(webhookSecret);
@@ -34,7 +36,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
         var env = Substitute.For<IHostEnvironment>();
         env.EnvironmentName.Returns("Production");
 
-        return new StripeWebhookService(_db, _emailService, config, _logger, env);
+        return new StripeWebhookService(_db, _emailService, config, _logger, env, purchaseAnalytics: purchaseAnalytics);
     }
 
     private StripeWebhookService CreateServiceWithPrices(string creatorPrice, string proPrice)
@@ -367,6 +369,45 @@ public sealed class StripeWebhookServiceTests : IDisposable
         Assert.Equal("active", subscriptions[0].Status);
         Assert.Equal("creator", subscriptions[0].Plan);
         Assert.Single(await _db.StripeWebhookEvents.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ProcessEventAsync_ReplayedEventId_CapturesPurchaseAnalyticsOnce()
+    {
+        var userId = "user-analytics-replay";
+        _db.Users.Add(new ApplicationUser { Id = userId, UserName = userId, Tier = "free" });
+        await _db.SaveChangesAsync();
+
+        var captured = new List<PurchaseAnalyticsEvent>();
+        var analytics = Substitute.For<IPurchaseAnalyticsService>();
+        analytics
+            .CaptureAsync(Arg.Do<PurchaseAnalyticsEvent>(captured.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var svc = CreateService(purchaseAnalytics: analytics);
+        var eventId = "evt_analytics_replay_subscription";
+        const string sessionId = "cs_analytics_replay_subscription";
+
+        await svc.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:subscription:creator",
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: sessionId);
+
+        await svc.ProcessEventAsync(
+            eventId: eventId,
+            eventType: "checkout.session.completed",
+            clientReferenceId: $"{userId}:subscription:creator",
+            amountTotal: null,
+            stripeCustomerId: null,
+            stripeSessionId: sessionId);
+
+        var purchaseEvent = Assert.Single(captured);
+        Assert.Equal("subscription_started", purchaseEvent.EventName);
+        Assert.Equal(eventId, purchaseEvent.StripeEventId);
+        Assert.Equal(userId, purchaseEvent.DistinctId);
     }
 
     // ════════════════════════════════════════════════════════════════

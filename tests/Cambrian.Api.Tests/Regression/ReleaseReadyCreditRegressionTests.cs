@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Cambrian.Api.Tests.Fixtures;
+using Cambrian.Application.DTOs.ReleaseReady;
 using Cambrian.Domain.Entities;
 using Cambrian.Domain.Enums;
 using Cambrian.Persistence;
@@ -49,6 +50,8 @@ public sealed class ReleaseReadyCreditRegressionTests : IClassFixture<Relational
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("success").GetBoolean().Should().BeFalse();
+        body.GetProperty("error").GetProperty("code").GetString().Should().Be(ReleaseReadyErrorCodes.InsufficientCredits);
+        body.GetProperty("error").GetProperty("message").GetString().Should().NotBeNullOrWhiteSpace();
 
         // The denied job must NOT have advanced to 'queued' and must NOT have been charged.
         var job = await GetJobAsync(jobId);

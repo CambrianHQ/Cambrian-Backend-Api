@@ -278,19 +278,14 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             ? await _db.CreatorFollows.CountAsync(f => f.CreatorId == creatorUuid)
             : 0;
 
-        // Use wallet transaction credits as the source of truth for earnings.
-        // These are already post-fee, per-purchase-floored values matching the
-        // withdrawable balance (consistent with PayoutService.GetEarningsAsync).
-        var totalEarningsCents = await _db.WalletTransactions
-            .Where(w => w.UserId == userId && w.Type == "credit")
-            .SumAsync(w => (long?)w.AmountCents ?? 0);
-
+        // F18: creator earnings are intentionally NOT included in this stats DTO —
+        // it is serialized on the anonymous storefront/profile routes. The withdrawable
+        // balance is owner-only via the authenticated wallet (PayoutService.GetEarningsAsync).
         return new CreatorStatsDto
         {
             TotalDownloads = totalSales,
             TotalPlays = totalPlays,
             FollowerCount = followerCount,
-            TotalEarnings = totalEarningsCents / 100m,
         };
     }
 

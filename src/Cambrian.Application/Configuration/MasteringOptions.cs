@@ -22,6 +22,21 @@ public sealed class MasteringOptions
     /// <summary>Per-job timeout in seconds (kills runaway ffmpeg).</summary>
     public int JobTimeoutSeconds { get; set; } = 480;
 
+    /// <summary>Minimum accepted track duration in seconds before mastering.</summary>
+    public int MinDurationSeconds { get; set; } = 5;
+
+    /// <summary>Maximum accepted track duration in seconds before mastering.</summary>
+    public int MaxDurationSeconds { get; set; } = 15 * 60;
+
+    /// <summary>How long a worker owns a processing job before another worker may recover it.</summary>
+    public int ProcessingLeaseSeconds { get; set; } = 120;
+
+    /// <summary>How often a worker extends its active processing lease.</summary>
+    public int ProcessingHeartbeatSeconds { get; set; } = 30;
+
+    /// <summary>Number of retry attempts after the first processing failure.</summary>
+    public int MaxRetryCount { get; set; } = 1;
+
     public FfmpegOptions Ffmpeg { get; set; } = new();
 
     public TonnOptions Tonn { get; set; } = new();

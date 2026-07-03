@@ -2,6 +2,7 @@ using System.Text.Json;
 using Cambrian.Application.DTOs.ReleaseReady;
 using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Provenance;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
@@ -18,6 +19,7 @@ public sealed class ReleaseReadyService : IReleaseReadyService
 {
     // Storage key templates (frozen contract — never modify the source key).
     private const string SourceKeyFmt = "release-ready/source/{0}{1}";
+    private const string CoverArtKeyFmt = "release-ready/artwork/{0}{1}";
     private const string MasterWavKeyFmt = "release-ready/master/{0}/master.wav";
     private const string MasterMp3KeyFmt = "release-ready/master/{0}/master.mp3";
 
@@ -68,6 +70,7 @@ public sealed class ReleaseReadyService : IReleaseReadyService
 
         // Buffer the audio so it stays seekable across validation + upload.
         var audio = await ToSeekableAsync(input.Audio, ct);
+        var contentHash = ContentHashing.ComputeSha256Hex(audio);
 
         var metadata = _validation.ValidateMetadata(audio, input.AudioFileName);
 
@@ -84,14 +87,45 @@ public sealed class ReleaseReadyService : IReleaseReadyService
         }
 
         var report = new ValidationReport { Metadata = metadata, Artwork = artwork };
+        if (!report.Passed)
+        {
+            artworkBuffer?.Dispose();
+            throw new ReleaseReadyValidationException(BuildValidationMessage(report), report);
+        }
+
+        var existing = await _jobs.GetActiveClassicByCreatorAndHashAsync(input.UserId, contentHash, ct);
+        if (existing is not null)
+        {
+            artworkBuffer?.Dispose();
+            _logger.LogInformation(
+                "EVENT: ReleaseReadyClassicCoalesced jobId:{JobId} userId:{UserId} status:{Status}",
+                existing.Id, input.UserId, existing.Status);
+
+            return new ValidateResponse
+            {
+                JobId = existing.Id,
+                Engine = existing.Engine,
+                RequiresApproval = _engine.RequiresApproval,
+                Validation = DeserializeValidation(existing.ValidationReportJson) ?? report,
+            };
+        }
 
         var jobId = Guid.NewGuid();
         var ext = SafeExt(input.AudioFileName);
         var sourceKey = string.Format(SourceKeyFmt, jobId, ext);
+        string? coverArtKey = null;
 
         // Persist the source — read-only thereafter.
         audio.Position = 0;
         await _storage.UploadAsync(audio, sourceKey, GuessAudioContentType(ext));
+
+        if (artworkBuffer is not null)
+        {
+            var artExt = SafeImageExt(input.ArtworkFileName);
+            coverArtKey = string.Format(CoverArtKeyFmt, jobId, artExt);
+            artworkBuffer.Position = 0;
+            await _storage.UploadAsync(artworkBuffer, coverArtKey, GuessImageContentType(artExt));
+        }
 
         // Persist DDEX AI-disclosure on the track when one is supplied (owner-scoped).
         if (input.TrackId is Guid trackId)
@@ -106,6 +140,8 @@ public sealed class ReleaseReadyService : IReleaseReadyService
             Status = "validated",
             SourceKey = sourceKey,
             SourceFileName = input.AudioFileName,
+            CoverArtKey = coverArtKey,
+            ContentHash = contentHash,
             TargetLufs = input.TargetLufs ?? -14.0,
             ValidationReportJson = JsonSerializer.Serialize(report, JsonOpts),
             CreatedAt = DateTime.UtcNow,
@@ -179,6 +215,7 @@ public sealed class ReleaseReadyService : IReleaseReadyService
                 SourceFileName = job.SourceFileName ?? "audio",
                 TargetLufs = job.TargetLufs,
                 TargetTruePeakDbtp = job.TargetTruePeakDbtp,
+                Metadata = BuildReleaseMetadata(job, null),
             },
             job.EngineRef,
             ct);
@@ -332,6 +369,40 @@ public sealed class ReleaseReadyService : IReleaseReadyService
         };
     }
 
+    private static ReleaseMetadata BuildReleaseMetadata(Domain.Entities.MasteringJob job, Domain.Entities.Track? track)
+    {
+        var report = DeserializeValidation(job.ValidationReportJson);
+        return new ReleaseMetadata
+        {
+            Title = FirstNonEmpty(track?.Title, report?.Metadata.Title),
+            Artist = FirstNonEmpty(track?.Creator?.DisplayName, track?.CreatorEntity?.DisplayName, report?.Metadata.Artist),
+            Album = FirstNonEmpty(report?.Metadata.Album, track?.Title),
+            Date = job.CreatedAt.Year.ToString(),
+            Genre = FirstNonEmpty(track?.PrimaryGenre, track?.Genre, track?.Subgenre),
+            Comment = "Release Ready Beta: loudness-normalized export with embedded MP3 metadata/artwork.",
+        };
+    }
+
+    private static ValidationReport? DeserializeValidation(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        try { return JsonSerializer.Deserialize<ValidationReport>(json, JsonOpts); }
+        catch (JsonException) { return null; }
+    }
+
+    private static string BuildValidationMessage(ValidationReport report)
+    {
+        var issues = report.Metadata.Issues.Concat(report.Artwork.Issues).Where(i => !string.IsNullOrWhiteSpace(i)).ToList();
+        return issues.Count == 0
+            ? "Release Ready validation failed."
+            : string.Join(" ", issues);
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
     private static async Task<Stream> ToSeekableAsync(Stream source, CancellationToken ct)
     {
         if (source.CanSeek)
@@ -352,6 +423,12 @@ public sealed class ReleaseReadyService : IReleaseReadyService
         return string.IsNullOrWhiteSpace(ext) || ext.Length > 6 ? ".audio" : ext.ToLowerInvariant();
     }
 
+    private static string SafeImageExt(string? name)
+    {
+        var ext = Path.GetExtension(name ?? "");
+        return ext.Equals(".png", StringComparison.OrdinalIgnoreCase) ? ".png" : ".jpg";
+    }
+
     private static string GuessAudioContentType(string ext) => ext.ToLowerInvariant() switch
     {
         ".wav" => "audio/wav",
@@ -361,5 +438,11 @@ public sealed class ReleaseReadyService : IReleaseReadyService
         ".ogg" => "audio/ogg",
         ".m4a" => "audio/mp4",
         _ => "application/octet-stream",
+    };
+
+    private static string GuessImageContentType(string ext) => ext.ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        _ => "image/jpeg",
     };
 }

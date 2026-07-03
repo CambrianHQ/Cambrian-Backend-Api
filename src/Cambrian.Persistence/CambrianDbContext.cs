@@ -75,9 +75,31 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<CreatorStat> CreatorStats => Set<CreatorStat>();
 
+    public DbSet<NewsletterSubscriber> NewsletterSubscribers => Set<NewsletterSubscriber>();
+
+    public DbSet<WeeklyChartSnapshot> WeeklyChartSnapshots => Set<WeeklyChartSnapshot>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<WeeklyChartSnapshot>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CreatorId).IsRequired().HasMaxLength(450);
+            e.Property(x => x.Title).IsRequired().HasMaxLength(300);
+            e.Property(x => x.Artist).IsRequired().HasMaxLength(300);
+            e.Property(x => x.Basis).IsRequired().HasMaxLength(32);
+            // A week holds exactly one row per rank and per track; recompute
+            // replaces the whole week atomically (idempotent per week).
+            e.HasIndex(x => new { x.WeekStartUtc, x.Rank })
+                .IsUnique()
+                .HasDatabaseName("ux_weekly_chart_week_rank");
+            e.HasIndex(x => new { x.WeekStartUtc, x.TrackId })
+                .IsUnique()
+                .HasDatabaseName("ux_weekly_chart_week_track");
+            e.ToTable("WeeklyChartSnapshots");
+        });
 
         builder.Entity<ApiIdempotencyKey>(e =>
         {
@@ -402,6 +424,19 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         // ── Denormalized public-metrics counters (track + creator stats) ──
         builder.ApplyConfiguration(new TrackStatConfiguration());
         builder.ApplyConfiguration(new CreatorStatConfiguration());
+
+        // ── Newsletter opt-ins ──
+        builder.Entity<NewsletterSubscriber>(e =>
+        {
+            e.HasKey(n => n.Id);
+            e.Property(n => n.Email).IsRequired().HasMaxLength(320); // RFC 5321 max
+            // Unique email → duplicate submissions are idempotent (200, no new row).
+            e.HasIndex(n => n.Email).IsUnique().HasDatabaseName("ux_newsletter_subscribers_email");
+            e.Property(n => n.Source).HasMaxLength(100);
+            e.Property(n => n.CreatedAt).IsRequired();
+            e.Property(n => n.ProviderSynced).HasDefaultValue(false);
+            e.ToTable("NewsletterSubscribers");
+        });
 
         // ── API keys ──
         builder.Entity<ApiKey>(e =>

@@ -20,6 +20,11 @@ public class AuthorshipRecordRepository : IAuthorshipRecordRepository
     public Task<AuthorshipRecord?> GetForOwnerAsync(Guid id, string creatorId, CancellationToken ct = default) =>
         _db.AuthorshipRecords.FirstOrDefaultAsync(r => r.Id == id && r.CreatorId == creatorId, ct);
 
+    public Task<AuthorshipRecord?> GetByHashAsync(string recordHash, CancellationToken ct = default) =>
+        _db.AuthorshipRecords.FirstOrDefaultAsync(
+            r => r.RecordHash == recordHash && r.Status == "issued",
+            ct);
+
     public async Task AddAsync(AuthorshipRecord record, CancellationToken ct = default)
     {
         _db.AuthorshipRecords.Add(record);

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Cambrian.Api.Tests.Fixtures;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Enums;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -106,6 +107,71 @@ public class AuthorshipRecordTests : IClassFixture<CambrianApiFixture>
     }
 
     [Fact]
+    public async Task CertificatePdf_FreeTier_ReturnsUpgradeRequiredJson()
+    {
+        var (client, userId, trackId) = await SetupCreatorWithTrackAsync();
+        var recordId = await CreatePendingRecordAsync(client, trackId);
+        await FirePaidWebhookAsync(userId, recordId, $"cs_test_{Guid.NewGuid():N}");
+
+        var res = await client.GetAsync($"/api/authorship-records/{recordId}/certificate.pdf");
+
+        Assert.Equal(HttpStatusCode.PaymentRequired, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(body.GetProperty("success").GetBoolean());
+        Assert.Equal("UPGRADE_REQUIRED", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task CertificatePdf_CreatorTier_RendersPdf_AndSecondRequestHitsStorage()
+    {
+        var (client, userId, trackId) = await SetupCreatorWithTrackAsync();
+        await SetCreatorTierAsync(userId, CreatorTier.Creator);
+        var recordId = await CreatePendingRecordAsync(client, trackId);
+        await FirePaidWebhookAsync(userId, recordId, $"cs_test_{Guid.NewGuid():N}");
+
+        var first = await client.GetAsync($"/api/authorship-records/{recordId}/certificate.pdf");
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal("miss", string.Join("", first.Headers.GetValues("X-Cambrian-Certificate-Cache")));
+        Assert.Equal("application/pdf", first.Content.Headers.ContentType?.MediaType);
+        var pdf = await first.Content.ReadAsByteArrayAsync();
+        Assert.True(pdf.Length > 0);
+        Assert.Equal((byte)'%', pdf[0]);
+        Assert.Equal((byte)'P', pdf[1]);
+        Assert.Equal((byte)'D', pdf[2]);
+        Assert.Equal((byte)'F', pdf[3]);
+
+        var second = await client.GetAsync($"/api/authorship-records/{recordId}/certificate.pdf");
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Equal("hit", string.Join("", second.Headers.GetValues("X-Cambrian-Certificate-Cache")));
+    }
+
+    [Fact]
+    public async Task VerifyHash_IsPublic_AndUnknownHashReturnsFoundFalseOnly()
+    {
+        var (client, userId, trackId) = await SetupCreatorWithTrackAsync();
+        var recordId = await CreatePendingRecordAsync(client, trackId);
+        await FirePaidWebhookAsync(userId, recordId, $"cs_test_{Guid.NewGuid():N}");
+        var hash = await GetRecordHashAsync(recordId);
+
+        var anonymous = _fixture.CreateClient();
+        var found = await anonymous.GetAsync($"/api/verify/{hash}");
+        Assert.Equal(HttpStatusCode.OK, found.StatusCode);
+        var foundJson = await found.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(foundJson.GetProperty("found").GetBoolean());
+        Assert.Equal("Authorship Test Track", foundJson.GetProperty("trackTitle").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(foundJson.GetProperty("creatorName").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(foundJson.GetProperty("recordUrl").GetString()));
+
+        var unknownHash = new string('a', 64);
+        var missing = await anonymous.GetAsync($"/api/verify/{unknownHash}");
+        Assert.Equal(HttpStatusCode.OK, missing.StatusCode);
+        var missingJson = await missing.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(missingJson.TryGetProperty("found", out var foundProp));
+        Assert.False(foundProp.GetBoolean());
+        Assert.Single(missingJson.EnumerateObject());
+    }
+
+    [Fact]
     public async Task PaidWebhook_Replay_IsIdempotent()
     {
         var (client, userId, trackId) = await SetupCreatorWithTrackAsync();
@@ -156,6 +222,17 @@ public class AuthorshipRecordTests : IClassFixture<CambrianApiFixture>
         return (client, userId, trackId);
     }
 
+    private async Task SetCreatorTierAsync(string userId, CreatorTier tier)
+    {
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Id == userId);
+        user.CreatorTier = tier;
+        user.Tier = tier.ToString().ToLowerInvariant();
+        user.SubscriptionStatus = "Active";
+        await db.SaveChangesAsync();
+    }
+
     private static async Task<Guid> CreatePendingRecordAsync(HttpClient client, Guid trackId)
     {
         var res = await client.PostAsJsonAsync($"/api/releases/{trackId}/authorship-record", EvidenceBody());
@@ -193,5 +270,13 @@ public class AuthorshipRecordTests : IClassFixture<CambrianApiFixture>
         var record = await db.AuthorshipRecords.AsNoTracking().FirstAsync(r => r.Id == recordId);
         Assert.Equal("issued", record.Status);
         return record.IssuedAt;
+    }
+
+    private async Task<string> GetRecordHashAsync(Guid recordId)
+    {
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var record = await db.AuthorshipRecords.AsNoTracking().FirstAsync(r => r.Id == recordId);
+        return record.RecordHash ?? throw new InvalidOperationException("Issued record did not have a hash.");
     }
 }
