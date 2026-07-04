@@ -568,6 +568,10 @@ builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IStreamRepository, StreamRepository>();
 builder.Services.AddScoped<IWalletRepository, WalletRepository>();
 builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+// Subscription expiry sweep (keeps Status truthful; tier enforcement is at read
+// time in GetActiveAsync). Not in Testing — same reason as the other workers.
+if (builder.Environment.EnvironmentName != TestingEnvironment)
+    builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.SubscriptionExpiryWorker>();
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
