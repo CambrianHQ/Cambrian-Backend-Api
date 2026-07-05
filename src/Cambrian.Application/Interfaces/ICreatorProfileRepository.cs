@@ -13,7 +13,8 @@ public interface ICreatorProfileRepository
 
     Task<CreatorProfileDto> UpsertAsync(string userId, string slug, string bio, string? niche,
         string? socialLinksJson, bool showEarnings, bool showDownloadStats,
-        string? bannerImageUrl = null, string? profileImageUrl = null);
+        string? bannerImageUrl = null, string? profileImageUrl = null,
+        string? studioSetupJson = null, string? journeyEntriesJson = null);
 
     Task<CreatorProfileDto> UpdateImageAsync(string userId, string? bannerImageUrl, string? profileImageUrl);
 

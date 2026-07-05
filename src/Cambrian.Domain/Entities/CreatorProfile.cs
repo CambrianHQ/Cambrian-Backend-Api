@@ -20,6 +20,12 @@ public sealed class CreatorProfile
     // --- Social links (JSON or pipe-delimited) ---
     public string? SocialLinks { get; set; } // stored as JSON string
 
+    // --- "What's in my studio" (DAW, AI tools, instruments, plugins, gear, workflow) ---
+    public string? StudioSetup { get; set; } // stored as JSON string (SocialLinks precedent)
+
+    // --- Artist journey timeline (updates, milestones, photos, shows) ---
+    public string? JourneyEntries { get; set; } // stored as JSON array string
+
     // --- Public stats toggle ---
     public bool ShowEarnings { get; set; }
     public bool ShowDownloadStats { get; set; }

@@ -20,6 +20,12 @@ public class CreatorProfileDto
 
     public List<SocialLinkDto>? SocialLinks { get; set; }
 
+    /// <summary>Optional "What's in my studio" section; null/empty is hidden publicly.</summary>
+    public StudioSetupDto? StudioSetup { get; set; }
+
+    /// <summary>Optional "Artist Journey" timeline entries; null/empty is hidden publicly.</summary>
+    public List<JourneyEntryDto>? JourneyEntries { get; set; }
+
     public CreatorStatsDto Stats { get; set; } = new();
 
     public bool ShowEarnings { get; set; }

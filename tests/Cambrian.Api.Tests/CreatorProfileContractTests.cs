@@ -121,6 +121,97 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
     }
 
     [Fact]
+    public async Task UpsertProfile_PersistsStudioSetupAndJourney_AndRoundTrips()
+    {
+        var email = $"creator-studio-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email, "Test1234!@");
+
+        var slug = $"studio-{Guid.NewGuid():N}"[..20];
+        var putRes = await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            bio = "studio test",
+            showEarnings = false,
+            showDownloadStats = false,
+            // Free-text by design: niche gear must round-trip verbatim, not map to an enum.
+            studioSetup = new
+            {
+                daw = "Ableton Live 12 + Reaper for stems",
+                aiTools = new[] { "Suno v5.5", "RVC" },
+                instruments = new[] { "kalimba", "Otamatone Deluxe" },
+                plugins = new[] { "FabFilter Pro-Q 4" },
+                workflowNotes = "Generate 6 takes, comp in Reaper, master in Ableton.",
+            },
+            journeyEntries = new object[]
+            {
+                new { type = "milestone", title = "First 1k plays", date = "2026-05-01" },
+                new { type = "event", title = "AI Music Night", venue = "The Basement, Austin", date = "2026-08-15", link = "https://example.com/tickets" },
+            },
+        });
+        putRes.EnsureSuccessStatusCode();
+        var putData = (await putRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal("Ableton Live 12 + Reaper for stems", putData.GetProperty("studioSetup").GetProperty("daw").GetString());
+        Assert.Equal("Otamatone Deluxe", putData.GetProperty("studioSetup").GetProperty("instruments")[1].GetString());
+        Assert.Equal(2, putData.GetProperty("journeyEntries").GetArrayLength());
+
+        // Public read surface (anonymous) must expose both sections.
+        var publicClient = _fixture.CreateClient();
+        var pubRes = await publicClient.GetAsync($"/creator-profile/{slug}");
+        pubRes.EnsureSuccessStatusCode();
+        var pubData = (await pubRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal("Suno v5.5", pubData.GetProperty("studioSetup").GetProperty("aiTools")[0].GetString());
+        var entry = pubData.GetProperty("journeyEntries")[1];
+        Assert.Equal("event", entry.GetProperty("type").GetString());
+        Assert.Equal("The Basement, Austin", entry.GetProperty("venue").GetString());
+
+        // Upsert WITHOUT the sections (null = not sent) must keep the stored values.
+        var putRes2 = await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            bio = "edited bio only",
+            showEarnings = false,
+            showDownloadStats = false,
+        });
+        putRes2.EnsureSuccessStatusCode();
+        var kept = (await putRes2.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal("Ableton Live 12 + Reaper for stems", kept.GetProperty("studioSetup").GetProperty("daw").GetString());
+        Assert.Equal(2, kept.GetProperty("journeyEntries").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task UpsertProfile_RejectsInvalidJourneyEntry()
+    {
+        var email = $"creator-journey-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email, "Test1234!@");
+
+        var slug = $"journey-{Guid.NewGuid():N}"[..20];
+        // javascript: link must be rejected (same rule as social links).
+        var bad = await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            bio = "x",
+            showEarnings = false,
+            showDownloadStats = false,
+            journeyEntries = new object[]
+            {
+                new { type = "event", title = "Show", link = "javascript:alert(1)" },
+            },
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+
+        // Unknown entry type must be rejected.
+        var badType = await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            bio = "x",
+            showEarnings = false,
+            showDownloadStats = false,
+            journeyEntries = new object[] { new { type = "manifesto", title = "??" } },
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, badType.StatusCode);
+    }
+
+    [Fact]
     public async Task GetBySlug_ReturnsExpectedShape_AfterCreation()
     {
         var email = $"creator-slug-{Guid.NewGuid():N}@test.com";

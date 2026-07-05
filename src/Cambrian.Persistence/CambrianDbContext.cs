@@ -336,6 +336,9 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(cp => cp.SocialLinks).HasMaxLength(2000);
             e.Property(cp => cp.BannerImageUrl).HasMaxLength(500);
             e.Property(cp => cp.ProfileImageUrl).HasMaxLength(500);
+            // JSON blobs (SocialLinks precedent); sizes enforced again in the controller.
+            e.Property(cp => cp.StudioSetup).HasMaxLength(8000);
+            e.Property(cp => cp.JourneyEntries).HasMaxLength(16000);
         });
 
         builder.Entity<TrackCollection>(e =>

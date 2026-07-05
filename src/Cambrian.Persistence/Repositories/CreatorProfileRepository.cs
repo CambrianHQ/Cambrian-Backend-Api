@@ -41,7 +41,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
 
     public async Task<CreatorProfileDto> UpsertAsync(string userId, string slug, string bio, string? niche,
         string? socialLinksJson, bool showEarnings, bool showDownloadStats,
-        string? bannerImageUrl = null, string? profileImageUrl = null)
+        string? bannerImageUrl = null, string? profileImageUrl = null,
+        string? studioSetupJson = null, string? journeyEntriesJson = null)
     {
         var existing = await _db.CreatorProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId);
@@ -56,6 +57,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
                 Bio = bio,
                 Niche = niche,
                 SocialLinks = socialLinksJson,
+                StudioSetup = studioSetupJson,
+                JourneyEntries = journeyEntriesJson,
                 ShowEarnings = showEarnings,
                 ShowDownloadStats = showDownloadStats,
                 BannerImageUrl = bannerImageUrl,
@@ -72,6 +75,10 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         existing.Bio = bio;
         existing.Niche = niche;
         existing.SocialLinks = socialLinksJson ?? existing.SocialLinks;
+        // null = "not sent, keep stored value"; the controller maps an explicit
+        // empty object/list to a serialized empty value so creators CAN clear these.
+        existing.StudioSetup = studioSetupJson ?? existing.StudioSetup;
+        existing.JourneyEntries = journeyEntriesJson ?? existing.JourneyEntries;
         existing.ShowEarnings = showEarnings;
         existing.ShowDownloadStats = showDownloadStats;
         if (bannerImageUrl is not null) existing.BannerImageUrl = bannerImageUrl;
@@ -226,6 +233,20 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             catch { /* ignore malformed JSON */ }
         }
 
+        StudioSetupDto? studioSetup = null;
+        if (!string.IsNullOrEmpty(p.StudioSetup))
+        {
+            try { studioSetup = JsonSerializer.Deserialize<StudioSetupDto>(p.StudioSetup); }
+            catch { /* ignore malformed JSON */ }
+        }
+
+        List<JourneyEntryDto>? journeyEntries = null;
+        if (!string.IsNullOrEmpty(p.JourneyEntries))
+        {
+            try { journeyEntries = JsonSerializer.Deserialize<List<JourneyEntryDto>>(p.JourneyEntries); }
+            catch { /* ignore malformed JSON */ }
+        }
+
         var stats = await ComputeStatsAsync(p.UserId);
 
         // Resolve canonical display name and routing username from Creator identity table
@@ -244,6 +265,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             BannerImageUrl = p.BannerImageUrl,
             ProfileImageUrl = p.ProfileImageUrl,
             SocialLinks = links,
+            StudioSetup = studioSetup,
+            JourneyEntries = journeyEntries,
             ShowEarnings = p.ShowEarnings,
             ShowDownloadStats = p.ShowDownloadStats,
             PinnedTrackIds = p.PinnedTrackIds,

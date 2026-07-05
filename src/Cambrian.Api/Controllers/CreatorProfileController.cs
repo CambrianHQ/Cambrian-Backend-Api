@@ -4,6 +4,7 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.DTOs.Creators;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Validation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -144,6 +145,8 @@ public class CreatorProfileController : BaseController
             ProfileImageUrl = ResolveImageUrl(profile.ProfileImageUrl),
             BannerImageUrl = ResolveImageUrl(profile.BannerImageUrl),
             profile.SocialLinks,
+            profile.StudioSetup,
+            profile.JourneyEntries,
             profile.ShowEarnings,
             profile.ShowDownloadStats,
             profile.PinnedTrackIds,
@@ -207,10 +210,34 @@ public class CreatorProfileController : BaseController
             ? JsonSerializer.Serialize(body.SocialLinks)
             : null;
 
+        // "What's in my studio" — free-text/tag fields by design (niche gear must
+        // never be blocked by a dropdown taxonomy). Normalize tags, cap sizes.
+        string? studioSetupJson = null;
+        if (body.StudioSetup is not null)
+        {
+            var studioError = CreatorProfileSectionValidator.NormalizeStudioSetup(body.StudioSetup);
+            if (studioError is not null) return ErrorResponse(studioError);
+            studioSetupJson = JsonSerializer.Serialize(body.StudioSetup);
+            if (studioSetupJson.Length > 8000)
+                return ErrorResponse("Studio setup is too large. Trim some entries.");
+        }
+
+        // Artist journey timeline entries.
+        string? journeyEntriesJson = null;
+        if (body.JourneyEntries is not null)
+        {
+            var journeyError = CreatorProfileSectionValidator.NormalizeJourneyEntries(body.JourneyEntries);
+            if (journeyError is not null) return ErrorResponse(journeyError);
+            journeyEntriesJson = JsonSerializer.Serialize(body.JourneyEntries);
+            if (journeyEntriesJson.Length > 16000)
+                return ErrorResponse("Journey timeline is too large. Remove some entries.");
+        }
+
         await using var tx = await _transactions.BeginTransactionAsync();
 
         var saved = await _profiles.UpsertAsync(userId, slug, body.Bio?.Trim() ?? "",
-            body.Niche?.Trim(), socialLinksJson, body.ShowEarnings, body.ShowDownloadStats);
+            body.Niche?.Trim(), socialLinksJson, body.ShowEarnings, body.ShowDownloadStats,
+            studioSetupJson: studioSetupJson, journeyEntriesJson: journeyEntriesJson);
 
         var displayName = body.DisplayName?.Trim();
 
@@ -589,4 +616,5 @@ public class CreatorProfileController : BaseController
         if (!string.IsNullOrWhiteSpace(collection.CoverImageUrl))
             collection.CoverImageUrl = ResolveImageUrl(collection.CoverImageUrl);
     }
+
 }

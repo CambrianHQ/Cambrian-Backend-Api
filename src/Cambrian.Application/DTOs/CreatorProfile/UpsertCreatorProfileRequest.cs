@@ -22,6 +22,13 @@ public class UpsertCreatorProfileRequest
     [SafeMetadata]
     public string? Niche { get; set; }
     public List<SocialLinkDto>? SocialLinks { get; set; }
+
+    /// <summary>Optional studio/gear section. Omit (null) to keep the stored value; send an empty object to clear.</summary>
+    public StudioSetupDto? StudioSetup { get; set; }
+
+    /// <summary>Optional journey timeline. Omit (null) to keep the stored value; send an empty list to clear.</summary>
+    public List<JourneyEntryDto>? JourneyEntries { get; set; }
+
     public bool ShowEarnings { get; set; }
     public bool ShowDownloadStats { get; set; }
 }

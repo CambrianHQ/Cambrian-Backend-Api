@@ -6754,6 +6754,80 @@
           }
         }
       }
+    },
+    "/api/authorship-records/{id}/certificate.pdf": {
+      "get": {
+        "tags": [
+          "AuthorshipRecords"
+        ],
+        "summary": "Download the authorship record certificate as PDF.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Authorship record id (GUID)."
+          }
+        ]
+      }
+    },
+    "/api/verify/{hash}": {
+      "get": {
+        "tags": [
+          "AuthorshipRecords"
+        ],
+        "summary": "Publicly verify an authorship record by content hash.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "SHA-256 content hash."
+          }
+        ]
+      }
+    },
+    "/api/config/entitlements": {
+      "get": {
+        "tags": [
+          "Config"
+        ],
+        "summary": "Public plan/entitlement configuration.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/newsletter": {
+      "post": {
+        "tags": [
+          "Newsletter"
+        ],
+        "summary": "Subscribe an email address to the newsletter.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8545,6 +8619,16 @@
           },
           "showDownloadStats": {
             "type": "boolean"
+          },
+          "studioSetup": {
+            "$ref": "#/components/schemas/StudioSetupDto"
+          },
+          "journeyEntries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JourneyEntryDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8631,6 +8715,99 @@
           }
         },
         "additionalProperties": false
+      },
+      "StudioSetupDto": {
+        "type": "object",
+        "properties": {
+          "daw": {
+            "type": "string",
+            "maxLength": 200,
+            "nullable": true
+          },
+          "aiTools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "instruments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "hardware": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "plugins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "gear": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "workflowNotes": {
+            "type": "string",
+            "maxLength": 2000,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Optional 'What's in my studio' section. Free text / free-text tags by design."
+      },
+      "JourneyEntryDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "update | milestone | photo | event"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 1000,
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "maxLength": 30,
+            "nullable": true
+          },
+          "venue": {
+            "type": "string",
+            "maxLength": 200,
+            "nullable": true
+          },
+          "link": {
+            "type": "string",
+            "maxLength": 500,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One entry on a creator's public Artist Journey timeline."
       }
     },
     "securitySchemes": {
