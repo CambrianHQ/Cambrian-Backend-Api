@@ -1,6 +1,6 @@
 namespace Cambrian.Application.AI.Discovery.Dtos;
 
-public class AiTrackPreviewDto
+public class AiTrackPreview
 {
     public bool Available { get; set; }
     public string? Url { get; set; }

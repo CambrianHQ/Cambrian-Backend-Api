@@ -1,6 +1,6 @@
 namespace Cambrian.Application.AI.Discovery.Dtos;
 
-public class AiQuerySummaryDto
+public class AiQuerySummary
 {
     public string Intent { get; set; } = string.Empty;
     public List<string> MatchedOn { get; set; } = new();

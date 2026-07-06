@@ -77,67 +77,67 @@ public sealed class AiDiscoveryContractTests
     [Fact]
     public void AiLicenseSummary_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiLicenseSummaryDto>("AiLicenseSummary");
+        AssertDtoMatchesSchema<AiLicenseSummary>("AiLicenseSummary");
     }
 
     [Fact]
     public void AiLicenseOption_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiLicenseOptionDto>("AiLicenseOption");
+        AssertDtoMatchesSchema<AiLicenseOption>("AiLicenseOption");
     }
 
     [Fact]
     public void AiTrackSearchResult_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiTrackSearchResultDto>("AiTrackSearchResult");
+        AssertDtoMatchesSchema<AiTrackSearchResult>("AiTrackSearchResult");
     }
 
     [Fact]
     public void AiTrackDetails_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiTrackDetailsDto>("AiTrackDetails");
+        AssertDtoMatchesSchema<AiTrackDetails>("AiTrackDetails");
     }
 
     [Fact]
     public void AiTrackPreview_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiTrackPreviewDto>("AiTrackPreview");
+        AssertDtoMatchesSchema<AiTrackPreview>("AiTrackPreview");
     }
 
     [Fact]
     public void AiTrackAttributes_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiTrackAttributesDto>("AiTrackAttributes");
+        AssertDtoMatchesSchema<AiTrackAttributes>("AiTrackAttributes");
     }
 
     [Fact]
     public void AiCreatorSummary_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiCreatorSummaryDto>("AiCreatorSummary");
+        AssertDtoMatchesSchema<AiCreatorSummary>("AiCreatorSummary");
     }
 
     [Fact]
     public void AiCreatorProfile_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiCreatorProfileDto>("AiCreatorProfile");
+        AssertDtoMatchesSchema<AiCreatorProfile>("AiCreatorProfile");
     }
 
     [Fact]
     public void AiCreatorCatalogHighlight_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiCreatorCatalogHighlightDto>("AiCreatorCatalogHighlight");
+        AssertDtoMatchesSchema<AiCreatorCatalogHighlight>("AiCreatorCatalogHighlight");
     }
 
     [Fact]
     public void AiQuerySummary_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiQuerySummaryDto>("AiQuerySummary");
+        AssertDtoMatchesSchema<AiQuerySummary>("AiQuerySummary");
     }
 
     [Fact]
     public void AiTrackSearchResponse_PropertiesMatchSpec()
     {
-        AssertDtoMatchesSchema<AiTrackSearchResponseDto>("AiTrackSearchResponse");
+        AssertDtoMatchesSchema<AiTrackSearchResponse>("AiTrackSearchResponse");
     }
 
     // ── Response wrapper shapes ──

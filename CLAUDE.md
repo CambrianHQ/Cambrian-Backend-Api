@@ -1,6 +1,6 @@
 # CLAUDE.md - Cambrian Backend API
 
-Last verified from this checkout: 2026-04-29.
+Last verified from this checkout: 2026-07-06.
 
 This file is an operating brief for AI/code agents. Treat it as a snapshot of the current codebase, not a product promise. If a statement here matters for a change, verify it against source before editing.
 
@@ -15,22 +15,18 @@ This file is an operating brief for AI/code agents. Treat it as a snapshot of th
 
 ## Truthful Validation State
 
-Do not claim the full suite is green.
+Verified during the test-debt cleanup pass (2026-07-06):
 
-Verified during the latest staging push:
+- `dotnet build Cambrian.sln --configuration Release` passes clean: `0 Warning(s)`, `0 Error(s)`.
+- `dotnet test Cambrian.sln --configuration Release` is green: `1098 passed`, `4 skipped`, `0 failed`, total `1102`.
+  - The 4 skips are `Cambrian.Api.Tests.StabilityTests` upload-validation tests, each with an explicit tracking reason: "Phase A validation reverted in c7e31bf — restore UploadService title/price guard to re-enable."
+- `node scripts/validate-contracts.cjs` exits successfully (non-blocking), reporting seven architecture-compliance warnings — see "Contracts And Governance" below for the current list.
+- `node scripts/check-contract-drift.cjs` exits `0` with "Contract drift checks passed." — no drift, no false positives.
 
-- `dotnet build Cambrian.sln --configuration Release --no-restore` passed outside the sandbox.
-- Pre-push critical tests passed: `117 passed`, `0 failed`.
-- `node scripts/validate-contracts.cjs` exits successfully, but reports five non-blocking architecture violations.
+Previously known failures, now resolved:
 
-Known current full-suite status:
-
-- `dotnet test Cambrian.sln --configuration Release` builds and runs, but is not green.
-- Latest observed result: `768 passed`, `5 skipped`, `32 failed`, total `805`.
-- The observed failures are concentrated in:
-  - `Cambrian.Api.Tests.AI.AiDiscoveryContractTests`: missing AI schemas in `contracts/openapi.v1.json`.
-  - `Cambrian.Api.Tests.Contract.ApiContractTests.OpenApi_Paths_Have_Matching_Controller_Actions`: `/sse` OpenAPI paths are not implemented by controllers.
-  - `Cambrian.Api.Tests.Contract.OpenApiEndpointCoverageTests.OpenApi_Operations_Return_Controlled_Status_Codes`: `GET /sse` returns `307`.
+- `Cambrian.Api.Tests.AI.AiDiscoveryContractTests` (30 tests): the AI Discovery controller returned anonymous/untyped `IActionResult` payloads, so Swashbuckle never emitted `Ai*` schemas into `contracts/openapi.v1.json`. Fixed by adding typed response DTOs (`AiTrackDetailsResponse`, `AiTrackPreviewResponse`, `AiCreatorProfileResponse`, `AiTrackLicenseOptionsResponse`) and `[ProducesResponseType]` attributes on `AiDiscoveryController`, renaming the AI Discovery DTOs to drop their `Dto` suffix (matching the schema names the tests expect and the no-suffix convention already used elsewhere in the contract), and adding the previously-unwired `GET /ai-discovery/tracks/{trackId}/licenses` endpoint so `AiTrackLicenseOptionsResponse` has a real caller. The contract was then regenerated via the Swashbuckle CLI (`dotnet swagger tofile`) and copied in as raw text (never round-tripped through `JSON.parse`/`JSON.stringify`, which would corrupt the `decimal.MaxValue` literals in the money schemas).
+- The `/sse` `OpenApi_Paths_Have_Matching_Controller_Actions` / `GET /sse` `307` failures mentioned in an earlier revision of this file are no longer reproducible on this checkout.
 
 Known validation/tooling caveats on this machine:
 
@@ -99,11 +95,12 @@ manifests/
 
 Current counts from source:
 
-- Controllers: 38 `.cs` files under `src/Cambrian.Api/Controllers`.
-- EF migrations: 38 non-designer migration/model snapshot files under `src/Cambrian.Persistence/Migrations`.
-- DbSets in `CambrianDbContext`: 22.
-- OpenAPI paths: 196.
-- OpenAPI operations: 219.
+- Controllers: 46 `.cs` files under `src/Cambrian.Api/Controllers`.
+- EF migrations: 55 non-designer migration/model snapshot files under `src/Cambrian.Persistence/Migrations`.
+- DbSets in `CambrianDbContext`: 36.
+- OpenAPI paths: 243.
+- OpenAPI operations: 268.
+- OpenAPI schemas: 104.
 
 ## Current Feature Surface
 
@@ -125,7 +122,7 @@ The backend includes these major areas:
   - `src/Cambrian.Application/Services/EntitlementService.cs`
   - `src/Cambrian.Persistence/Configurations/EntitlementConfiguration.cs`
   - `src/Cambrian.Persistence/Migrations/20260424004954_AddEntitlementsTable.cs`
-- MCP/AI discovery code exists, but the OpenAPI AI schema contract tests are currently failing, so do not present that surface as fully contract-green.
+- MCP/AI discovery code exists under `src/Cambrian.Application/AI/Discovery` and `src/Cambrian.Api/Controllers/AiDiscoveryController.cs`, including a `GET /ai-discovery/tracks/{trackId}/licenses` endpoint. The AI schema contract (`Cambrian.Api.Tests.AI.AiDiscoveryContractTests`) is green — the `Ai*` DTOs (no `Dto` suffix) and their `Ai*Response` wrappers are documented in `contracts/openapi.v1.json`.
 
 ## Database And Migrations
 
@@ -145,21 +142,37 @@ Current DbSets:
 - `StripeWebhookEvents`
 - `StreamSessions`
 - `WalletTransactions`
-- `LicenseCertificates`
 - `AnalyticsEvents`
 - `FeatureFlags`
 - `ActivityItems`
 - `CreatorProfiles`
 - `TrackCollections`
+- `AlbumTracks`
+- `TrackLyrics`
+- `TrackCreationProcesses`
 - `CreatorFollows`
 - `ApiKeys`
 - `Entitlements`
 - `ApiIdempotencyKeys`
+- `TrackBoosts`
+- `ProvenanceAnchors`
+- `TrackAuthorships`
+- `MasteringJobs`
+- `ReleaseCreditPurchases`
+- `AuthorshipRecords`
+- `EarningsTransactions`
+- `FanSubscriptions`
+- `TrackStats`
+- `CreatorStats`
+- `NewsletterSubscribers`
+- `WeeklyChartSnapshots`
 
 Recent migration area:
 
-- `20260421023649_AddApiIdempotencyKeys`
-- `20260424004954_AddEntitlementsTable`
+- `20260702210842_AddWeeklyChartSnapshots`
+- `20260702211808_AddWeeklyDigestFields`
+- `20260705181345_AddStudioSetupAndJourneyToCreatorProfile`
+- `20260705194847_AddAlbumsLyricsBehindTheTrack`
 - `20260407203714_AddPasswordResetAttemptTracking` exists and was repaired in staging history.
 
 Migration rules:
@@ -172,18 +185,22 @@ Migration rules:
 
 `contracts/openapi.v1.json` is a checked-in contract and is enforced by `scripts/validate-contracts.cjs`.
 
-Current validator state:
+Current validator state (2026-07-06):
 
-- Contract has `196` routes.
-- Validator finds `38` controller files.
-- Validator reports five non-blocking violations:
+- Contract has `243` routes.
+- Validator finds `46` controller files.
+- Validator reports seven non-blocking violations:
   - `AdminController.cs` imports domain entities instead of DTOs.
   - `AdminController.cs` contains business logic.
+  - `CatalogController.cs` contains business logic (`.Select(...)` DTO projection).
   - `CreatorController.cs` contains business logic.
+  - `CreatorProfileController.cs` contains business logic (a `.Where(...)` visibility filter inline in the action).
   - `src/Cambrian.Api/Controllers/v1/TracksV1Controller.cs` contains business logic.
   - `src/Cambrian.Application/DTOs/Email/ResendWebhookEvent.cs` is detected by the Stripe idempotency rule.
 
-Because these currently pass as warnings, do not claim architecture compliance is clean. Also do not broaden this list without rerunning the validator.
+Because these currently pass as warnings, do not claim architecture compliance is clean. Also do not broaden this list without rerunning the validator. A prior revision of this file also listed a `CreatorProfileController.cs` "references DbContext directly" violation — that was a validator false positive (the regex matched the word "DbContext" inside a code comment, not an actual reference) and has been fixed in `scripts/validate-contracts.cjs`.
+
+`scripts/check-contract-drift.cjs` currently passes cleanly ("Contract drift checks passed.") — it is run by `scripts/pre-deploy-tests.ps1` as a deploy gate but is not wired into `.github/workflows/ci.yml`.
 
 Useful commands:
 

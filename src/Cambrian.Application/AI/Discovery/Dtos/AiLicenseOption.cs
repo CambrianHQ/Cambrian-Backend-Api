@@ -1,6 +1,6 @@
 namespace Cambrian.Application.AI.Discovery.Dtos;
 
-public class AiLicenseOptionDto
+public class AiLicenseOption
 {
     public string DisplayName { get; set; } = string.Empty;
 

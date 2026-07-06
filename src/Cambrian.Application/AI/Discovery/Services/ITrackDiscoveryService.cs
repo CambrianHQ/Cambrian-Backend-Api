@@ -5,11 +5,13 @@ namespace Cambrian.Application.AI.Discovery.Services;
 
 public interface ITrackDiscoveryService
 {
-    Task<AiTrackSearchResponseDto> SearchAsync(SearchTracksQuery query);
+    Task<AiTrackSearchResponse> SearchAsync(SearchTracksQuery query);
 
-    Task<AiTrackDetailsDto?> GetTrackDetailsAsync(string trackId);
+    Task<AiTrackDetails?> GetTrackDetailsAsync(string trackId);
 
-    Task<AiTrackPreviewDto?> GetPreviewAsync(string trackId);
+    Task<AiTrackPreview?> GetPreviewAsync(string trackId);
 
-    Task<AiCreatorProfileDto?> GetCreatorProfileAsync(string creatorId);
+    Task<AiCreatorProfile?> GetCreatorProfileAsync(string creatorId);
+
+    Task<List<AiLicenseOption>?> GetLicenseOptionsAsync(string trackId);
 }

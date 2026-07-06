@@ -629,8 +629,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "501": {
+            "description": "Not Implemented"
           }
         }
       }
@@ -651,8 +651,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "501": {
+            "description": "Not Implemented"
           }
         }
       }
@@ -704,8 +704,8 @@
           "Admin"
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "501": {
+            "description": "Not Implemented"
           }
         }
       }
@@ -716,8 +716,8 @@
           "Admin"
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "501": {
+            "description": "Not Implemented"
           }
         }
       }
@@ -900,7 +900,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackSearchResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackSearchResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackSearchResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -922,7 +939,44 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackDetailsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackDetailsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackDetailsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -944,7 +998,103 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackPreviewResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackPreviewResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackPreviewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai-discovery/tracks/{trackId}/licenses": {
+      "get": {
+        "tags": [
+          "AiDiscovery"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackLicenseOptionsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackLicenseOptionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrackLicenseOptionsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -966,7 +1116,44 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiCreatorProfileResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiCreatorProfileResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiCreatorProfileResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -1152,8 +1339,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created"
           }
         }
       },
@@ -1185,8 +1372,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           }
         }
       }
@@ -1322,8 +1509,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created"
           }
         }
       }
@@ -3409,8 +3596,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created"
           }
         }
       }
@@ -3472,8 +3659,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           }
         }
       }
@@ -4402,8 +4589,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created"
           }
         }
       }
@@ -6929,8 +7116,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created"
           }
         }
       }
@@ -7121,8 +7308,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created"
           }
         }
       }
@@ -8068,6 +8255,483 @@
           "trackTitle": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiCreatorCatalogHighlight": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "bestUseCase": {
+            "type": "string",
+            "nullable": true
+          },
+          "previewAvailable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiCreatorProfile": {
+        "type": "object",
+        "properties": {
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifiedCreator": {
+            "type": "boolean"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "trackCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "featuredGenres": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "featuredMoods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "catalogHighlights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiCreatorCatalogHighlight"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiCreatorProfileResponse": {
+        "type": "object",
+        "properties": {
+          "creator": {
+            "$ref": "#/components/schemas/AiCreatorProfile"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiCreatorSummary": {
+        "type": "object",
+        "properties": {
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifiedCreator": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiLicenseOption": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "commercialUse": {
+            "type": "boolean"
+          },
+          "attributionRequired": {
+            "type": "boolean"
+          },
+          "instantDownload": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowedUseCases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "restrictions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "recommendedFor": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiLicenseSummary": {
+        "type": "object",
+        "properties": {
+          "startingPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "commercialUse": {
+            "type": "boolean"
+          },
+          "attributionRequired": {
+            "type": "boolean"
+          },
+          "instantDownload": {
+            "type": "boolean"
+          },
+          "licenseClarityScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "commercialSafetyNotes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiQuerySummary": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "nullable": true
+          },
+          "matchedOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackAttributes": {
+        "type": "object",
+        "properties": {
+          "genre": {
+            "type": "string",
+            "nullable": true
+          },
+          "subgenre": {
+            "type": "string",
+            "nullable": true
+          },
+          "moods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "bpm": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "key": {
+            "type": "string",
+            "nullable": true
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "instrumental": {
+            "type": "boolean"
+          },
+          "hasVocals": {
+            "type": "boolean"
+          },
+          "vocalsType": {
+            "type": "string",
+            "nullable": true
+          },
+          "energyLevel": {
+            "type": "string",
+            "nullable": true
+          },
+          "energyCurve": {
+            "type": "string",
+            "nullable": true
+          },
+          "loopFriendly": {
+            "type": "boolean"
+          },
+          "dropMomentSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackDetails": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "creator": {
+            "$ref": "#/components/schemas/AiCreatorSummary"
+          },
+          "attributes": {
+            "$ref": "#/components/schemas/AiTrackAttributes"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "aiGenerator": {
+            "type": "string",
+            "nullable": true
+          },
+          "useCaseHints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "whyThisWorks": {
+            "type": "string",
+            "nullable": true
+          },
+          "licenseSummary": {
+            "$ref": "#/components/schemas/AiLicenseSummary"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/AiTrackPreview"
+          },
+          "waveformImageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverImageUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackDetailsResponse": {
+        "type": "object",
+        "properties": {
+          "track": {
+            "$ref": "#/components/schemas/AiTrackDetails"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackLicenseOptionsResponse": {
+        "type": "object",
+        "properties": {
+          "licenses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiLicenseOption"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackPreview": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "clipStartSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "clipEndSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "format": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackPreviewResponse": {
+        "type": "object",
+        "properties": {
+          "preview": {
+            "$ref": "#/components/schemas/AiTrackPreview"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackSearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiTrackSearchResult"
+            },
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "querySummary": {
+            "$ref": "#/components/schemas/AiQuerySummary"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiTrackSearchResult": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "creator": {
+            "$ref": "#/components/schemas/AiCreatorSummary"
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          },
+          "fitConfidence": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "bestUseCase": {
+            "type": "string",
+            "nullable": true
+          },
+          "secondaryUseCases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "whyThisWorks": {
+            "type": "string",
+            "nullable": true
+          },
+          "attributes": {
+            "$ref": "#/components/schemas/AiTrackAttributes"
+          },
+          "license": {
+            "$ref": "#/components/schemas/AiLicenseSummary"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/AiTrackPreview"
           }
         },
         "additionalProperties": false
