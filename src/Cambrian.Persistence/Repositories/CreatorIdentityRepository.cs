@@ -86,7 +86,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         var userIds = matches.Select(m => m.UserId).ToList();
         var profiles = await _db.CreatorProfiles.AsNoTracking()
             .Where(p => userIds.Contains(p.UserId))
-            .Select(p => new { p.UserId, p.ProfileImageUrl, p.Bio })
+            .Select(p => new { p.UserId, p.Slug, p.ProfileImageUrl, p.Bio })
             .ToListAsync();
         var profileByUser = profiles.ToDictionary(p => p.UserId);
 
@@ -106,6 +106,9 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 Id = m.Id.ToString(),
                 Username = m.Username,
                 DisplayName = m.DisplayName,
+                // Slug is the profile-page handle; guarantee it is never empty so
+                // clients can always build a /@{slug} link (falls back to username).
+                Slug = string.IsNullOrWhiteSpace(prof?.Slug) ? m.Username : prof!.Slug,
                 ProfileImageUrl = prof?.ProfileImageUrl ?? m.ProfileImageUrl,
                 Bio = prof?.Bio ?? "",
                 TrackCount = trackCount,

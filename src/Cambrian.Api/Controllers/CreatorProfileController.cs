@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Security.Claims;
 using System.Text.Json;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Catalog;
@@ -26,6 +28,8 @@ public class CreatorProfileController : BaseController
     private readonly ICreatorIdentityRepository _creators;
     private readonly ITrackRepository _tracks;
     private readonly ITransactionManager _transactions;
+    private readonly ICatalogService _catalog;
+    private readonly ITrackVisibilityPolicy _trackVisibility;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ILogger<CreatorProfileController> _logger;
 
@@ -36,7 +40,7 @@ public class CreatorProfileController : BaseController
 
     private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
 
-    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators, ITrackRepository tracks, ITransactionManager transactions, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorProfileController> logger)
+    public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators, ITrackRepository tracks, ITransactionManager transactions, ICatalogService catalog, ITrackVisibilityPolicy trackVisibility, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorProfileController> logger)
     {
         _profiles = profiles;
         _storage = storage;
@@ -45,6 +49,8 @@ public class CreatorProfileController : BaseController
         _creators = creators;
         _tracks = tracks;
         _transactions = transactions;
+        _catalog = catalog;
+        _trackVisibility = trackVisibility;
         _userManager = userManager;
         _logger = logger;
     }
@@ -414,8 +420,78 @@ public class CreatorProfileController : BaseController
         if (creatorUserId is null) return NotFoundResponse("Creator not found.");
 
         var collections = await _profiles.GetCollectionsAsync(creatorUserId);
+        // Hidden albums are owner-only on the public listing.
+        var requesterId = User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.Equals(requesterId, creatorUserId, StringComparison.Ordinal))
+            collections = collections.Where(c => c.Visibility != "hidden").ToList();
         ResolveCollectionImageUrls(collections);
         return OkResponse(collections);
+    }
+
+    // ───── Collections: public album detail ─────
+
+    /// <summary>
+    /// Public album page payload: album metadata + hydrated public track
+    /// projections + creator summary. Anyone can view a public album; hidden
+    /// albums 404 for everyone but their owner. Tracks the viewer can't see
+    /// (e.g. drafts) are filtered out of the hydrated list.
+    /// </summary>
+    [HttpGet("/collections/{collectionId:guid}")]
+    public async Task<IActionResult> GetCollectionDetail(Guid collectionId)
+    {
+        var collection = await _profiles.GetCollectionByIdAsync(collectionId);
+        if (collection is null) return NotFoundResponse("Album not found.");
+
+        var owner = await _profiles.GetCollectionOwnerAsync(collectionId);
+        var requesterId = User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        var isOwner = owner is not null && string.Equals(requesterId, owner, StringComparison.Ordinal);
+        if (collection.Visibility == "hidden" && !isOwner)
+            return NotFoundResponse("Album not found.");
+
+        var isAdmin = User?.IsInRole("Admin") == true;
+        var tracks = new List<PublicCatalogTrackDto>();
+        // Sequential on purpose — one scoped DbContext, no concurrent queries.
+        foreach (var trackId in collection.TrackIds)
+        {
+            var track = await _catalog.GetTrackAsync(trackId);
+            if (track is null) continue;
+            if (!_trackVisibility.CanAccess(track.Visibility ?? "public", track.CreatorId, requesterId, isAdmin))
+                continue;
+            track.AudioUrl = ResolveAbsoluteUrl($"/stream/{track.Id}/audio");
+            if (!string.IsNullOrEmpty(track.CoverArtUrl))
+                track.CoverArtUrl = ResolveImageUrl(track.CoverArtUrl);
+            tracks.Add(PublicCatalogTrackDto.From(track));
+        }
+
+        var creatorSummary = new CollectionCreatorSummary { UserId = owner ?? "" };
+        if (owner is not null)
+        {
+            var profile = await _profiles.GetByUserIdAsync(owner);
+            var identity = await _creators.ResolveByLegacyIdentifierAsync(owner);
+            creatorSummary.CreatorId = identity?.Id;
+            creatorSummary.Username = identity?.Username;
+            creatorSummary.Slug = profile?.Slug ?? identity?.Username;
+            creatorSummary.DisplayName = profile?.DisplayName ?? identity?.DisplayName ?? identity?.Username;
+            var profileImage = profile?.ProfileImageUrl ?? identity?.ProfileImageUrl;
+            creatorSummary.ProfileImageUrl = string.IsNullOrWhiteSpace(profileImage) ? null : ResolveImageUrl(profileImage);
+        }
+
+        ResolveCollectionImageUrl(collection);
+        return OkResponse(new TrackCollectionDetailResponse
+        {
+            Id = collection.Id,
+            Title = collection.Title,
+            Slug = collection.Slug,
+            Description = collection.Description,
+            CoverImageUrl = collection.CoverImageUrl,
+            Visibility = collection.Visibility,
+            ReleaseDate = collection.ReleaseDate,
+            CreatedAt = collection.CreatedAt,
+            UpdatedAt = collection.UpdatedAt,
+            Creator = creatorSummary,
+            Tracks = tracks,
+            TrackIds = collection.TrackIds,
+        });
     }
 
     // ───── Collections: list own (authenticated) ─────
@@ -445,8 +521,14 @@ public class CreatorProfileController : BaseController
         if (!await AllTracksOwnedByCreatorAsync(body.TrackIds, userId))
             return ErrorResponse("One or more tracks do not belong to you.");
 
+        if (!TryParseCollectionVisibility(body.Visibility, out var visibility))
+            return ErrorResponse("Visibility must be 'public' or 'hidden'.");
+        if (!TryParseReleaseDate(body.ReleaseDate, out var releaseDate, out _))
+            return ErrorResponse("ReleaseDate must be a valid ISO-8601 date.");
+
         var saved = await _profiles.AddCollectionAsync(userId, body.Title.Trim(),
-            body.Description?.Trim(), body.CoverImageUrl?.Trim(), body.TrackIds ?? "");
+            body.Description?.Trim(), body.CoverImageUrl?.Trim(), body.TrackIds ?? "",
+            visibility, releaseDate);
         ResolveCollectionImageUrl(saved);
         return CreatedResponse(saved);
     }
@@ -467,8 +549,46 @@ public class CreatorProfileController : BaseController
         if (!await AllTracksOwnedByCreatorAsync(body.TrackIds, userId))
             return ErrorResponse("One or more tracks do not belong to you.");
 
+        if (!TryParseCollectionVisibility(body.Visibility, out var visibility))
+            return ErrorResponse("Visibility must be 'public' or 'hidden'.");
+        if (!TryParseReleaseDate(body.ReleaseDate, out var releaseDate, out var clearReleaseDate))
+            return ErrorResponse("ReleaseDate must be a valid ISO-8601 date.");
+
         var saved = await _profiles.UpdateCollectionAsync(collectionId, userId,
-            body.Title?.Trim(), body.Description?.Trim(), body.CoverImageUrl?.Trim(), body.TrackIds);
+            body.Title?.Trim(), body.Description?.Trim(), body.CoverImageUrl?.Trim(), body.TrackIds,
+            visibility, releaseDate, clearReleaseDate);
+        ResolveCollectionImageUrl(saved);
+        return OkResponse(saved);
+    }
+
+    // ───── Collections: upload album artwork ─────
+
+    [Authorize]
+    [RequireCreatorTier]
+    [HttpPost("me/collections/{collectionId}/cover")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<IActionResult> UploadCollectionCover(Guid collectionId, IFormFile file)
+    {
+        var userId = GetRequiredUserId()!;
+        var owner = await _profiles.GetCollectionOwnerAsync(collectionId);
+        if (owner is null) return NotFoundResponse("Collection not found.");
+        if (owner != userId) return ForbiddenResponse();
+
+        string? uploadedUrl;
+        try
+        {
+            uploadedUrl = await UploadImage(file, "covers");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Album cover upload failed for collection {CollectionId}", collectionId);
+            return StatusCode(502, new { success = false, error = "Image upload failed. Storage may be misconfigured." });
+        }
+
+        if (uploadedUrl is null)
+            return ErrorResponse("Upload a JPG, PNG, or WebP image up to 10 MB.");
+
+        var saved = await _profiles.UpdateCollectionAsync(collectionId, userId, null, null, uploadedUrl, null);
         ResolveCollectionImageUrl(saved);
         return OkResponse(saved);
     }
@@ -617,4 +737,35 @@ public class CreatorProfileController : BaseController
             collection.CoverImageUrl = ResolveImageUrl(collection.CoverImageUrl);
     }
 
+    /// <summary>Null = keep stored value; "public"/"hidden" pass through; anything else is invalid.</summary>
+    private static bool TryParseCollectionVisibility(string? raw, out string? visibility)
+    {
+        visibility = null;
+        if (raw is null) return true;
+        var normalized = raw.Trim().ToLowerInvariant();
+        if (normalized is not ("public" or "hidden")) return false;
+        visibility = normalized;
+        return true;
+    }
+
+    /// <summary>
+    /// Null = keep stored value; empty string = clear; otherwise must parse as a
+    /// date. Parsed values are coerced to UTC (Npgsql timestamptz requirement).
+    /// </summary>
+    private static bool TryParseReleaseDate(string? raw, out DateTime? releaseDate, out bool clear)
+    {
+        releaseDate = null;
+        clear = false;
+        if (raw is null) return true;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            clear = true;
+            return true;
+        }
+        if (!DateTime.TryParse(raw, CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
+            return false;
+        releaseDate = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+        return true;
+    }
 }

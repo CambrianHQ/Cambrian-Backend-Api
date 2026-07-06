@@ -11,10 +11,10 @@ using Xunit;
 namespace Cambrian.Api.Tests.Unit.Application;
 
 /// <summary>
-/// A serializable-isolation conflict (Postgres 40001) on a concurrent last-credit charge is
-/// transient: <see cref="ReleaseCreditService.TryChargeAsync"/> retries it to a clean result
-/// instead of surfacing a 500, and never retries a genuine (non-transient) error. The retried
-/// attempt re-checks idempotency, so it cannot double-charge.
+/// A transient serialization/deadlock conflict (Postgres 40001/40P01) surfacing from a concurrent
+/// last-credit charge is retried by <see cref="ReleaseCreditService.TryChargeAsync"/> to a clean
+/// result instead of a 500, and a genuine (non-transient) error is never retried. The retried
+/// attempt re-checks idempotency under the per-creator advisory lock, so it cannot double-charge.
 /// </summary>
 public sealed class ReleaseCreditServiceRetryTests
 {
@@ -29,7 +29,7 @@ public sealed class ReleaseCreditServiceRetryTests
         users.FindByIdAsync(Arg.Any<string>())
             .Returns(new ApplicationUser { Id = "u1", CreatorTier = CreatorTier.Creator });
 
-        _tx.BeginSerializableTransactionAsync().Returns(Substitute.For<IAsyncDisposable>());
+        _tx.BeginTransactionAsync().Returns(Substitute.For<IAsyncDisposable>());
 
         // A chargeable job with monthly allowance available, so the path reaches commit.
         _jobs.GetForOwnerAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())

@@ -76,5 +76,13 @@ public class UploadTrackRequest
     [SafeMetadata]
     public string? NewAlbumDescription { get; set; }
 
+    /// <summary>
+    /// When true the track is created with Visibility = "hidden" (a draft):
+    /// it exists, is playable by its owner, but is not publicly listed until
+    /// the creator publishes it. Used by bulk upload so nothing goes live
+    /// before the creator finishes metadata.
+    /// </summary>
+    public bool? SaveAsDraft { get; set; }
+
     public string? CreatorId { get; set; }
 }

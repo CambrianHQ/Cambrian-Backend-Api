@@ -576,6 +576,7 @@ builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
+builder.Services.AddScoped<ITrackDetailsRepository, TrackDetailsRepository>();
 builder.Services.AddScoped<IPublicDirectoryRepository, PublicDirectoryRepository>();
 builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();

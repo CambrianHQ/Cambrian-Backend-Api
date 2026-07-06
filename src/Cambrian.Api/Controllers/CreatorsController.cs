@@ -621,8 +621,10 @@ public class CreatorsController : BaseController
         => SearchCreatorsCore(body?.Query, body?.Limit);
 
     [HttpGet("/creators/search")]
-    public Task<IActionResult> SearchCreatorsGet([FromQuery] string? query, [FromQuery] int? limit)
-        => SearchCreatorsCore(query, limit);
+    public Task<IActionResult> SearchCreatorsGet([FromQuery] string? query, [FromQuery] string? q, [FromQuery] int? limit)
+        // Accept ?q= as an alias — an unbound param silently searches for
+        // nothing and returns [], which reads as "search is broken".
+        => SearchCreatorsCore(string.IsNullOrWhiteSpace(query) ? q : query, limit);
 
     private async Task<IActionResult> SearchCreatorsCore(string? query, int? limit)
     {

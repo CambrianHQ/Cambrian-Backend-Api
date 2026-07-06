@@ -23,6 +23,22 @@ public sealed class EfTransactionManager : ITransactionManager
         return _transaction;
     }
 
+    /// <summary>
+    /// PostgreSQL: takes a transaction-scoped advisory lock (<c>pg_advisory_xact_lock</c>) whose id
+    /// is a stable hash of <paramref name="key"/>, so concurrent transactions using the same key are
+    /// forced to run one at a time and release automatically at COMMIT/ROLLBACK. Other providers
+    /// (SQLite) have no advisory locks and already serialize writers, so this is a no-op there.
+    /// </summary>
+    public async Task AcquireAdvisoryLockAsync(string key, CancellationToken ct = default)
+    {
+        if (!_db.Database.IsNpgsql())
+            return;
+
+        // hashtextextended(text, seed) -> bigint maps the key into the advisory-lock id space.
+        await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", ct);
+    }
+
     public async Task CommitAsync()
     {
         if (_transaction is not null)

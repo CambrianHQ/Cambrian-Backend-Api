@@ -47,6 +47,12 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<TrackCollection> TrackCollections => Set<TrackCollection>();
 
+    public DbSet<AlbumTrack> AlbumTracks => Set<AlbumTrack>();
+
+    public DbSet<TrackLyrics> TrackLyrics => Set<TrackLyrics>();
+
+    public DbSet<TrackCreationProcess> TrackCreationProcesses => Set<TrackCreationProcess>();
+
     public DbSet<CreatorFollow> CreatorFollows => Set<CreatorFollow>();
 
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
@@ -347,9 +353,39 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(tc => tc.CreatorId).HasMaxLength(450).IsRequired();
             e.HasIndex(tc => tc.CreatorId);
             e.Property(tc => tc.Title).HasMaxLength(200).IsRequired();
+            // Slug is unique per creator (albums are addressed by id publicly;
+            // the slug is an SEO affordance, so no global uniqueness needed).
+            e.Property(tc => tc.Slug).HasMaxLength(220).IsRequired().HasDefaultValue("");
+            e.HasIndex(tc => new { tc.CreatorId, tc.Slug }).IsUnique();
             e.Property(tc => tc.Description).HasMaxLength(2000);
             e.Property(tc => tc.CoverImageUrl).HasMaxLength(500);
             e.Property(tc => tc.TrackIds).HasMaxLength(5000);
+            e.Property(tc => tc.Visibility).HasMaxLength(20).IsRequired().HasDefaultValue("public");
+        });
+
+        builder.Entity<AlbumTrack>(e =>
+        {
+            e.HasKey(at => new { at.AlbumId, at.TrackId });
+            e.HasIndex(at => new { at.AlbumId, at.Position });
+            e.HasIndex(at => at.TrackId);
+            // No FK to Tracks on purpose: album membership must never block or
+            // cascade into Track rows (albums are relationships only). Album
+            // deletion cleans its own rows in the repository.
+        });
+
+        builder.Entity<TrackLyrics>(e =>
+        {
+            e.HasKey(tl => tl.TrackId);
+            e.Property(tl => tl.Lyrics).HasMaxLength(20000).IsRequired();
+            e.Property(tl => tl.Language).HasMaxLength(16).IsRequired().HasDefaultValue("en");
+        });
+
+        builder.Entity<TrackCreationProcess>(e =>
+        {
+            e.HasKey(cp => cp.TrackId);
+            e.Property(cp => cp.Story).HasMaxLength(5000);
+            e.Property(cp => cp.YoutubeUrl).HasMaxLength(500);
+            e.Property(cp => cp.ToolsUsed).HasMaxLength(2000);
         });
 
         builder.Entity<ApplicationUser>(e =>

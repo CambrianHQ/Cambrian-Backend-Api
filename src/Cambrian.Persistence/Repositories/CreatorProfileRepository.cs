@@ -164,6 +164,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
     {
         var collections = await _db.TrackCollections.AsNoTracking()
             .Where(c => c.CreatorId == creatorId)
+            .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
         return collections.Select(MapCollectionToDto).ToList();
     }
@@ -180,25 +181,31 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return entity?.CreatorId;
     }
 
-    public async Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string? coverImageUrl, string trackIds)
+    public async Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string? coverImageUrl, string trackIds,
+        string? visibility = null, DateTime? releaseDate = null)
     {
         var collection = new TrackCollection
         {
             Id = Guid.NewGuid(),
             CreatorId = creatorId,
             Title = title,
+            Slug = await GenerateCollectionSlugAsync(creatorId, title),
             Description = description,
             CoverImageUrl = coverImageUrl,
             TrackIds = trackIds,
+            Visibility = NormalizeCollectionVisibility(visibility) ?? "public",
+            ReleaseDate = releaseDate,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
         _db.TrackCollections.Add(collection);
+        SyncAlbumTracks(collection.Id, trackIds, Array.Empty<AlbumTrack>());
         await _db.SaveChangesAsync();
         return MapCollectionToDto(collection);
     }
 
-    public async Task<TrackCollectionDto> UpdateCollectionAsync(Guid id, string creatorId, string? title, string? description, string? coverImageUrl, string? trackIds)
+    public async Task<TrackCollectionDto> UpdateCollectionAsync(Guid id, string creatorId, string? title, string? description, string? coverImageUrl, string? trackIds,
+        string? visibility = null, DateTime? releaseDate = null, bool clearReleaseDate = false)
     {
         var existing = await _db.TrackCollections.FindAsync(id);
         if (existing is null) throw new KeyNotFoundException("Collection not found.");
@@ -206,7 +213,20 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         if (title is not null) existing.Title = title;
         existing.Description = description ?? existing.Description;
         if (coverImageUrl is not null) existing.CoverImageUrl = coverImageUrl;
-        if (trackIds is not null) existing.TrackIds = trackIds;
+        if (trackIds is not null)
+        {
+            existing.TrackIds = trackIds;
+            var joinRows = await _db.AlbumTracks.Where(at => at.AlbumId == id).ToListAsync();
+            SyncAlbumTracks(id, trackIds, joinRows);
+        }
+        var normalizedVisibility = NormalizeCollectionVisibility(visibility);
+        if (normalizedVisibility is not null) existing.Visibility = normalizedVisibility;
+        if (clearReleaseDate) existing.ReleaseDate = null;
+        else if (releaseDate.HasValue) existing.ReleaseDate = releaseDate;
+        // Slug stays stable once created (album URLs must not break on rename);
+        // legacy pre-slug rows get one lazily.
+        if (string.IsNullOrEmpty(existing.Slug))
+            existing.Slug = await GenerateCollectionSlugAsync(existing.CreatorId, existing.Title, existing.Id);
         existing.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return MapCollectionToDto(existing);
@@ -217,9 +237,102 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         var existing = await _db.TrackCollections.FindAsync(id);
         if (existing is not null)
         {
+            // Deleting an album only deletes the relationship rows — the
+            // tracks themselves (and their plays/likes/URLs) are untouched.
+            var joinRows = await _db.AlbumTracks.Where(at => at.AlbumId == id).ToListAsync();
+            _db.AlbumTracks.RemoveRange(joinRows);
             _db.TrackCollections.Remove(existing);
             await _db.SaveChangesAsync();
         }
+    }
+
+    /// <summary>
+    /// Dual-write: keeps AlbumTrack join rows (canonical positions + AddedAt)
+    /// in sync with the legacy CSV column. Retained tracks keep their AddedAt.
+    /// Runs against the change tracker; caller saves.
+    /// </summary>
+    private void SyncAlbumTracks(Guid albumId, string trackIdsCsv, IReadOnlyList<AlbumTrack> existingRows)
+    {
+        var orderedIds = ParseCollectionTrackGuids(trackIdsCsv);
+        var keep = new HashSet<Guid>(orderedIds);
+        var byTrackId = new Dictionary<Guid, AlbumTrack>();
+        foreach (var row in existingRows)
+        {
+            if (!keep.Contains(row.TrackId))
+                _db.AlbumTracks.Remove(row);
+            else
+                byTrackId[row.TrackId] = row;
+        }
+
+        for (var position = 0; position < orderedIds.Count; position++)
+        {
+            if (byTrackId.TryGetValue(orderedIds[position], out var row))
+            {
+                row.Position = position;
+            }
+            else
+            {
+                _db.AlbumTracks.Add(new AlbumTrack
+                {
+                    AlbumId = albumId,
+                    TrackId = orderedIds[position],
+                    Position = position,
+                    AddedAt = DateTime.UtcNow,
+                });
+            }
+        }
+    }
+
+    private static List<Guid> ParseCollectionTrackGuids(string trackIdsCsv)
+    {
+        var result = new List<Guid>();
+        var seen = new HashSet<Guid>();
+        foreach (var piece in trackIdsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (Guid.TryParse(piece, out var guid) && seen.Add(guid))
+                result.Add(guid);
+        }
+        return result;
+    }
+
+    private static string? NormalizeCollectionVisibility(string? visibility)
+    {
+        var normalized = visibility?.Trim().ToLowerInvariant();
+        return normalized is "public" or "hidden" ? normalized : null;
+    }
+
+    private async Task<string> GenerateCollectionSlugAsync(string creatorId, string title, Guid? excludeId = null)
+    {
+        var baseSlug = SlugifyCollectionTitle(title);
+        var slug = baseSlug;
+        var suffix = 2;
+        while (await _db.TrackCollections.AnyAsync(c => c.CreatorId == creatorId && c.Slug == slug && (excludeId == null || c.Id != excludeId)))
+        {
+            slug = $"{baseSlug}-{suffix++}";
+        }
+        return slug;
+    }
+
+    private static string SlugifyCollectionTitle(string title)
+    {
+        var builder = new System.Text.StringBuilder(title.Length);
+        var lastWasHyphen = true; // suppress leading hyphens
+        foreach (var ch in title.Trim().ToLowerInvariant())
+        {
+            if (char.IsAsciiLetterOrDigit(ch))
+            {
+                builder.Append(ch);
+                lastWasHyphen = false;
+            }
+            else if (!lastWasHyphen)
+            {
+                builder.Append('-');
+                lastWasHyphen = true;
+            }
+        }
+        var slug = builder.ToString().TrimEnd('-');
+        if (slug.Length > 200) slug = slug[..200].TrimEnd('-');
+        return slug.Length > 0 ? slug : "album";
     }
 
     // ───── Mapping helpers ─────
@@ -316,11 +429,14 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
     {
         Id = c.Id.ToString(),
         Title = c.Title,
+        Slug = c.Slug,
         Description = c.Description,
         CoverImageUrl = c.CoverImageUrl,
         TrackIds = string.IsNullOrWhiteSpace(c.TrackIds)
             ? Array.Empty<string>()
             : c.TrackIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+        Visibility = string.IsNullOrEmpty(c.Visibility) ? "public" : c.Visibility,
+        ReleaseDate = c.ReleaseDate,
         CreatedAt = c.CreatedAt,
         UpdatedAt = c.UpdatedAt,
     };

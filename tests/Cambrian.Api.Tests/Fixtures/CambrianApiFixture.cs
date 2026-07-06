@@ -269,7 +269,7 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
     }
 
     /// <summary>Seed a track into the database and return its id.</summary>
-    public async Task<Guid> SeedTrackAsync(string creatorId, string title = "Test Beat")
+    public async Task<Guid> SeedTrackAsync(string creatorId, string title = "Test Beat", string visibility = "public")
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
@@ -284,7 +284,8 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             LicenseType = "standard",
             AudioUrl = "tracks/test-beat.mp3",
             CreatorId = creatorId,
-            Genre = "Hip-Hop"
+            Genre = "Hip-Hop",
+            Visibility = visibility
         };
 
         db.Tracks.Add(track);
@@ -407,7 +408,7 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             Id = id,
             UserId = userId,
             Username = normalized,
-            DisplayName = normalized,
+            DisplayName = displayName ?? normalized,
             Bio = "",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -417,7 +418,7 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
     }
 
     /// <summary>Seed a track with the UUID-based CreatorUuid FK set.</summary>
-    public async Task<Guid> SeedTrackWithCreatorUuidAsync(string creatorUserId, Guid creatorUuid, string title = "Test Beat")
+    public async Task<Guid> SeedTrackWithCreatorUuidAsync(string creatorUserId, Guid creatorUuid, string title = "Test Beat", string visibility = "public")
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
@@ -433,6 +434,7 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             CreatorId = creatorUserId,
             CreatorUuid = creatorUuid,
             Genre = "Hip-Hop",
+            Visibility = visibility,
         });
         await db.SaveChangesAsync();
         return trackId;

@@ -292,6 +292,11 @@ public class UploadService : IUploadService
         };
         ApplyGenreFields(track, request.PrimaryGenre, request.Subgenre, request.Genre);
 
+        // Bulk-upload drafts: the track row is fully created (same provenance,
+        // same id, same URLs) but stays hidden until the creator publishes it.
+        if (request.SaveAsDraft == true)
+            track.Visibility = "hidden";
+
         await _tracks.AddAsync(track);
 
         // §9 provenance: record a pending anchor after the track row exists (FK target).

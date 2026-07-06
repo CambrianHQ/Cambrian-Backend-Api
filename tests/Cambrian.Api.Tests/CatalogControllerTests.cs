@@ -28,7 +28,7 @@ public sealed class CatalogControllerTests
 
     public CatalogControllerTests()
     {
-        _controller = new CatalogController(_catalog, _storage, _cache, _activity, new TrackVisibilityPolicy());
+        _controller = new CatalogController(_catalog, _storage, _cache, _activity, new TrackVisibilityPolicy(), Substitute.For<ITrackDetailsRepository>());
     }
 
     // ── Discover ──

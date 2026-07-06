@@ -401,7 +401,11 @@ public sealed class E2eScenarioService
             Email = email,
             UserName = email,
             DisplayName = email.Split('@')[0],
-            Role = "User",
+            // Creator-tier accounts need Role="Creator" — CapabilityResolver
+            // grants track.upload/edit by ROLE, not tier (residue-be refactor),
+            // and real creator accounts carry the Creator role in production.
+            // Without this the seeded creator can't reach /upload or /studio.
+            Role = tier == CreatorTier.Free ? "User" : "Creator",
             Status = "active",
             Tier = tierString,
             CreatorTier = tier,

@@ -168,7 +168,7 @@ public sealed class SecurityPatchTests
         public C4CatalogFixture()
         {
             var cache = Substitute.For<IMemoryCache>();
-            Controller = new CatalogController(CatalogService, Storage, cache, Activity, new TrackVisibilityPolicy());
+            Controller = new CatalogController(CatalogService, Storage, cache, Activity, new TrackVisibilityPolicy(), Substitute.For<ITrackDetailsRepository>());
         }
 
         public void SetAuthenticatedUser(string userId)

@@ -104,6 +104,11 @@ public sealed class CreatorIdentityRepositoryCompatibilityTests : IDisposable
             );
             """);
 
+        // Mirror the full CreatorProfile column set so EF's INSERT of a
+        // CreatorProfile entity succeeds. StudioSetup + JourneyEntries were
+        // added to the entity (commit 63029b7) as nullable JSON columns —
+        // kept here so this legacy-schema fixture stays in sync. (The test's
+        // "legacy" intent is about ABSENT Track taxonomy columns, not these.)
         ExecuteNonQuery(
             """
             CREATE TABLE "CreatorProfiles" (
@@ -115,6 +120,8 @@ public sealed class CreatorIdentityRepositoryCompatibilityTests : IDisposable
                 "Bio" TEXT NOT NULL,
                 "Niche" TEXT NULL,
                 "SocialLinks" TEXT NULL,
+                "StudioSetup" TEXT NULL,
+                "JourneyEntries" TEXT NULL,
                 "ShowEarnings" INTEGER NOT NULL DEFAULT 0,
                 "ShowDownloadStats" INTEGER NOT NULL DEFAULT 0,
                 "PinnedTrackIds" TEXT NULL,

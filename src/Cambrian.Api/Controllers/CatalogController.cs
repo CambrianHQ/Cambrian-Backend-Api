@@ -15,17 +15,19 @@ public class CatalogController : BaseController
     private readonly IObjectStorage _storage;
     private readonly IMemoryCache _cache;
     private readonly ITrackVisibilityPolicy _visibility;
+    private readonly ITrackDetailsRepository _trackDetails;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
     private readonly IActivityService _activity;
 
-    public CatalogController(ICatalogService catalog, IObjectStorage storage, IMemoryCache cache, IActivityService activity, ITrackVisibilityPolicy visibility)
+    public CatalogController(ICatalogService catalog, IObjectStorage storage, IMemoryCache cache, IActivityService activity, ITrackVisibilityPolicy visibility, ITrackDetailsRepository trackDetails)
     {
         _catalog = catalog;
         _storage = storage;
         _cache = cache;
         _activity = activity;
         _visibility = visibility;
+        _trackDetails = trackDetails;
     }
 
     [HttpGet("discover")]
@@ -134,6 +136,47 @@ public class CatalogController : BaseController
     // frontend deploy stops 404'ing while it's updated.
     [HttpGet("catalog/{trackId}")]
     public Task<IActionResult> GetTrackCatalogAlias(string trackId) => GetTrack(trackId);
+
+    /// <summary>
+    /// Public lyrics for a track. 404 when the track is not visible to the
+    /// requester or has no lyrics. Rendered server-side by the frontend so
+    /// lyrics are SEO-indexable.
+    /// </summary>
+    [HttpGet("tracks/{trackId}/lyrics")]
+    public async Task<IActionResult> GetTrackLyrics(string trackId)
+    {
+        var track = await ResolveVisibleTrackAsync(trackId);
+        if (track is null) return NotFoundResponse($"Track '{trackId}' not found.");
+
+        var lyrics = await _trackDetails.GetLyricsAsync(Guid.Parse(track.Id));
+        if (lyrics is null) return NotFoundResponse("This track has no lyrics.");
+        return OkResponse(lyrics);
+    }
+
+    /// <summary>
+    /// Public "Behind The Track" creation-process payload. 404 when the track
+    /// is not visible to the requester or the creator hasn't shared a process.
+    /// </summary>
+    [HttpGet("tracks/{trackId}/behind-the-track")]
+    public async Task<IActionResult> GetBehindTheTrack(string trackId)
+    {
+        var track = await ResolveVisibleTrackAsync(trackId);
+        if (track is null) return NotFoundResponse($"Track '{trackId}' not found.");
+
+        var process = await _trackDetails.GetCreationProcessAsync(Guid.Parse(track.Id));
+        if (process is null) return NotFoundResponse("This track has no Behind The Track story.");
+        return OkResponse(process);
+    }
+
+    /// <summary>Resolves a track and applies the shared visibility policy (C4).</summary>
+    private async Task<TrackResponse?> ResolveVisibleTrackAsync(string trackId)
+    {
+        var track = await _catalog.GetTrackAsync(trackId);
+        if (track is null) return null;
+        var requesterId = User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        var isAdmin = User?.IsInRole("Admin") == true;
+        return _visibility.CanAccess(track.Visibility ?? "public", track.CreatorId, requesterId, isAdmin) ? track : null;
+    }
 
     [HttpGet("trending")]
     public async Task<IActionResult> Trending(

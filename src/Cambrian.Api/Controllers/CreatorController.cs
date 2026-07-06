@@ -24,6 +24,7 @@ public class CreatorController : BaseController
     private readonly ICreatorProfileRepository _profiles;
     private readonly IUploadService _upload;
     private readonly ITrackReadinessCache _readinessCache;
+    private readonly ITrackDetailsRepository _trackDetails;
     private readonly ILogger<CreatorController> _logger;
 
     public CreatorController(
@@ -33,6 +34,7 @@ public class CreatorController : BaseController
         ICreatorProfileRepository profiles,
         IUploadService upload,
         ITrackReadinessCache readinessCache,
+        ITrackDetailsRepository trackDetails,
         ILogger<CreatorController> logger)
     {
         _creator = creator;
@@ -41,6 +43,7 @@ public class CreatorController : BaseController
         _profiles = profiles;
         _upload = upload;
         _readinessCache = readinessCache;
+        _trackDetails = trackDetails;
         _logger = logger;
     }
 
@@ -114,6 +117,27 @@ public class CreatorController : BaseController
         }
         if (request.ExclusivePriceCents.HasValue) track.ExclusivePriceCents = request.ExclusivePriceCents.Value;
         if (request.CopyrightBuyoutPriceCents.HasValue) track.CopyrightBuyoutPriceCents = request.CopyrightBuyoutPriceCents.Value;
+        if (request.Visibility is not null)
+        {
+            // Publish / unpublish (bulk-upload drafts). Same in-place partial
+            // update as every other field — id, engagement, and URLs untouched.
+            var visibility = request.Visibility.Trim().ToLowerInvariant();
+            if (visibility is not ("public" or "hidden"))
+                return ErrorResponse("Visibility must be 'public' or 'hidden'.");
+
+            // Hiding a track that fans already paid for would revoke their
+            // streaming access (the visibility policy has no purchaser
+            // carve-out) while downloads kept working. Refuse rather than
+            // silently break paying supporters' playback.
+            if (visibility == "hidden" && track.Visibility != "hidden")
+            {
+                var stats = await _tracks.GetTrackStatsAsync(new[] { track.Id });
+                if (stats.TryGetValue(track.Id, out var trackStats) && trackStats.Sales > 0)
+                    return ErrorResponse("This track can't be unpublished — fans have already purchased it.");
+            }
+
+            track.Visibility = visibility;
+        }
 
         await _tracks.UpdateAsync(track);
         _readinessCache.Invalidate(track.Id);
@@ -142,6 +166,103 @@ public class CreatorController : BaseController
         _readinessCache.Invalidate(track.Id);
 
         return OkResponse(await BuildMutationResponseAsync(userId, track));
+    }
+
+    // ───── Lyrics (1:1 companion row — never touches the Track row) ─────
+
+    [Authorize(Policy = "CanEditOwnTrack")]
+    [HttpPut("tracks/{trackId:guid}/lyrics")]
+    public async Task<IActionResult> UpsertTrackLyrics(Guid trackId, [FromBody] UpsertTrackLyricsRequest request)
+    {
+        var userId = GetRequiredUserId()!;
+        var track = await _tracks.GetByIdAsync(trackId);
+        if (track is null) return NotFoundResponse("Track not found.");
+
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
+        var ownsLegacy = track.CreatorId == userId;
+        var ownsUuid = creatorUuid.HasValue && track.CreatorUuid == creatorUuid.Value;
+        if (!ownsLegacy && !ownsUuid) return ForbiddenResponse("You can only edit your own tracks.");
+
+        var lyrics = request.Lyrics?.Trim() ?? "";
+        if (lyrics.Length == 0)
+        {
+            await _trackDetails.DeleteLyricsAsync(trackId);
+            return OkResponse<object?>(null, "Lyrics removed.");
+        }
+
+        var language = NormalizeLanguageTag(request.Language);
+        if (language is null)
+            return ErrorResponse("Language must be a valid language tag (e.g. 'en', 'pt-BR').");
+
+        var saved = await _trackDetails.UpsertLyricsAsync(trackId, lyrics, language);
+        return OkResponse(saved);
+    }
+
+    // ───── Behind The Track (1:1 companion row — never touches the Track row) ─────
+
+    [Authorize(Policy = "CanEditOwnTrack")]
+    [HttpPut("tracks/{trackId:guid}/behind-the-track")]
+    public async Task<IActionResult> UpsertBehindTheTrack(Guid trackId, [FromBody] UpsertBehindTheTrackRequest request)
+    {
+        var userId = GetRequiredUserId()!;
+        var track = await _tracks.GetByIdAsync(trackId);
+        if (track is null) return NotFoundResponse("Track not found.");
+
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
+        var ownsLegacy = track.CreatorId == userId;
+        var ownsUuid = creatorUuid.HasValue && track.CreatorUuid == creatorUuid.Value;
+        if (!ownsLegacy && !ownsUuid) return ForbiddenResponse("You can only edit your own tracks.");
+
+        var story = MetadataSanitizer.NormalizeOptional(request.Story, "Story");
+        var youtubeUrl = request.YoutubeUrl?.Trim();
+        if (!string.IsNullOrEmpty(youtubeUrl) && !IsYoutubeUrl(youtubeUrl))
+            return ErrorResponse("Process video must be a YouTube URL (youtube.com or youtu.be).");
+        youtubeUrl = string.IsNullOrEmpty(youtubeUrl) ? null : youtubeUrl;
+
+        var tools = (request.ToolsUsed ?? new List<string>())
+            .Select(t => t?.Trim() ?? "")
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(30)
+            .ToList();
+        if (tools.Any(t => t.Length > 100))
+            return ErrorResponse("Each tool name must be 100 characters or less.");
+        // The column stores the JSON-serialized list (varchar 2000). 30×100-char
+        // tools can serialize past that, which would 500 at SaveChanges on
+        // Postgres — reject it here with an actionable message instead.
+        if (tools.Count > 0 && System.Text.Json.JsonSerializer.Serialize(tools).Length > 2000)
+            return ErrorResponse("Tools list is too long — remove some tools or shorten their names.");
+
+        if (story is null && youtubeUrl is null && tools.Count == 0)
+        {
+            await _trackDetails.DeleteCreationProcessAsync(trackId);
+            return OkResponse<object?>(null, "Behind The Track removed.");
+        }
+
+        var saved = await _trackDetails.UpsertCreationProcessAsync(trackId, story, youtubeUrl, tools);
+        return OkResponse(saved);
+    }
+
+    private static readonly HashSet<string> YoutubeHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"
+    };
+
+    private static bool IsYoutubeUrl(string url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && (uri.Scheme == "https" || uri.Scheme == "http")
+            && string.IsNullOrEmpty(uri.UserInfo)
+            && YoutubeHosts.Contains(uri.Host);
+    }
+
+    /// <summary>Accepts short BCP-47-ish tags: "en", "pt-BR", "zh-Hans". Null/empty → "en".</summary>
+    private static string? NormalizeLanguageTag(string? raw)
+    {
+        var value = raw?.Trim();
+        if (string.IsNullOrEmpty(value)) return "en";
+        if (value.Length > 16) return null;
+        return value.All(c => char.IsAsciiLetterOrDigit(c) || c == '-') ? value : null;
     }
 
     [Authorize(Policy = "CanDeleteOwnTrack")]

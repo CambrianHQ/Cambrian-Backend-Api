@@ -18,6 +18,13 @@ public class CreatorSearchResultDto
     public string Id { get; set; } = "";
     public string Username { get; set; } = "";
     public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// Public profile slug when the creator customized one; falls back to the
+    /// username. Frontends build /@{slug} links from this — it is never empty.
+    /// </summary>
+    public string Slug { get; set; } = "";
+
     public string? ProfileImageUrl { get; set; }
     public string Bio { get; set; } = "";
     public int TrackCount { get; set; }

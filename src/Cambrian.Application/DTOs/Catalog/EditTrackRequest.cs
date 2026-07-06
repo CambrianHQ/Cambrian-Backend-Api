@@ -45,4 +45,12 @@ public class EditTrackRequest
 
     [Range(1, int.MaxValue)]
     public int? CopyrightBuyoutPriceCents { get; set; }
+
+    /// <summary>
+    /// Publish/unpublish: "public" or "hidden". Omit to keep the stored value.
+    /// This is the same in-place partial update as every other field — it can
+    /// never recreate the track or touch engagement data.
+    /// </summary>
+    [MaxLength(20)]
+    public string? Visibility { get; set; }
 }

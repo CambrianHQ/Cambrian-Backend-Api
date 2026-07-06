@@ -34,9 +34,21 @@ public interface ICreatorProfileRepository
 
     Task<string?> GetCollectionOwnerAsync(Guid id);
 
-    Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string? coverImageUrl, string trackIds);
+    /// <summary>
+    /// Creates an album. TrackIds CSV order is the track order; a per-creator
+    /// unique slug is generated from the title. AlbumTrack join rows are
+    /// dual-written alongside the legacy CSV column.
+    /// </summary>
+    Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string? coverImageUrl, string trackIds,
+        string? visibility = null, DateTime? releaseDate = null);
 
-    Task<TrackCollectionDto> UpdateCollectionAsync(Guid id, string creatorId, string? title, string? description, string? coverImageUrl, string? trackIds);
+    /// <summary>
+    /// Partial album update (null = keep). TrackIds CSV order is the new track
+    /// order (drag-reorder just sends the reordered CSV). Pass
+    /// <paramref name="clearReleaseDate"/> to remove a stored release date.
+    /// </summary>
+    Task<TrackCollectionDto> UpdateCollectionAsync(Guid id, string creatorId, string? title, string? description, string? coverImageUrl, string? trackIds,
+        string? visibility = null, DateTime? releaseDate = null, bool clearReleaseDate = false);
 
     Task DeleteCollectionAsync(Guid id);
 }

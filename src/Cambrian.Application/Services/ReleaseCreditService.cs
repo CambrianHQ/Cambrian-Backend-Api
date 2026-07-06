@@ -77,17 +77,18 @@ public sealed class ReleaseCreditService : IReleaseCreditService
     }
 
     /// <summary>
-    /// Atomic count-and-charge in ONE serializable transaction. Re-fetches the job
-    /// (already-charged → idempotent true), then spends a monthly credit if any remain,
-    /// otherwise a purchased credit. Serializable isolation prevents two concurrent
-    /// submits from both passing on the last credit of either pool.
+    /// Atomic count-and-charge in ONE transaction, serialized per-creator by an advisory lock.
+    /// Re-fetches the job (already-charged → idempotent true), then spends a monthly credit if any
+    /// remain, otherwise a purchased credit. The advisory lock forces concurrent charges for the
+    /// same creator to run one at a time, so the derived-count check can never let two submits both
+    /// pass on the last credit of either pool.
     /// </summary>
     public async Task<bool> TryChargeAsync(Guid jobId, string userId, CancellationToken ct = default)
     {
-        // Under Postgres SERIALIZABLE, two concurrent last-credit charges make the loser fail
-        // with 40001 (serialization_failure) — transient. Retry a bounded number of times so the
-        // caller gets a clean result instead of a 500. Each attempt re-checks job.ChargedAt, so a
-        // retry can never double-charge.
+        // The advisory lock is the primary guard. The retry loop is defense-in-depth: should a
+        // charge still surface a transient serialization/deadlock error (40001/40P01), retry a
+        // bounded number of times so the caller gets a clean result instead of a 500. Each attempt
+        // re-checks job.ChargedAt inside the lock, so a retry can never double-charge.
         const int maxAttempts = 3;
         for (var attempt = 1; ; attempt++)
         {
@@ -109,9 +110,16 @@ public sealed class ReleaseCreditService : IReleaseCreditService
         var tier = await ResolveTierAsync(userId);
         var allowance = tier.ReleaseReadyCreditsPerMonth;
 
-        await using var tx = await _transactions.BeginSerializableTransactionAsync();
+        await using var tx = await _transactions.BeginTransactionAsync();
         try
         {
+            // Serialize every concurrent charge for this creator. Under the default READ COMMITTED
+            // isolation each statement takes a fresh snapshot, so once this lock is granted the
+            // count below reflects the previous winner's committed charge. Serializable isolation
+            // alone did NOT abort this write-skew on PostgreSQL (each contender updates a different
+            // job row), which let concurrent submits over-charge the last credit.
+            await _transactions.AcquireAdvisoryLockAsync($"release-credit:{userId}", ct);
+
             var job = await _jobs.GetForOwnerAsync(jobId, userId, ct);
             if (job is null)
             {
