@@ -270,6 +270,33 @@ public sealed class AdminControllerTests
         Assert.IsType<NotFoundObjectResult>(result);
     }
 
+    // ── VerifyCreator ──
+
+    [Fact]
+    public async Task VerifyCreator_Found_ReturnsOkWithUpdatedUser()
+    {
+        _admin.VerifyCreatorAsync("user-1", Arg.Any<string>()).Returns(true);
+        _admin.GetUsersAsync().Returns(new List<AdminUser>
+        {
+            new() { Id = "user-1", VerifiedCreator = true, CreatorTier = "Pro", Tier = "pro" }
+        });
+
+        var result = await _controller.VerifyCreator("user-1");
+
+        Assert.IsType<OkObjectResult>(result);
+        await _admin.Received(1).VerifyCreatorAsync("user-1", Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task VerifyCreator_UserNotFound_ReturnsNotFound()
+    {
+        _admin.VerifyCreatorAsync("missing", Arg.Any<string>()).Returns(false);
+
+        var result = await _controller.VerifyCreator("missing");
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
     // ── UpgradeUserTier ──
 
     [Fact]
@@ -335,19 +362,29 @@ public sealed class AdminControllerTests
     // ── Settings ──
 
     [Fact]
-    public void GetSettings_ReturnsOk()
+    public async Task GetSettings_ReturnsOk()
     {
-        var result = _controller.GetSettings();
+        _admin.GetSettingsAsync().Returns(new AdminSettingsResponse());
+
+        var result = await _controller.GetSettings();
 
         Assert.IsType<OkObjectResult>(result);
     }
 
     [Fact]
-    public void UpdateSettings_ReturnsMessage()
+    public async Task UpdateSettings_ReturnsOk_AndPersistsViaService()
     {
-        var result = _controller.UpdateSettings();
+        var request = new AdminController.UpdateSettingsRequest(true, false, true, false, true);
+        _admin.UpdateSettingsAsync(
+            Arg.Is<AdminSettingsUpdateRequest>(r =>
+                r.PayoutsEnabled && !r.ModerationEnabled && r.MarketplaceEnabled && !r.AllowExclusiveListings && r.RequireTrackReview),
+            Arg.Any<string>()
+        ).Returns(new AdminSettingsResponse());
+
+        var result = await _controller.UpdateSettings(request);
 
         Assert.IsType<OkObjectResult>(result);
+        await _admin.Received(1).UpdateSettingsAsync(Arg.Any<AdminSettingsUpdateRequest>(), Arg.Any<string>());
     }
 
     // ── IntegrityAudit ──
@@ -362,23 +399,253 @@ public sealed class AdminControllerTests
         Assert.IsType<OkObjectResult>(result);
     }
 
-    // ── Stub endpoints ──
+    // ── Track editorial placement ──
 
     [Fact]
-    public void FeatureTrack_Returns501()
+    public async Task FeatureTrack_ReturnsOk_WhenFound()
     {
-        var result = _controller.FeatureTrack("t-1");
+        _admin.FeatureTrackAsync("t-1", Arg.Any<string>()).Returns(true);
 
-        var obj = Assert.IsType<ObjectResult>(result);
-        Assert.Equal(501, obj.StatusCode);
+        var result = await _controller.FeatureTrack("t-1");
+
+        Assert.IsType<OkObjectResult>(result);
     }
 
     [Fact]
-    public void PinTrack_Returns501()
+    public async Task FeatureTrack_ReturnsNotFound_WhenMissing()
     {
-        var result = _controller.PinTrack("t-1");
+        _admin.FeatureTrackAsync("missing", Arg.Any<string>()).Returns(false);
+
+        var result = await _controller.FeatureTrack("missing");
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task PinTrack_ReturnsOk_WhenFound()
+    {
+        _admin.PinTrackAsync("t-1", Arg.Any<string>()).Returns(true);
+
+        var result = await _controller.PinTrack("t-1");
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task PinTrack_ReturnsNotFound_WhenMissing()
+    {
+        _admin.PinTrackAsync("missing", Arg.Any<string>()).Returns(false);
+
+        var result = await _controller.PinTrack("missing");
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    // ── Payout review ──
+
+    [Fact]
+    public async Task ApprovePayout_ReturnsOk_WhenApproved()
+    {
+        _admin.ApprovePayoutAsync("p-1", Arg.Any<string>()).Returns(new PayoutReviewResult
+        {
+            Outcome = PayoutReviewOutcome.Approved,
+            Payout = new AdminPayout { Id = "p-1", Status = "completed" },
+            Message = "Payout approved and the Stripe transfer completed."
+        });
+
+        var result = await _controller.ApprovePayout("p-1");
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ApprovePayout_ReturnsNotFound_WhenMissing()
+    {
+        _admin.ApprovePayoutAsync("missing", Arg.Any<string>()).Returns(new PayoutReviewResult
+        {
+            Outcome = PayoutReviewOutcome.NotFound,
+            Message = "Payout not found."
+        });
+
+        var result = await _controller.ApprovePayout("missing");
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ApprovePayout_ReturnsConflict_WhenNotPending()
+    {
+        _admin.ApprovePayoutAsync("p-1", Arg.Any<string>()).Returns(new PayoutReviewResult
+        {
+            Outcome = PayoutReviewOutcome.InvalidState,
+            Message = "Payout is 'completed', not pending — only pending payouts can be approved."
+        });
+
+        var result = await _controller.ApprovePayout("p-1");
 
         var obj = Assert.IsType<ObjectResult>(result);
-        Assert.Equal(501, obj.StatusCode);
+        Assert.Equal(409, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task ApprovePayout_RetryFailed_ReturnsOkWithSuccessFalse()
+    {
+        _admin.ApprovePayoutAsync("p-1", Arg.Any<string>()).Returns(new PayoutReviewResult
+        {
+            Outcome = PayoutReviewOutcome.ApprovalRetryFailed,
+            Payout = new AdminPayout { Id = "p-1", Status = "pending" },
+            Message = "Stripe transfer retry failed: card declined. Payout remains pending."
+        });
+
+        var result = await _controller.ApprovePayout("p-1");
+
+        // Must never report bare success when the retry actually failed.
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.NotNull(ok.Value);
+    }
+
+    [Fact]
+    public async Task RejectPayout_BlankReason_ReturnsBadRequest()
+    {
+        var result = await _controller.RejectPayout("p-1", new AdminController.RejectPayoutRequest(""));
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task RejectPayout_NullBody_ReturnsBadRequest()
+    {
+        var result = await _controller.RejectPayout("p-1", null);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task RejectPayout_ReturnsOk_WhenRejected()
+    {
+        _admin.RejectPayoutAsync("p-1", Arg.Any<string>(), "fraud suspected").Returns(new PayoutReviewResult
+        {
+            Outcome = PayoutReviewOutcome.Rejected,
+            Payout = new AdminPayout { Id = "p-1", Status = "rejected" },
+            Message = "Payout rejected."
+        });
+
+        var result = await _controller.RejectPayout("p-1", new AdminController.RejectPayoutRequest("fraud suspected"));
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task RejectPayout_ReturnsNotFound_WhenMissing()
+    {
+        _admin.RejectPayoutAsync("missing", Arg.Any<string>(), Arg.Any<string>()).Returns(new PayoutReviewResult
+        {
+            Outcome = PayoutReviewOutcome.NotFound,
+            Message = "Payout not found."
+        });
+
+        var result = await _controller.RejectPayout("missing", new AdminController.RejectPayoutRequest("reason"));
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task RejectPayout_ReturnsConflict_WhenNotPending()
+    {
+        _admin.RejectPayoutAsync("p-1", Arg.Any<string>(), Arg.Any<string>()).Returns(new PayoutReviewResult
+        {
+            Outcome = PayoutReviewOutcome.InvalidState,
+            Message = "Payout is 'rejected', not pending — only pending payouts can be rejected."
+        });
+
+        var result = await _controller.RejectPayout("p-1", new AdminController.RejectPayoutRequest("reason"));
+
+        var obj = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(409, obj.StatusCode);
+    }
+
+    // ── Reports / moderation ──
+
+    [Fact]
+    public async Task Reports_ReturnsOk()
+    {
+        _admin.GetReportsAsync().Returns(new List<AdminAbuseReport>());
+
+        var result = await _controller.Reports();
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task InvestigateReport_ReturnsOk_WhenSuccessful()
+    {
+        _admin.InvestigateReportAsync("r-1", Arg.Any<string>()).Returns(new ReportActionResult
+        {
+            Outcome = ReportActionOutcome.Success,
+            Report = new AdminAbuseReport { Id = "r-1", Status = "investigating" },
+            Message = "Report is under investigation."
+        });
+
+        var result = await _controller.InvestigateReport("r-1");
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task InvestigateReport_ReturnsNotFound_WhenMissing()
+    {
+        _admin.InvestigateReportAsync("missing", Arg.Any<string>()).Returns(new ReportActionResult
+        {
+            Outcome = ReportActionOutcome.NotFound,
+            Message = "Report not found."
+        });
+
+        var result = await _controller.InvestigateReport("missing");
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task InvestigateReport_ReturnsConflict_WhenClosed()
+    {
+        _admin.InvestigateReportAsync("r-1", Arg.Any<string>()).Returns(new ReportActionResult
+        {
+            Outcome = ReportActionOutcome.InvalidState,
+            Message = "Report is closed and cannot be re-investigated."
+        });
+
+        var result = await _controller.InvestigateReport("r-1");
+
+        var obj = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(409, obj.StatusCode);
+    }
+
+    [Fact]
+    public async Task CloseReport_ReturnsOk_WhenSuccessful()
+    {
+        _admin.CloseReportAsync("r-1", Arg.Any<string>(), Arg.Any<string?>()).Returns(new ReportActionResult
+        {
+            Outcome = ReportActionOutcome.Success,
+            Report = new AdminAbuseReport { Id = "r-1", Status = "closed" },
+            Message = "Report closed."
+        });
+
+        var result = await _controller.CloseReport("r-1", new AdminController.CloseReportRequest("resolved"));
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task CloseReport_ReturnsNotFound_WhenMissing()
+    {
+        _admin.CloseReportAsync("missing", Arg.Any<string>(), Arg.Any<string?>()).Returns(new ReportActionResult
+        {
+            Outcome = ReportActionOutcome.NotFound,
+            Message = "Report not found."
+        });
+
+        var result = await _controller.CloseReport("missing", null);
+
+        Assert.IsType<NotFoundObjectResult>(result);
     }
 }

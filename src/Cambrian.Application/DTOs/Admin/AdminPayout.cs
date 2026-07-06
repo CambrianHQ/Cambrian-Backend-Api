@@ -15,4 +15,12 @@ public class AdminPayout
     public DateTime RequestedAt { get; set; }
 
     public DateTime? CompletedAt { get; set; }
+
+    public string? FailureReason { get; set; }
+
+    public string? ReviewedByUserId { get; set; }
+
+    public DateTime? ReviewedAt { get; set; }
+
+    public string? RejectionReason { get; set; }
 }

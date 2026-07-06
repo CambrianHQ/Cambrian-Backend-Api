@@ -24,4 +24,12 @@ public class Payout
 
     /// <summary>Stripe transfer ID persisted once completion is confirmed.</summary>
     public string? StripeTransferId { get; set; }
+
+    /// <summary>Admin user id who approved/rejected this payout, if reviewed.</summary>
+    public string? ReviewedByUserId { get; set; }
+
+    public DateTime? ReviewedAt { get; set; }
+
+    /// <summary>Reason supplied by the admin when rejecting a pending payout.</summary>
+    public string? RejectionReason { get; set; }
 }

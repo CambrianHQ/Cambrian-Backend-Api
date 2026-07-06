@@ -222,6 +222,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasKey(p => p.Id);
             e.Property(p => p.StripeIdempotencyKey).HasMaxLength(255);
             e.Property(p => p.StripeTransferId).HasMaxLength(255);
+            e.Property(p => p.ReviewedByUserId).HasMaxLength(450);
+            e.Property(p => p.RejectionReason).HasMaxLength(1000);
             e.HasIndex(p => p.StripeIdempotencyKey)
                 .IsUnique()
                 .HasFilter("\"StripeIdempotencyKey\" IS NOT NULL");
@@ -235,10 +237,14 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<AbuseReport>(e =>
         {
             e.HasKey(a => a.Id);
+            e.Property(a => a.TargetType).HasMaxLength(20).HasDefaultValue("track");
+            e.Property(a => a.TargetId).HasMaxLength(64);
+            e.Property(a => a.ReportedByUserId).HasMaxLength(450);
+            e.Property(a => a.InvestigatedByUserId).HasMaxLength(450);
             e.HasOne(a => a.Track)
                 .WithMany()
                 .HasForeignKey(a => a.TrackId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<AuditLog>(e =>
@@ -443,6 +449,12 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(t => t.ContentHash).HasDatabaseName("IX_Tracks_ContentHash");
             e.Property(t => t.Signature).HasMaxLength(200);
             e.Property(t => t.CommercialRightsVerified).HasDefaultValue(false);
+
+            // Admin editorial placement — additive, nullable/defaulted, one-way (no unfeature/unpin yet).
+            e.Property(t => t.IsFeatured).HasDefaultValue(false);
+            e.Property(t => t.FeaturedByUserId).HasMaxLength(450);
+            e.Property(t => t.IsPinned).HasDefaultValue(false);
+            e.Property(t => t.PinnedByUserId).HasMaxLength(450);
         });
 
         // ── §9 provenance + authorship (additive tables) ──

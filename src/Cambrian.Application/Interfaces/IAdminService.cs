@@ -34,4 +34,21 @@ public interface IAdminService
     Task<bool> HideTrackAsync(string trackId, string adminActor);
     Task<bool> FlagTrackAsync(string trackId, string adminActor);
     Task<bool> SetTrackVisibilityAsync(string trackId, string visibility, string adminActor);
+
+    // ── Track editorial placement ──
+    Task<bool> FeatureTrackAsync(string trackId, string adminActor);
+    Task<bool> PinTrackAsync(string trackId, string adminActor);
+
+    // ── Payout review ──
+    Task<PayoutReviewResult> ApprovePayoutAsync(string payoutId, string adminActor);
+    Task<PayoutReviewResult> RejectPayoutAsync(string payoutId, string adminActor, string rejectionReason);
+
+    // ── Reports / moderation ──
+    Task<IReadOnlyCollection<AdminAbuseReport>> GetReportsAsync();
+    Task<ReportActionResult> InvestigateReportAsync(string reportId, string adminActor);
+    Task<ReportActionResult> CloseReportAsync(string reportId, string adminActor, string? resolutionNote);
+
+    // ── Settings ──
+    Task<AdminSettingsResponse> GetSettingsAsync();
+    Task<AdminSettingsResponse> UpdateSettingsAsync(AdminSettingsUpdateRequest request, string adminActor);
 }

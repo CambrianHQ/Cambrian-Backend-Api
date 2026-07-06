@@ -285,7 +285,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
         _users.FindByIdAsync(user.Id).Returns(user);
 
         var emailService = Substitute.For<IEmailService>();
-        var repo = new AdminRepository(_db, _users, emailService);
+        var repo = new AdminRepository(_db, _users, emailService, Substitute.For<IPaymentGateway>(), Substitute.For<IFeatureFlagRepository>());
 
         // Act + Assert
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -307,7 +307,7 @@ public sealed class AuditPhase1Phase2Tests : IDisposable
         _users.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
 
         var emailService = Substitute.For<IEmailService>();
-        var repo = new AdminRepository(_db, _users, emailService);
+        var repo = new AdminRepository(_db, _users, emailService, Substitute.For<IPaymentGateway>(), Substitute.For<IFeatureFlagRepository>());
 
         var ok = await repo.SetUserRoleAsync(user.Id, "Creator", "admin@test.com");
         Assert.True(ok);

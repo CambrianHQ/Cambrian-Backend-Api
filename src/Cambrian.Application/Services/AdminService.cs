@@ -78,4 +78,47 @@ public class AdminService : IAdminService
 
     public Task<bool> SetTrackVisibilityAsync(string trackId, string visibility, string adminActor)
         => Guid.TryParse(trackId, out var id) ? _admin.SetTrackVisibilityAsync(id, visibility, adminActor) : Task.FromResult(false);
+
+    // ── Track editorial placement ──
+
+    public Task<bool> FeatureTrackAsync(string trackId, string adminActor)
+        => Guid.TryParse(trackId, out var id) ? _admin.FeatureTrackAsync(id, adminActor) : Task.FromResult(false);
+
+    public Task<bool> PinTrackAsync(string trackId, string adminActor)
+        => Guid.TryParse(trackId, out var id) ? _admin.PinTrackAsync(id, adminActor) : Task.FromResult(false);
+
+    // ── Payout review ──
+
+    public Task<PayoutReviewResult> ApprovePayoutAsync(string payoutId, string adminActor)
+        => Guid.TryParse(payoutId, out var id)
+            ? _admin.ApprovePayoutAsync(id, adminActor)
+            : Task.FromResult(new PayoutReviewResult { Outcome = PayoutReviewOutcome.NotFound, Message = "Payout not found." });
+
+    public Task<PayoutReviewResult> RejectPayoutAsync(string payoutId, string adminActor, string rejectionReason)
+        => Guid.TryParse(payoutId, out var id)
+            ? _admin.RejectPayoutAsync(id, adminActor, rejectionReason)
+            : Task.FromResult(new PayoutReviewResult { Outcome = PayoutReviewOutcome.NotFound, Message = "Payout not found." });
+
+    // ── Reports / moderation ──
+
+    public Task<IReadOnlyCollection<AdminAbuseReport>> GetReportsAsync()
+        => _admin.GetReportsAsync();
+
+    public Task<ReportActionResult> InvestigateReportAsync(string reportId, string adminActor)
+        => Guid.TryParse(reportId, out var id)
+            ? _admin.InvestigateReportAsync(id, adminActor)
+            : Task.FromResult(new ReportActionResult { Outcome = ReportActionOutcome.NotFound, Message = "Report not found." });
+
+    public Task<ReportActionResult> CloseReportAsync(string reportId, string adminActor, string? resolutionNote)
+        => Guid.TryParse(reportId, out var id)
+            ? _admin.CloseReportAsync(id, adminActor, resolutionNote)
+            : Task.FromResult(new ReportActionResult { Outcome = ReportActionOutcome.NotFound, Message = "Report not found." });
+
+    // ── Settings ──
+
+    public Task<AdminSettingsResponse> GetSettingsAsync()
+        => _admin.GetSettingsAsync();
+
+    public Task<AdminSettingsResponse> UpdateSettingsAsync(AdminSettingsUpdateRequest request, string adminActor)
+        => _admin.UpdateSettingsAsync(request, adminActor);
 }

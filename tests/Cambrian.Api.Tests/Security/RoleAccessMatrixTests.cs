@@ -88,6 +88,31 @@ public sealed class RoleAccessMatrixTests : IClassFixture<CambrianApiFixture>
     }
 
     [Fact]
+    public async Task AdminPayoutApprove_Is_Admin_Only()
+    {
+        using var user = await CreateUserClientAsync();
+        using var creator = await CreateCreatorClientAsync();
+
+        // A non-existent payout id is fine here — role enforcement must reject
+        // before the handler ever looks up the payout.
+        var fakePayoutId = Guid.NewGuid();
+        Assert.Equal(HttpStatusCode.Forbidden, (await user.PostAsync($"/admin/payouts/{fakePayoutId}/approve", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await creator.PostAsync($"/admin/payouts/{fakePayoutId}/approve", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminReports_Is_Admin_Only()
+    {
+        using var user = await CreateUserClientAsync();
+        using var creator = await CreateCreatorClientAsync();
+        using var admin = await CreateAdminClientAsync();
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync("/admin/reports")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await creator.GetAsync("/admin/reports")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/admin/reports")).StatusCode);
+    }
+
+    [Fact]
     public async Task SubscriptionsCurrent_Is_Accessible_To_Authenticated_Roles()
     {
         using var user = await CreateUserClientAsync();

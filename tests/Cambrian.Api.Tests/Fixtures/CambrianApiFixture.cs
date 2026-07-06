@@ -417,6 +417,60 @@ public class CambrianApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         return id;
     }
 
+    /// <summary>Set a user's connected Stripe account id (payout-eligibility precondition).</summary>
+    public async Task SetStripeAccountIdAsync(string email, string stripeAccountId = "acct_fake_123")
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var user = await db.Users.FirstAsync(u => u.Email == email);
+        user.StripeAccountId = stripeAccountId;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Seed a Payout directly into the database and return its id.</summary>
+    public async Task<Guid> SeedPayoutAsync(string creatorId, int amountCents = 5000, string status = "pending")
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var payoutId = Guid.NewGuid();
+        db.Payouts.Add(new Payout
+        {
+            Id = payoutId,
+            CreatorId = creatorId,
+            AmountCents = amountCents,
+            Status = status,
+            RequestedAt = DateTime.UtcNow,
+            StripeIdempotencyKey = $"cambrian-payout-{payoutId:N}",
+        });
+        await db.SaveChangesAsync();
+        return payoutId;
+    }
+
+    /// <summary>Seed an AbuseReport directly into the database and return its id.</summary>
+    public async Task<Guid> SeedAbuseReportAsync(
+        Guid? trackId = null,
+        string reason = "Copyright infringement",
+        string status = "open",
+        string targetType = "track")
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var reportId = Guid.NewGuid();
+        db.AbuseReports.Add(new AbuseReport
+        {
+            Id = reportId,
+            TrackId = trackId,
+            TargetType = targetType,
+            TargetId = trackId?.ToString(),
+            Reason = reason,
+            Status = status,
+            ReportedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return reportId;
+    }
+
     /// <summary>Seed a track with the UUID-based CreatorUuid FK set.</summary>
     public async Task<Guid> SeedTrackWithCreatorUuidAsync(string creatorUserId, Guid creatorUuid, string title = "Test Beat", string visibility = "public")
     {

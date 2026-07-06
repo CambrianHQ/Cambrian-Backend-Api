@@ -23,4 +23,12 @@ public class AdminTrack
     public int CopyrightBuyoutPriceCents { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public bool IsFeatured { get; set; }
+
+    public DateTime? FeaturedAt { get; set; }
+
+    public bool IsPinned { get; set; }
+
+    public DateTime? PinnedAt { get; set; }
 }

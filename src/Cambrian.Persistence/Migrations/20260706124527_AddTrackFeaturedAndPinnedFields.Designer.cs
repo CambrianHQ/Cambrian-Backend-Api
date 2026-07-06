@@ -3,6 +3,7 @@ using System;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cambrian.Persistence.Migrations
 {
     [DbContext(typeof(CambrianDbContext))]
-    partial class CambrianDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260706124527_AddTrackFeaturedAndPinnedFields")]
+    partial class AddTrackFeaturedAndPinnedFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -28,16 +31,6 @@ namespace Cambrian.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Details")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("InvestigatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("InvestigatedByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasColumnType("text");
@@ -46,32 +39,14 @@ namespace Cambrian.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ReportedByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<string>("ResolutionNote")
                         .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("TargetId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("TargetType")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("track");
-
-                    b.Property<Guid?>("TrackId")
+                    b.Property<Guid>("TrackId")
                         .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -2231,7 +2206,8 @@ namespace Cambrian.Persistence.Migrations
                     b.HasOne("Cambrian.Domain.Entities.Track", "Track")
                         .WithMany()
                         .HasForeignKey("TrackId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Track");
                 });

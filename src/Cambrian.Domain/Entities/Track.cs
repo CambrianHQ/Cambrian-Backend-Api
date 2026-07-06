@@ -120,4 +120,18 @@ public class Track
 
     /// <summary>Computed trending score; default 0; never required for existing tracks.</summary>
     public decimal TrendingScore { get; set; }
+
+    /// <summary>Editorial "featured" placement set by an admin. One-way (no unfeature action yet).</summary>
+    public bool IsFeatured { get; set; }
+
+    public DateTime? FeaturedAt { get; set; }
+
+    public string? FeaturedByUserId { get; set; }
+
+    /// <summary>Editorial "pinned" placement set by an admin. One-way (no unpin action yet).</summary>
+    public bool IsPinned { get; set; }
+
+    public DateTime? PinnedAt { get; set; }
+
+    public string? PinnedByUserId { get; set; }
 }

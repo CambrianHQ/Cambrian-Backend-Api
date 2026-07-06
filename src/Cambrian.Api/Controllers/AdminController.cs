@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Application.Configuration;
+using Cambrian.Application.DTOs.Admin;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Options;
@@ -146,27 +147,32 @@ public class AdminController : BaseController
     }
 
     [HttpGet("settings")]
-    public IActionResult GetSettings()
+    public async Task<IActionResult> GetSettings()
     {
-        var free = TierManifest.Free;
-        var pro = TierManifest.Pro;
-        return OkResponse(new
-        {
-            freeTierFeePercent = (double)free.FeeRate,
-            proTierFeePercent = (double)pro.FeeRate,
-            proTierPriceCents = pro.PriceCents,
-            freeTierUploadLimit = free.UploadLimit,
-            proTierUploadLimit = pro.UploadLimit,
-            featureToggles = new { payoutsEnabled = true, moderationEnabled = true, marketplaceEnabled = true }
-        });
+        var settings = await _admin.GetSettingsAsync();
+        return OkResponse(settings);
     }
 
+    public record UpdateSettingsRequest(
+        bool PayoutsEnabled,
+        bool ModerationEnabled,
+        bool MarketplaceEnabled,
+        bool AllowExclusiveListings,
+        bool RequireTrackReview);
+
     [HttpPost("settings")]
-    public IActionResult UpdateSettings()
+    public async Task<IActionResult> UpdateSettings([FromBody] UpdateSettingsRequest body)
     {
-        // Settings are read-only compile-time constants (TierManifest).
-        // Accept the request and return success — no persistence needed for MVP.
-        return MessageResponse("Settings saved.");
+        _logger.LogInformation("[Admin] UpdateSettings by {Actor}", GetAdminActor());
+        var updated = await _admin.UpdateSettingsAsync(new AdminSettingsUpdateRequest
+        {
+            PayoutsEnabled = body.PayoutsEnabled,
+            ModerationEnabled = body.ModerationEnabled,
+            MarketplaceEnabled = body.MarketplaceEnabled,
+            AllowExclusiveListings = body.AllowExclusiveListings,
+            RequireTrackReview = body.RequireTrackReview,
+        }, GetAdminActor());
+        return OkResponse(updated, "Settings saved.");
     }
 
     // --- Payout management ---
@@ -188,6 +194,38 @@ public class AdminController : BaseController
             if (p.Status == "pending") pending.Add(p);
         }
         return OkResponse(pending);
+    }
+
+    [HttpPost("payouts/{id}/approve")]
+    public async Task<IActionResult> ApprovePayout(string id)
+    {
+        _logger.LogInformation("[Admin] ApprovePayout id={PayoutId} by {Actor}", id, GetAdminActor());
+        var result = await _admin.ApprovePayoutAsync(id, GetAdminActor());
+        return result.Outcome switch
+        {
+            PayoutReviewOutcome.NotFound => NotFoundResponse(result.Message),
+            PayoutReviewOutcome.InvalidState => ConflictResponse(result.Message),
+            PayoutReviewOutcome.ApprovalRetryFailed => OkResponse(new { success = false, payout = result.Payout }, result.Message),
+            _ => OkResponse(new { success = true, payout = result.Payout }, result.Message),
+        };
+    }
+
+    public record RejectPayoutRequest(string Reason);
+
+    [HttpPost("payouts/{id}/reject")]
+    public async Task<IActionResult> RejectPayout(string id, [FromBody] RejectPayoutRequest? body)
+    {
+        if (string.IsNullOrWhiteSpace(body?.Reason))
+            return ErrorResponse("A rejection reason is required.");
+
+        _logger.LogInformation("[Admin] RejectPayout id={PayoutId} by {Actor}", id, GetAdminActor());
+        var result = await _admin.RejectPayoutAsync(id, GetAdminActor(), body.Reason);
+        return result.Outcome switch
+        {
+            PayoutReviewOutcome.NotFound => NotFoundResponse(result.Message),
+            PayoutReviewOutcome.InvalidState => ConflictResponse(result.Message),
+            _ => OkResponse(new { success = true, payout = result.Payout }, result.Message),
+        };
     }
 
     // --- User management ---
@@ -297,15 +335,38 @@ public class AdminController : BaseController
     // --- Content moderation ---
 
     [HttpGet("reports")]
-    public IActionResult Reports()
+    public async Task<IActionResult> Reports()
     {
-        return OkResponse(Array.Empty<object>());
+        var reports = await _admin.GetReportsAsync();
+        return OkResponse(reports);
     }
 
     [HttpPost("reports/{id}/investigate")]
-    public IActionResult InvestigateReport(string id)
+    public async Task<IActionResult> InvestigateReport(string id)
     {
-        return OkResponse(new { success = true, message = "Report under investigation." });
+        _logger.LogInformation("[Admin] InvestigateReport id={ReportId} by {Actor}", id, GetAdminActor());
+        var result = await _admin.InvestigateReportAsync(id, GetAdminActor());
+        return result.Outcome switch
+        {
+            ReportActionOutcome.NotFound => NotFoundResponse(result.Message),
+            ReportActionOutcome.InvalidState => ConflictResponse(result.Message),
+            _ => OkResponse(new { success = true, report = result.Report }, result.Message),
+        };
+    }
+
+    public record CloseReportRequest(string? ResolutionNote);
+
+    [HttpPost("reports/{id}/close")]
+    public async Task<IActionResult> CloseReport(string id, [FromBody] CloseReportRequest? body)
+    {
+        _logger.LogInformation("[Admin] CloseReport id={ReportId} by {Actor}", id, GetAdminActor());
+        var result = await _admin.CloseReportAsync(id, GetAdminActor(), body?.ResolutionNote);
+        return result.Outcome switch
+        {
+            ReportActionOutcome.NotFound => NotFoundResponse(result.Message),
+            ReportActionOutcome.InvalidState => ConflictResponse(result.Message),
+            _ => OkResponse(new { success = true, report = result.Report }, result.Message),
+        };
     }
 
     [HttpPost("tracks/{id}/remove")]
@@ -345,15 +406,21 @@ public class AdminController : BaseController
     }
 
     [HttpPost("tracks/{id}/feature")]
-    public IActionResult FeatureTrack(string id)
+    public async Task<IActionResult> FeatureTrack(string id)
     {
-        return StatusCode(501, new { error = "Featured track placement is not yet implemented." });
+        _logger.LogInformation("[Admin] FeatureTrack id={TrackId}", id);
+        var ok = await _admin.FeatureTrackAsync(id, GetAdminActor());
+        if (!ok) return NotFoundResponse(MsgTrackNotFound);
+        return OkResponse(new { success = true, message = "Track featured." });
     }
 
     [HttpPost("tracks/{id}/pin")]
-    public IActionResult PinTrack(string id)
+    public async Task<IActionResult> PinTrack(string id)
     {
-        return StatusCode(501, new { error = "Track pinning is not yet implemented." });
+        _logger.LogInformation("[Admin] PinTrack id={TrackId}", id);
+        var ok = await _admin.PinTrackAsync(id, GetAdminActor());
+        if (!ok) return NotFoundResponse(MsgTrackNotFound);
+        return OkResponse(new { success = true, message = "Track pinned." });
     }
 
     private static readonly HashSet<string> AllowedVisibilities = new(StringComparer.OrdinalIgnoreCase)
