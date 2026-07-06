@@ -3,6 +3,7 @@ using System;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cambrian.Persistence.Migrations
 {
     [DbContext(typeof(CambrianDbContext))]
-    partial class CambrianDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260706022939_AddBehindTheTrackDetailsAndProofVideos")]
+    partial class AddBehindTheTrackDetailsAndProofVideos
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1887,9 +1890,6 @@ namespace Cambrian.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool?>("IsExplicit")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("Language")
                         .IsRequired()

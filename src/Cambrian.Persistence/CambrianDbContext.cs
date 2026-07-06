@@ -53,6 +53,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<TrackCreationProcess> TrackCreationProcesses => Set<TrackCreationProcess>();
 
+    public DbSet<TrackVideoProof> TrackVideoProofs => Set<TrackVideoProof>();
+
     public DbSet<CreatorFollow> CreatorFollows => Set<CreatorFollow>();
 
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
@@ -387,6 +389,11 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(cp => cp.Story).HasMaxLength(5000);
             e.Property(cp => cp.YoutubeUrl).HasMaxLength(500);
             e.Property(cp => cp.ToolsUsed).HasMaxLength(2000);
+            e.Property(cp => cp.DAW).HasMaxLength(200);
+            e.Property(cp => cp.VocalChain).HasMaxLength(2000);
+            e.Property(cp => cp.PromptNotes).HasMaxLength(5000);
+            e.Property(cp => cp.ProductionNotes).HasMaxLength(5000);
+            e.Property(cp => cp.HumanContributionNotes).HasMaxLength(5000);
         });
 
         builder.Entity<ApplicationUser>(e =>
@@ -449,6 +456,9 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         // ── §9 provenance + authorship (additive tables) ──
         builder.ApplyConfiguration(new ProvenanceAnchorConfiguration());
         builder.ApplyConfiguration(new TrackAuthorshipConfiguration());
+
+        // ── Behind The Track: proof videos (additive table) ──
+        builder.ApplyConfiguration(new TrackVideoProofConfiguration());
 
         // ── Release Ready mastering ──
         builder.ApplyConfiguration(new MasteringJobConfiguration());

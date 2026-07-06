@@ -65,7 +65,16 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         return entity is null ? null : MapProcess(entity);
     }
 
-    public async Task<BehindTheTrackDto> UpsertCreationProcessAsync(Guid trackId, string? story, string? youtubeUrl, IReadOnlyList<string> toolsUsed)
+    public async Task<BehindTheTrackDto> UpsertCreationProcessAsync(
+        Guid trackId,
+        string? story,
+        string? daw,
+        string? vocalChain,
+        string? promptNotes,
+        string? productionNotes,
+        string? humanContributionNotes,
+        string? youtubeUrl,
+        IReadOnlyList<string> toolsUsed)
     {
         var toolsJson = toolsUsed.Count > 0 ? JsonSerializer.Serialize(toolsUsed) : null;
         var existing = await _db.TrackCreationProcesses.FindAsync(trackId);
@@ -75,6 +84,11 @@ public class TrackDetailsRepository : ITrackDetailsRepository
             {
                 TrackId = trackId,
                 Story = story,
+                DAW = daw,
+                VocalChain = vocalChain,
+                PromptNotes = promptNotes,
+                ProductionNotes = productionNotes,
+                HumanContributionNotes = humanContributionNotes,
                 YoutubeUrl = youtubeUrl,
                 ToolsUsed = toolsJson,
                 CreatedAt = DateTime.UtcNow,
@@ -85,6 +99,11 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         else
         {
             existing.Story = story;
+            existing.DAW = daw;
+            existing.VocalChain = vocalChain;
+            existing.PromptNotes = promptNotes;
+            existing.ProductionNotes = productionNotes;
+            existing.HumanContributionNotes = humanContributionNotes;
             existing.YoutubeUrl = youtubeUrl;
             existing.ToolsUsed = toolsJson;
             existing.UpdatedAt = DateTime.UtcNow;
@@ -102,6 +121,80 @@ public class TrackDetailsRepository : ITrackDetailsRepository
             _db.TrackCreationProcesses.Remove(existing);
             await _db.SaveChangesAsync();
         }
+    }
+
+    public async Task<IReadOnlyList<TrackVideoProofDto>> GetProofVideosAsync(Guid trackId, bool includeHidden)
+    {
+        var query = _db.TrackVideoProofs.AsNoTracking().Where(v => v.TrackId == trackId);
+        if (!includeHidden)
+            query = query.Where(v => v.Visibility == "public");
+
+        var videos = await query.OrderBy(v => v.SortOrder).ThenBy(v => v.CreatedAt).ToListAsync();
+        return videos.Select(MapProofVideo).ToList();
+    }
+
+    public async Task<TrackVideoProofDto?> GetProofVideoAsync(Guid trackId, Guid videoId)
+    {
+        var entity = await _db.TrackVideoProofs.AsNoTracking()
+            .FirstOrDefaultAsync(v => v.TrackId == trackId && v.Id == videoId);
+        return entity is null ? null : MapProofVideo(entity);
+    }
+
+    public async Task<TrackVideoProofDto> AddProofVideoAsync(
+        Guid trackId, string videoType, string url, string? title, string? description, int sortOrder, string visibility)
+    {
+        var entity = new TrackVideoProof
+        {
+            Id = Guid.NewGuid(),
+            TrackId = trackId,
+            VideoType = videoType,
+            Url = url,
+            Title = title,
+            Description = description,
+            SortOrder = sortOrder,
+            Visibility = visibility,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        _db.TrackVideoProofs.Add(entity);
+        await _db.SaveChangesAsync();
+        return MapProofVideo(entity);
+    }
+
+    public async Task<TrackVideoProofDto?> UpdateProofVideoAsync(
+        Guid trackId, Guid videoId, string? videoType, string? url, string? title, string? description, int? sortOrder, string? visibility)
+    {
+        var existing = await _db.TrackVideoProofs.FirstOrDefaultAsync(v => v.TrackId == trackId && v.Id == videoId);
+        if (existing is null) return null;
+
+        if (videoType is not null) existing.VideoType = videoType;
+        if (url is not null) existing.Url = url;
+        if (title is not null) existing.Title = title.Length == 0 ? null : title;
+        if (description is not null) existing.Description = description.Length == 0 ? null : description;
+        if (sortOrder.HasValue) existing.SortOrder = sortOrder.Value;
+        if (visibility is not null) existing.Visibility = visibility;
+        existing.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+        return MapProofVideo(existing);
+    }
+
+    public async Task<bool> DeleteProofVideoAsync(Guid trackId, Guid videoId)
+    {
+        var existing = await _db.TrackVideoProofs.FirstOrDefaultAsync(v => v.TrackId == trackId && v.Id == videoId);
+        if (existing is null) return false;
+
+        _db.TrackVideoProofs.Remove(existing);
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<int> GetNextProofVideoSortOrderAsync(Guid trackId)
+    {
+        var max = await _db.TrackVideoProofs.Where(v => v.TrackId == trackId)
+            .Select(v => (int?)v.SortOrder)
+            .MaxAsync();
+        return (max ?? -1) + 1;
     }
 
     private static TrackLyricsDto MapLyrics(TrackLyrics l) => new()
@@ -127,10 +220,29 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         {
             TrackId = p.TrackId.ToString(),
             Story = p.Story,
+            DAW = p.DAW,
+            VocalChain = p.VocalChain,
+            PromptNotes = p.PromptNotes,
+            ProductionNotes = p.ProductionNotes,
+            HumanContributionNotes = p.HumanContributionNotes,
             YoutubeUrl = p.YoutubeUrl,
             ToolsUsed = tools,
             CreatedAt = p.CreatedAt,
             UpdatedAt = p.UpdatedAt,
         };
     }
+
+    private static TrackVideoProofDto MapProofVideo(TrackVideoProof v) => new()
+    {
+        Id = v.Id.ToString(),
+        TrackId = v.TrackId.ToString(),
+        VideoType = v.VideoType,
+        Url = v.Url,
+        Title = v.Title,
+        Description = v.Description,
+        SortOrder = v.SortOrder,
+        Visibility = v.Visibility,
+        CreatedAt = v.CreatedAt,
+        UpdatedAt = v.UpdatedAt,
+    };
 }
