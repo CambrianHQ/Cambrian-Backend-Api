@@ -1,6 +1,6 @@
 namespace Cambrian.Application.AI.Discovery.Dtos;
 
-public class AiLicenseSummaryDto
+public class AiLicenseSummary
 {
     public decimal StartingPrice { get; set; }
     public string Currency { get; set; } = "USD";

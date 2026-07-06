@@ -21,9 +21,9 @@ public class CambrianMcpToolsTests
     public async Task SearchTracks_ReturnsValidJson()
     {
         _discovery.SearchAsync(Arg.Any<Application.AI.Discovery.Queries.SearchTracksQuery>())
-            .Returns(new AiTrackSearchResponseDto
+            .Returns(new AiTrackSearchResponse
             {
-                Results = new List<AiTrackSearchResultDto>
+                Results = new List<AiTrackSearchResult>
                 {
                     new()
                     {
@@ -36,7 +36,7 @@ public class CambrianMcpToolsTests
                 Page = 1,
                 PageSize = 10,
                 TotalCount = 1,
-                QuerySummary = new AiQuerySummaryDto { Intent = "test search" }
+                QuerySummary = new AiQuerySummary { Intent = "test search" }
             });
 
         var json = await CambrianMcpTools.SearchTracks(
@@ -56,7 +56,7 @@ public class CambrianMcpToolsTests
         Application.AI.Discovery.Queries.SearchTracksQuery? captured = null;
 
         _discovery.SearchAsync(Arg.Do<Application.AI.Discovery.Queries.SearchTracksQuery>(q => captured = q))
-            .Returns(new AiTrackSearchResponseDto());
+            .Returns(new AiTrackSearchResponse());
 
         await CambrianMcpTools.SearchTracks(
             _discovery,
@@ -96,7 +96,7 @@ public class CambrianMcpToolsTests
         Application.AI.Discovery.Queries.SearchTracksQuery? captured = null;
 
         _discovery.SearchAsync(Arg.Do<Application.AI.Discovery.Queries.SearchTracksQuery>(q => captured = q))
-            .Returns(new AiTrackSearchResponseDto());
+            .Returns(new AiTrackSearchResponse());
 
         await CambrianMcpTools.SearchTracks(_discovery, pageSize: 999);
 
@@ -110,7 +110,7 @@ public class CambrianMcpToolsTests
         Application.AI.Discovery.Queries.SearchTracksQuery? captured = null;
 
         _discovery.SearchAsync(Arg.Do<Application.AI.Discovery.Queries.SearchTracksQuery>(q => captured = q))
-            .Returns(new AiTrackSearchResponseDto());
+            .Returns(new AiTrackSearchResponse());
 
         await CambrianMcpTools.SearchTracks(_discovery);
 
@@ -128,7 +128,7 @@ public class CambrianMcpToolsTests
     public async Task GetTrackDetails_ReturnsTrackJson()
     {
         _discovery.GetTrackDetailsAsync("CAMB-TRK-TEST0001")
-            .Returns(new AiTrackDetailsDto
+            .Returns(new AiTrackDetails
             {
                 TrackId = "CAMB-TRK-TEST0001",
                 Title = "Detail Track",
@@ -146,7 +146,7 @@ public class CambrianMcpToolsTests
     public async Task GetTrackDetails_NotFound_ReturnsErrorJson()
     {
         _discovery.GetTrackDetailsAsync("CAMB-TRK-MISSING")
-            .Returns((AiTrackDetailsDto?)null);
+            .Returns((AiTrackDetails?)null);
 
         var json = await CambrianMcpTools.GetTrackDetails(_discovery, "CAMB-TRK-MISSING");
         var doc = JsonDocument.Parse(json);
@@ -160,7 +160,7 @@ public class CambrianMcpToolsTests
     public async Task GetTrackPreview_ReturnsPreviewJson()
     {
         _discovery.GetPreviewAsync("CAMB-TRK-TEST0001")
-            .Returns(new AiTrackPreviewDto
+            .Returns(new AiTrackPreview
             {
                 Available = true,
                 Url = "https://cdn.example.com/audio/test.mp3",
@@ -179,7 +179,7 @@ public class CambrianMcpToolsTests
     public async Task GetTrackPreview_NullUrl_ProducesSafeOutput()
     {
         _discovery.GetPreviewAsync("CAMB-TRK-NOAUDIO")
-            .Returns(new AiTrackPreviewDto
+            .Returns(new AiTrackPreview
             {
                 Available = false,
                 Url = null,
@@ -198,7 +198,7 @@ public class CambrianMcpToolsTests
     public async Task GetTrackPreview_NotFound_ReturnsErrorJson()
     {
         _discovery.GetPreviewAsync("CAMB-TRK-GONE")
-            .Returns((AiTrackPreviewDto?)null);
+            .Returns((AiTrackPreview?)null);
 
         var json = await CambrianMcpTools.GetTrackPreview(_discovery, "CAMB-TRK-GONE");
         var doc = JsonDocument.Parse(json);
@@ -212,7 +212,7 @@ public class CambrianMcpToolsTests
     public async Task GetCreatorProfile_ReturnsProfileJson()
     {
         _discovery.GetCreatorProfileAsync("creator123")
-            .Returns(new AiCreatorProfileDto
+            .Returns(new AiCreatorProfile
             {
                 CreatorId = "creator123",
                 DisplayName = "DJ Test",
@@ -232,7 +232,7 @@ public class CambrianMcpToolsTests
     public async Task GetCreatorProfile_NotFound_ReturnsErrorJson()
     {
         _discovery.GetCreatorProfileAsync("nobody")
-            .Returns((AiCreatorProfileDto?)null);
+            .Returns((AiCreatorProfile?)null);
 
         var json = await CambrianMcpTools.GetCreatorProfile(_discovery, "nobody");
         var doc = JsonDocument.Parse(json);
@@ -246,13 +246,13 @@ public class CambrianMcpToolsTests
     public async Task AllTools_ProduceCamelCaseJson()
     {
         _discovery.SearchAsync(Arg.Any<Application.AI.Discovery.Queries.SearchTracksQuery>())
-            .Returns(new AiTrackSearchResponseDto
+            .Returns(new AiTrackSearchResponse
             {
-                Results = new List<AiTrackSearchResultDto>
+                Results = new List<AiTrackSearchResult>
                 {
                     new() { TrackId = "T1", Title = "X", FitConfidence = "low" }
                 },
-                QuerySummary = new AiQuerySummaryDto { Intent = "test" }
+                QuerySummary = new AiQuerySummary { Intent = "test" }
             });
 
         var json = await CambrianMcpTools.SearchTracks(_discovery, query: "x");
@@ -269,7 +269,7 @@ public class CambrianMcpToolsTests
     public async Task AllTools_ProduceIndentedJson()
     {
         _discovery.GetTrackDetailsAsync("T1")
-            .Returns(new AiTrackDetailsDto { TrackId = "T1", Title = "X" });
+            .Returns(new AiTrackDetails { TrackId = "T1", Title = "X" });
 
         var json = await CambrianMcpTools.GetTrackDetails(_discovery, "T1");
 

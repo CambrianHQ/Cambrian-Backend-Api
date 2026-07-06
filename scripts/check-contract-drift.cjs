@@ -43,6 +43,18 @@ function parseControllerActions(filePath) {
     const actionPath = attrMatch[2] || "";
     let methodLine = i + 1;
     while (methodLine < lines.length && !/public\s+.*\(/.test(lines[methodLine])) methodLine++;
+
+    // Attributes on an action are stacked directly above the method signature, in any
+    // order, so scan the whole contiguous attribute block (not just the Http* line) for
+    // [ApiExplorerSettings]/[ProducesResponseType] — both can appear before or after Http*.
+    let attrBlockStart = i;
+    while (attrBlockStart > 0 && /^\s*\[.*\]\s*$/.test(lines[attrBlockStart - 1])) attrBlockStart--;
+    const attrBlock = lines.slice(attrBlockStart, methodLine).join("\n");
+
+    // Routes hidden from the public API surface (internal/local-dev proxies, deploy
+    // gates) are intentionally absent from openapi.v1.json — mirrors validate-contracts.cjs.
+    if (/\[ApiExplorerSettings\s*\(\s*IgnoreApi\s*=\s*true\s*\)\]/i.test(attrBlock)) continue;
+
     const bodyStart = methodLine;
     let bodyEnd = bodyStart;
     let braceDepth = 0;
@@ -70,6 +82,14 @@ function parseControllerActions(filePath) {
     else if (/NoContent\(/.test(body)) successCode = 204;
     else if (/StatusCode\(501/.test(body)) successCode = 501;
     else if (/StatusCode\(403/.test(body) && !/OkResponse\(|MessageResponse\(|CreatedResponse\(|NoContent\(/.test(body)) successCode = 403;
+    else if (/\bAccepted\(/.test(body) && !/OkResponse\(/.test(body)) successCode = 202;
+
+    // An explicit [ProducesResponseType(..., StatusCodes.StatusXxx)] documenting a 2xx
+    // code is the author's stated intent — trust it over the body-shape guess above.
+    const declared2xx = [...attrBlock.matchAll(/ProducesResponseType\([^)]*StatusCodes\.Status(\d{3})\w*\)/g)]
+      .map((m) => Number(m[1]))
+      .find((code) => code >= 200 && code < 300);
+    if (declared2xx) successCode = declared2xx;
 
     if (/MessageResponse\(/.test(body)) envelope = "message";
     else if (/NoContent\(/.test(body)) envelope = "none";
@@ -124,16 +144,20 @@ for (const action of controllerActions) {
     report(`Status-code parity drift: ${key} controller=${action.successCode} openapi=${openApiSuccess}`);
   }
 
+  // Most actions return IActionResult with no [ProducesResponseType], so Swashbuckle has
+  // nothing to introspect and emits a bare "200: OK" with no response body schema at all.
+  // That's undocumented, not conflicting — only compare envelopes when openapi.v1.json
+  // actually documents a response schema to compare against.
   const schema = operation?.responses?.[openApiSuccess]?.content?.["application/json"]?.schema;
-  let openApiEnvelope = "none";
-  const ref = schema?.$ref || "";
-  if (action.successCode !== 204) {
+  if (schema && action.successCode !== 204) {
+    const ref = schema.$ref || "";
+    let openApiEnvelope = "data";
     if (ref.endsWith("ApiResponseOfMessage")) openApiEnvelope = "message";
-    else if (schema?.properties?.data || ref.includes("ApiResponse")) openApiEnvelope = "data";
-    else openApiEnvelope = "data";
-  }
-  if (openApiEnvelope !== action.envelope) {
-    report(`Envelope schema parity drift: ${key} controller=${action.envelope} openapi=${openApiEnvelope}`);
+    else if (schema.properties?.data || ref.includes("ApiResponse")) openApiEnvelope = "data";
+
+    if (openApiEnvelope !== action.envelope) {
+      report(`Envelope schema parity drift: ${key} controller=${action.envelope} openapi=${openApiEnvelope}`);
+    }
   }
 }
 

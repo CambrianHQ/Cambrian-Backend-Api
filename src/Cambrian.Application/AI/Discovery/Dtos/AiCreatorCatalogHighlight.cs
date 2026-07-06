@@ -1,6 +1,6 @@
 namespace Cambrian.Application.AI.Discovery.Dtos;
 
-public class AiCreatorCatalogHighlightDto
+public class AiCreatorCatalogHighlight
 {
     public string TrackId { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;

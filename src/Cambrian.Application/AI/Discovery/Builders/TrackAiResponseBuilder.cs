@@ -10,7 +10,7 @@ namespace Cambrian.Application.AI.Discovery.Builders;
 /// </summary>
 public static class TrackAiResponseBuilder
 {
-    public static AiTrackSearchResultDto Build(
+    public static AiTrackSearchResult Build(
         Track track,
         double score,
         SearchTracksQuery query,
@@ -27,7 +27,7 @@ public static class TrackAiResponseBuilder
             ? track.UseCase
             : query.UseCase ?? "general";
 
-        return new AiTrackSearchResultDto
+        return new AiTrackSearchResult
         {
             TrackId = track.CambrianTrackId,
             Title = track.Title,
@@ -44,11 +44,11 @@ public static class TrackAiResponseBuilder
         };
     }
 
-    public static AiTrackDetailsDto BuildDetails(
+    public static AiTrackDetails BuildDetails(
         Track track,
         ApplicationUser? creator)
     {
-        return new AiTrackDetailsDto
+        return new AiTrackDetails
         {
             TrackId = track.CambrianTrackId,
             Title = track.Title,
@@ -64,15 +64,15 @@ public static class TrackAiResponseBuilder
         };
     }
 
-    public static List<AiLicenseOptionDto> BuildLicenseOptions(Track track)
+    public static List<AiLicenseOption> BuildLicenseOptions(Track track)
     {
-        var options = new List<AiLicenseOptionDto>();
+        var options = new List<AiLicenseOption>();
 
         var nonExCents = track.NonExclusivePriceCents > 0
             ? track.NonExclusivePriceCents
             : (int)(track.Price * 100);
 
-        options.Add(new AiLicenseOptionDto
+        options.Add(new AiLicenseOption
         {
             DisplayName = "Standard Usage",
             Price = nonExCents / 100m,
@@ -104,7 +104,7 @@ public static class TrackAiResponseBuilder
         return options;
     }
 
-    public static AiQuerySummaryDto BuildQuerySummary(SearchTracksQuery query, int resultCount)
+    public static AiQuerySummary BuildQuerySummary(SearchTracksQuery query, int resultCount)
     {
         var matchedOn = new List<string>();
 
@@ -121,7 +121,7 @@ public static class TrackAiResponseBuilder
         var intent = BuildInterpretedIntent(query);
         var notes = resultCount == 0 ? "No tracks matched current filters. Try broadening your search." : null;
 
-        return new AiQuerySummaryDto
+        return new AiQuerySummary
         {
             Intent = intent,
             MatchedOn = matchedOn,
@@ -131,7 +131,7 @@ public static class TrackAiResponseBuilder
 
     // ── Private builders ──
 
-    private static AiCreatorSummaryDto BuildCreatorSummary(
+    private static AiCreatorSummary BuildCreatorSummary(
         Track track, ApplicationUser? creator)
     {
         var displayName = !string.IsNullOrWhiteSpace(track.CreatorEntity?.DisplayName)
@@ -140,7 +140,7 @@ public static class TrackAiResponseBuilder
               ?? creator?.DisplayName
               ?? "Unknown Artist";
 
-        return new AiCreatorSummaryDto
+        return new AiCreatorSummary
         {
             CreatorId = track.CreatorId,
             DisplayName = displayName,
@@ -148,12 +148,12 @@ public static class TrackAiResponseBuilder
         };
     }
 
-    private static AiTrackAttributesDto BuildAttributes(Track track)
+    private static AiTrackAttributes BuildAttributes(Track track)
     {
         var moods = new List<string>();
         if (!string.IsNullOrEmpty(track.Mood)) moods.Add(track.Mood);
 
-        return new AiTrackAttributesDto
+        return new AiTrackAttributes
         {
             Genre = track.Genre,
             Moods = moods,
@@ -165,7 +165,7 @@ public static class TrackAiResponseBuilder
         };
     }
 
-    public static AiTrackPreviewDto BuildPreview(Track track) => new()
+    public static AiTrackPreview BuildPreview(Track track) => new()
     {
         Available = !string.IsNullOrEmpty(track.AudioUrl),
         // Never expose the raw object-storage key (e.g. "tracks/{creator}/{guid}.mp3") — it
@@ -176,7 +176,7 @@ public static class TrackAiResponseBuilder
         Format = InferFormat(track.AudioUrl)
     };
 
-    private static AiLicenseSummaryDto BuildLicenseSummary(Track track)
+    private static AiLicenseSummary BuildLicenseSummary(Track track)
     {
         var options = BuildLicenseOptions(track);
         var cheapest = options.MinBy(o => o.Price) ?? options.FirstOrDefault();
@@ -188,7 +188,7 @@ public static class TrackAiResponseBuilder
         // Clarity: 1.0 when prices are set and options are clear
         var clarity = options.Count > 0 && cheapest?.Price > 0 ? 1.0 : 0.5;
 
-        return new AiLicenseSummaryDto
+        return new AiLicenseSummary
         {
             StartingPrice = cheapest?.Price ?? 0,
             Currency = "USD",
