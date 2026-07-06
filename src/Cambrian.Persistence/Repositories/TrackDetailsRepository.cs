@@ -21,7 +21,7 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         return entity is null ? null : MapLyrics(entity);
     }
 
-    public async Task<TrackLyricsDto> UpsertLyricsAsync(Guid trackId, string lyrics, string language)
+    public async Task<TrackLyricsDto> UpsertLyricsAsync(Guid trackId, string lyrics, string language, bool? isExplicit)
     {
         var existing = await _db.TrackLyrics.FindAsync(trackId);
         if (existing is null)
@@ -31,6 +31,7 @@ public class TrackDetailsRepository : ITrackDetailsRepository
                 TrackId = trackId,
                 Lyrics = lyrics,
                 Language = language,
+                IsExplicit = isExplicit,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             };
@@ -40,6 +41,7 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         {
             existing.Lyrics = lyrics;
             existing.Language = language;
+            existing.IsExplicit = isExplicit;
             existing.UpdatedAt = DateTime.UtcNow;
         }
 
@@ -107,6 +109,7 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         TrackId = l.TrackId.ToString(),
         Lyrics = l.Lyrics,
         Language = l.Language,
+        IsExplicit = l.IsExplicit,
         CreatedAt = l.CreatedAt,
         UpdatedAt = l.UpdatedAt,
     };

@@ -194,7 +194,7 @@ public class CreatorController : BaseController
         if (language is null)
             return ErrorResponse("Language must be a valid language tag (e.g. 'en', 'pt-BR').");
 
-        var saved = await _trackDetails.UpsertLyricsAsync(trackId, lyrics, language);
+        var saved = await _trackDetails.UpsertLyricsAsync(trackId, lyrics, language, request.IsExplicit);
         return OkResponse(saved);
     }
 

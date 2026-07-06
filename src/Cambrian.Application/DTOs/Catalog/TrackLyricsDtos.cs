@@ -8,6 +8,7 @@ public class TrackLyricsDto
     public string TrackId { get; set; } = "";
     public string Lyrics { get; set; } = "";
     public string Language { get; set; } = "en";
+    public bool? IsExplicit { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -24,4 +25,7 @@ public class UpsertTrackLyricsRequest
     /// <summary>BCP-47 language tag; defaults to "en".</summary>
     [StringLength(16)]
     public string? Language { get; set; }
+
+    /// <summary>Explicit content marker. Null leaves the flag unset/unchanged on delete-then-recreate.</summary>
+    public bool? IsExplicit { get; set; }
 }

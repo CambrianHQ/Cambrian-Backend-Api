@@ -11,7 +11,7 @@ public interface ITrackDetailsRepository
 {
     Task<TrackLyricsDto?> GetLyricsAsync(Guid trackId);
 
-    Task<TrackLyricsDto> UpsertLyricsAsync(Guid trackId, string lyrics, string language);
+    Task<TrackLyricsDto> UpsertLyricsAsync(Guid trackId, string lyrics, string language, bool? isExplicit);
 
     Task DeleteLyricsAsync(Guid trackId);
 
