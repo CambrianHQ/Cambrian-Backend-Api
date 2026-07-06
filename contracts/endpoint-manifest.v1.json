@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generatedAt": "2026-06-30T19:57:00.493Z",
+  "generatedAt": "2026-07-06T02:44:14.341Z",
   "endpoints": [
     {
       "method": "GET",
@@ -311,29 +311,35 @@
       "method": "POST",
       "path": "/api/artists/{id}/subscribe",
       "requiresAuth": true,
-      "tag": "ArtistMonetization"
+      "tag": "Artists"
     },
     {
       "method": "POST",
       "path": "/api/artists/{id}/tip",
       "requiresAuth": true,
-      "tag": "ArtistMonetization"
+      "tag": "Artists"
     },
     {
       "method": "PUT",
       "path": "/api/artists/me/subscription-price",
       "requiresAuth": true,
-      "tag": "ArtistMonetization"
+      "tag": "Artists"
     },
     {
       "method": "GET",
       "path": "/api/artists/me/support",
       "requiresAuth": true,
-      "tag": "ArtistMonetization"
+      "tag": "Artists"
     },
     {
       "method": "GET",
       "path": "/api/authorship-records/{id}",
+      "requiresAuth": true,
+      "tag": "AuthorshipRecords"
+    },
+    {
+      "method": "GET",
+      "path": "/api/authorship-records/{id}/certificate.pdf",
       "requiresAuth": true,
       "tag": "AuthorshipRecords"
     },
@@ -354,6 +360,12 @@
       "path": "/api/charts/weekly",
       "requiresAuth": false,
       "tag": "Charts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/entitlements",
+      "requiresAuth": false,
+      "tag": "Config"
     },
     {
       "method": "GET",
@@ -461,6 +473,12 @@
       "path": "/api/me/entitlements",
       "requiresAuth": true,
       "tag": "Me"
+    },
+    {
+      "method": "POST",
+      "path": "/api/newsletter",
+      "requiresAuth": false,
+      "tag": "Newsletter"
     },
     {
       "method": "GET",
@@ -600,31 +618,31 @@
       "method": "GET",
       "path": "/api/tracks/{id}/authorship",
       "requiresAuth": true,
-      "tag": "Provenance"
+      "tag": "TrackProvenance"
     },
     {
       "method": "POST",
       "path": "/api/tracks/{id}/authorship",
       "requiresAuth": true,
-      "tag": "Provenance"
+      "tag": "TrackProvenance"
     },
     {
       "method": "GET",
       "path": "/api/tracks/{id}/compliance-score",
       "requiresAuth": true,
-      "tag": "Provenance"
+      "tag": "TrackProvenance"
     },
     {
       "method": "GET",
       "path": "/api/tracks/{id}/creator-detail",
       "requiresAuth": true,
-      "tag": "Provenance"
+      "tag": "TrackProvenance"
     },
     {
       "method": "GET",
       "path": "/api/tracks/{id}/provenance",
       "requiresAuth": true,
-      "tag": "Provenance"
+      "tag": "TrackProvenance"
     },
     {
       "method": "GET",
@@ -650,6 +668,60 @@
       "path": "/api/uploads/creator-image-url",
       "requiresAuth": true,
       "tag": "Creators",
+      "requiresRole": "Creator"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums",
+      "requiresAuth": true,
+      "tag": "AlbumsV1"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/albums",
+      "requiresAuth": true,
+      "tag": "AlbumsV1",
+      "requiresRole": "Creator"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/albums/{id}",
+      "requiresAuth": true,
+      "tag": "AlbumsV1",
+      "requiresRole": "Creator"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums/{id}",
+      "requiresAuth": true,
+      "tag": "AlbumsV1"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/albums/{id}",
+      "requiresAuth": true,
+      "tag": "AlbumsV1",
+      "requiresRole": "Creator"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/albums/{id}/tracks",
+      "requiresAuth": true,
+      "tag": "AlbumsV1",
+      "requiresRole": "Creator"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/albums/{id}/tracks/{trackId}",
+      "requiresAuth": true,
+      "tag": "AlbumsV1",
+      "requiresRole": "Creator"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/albums/{id}/tracks/reorder",
+      "requiresAuth": true,
+      "tag": "AlbumsV1",
       "requiresRole": "Creator"
     },
     {
@@ -685,6 +757,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/public/albums/{slug}",
+      "requiresAuth": false,
+      "tag": "PublicAlbumsV1"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/public/creators/{username}/albums",
+      "requiresAuth": false,
+      "tag": "PublicAlbumsV1"
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/tracks",
       "requiresAuth": false,
       "tag": "TracksV1"
@@ -700,6 +784,12 @@
       "path": "/api/v1/tracks/search",
       "requiresAuth": false,
       "tag": "TracksV1"
+    },
+    {
+      "method": "GET",
+      "path": "/api/verify/{hash}",
+      "requiresAuth": false,
+      "tag": "AuthorshipRecords"
     },
     {
       "method": "GET",
@@ -865,6 +955,12 @@
     },
     {
       "method": "GET",
+      "path": "/collections/{collectionId}",
+      "requiresAuth": false,
+      "tag": "CreatorProfile"
+    },
+    {
+      "method": "GET",
       "path": "/community",
       "requiresAuth": false,
       "tag": "Community"
@@ -967,6 +1063,13 @@
     },
     {
       "method": "POST",
+      "path": "/creator-profile/me/collections/{collectionId}/cover",
+      "requiresAuth": true,
+      "tag": "CreatorProfile",
+      "requiresRole": "Creator"
+    },
+    {
+      "method": "POST",
       "path": "/creator-profile/me/cover-image-upload",
       "requiresAuth": true,
       "tag": "CreatorProfile",
@@ -1031,7 +1134,23 @@
     },
     {
       "method": "PUT",
+      "path": "/creator/tracks/{trackId}/behind-the-track",
+      "requiresAuth": true,
+      "tag": "Creator",
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "PUT",
       "path": "/creator/tracks/{trackId}/cover-art",
+      "requiresAuth": true,
+      "tag": "Creator",
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "PUT",
+      "path": "/creator/tracks/{trackId}/lyrics",
       "requiresAuth": true,
       "tag": "Creator",
       "requiresRole": "Creator",
@@ -1543,24 +1662,36 @@
       "tag": "Catalog"
     },
     {
+      "method": "GET",
+      "path": "/tracks/{trackId}/behind-the-track",
+      "requiresAuth": false,
+      "tag": "Catalog"
+    },
+    {
       "method": "DELETE",
       "path": "/tracks/{trackId}/boost",
       "requiresAuth": true,
-      "tag": "Community",
+      "tag": "Boosts",
       "requiresPolicy": "VerifiedEmail"
     },
     {
       "method": "GET",
       "path": "/tracks/{trackId}/boost",
       "requiresAuth": false,
-      "tag": "Community"
+      "tag": "Boosts"
     },
     {
       "method": "POST",
       "path": "/tracks/{trackId}/boost",
       "requiresAuth": true,
-      "tag": "Community",
+      "tag": "Boosts",
       "requiresPolicy": "VerifiedEmail"
+    },
+    {
+      "method": "GET",
+      "path": "/tracks/{trackId}/lyrics",
+      "requiresAuth": false,
+      "tag": "Catalog"
     },
     {
       "method": "GET",
@@ -1641,7 +1772,7 @@
       "method": "POST",
       "path": "/webhook/stripe/connect",
       "requiresAuth": false,
-      "tag": "Webhooks"
+      "tag": "Webhook"
     }
   ]
 }

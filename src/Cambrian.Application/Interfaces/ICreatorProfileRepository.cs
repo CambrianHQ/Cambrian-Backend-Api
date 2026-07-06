@@ -35,6 +35,14 @@ public interface ICreatorProfileRepository
     Task<string?> GetCollectionOwnerAsync(Guid id);
 
     /// <summary>
+    /// Resolve a publicly-visible album (public | unlisted) by its slug. Slugs
+    /// are only unique per creator, so this returns the most recent match and
+    /// never surfaces draft/private albums. Returns null when no public album
+    /// with that slug exists.
+    /// </summary>
+    Task<TrackCollectionDto?> GetPublicCollectionBySlugAsync(string slug);
+
+    /// <summary>
     /// Creates an album. TrackIds CSV order is the track order; a per-creator
     /// unique slug is generated from the title. AlbumTrack join rows are
     /// dual-written alongside the legacy CSV column.

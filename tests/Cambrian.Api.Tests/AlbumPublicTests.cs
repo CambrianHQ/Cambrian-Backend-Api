@@ -83,7 +83,7 @@ public sealed class AlbumPublicTests : IClassFixture<CambrianApiFixture>
         {
             title = "Hidden Album",
             trackIds = "",
-            visibility = "hidden",
+            visibility = "private",
         });
         var collectionId = collection.GetProperty("id").GetString()!;
 
@@ -94,7 +94,7 @@ public sealed class AlbumPublicTests : IClassFixture<CambrianApiFixture>
         var ownerRes = await creator.Client.GetAsync($"/collections/{collectionId}");
         ownerRes.StatusCode.Should().Be(HttpStatusCode.OK);
         var data = (await ownerRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
-        data.GetProperty("visibility").GetString().Should().Be("hidden");
+        data.GetProperty("visibility").GetString().Should().Be("private");
     }
 
     // ───── 3. Draft (hidden) track inside a public album is filtered for anon ─────
@@ -157,7 +157,7 @@ public sealed class AlbumPublicTests : IClassFixture<CambrianApiFixture>
         {
             title = "List Hidden Album",
             trackIds = "",
-            visibility = "hidden",
+            visibility = "private",
         });
         var publicId = publicAlbum.GetProperty("id").GetString()!;
         var hiddenId = hiddenAlbum.GetProperty("id").GetString()!;
@@ -188,7 +188,7 @@ public sealed class AlbumPublicTests : IClassFixture<CambrianApiFixture>
         {
             title = "My Hidden Album",
             trackIds = "",
-            visibility = "hidden",
+            visibility = "private",
         });
         var hiddenId = hiddenAlbum.GetProperty("id").GetString()!;
 

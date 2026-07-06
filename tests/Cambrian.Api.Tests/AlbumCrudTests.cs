@@ -76,7 +76,7 @@ public sealed class AlbumCrudTests : IClassFixture<CambrianApiFixture>
     }
 
     [Fact]
-    public async Task CreateAlbum_HiddenWithReleaseDate_EchoesBothInDto()
+    public async Task CreateAlbum_PrivateWithReleaseDate_EchoesBothInDto()
     {
         var (client, _) = await CreateCreatorClientAsync();
 
@@ -84,11 +84,11 @@ public sealed class AlbumCrudTests : IClassFixture<CambrianApiFixture>
         {
             title = "Hidden Preview",
             trackIds = "",
-            visibility = "hidden",
+            visibility = "private",
             releaseDate = "2026-09-01T00:00:00Z",
         });
 
-        data.GetProperty("visibility").GetString().Should().Be("hidden");
+        data.GetProperty("visibility").GetString().Should().Be("private");
         data.GetProperty("releaseDate").GetDateTime().Date.Should().Be(new DateTime(2026, 9, 1));
     }
 

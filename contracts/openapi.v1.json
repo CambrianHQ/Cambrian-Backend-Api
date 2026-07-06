@@ -7231,6 +7231,451 @@
           }
         }
       }
+    },
+    "/api/v1/albums": {
+      "get": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "summary": "List the authenticated creator's albums.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumV1DtoListV1ApiResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "summary": "Create an album.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlbumV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Creator account required"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}": {
+      "get": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "summary": "Get one of the creator's albums with hydrated tracks.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumDetailV1DtoV1ApiResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "summary": "Update album metadata (partial).",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlbumV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "summary": "Delete an album (never deletes its tracks).",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks": {
+      "post": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "summary": "Append tracks to an album.",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks/reorder": {
+      "patch": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "summary": "Reorder an album's tracks (permutation of current members).",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks/{trackId}": {
+      "delete": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "summary": "Remove a track from an album (the track itself survives).",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/public/albums/{slug}": {
+      "get": {
+        "tags": [
+          "PublicAlbumsV1"
+        ],
+        "summary": "Public album detail by slug or album id (public/unlisted only).",
+        "security": [],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumDetailV1DtoV1ApiResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/public/creators/{username}/albums": {
+      "get": {
+        "tags": [
+          "PublicAlbumsV1"
+        ],
+        "summary": "List a creator's public albums.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumV1DtoListV1ApiResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Creator not found"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9817,6 +10262,322 @@
           "amount": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlbumV1Dto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "creatorId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "artworkUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "public",
+              "unlisted",
+              "private"
+            ]
+          },
+          "releaseDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "trackCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlbumCreatorSummaryV1Dto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlbumDetailV1Dto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "creatorId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "artworkUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "public",
+              "unlisted",
+              "private"
+            ]
+          },
+          "releaseDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "trackCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "creator": {
+            "$ref": "#/components/schemas/AlbumCreatorSummaryV1Dto"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicCatalogTrackDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateAlbumV1Request": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "artworkUrl": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "visibility": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 20
+          },
+          "releaseDate": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40
+          },
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateAlbumV1Request": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "artworkUrl": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "visibility": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 20
+          },
+          "releaseDate": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 40
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddAlbumTracksV1Request": {
+        "type": "object",
+        "properties": {
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "trackIds"
+        ],
+        "additionalProperties": false
+      },
+      "ReorderAlbumTracksV1Request": {
+        "type": "object",
+        "properties": {
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "trackIds"
+        ],
+        "additionalProperties": false
+      },
+      "AlbumV1DtoV1ApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AlbumV1Dto"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "meta": {
+            "$ref": "#/components/schemas/V1PaginationMeta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlbumV1DtoListV1ApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlbumV1Dto"
+            }
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "meta": {
+            "$ref": "#/components/schemas/V1PaginationMeta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AlbumDetailV1DtoV1ApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AlbumDetailV1Dto"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "meta": {
+            "$ref": "#/components/schemas/V1PaginationMeta"
           }
         },
         "additionalProperties": false

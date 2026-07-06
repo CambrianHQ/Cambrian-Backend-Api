@@ -7,6 +7,7 @@ using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.DTOs.Creators;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Validation;
+using Cambrian.Domain.Albums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -423,7 +424,7 @@ public class CreatorProfileController : BaseController
         // Hidden albums are owner-only on the public listing.
         var requesterId = User?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!string.Equals(requesterId, creatorUserId, StringComparison.Ordinal))
-            collections = collections.Where(c => c.Visibility != "hidden").ToList();
+            collections = collections.Where(c => AlbumVisibility.IsPubliclyListed(c.Visibility)).ToList();
         ResolveCollectionImageUrls(collections);
         return OkResponse(collections);
     }
@@ -445,7 +446,9 @@ public class CreatorProfileController : BaseController
         var owner = await _profiles.GetCollectionOwnerAsync(collectionId);
         var requesterId = User?.FindFirstValue(ClaimTypes.NameIdentifier);
         var isOwner = owner is not null && string.Equals(requesterId, owner, StringComparison.Ordinal);
-        if (collection.Visibility == "hidden" && !isOwner)
+        // public/unlisted are reachable by a direct link; draft/private (and any
+        // legacy "hidden") are owner-only and 404 for everyone else.
+        if (!AlbumVisibility.IsPubliclyVisible(collection.Visibility) && !isOwner)
             return NotFoundResponse("Album not found.");
 
         var isAdmin = User?.IsInRole("Admin") == true;
@@ -522,7 +525,7 @@ public class CreatorProfileController : BaseController
             return ErrorResponse("One or more tracks do not belong to you.");
 
         if (!TryParseCollectionVisibility(body.Visibility, out var visibility))
-            return ErrorResponse("Visibility must be 'public' or 'hidden'.");
+            return ErrorResponse("Visibility must be one of: draft, public, unlisted, private.");
         if (!TryParseReleaseDate(body.ReleaseDate, out var releaseDate, out _))
             return ErrorResponse("ReleaseDate must be a valid ISO-8601 date.");
 
@@ -550,7 +553,7 @@ public class CreatorProfileController : BaseController
             return ErrorResponse("One or more tracks do not belong to you.");
 
         if (!TryParseCollectionVisibility(body.Visibility, out var visibility))
-            return ErrorResponse("Visibility must be 'public' or 'hidden'.");
+            return ErrorResponse("Visibility must be one of: draft, public, unlisted, private.");
         if (!TryParseReleaseDate(body.ReleaseDate, out var releaseDate, out var clearReleaseDate))
             return ErrorResponse("ReleaseDate must be a valid ISO-8601 date.");
 
@@ -737,13 +740,17 @@ public class CreatorProfileController : BaseController
             collection.CoverImageUrl = ResolveImageUrl(collection.CoverImageUrl);
     }
 
-    /// <summary>Null = keep stored value; "public"/"hidden" pass through; anything else is invalid.</summary>
+    /// <summary>
+    /// Null input = keep stored value. Recognized values (draft | public |
+    /// unlisted | private, plus the legacy "hidden" alias) are normalized and
+    /// returned; anything else is rejected as invalid.
+    /// </summary>
     private static bool TryParseCollectionVisibility(string? raw, out string? visibility)
     {
         visibility = null;
         if (raw is null) return true;
-        var normalized = raw.Trim().ToLowerInvariant();
-        if (normalized is not ("public" or "hidden")) return false;
+        var normalized = AlbumVisibility.Normalize(raw);
+        if (normalized is null) return false;
         visibility = normalized;
         return true;
     }
