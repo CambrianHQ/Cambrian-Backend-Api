@@ -2,6 +2,8 @@ using Cambrian.Domain.Entities;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using NSubstitute;
 
 namespace Cambrian.Api.Tests;
 
@@ -68,6 +70,44 @@ public sealed class TrackEngagementMetricsTests : IDisposable
         var repo = new TrackRepository(_db);
         var stats = await repo.GetTrackStatsAsync(Array.Empty<Guid>());
         Assert.Empty(stats);
+    }
+
+    [Fact]
+    public async Task GetTracksByCreatorIdAsync_PopulatesPlaysAndSales_FromStreamSessionsAndPurchases()
+    {
+        // Regression: the public creator profile (/creator/tracks/{slug}) showed
+        // zero plays even when the catalog showed real counts — GetTracksByCreatorIdAsync
+        // projected the TrackResponse without Plays/Sales, so both defaulted to 0.
+        var creatorUuid = Guid.NewGuid();
+        const string userId = "u-store-1";
+        var trackA = Guid.NewGuid();
+        var trackB = Guid.NewGuid();
+
+        _db.Creators.Add(new Creator { Id = creatorUuid, UserId = userId, Username = "storestar", DisplayName = "Store Star" });
+        _db.CreatorProfiles.Add(new CreatorProfile { Id = Guid.NewGuid(), UserId = userId, Slug = "storestar" });
+        _db.Tracks.AddRange(
+            new Track { Id = trackA, Title = "A", CreatorId = userId, CreatorUuid = creatorUuid, Visibility = "public", Status = "available" },
+            new Track { Id = trackB, Title = "B", CreatorId = userId, CreatorUuid = creatorUuid, Visibility = "public", Status = "available" });
+
+        // trackA: 5 plays + 2 completed sales (+1 pending, which must NOT count); trackB: none
+        for (var i = 0; i < 5; i++)
+            _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackA });
+        _db.Purchases.AddRange(
+            new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b1", Status = "completed" },
+            new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b2", Status = "completed" },
+            new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b3", Status = "pending" });
+
+        await _db.SaveChangesAsync();
+
+        var repo = new CreatorIdentityRepository(_db, Substitute.For<ILogger<CreatorIdentityRepository>>());
+        var tracks = await repo.GetTracksByCreatorIdAsync(creatorUuid, 1, 50);
+
+        var a = tracks.Single(t => t.Id == trackA.ToString());
+        var b = tracks.Single(t => t.Id == trackB.ToString());
+        Assert.Equal(5, a.Plays);
+        Assert.Equal(2, a.Sales);
+        Assert.Equal(0, b.Plays);
+        Assert.Equal(0, b.Sales);
     }
 
     [Fact]

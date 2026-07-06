@@ -147,7 +147,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         var legacyUserId = creator.UserId;
         // Project directly to the API DTO so stale databases missing newer Track columns
         // like PrimaryGenre/Subgenre do not fail this storefront query.
-        return await _db.Tracks
+        var items = await _db.Tracks
             .AsNoTracking()
             .Where(t => (t.CreatorUuid == creatorId || t.CreatorId == legacyUserId)
                         && t.Visibility == "public"
@@ -176,6 +176,9 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 CreatedAt = t.CreatedAt,
             })
             .ToListAsync();
+
+        await PopulateEngagementAsync(items);
+        return items;
     }
 
     /// <summary>
@@ -245,6 +248,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             })
             .ToListAsync();
 
+        await PopulateEngagementAsync(items);
+
         return new PagedResult<TrackResponse>
         {
             Items = items,
@@ -252,6 +257,45 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             PageSize = pageSize,
             TotalCount = total,
         };
+    }
+
+    /// <summary>
+    /// Populate per-track engagement (plays, sales) on storefront track DTOs.
+    /// Mirrors the catalog path (TrackRepository.GetTrackStatsAsync): plays =
+    /// COUNT(StreamSessions), sales = COUNT(completed Purchases). Without this the
+    /// public creator profile shows zero plays even when the catalog shows real
+    /// counts (the projection above sets neither field, so both default to 0).
+    /// </summary>
+    private async Task PopulateEngagementAsync(List<TrackResponse> items)
+    {
+        if (items.Count == 0) return;
+
+        var ids = items
+            .Select(i => Guid.TryParse(i.Id, out var g) ? g : Guid.Empty)
+            .Where(g => g != Guid.Empty)
+            .ToList();
+        if (ids.Count == 0) return;
+
+        var plays = await _db.StreamSessions
+            .Where(s => ids.Contains(s.TrackId))
+            .GroupBy(s => s.TrackId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        var sales = await _db.Purchases
+            .Where(p => ids.Contains(p.TrackId) && p.Status == "completed")
+            .GroupBy(p => p.TrackId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        foreach (var it in items)
+        {
+            if (Guid.TryParse(it.Id, out var g))
+            {
+                it.Plays = plays.GetValueOrDefault(g);
+                it.Sales = sales.GetValueOrDefault(g);
+            }
+        }
     }
 
     public async Task<bool> IsUsernameTakenAsync(string normalizedUsername, Guid? excludeCreatorId = null)
