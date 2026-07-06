@@ -378,6 +378,7 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasKey(tl => tl.TrackId);
             e.Property(tl => tl.Lyrics).HasMaxLength(20000).IsRequired();
             e.Property(tl => tl.Language).HasMaxLength(16).IsRequired().HasDefaultValue("en");
+            e.Property(tl => tl.IsExplicit);
         });
 
         builder.Entity<TrackCreationProcess>(e =>

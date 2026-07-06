@@ -16,6 +16,9 @@ public sealed class TrackLyrics
     /// <summary>BCP-47 language tag (e.g. "en", "es", "pt-BR").</summary>
     public string Language { get; set; } = "en";
 
+    /// <summary>Creator-flagged explicit content marker. Null when not set.</summary>
+    public bool? IsExplicit { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
