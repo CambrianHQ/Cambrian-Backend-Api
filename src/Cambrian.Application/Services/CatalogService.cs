@@ -237,6 +237,7 @@ public class CatalogService : ICatalogService
                   ?? "Unknown Artist",
             Plays = stats?.Plays ?? 0,
             Sales = stats?.Sales ?? 0,
+            AuthorshipRecordId = stats?.AuthorshipRecordId,
             AiGenerated = t.AiGenerated,
             ProvenanceStatus = DeriveProvenanceStatus(t),
             CreatedAt = t.CreatedAt,

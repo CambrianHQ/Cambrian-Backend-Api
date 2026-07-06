@@ -50,6 +50,12 @@ public sealed class TrackEngagementMetricsTests : IDisposable
             new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b2", Status = "completed" },
             new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b3", Status = "pending" });
 
+        // trackA: issued authorship record; trackB: pending only (must not surface).
+        var issuedRecordId = Guid.NewGuid();
+        _db.AuthorshipRecords.AddRange(
+            new AuthorshipRecord { Id = issuedRecordId, TrackId = trackA, CreatorId = "c1", Status = "issued", IssuedAt = DateTime.UtcNow },
+            new AuthorshipRecord { Id = Guid.NewGuid(), TrackId = trackB, CreatorId = "c1", Status = "pending_payment" });
+
         await _db.SaveChangesAsync();
 
         var repo = new TrackRepository(_db);
@@ -57,11 +63,14 @@ public sealed class TrackEngagementMetricsTests : IDisposable
 
         Assert.Equal(3, stats[trackA].Plays);
         Assert.Equal(2, stats[trackA].Sales);
+        Assert.Equal(issuedRecordId.ToString(), stats[trackA].AuthorshipRecordId);
         Assert.Equal(1, stats[trackB].Plays);
         Assert.Equal(0, stats[trackB].Sales);
+        Assert.Null(stats[trackB].AuthorshipRecordId); // pending record must not count
         // A track with no activity is still present, zeroed.
         Assert.Equal(0, stats[trackC].Plays);
         Assert.Equal(0, stats[trackC].Sales);
+        Assert.Null(stats[trackC].AuthorshipRecordId);
     }
 
     [Fact]
@@ -97,6 +106,12 @@ public sealed class TrackEngagementMetricsTests : IDisposable
             new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b2", Status = "completed" },
             new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b3", Status = "pending" });
 
+        // trackA has an ISSUED authorship record; trackB only a pending one (must NOT surface).
+        var issuedRecordId = Guid.NewGuid();
+        _db.AuthorshipRecords.AddRange(
+            new AuthorshipRecord { Id = issuedRecordId, TrackId = trackA, CreatorId = userId, Status = "issued", IssuedAt = DateTime.UtcNow },
+            new AuthorshipRecord { Id = Guid.NewGuid(), TrackId = trackB, CreatorId = userId, Status = "pending_payment" });
+
         await _db.SaveChangesAsync();
 
         var repo = new CreatorIdentityRepository(_db, Substitute.For<ILogger<CreatorIdentityRepository>>());
@@ -106,8 +121,10 @@ public sealed class TrackEngagementMetricsTests : IDisposable
         var b = tracks.Single(t => t.Id == trackB.ToString());
         Assert.Equal(5, a.Plays);
         Assert.Equal(2, a.Sales);
+        Assert.Equal(issuedRecordId.ToString(), a.AuthorshipRecordId);
         Assert.Equal(0, b.Plays);
         Assert.Equal(0, b.Sales);
+        Assert.Null(b.AuthorshipRecordId); // pending record must not count
     }
 
     [Fact]
