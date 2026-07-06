@@ -20,6 +20,21 @@ public sealed class TrackCreationProcess
     /// <summary>JSON array of tool names used (DAWs, AI models, instruments…).</summary>
     public string? ToolsUsed { get; set; }
 
+    /// <summary>Digital Audio Workstation used (e.g. Ableton, FL Studio, Logic Pro).</summary>
+    public string? DAW { get; set; }
+
+    /// <summary>Vocal chain / signal path notes (plugins, processing order).</summary>
+    public string? VocalChain { get; set; }
+
+    /// <summary>Prompts or prompt-engineering notes used with AI tools.</summary>
+    public string? PromptNotes { get; set; }
+
+    /// <summary>Free-form production process notes distinct from the creation story.</summary>
+    public string? ProductionNotes { get; set; }
+
+    /// <summary>What the human creator contributed versus AI-assisted elements.</summary>
+    public string? HumanContributionNotes { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
