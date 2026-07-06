@@ -288,12 +288,24 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .Select(g => new { g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count);
 
+        // Issued Human Authorship Record id per track (null until one is issued);
+        // dedupe defensively by most recently issued.
+        var authorshipRows = await _db.AuthorshipRecords
+            .Where(a => ids.Contains(a.TrackId) && a.Status == "issued")
+            .Select(a => new { a.TrackId, a.Id, a.IssuedAt })
+            .ToListAsync();
+        var authorship = authorshipRows
+            .GroupBy(a => a.TrackId)
+            .ToDictionary(grp => grp.Key, grp => grp.OrderByDescending(a => a.IssuedAt).First().Id);
+
         foreach (var it in items)
         {
             if (Guid.TryParse(it.Id, out var g))
             {
                 it.Plays = plays.GetValueOrDefault(g);
                 it.Sales = sales.GetValueOrDefault(g);
+                if (authorship.TryGetValue(g, out var recId))
+                    it.AuthorshipRecordId = recId.ToString();
             }
         }
     }

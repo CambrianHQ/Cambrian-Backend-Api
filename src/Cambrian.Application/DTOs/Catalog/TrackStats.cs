@@ -11,4 +11,10 @@ public sealed class TrackStats
 
     /// <summary>Number of completed (paid) purchases for the track.</summary>
     public int Sales { get; set; }
+
+    /// <summary>
+    /// Id of this track's ISSUED Human Authorship Record, if one exists; null
+    /// otherwise. Drives the public "Verified authorship" surfaces.
+    /// </summary>
+    public string? AuthorshipRecordId { get; set; }
 }

@@ -81,6 +81,9 @@ public sealed class PublicCatalogTrackDto
     /// <summary>Number of completed (paid) purchases for this track.</summary>
     public int Sales { get; init; }
 
+    /// <summary>Id of the issued Human Authorship Record for this track, if any; null otherwise.</summary>
+    public string? AuthorshipRecordId { get; init; }
+
     public bool AiGenerated { get; init; }
 
     /// <summary>Provenance state: "none" | "hashed" | "stamped" | "verified". Never exposes the raw hash/signature.</summary>
@@ -114,6 +117,7 @@ public sealed class PublicCatalogTrackDto
         Artist = t.Artist,
         Plays = t.Plays,
         Sales = t.Sales,
+        AuthorshipRecordId = t.AuthorshipRecordId,
         AiGenerated = t.AiGenerated,
         ProvenanceStatus = t.ProvenanceStatus,
         CreatedAt = t.CreatedAt,

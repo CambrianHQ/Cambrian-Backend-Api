@@ -241,6 +241,17 @@ public class TrackRepository : ITrackRepository
         foreach (var row in sales)
             if (result.TryGetValue(row.TrackId, out var stats)) stats.Sales = row.Count;
 
+        // Authorship — the ISSUED Human Authorship Record id per track, if any.
+        // A track should have at most one issued record; dedupe defensively by
+        // taking the most recently issued.
+        var authorshipRows = await _db.AuthorshipRecords
+            .Where(a => ids.Contains(a.TrackId) && a.Status == "issued")
+            .Select(a => new { a.TrackId, a.Id, a.IssuedAt })
+            .ToListAsync();
+        foreach (var group in authorshipRows.GroupBy(a => a.TrackId))
+            if (result.TryGetValue(group.Key, out var stats))
+                stats.AuthorshipRecordId = group.OrderByDescending(a => a.IssuedAt).First().Id.ToString();
+
         return result;
     }
 

@@ -84,6 +84,13 @@ public class TrackResponse
     public int Sales { get; set; }
 
     /// <summary>
+    /// Id of this track's ISSUED Human Authorship Record, if one exists; null
+    /// otherwise (the record is a paid product, not auto-created on upload).
+    /// Drives the public "Verified authorship" link / provenance badge.
+    /// </summary>
+    public string? AuthorshipRecordId { get; set; }
+
+    /// <summary>
     /// Whether the creator disclosed this track as AI-generated/assisted (DDEX disclosure).
     /// </summary>
     public bool AiGenerated { get; set; }
