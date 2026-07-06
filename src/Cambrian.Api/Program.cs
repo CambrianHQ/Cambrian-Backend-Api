@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using Cambrian.Api;
 using Cambrian.Api.Common;
@@ -320,9 +321,32 @@ if (builder.Environment.EnvironmentName == TestingEnvironment)
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Every rejection (global limiter or a named policy) lands here exactly once.
+    // The default rejection writes only the status code — no body — which frontend
+    // callers see as an empty/undefined response. Always return retryAfter in
+    // seconds (rounded up) so callers can back off intelligently.
+    options.OnRejected = async (ctx, cancellationToken) =>
+    {
+        var retryAfterSeconds = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+            ? (int)Math.Ceiling(retryAfter.TotalSeconds)
+            : 60;
+        ctx.HttpContext.Response.Headers["Retry-After"] = retryAfterSeconds.ToString();
+        ctx.HttpContext.Response.ContentType = "application/json";
+        await ctx.HttpContext.Response.WriteAsync(JsonSerializer.Serialize(new
+        {
+            error = "rate_limited",
+            message = "Too many requests. Please slow down and try again shortly.",
+            retryAfter = retryAfterSeconds,
+        }), cancellationToken);
+    };
+
+    // Partitioned by authenticated user id (falling back to connection address for
+    // anonymous requests) — see ClientRateLimitKey.FromUserOrConnection for why an
+    // IP-only key isn't safe behind a reverse proxy.
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: ClientRateLimitKey.FromConnection(ctx),
+            partitionKey: ClientRateLimitKey.FromUserOrConnection(ctx),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = globalLimit,
@@ -331,7 +355,7 @@ builder.Services.AddRateLimiter(options =>
             }));
     options.AddPolicy("auth", ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: ClientRateLimitKey.FromConnection(ctx),
+            partitionKey: ClientRateLimitKey.FromUserOrConnection(ctx),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = authLimit,

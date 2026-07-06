@@ -600,7 +600,9 @@ public class CreatorsController : BaseController
     // ───── GET /api/creators/{creatorId}/follow ─────
 
     /// <summary>Check if the authenticated user is following a creator.</summary>
+    // See CreatorProfileController.GetFollowStatus for why this is exempt from rate limiting.
     [Authorize]
+    [DisableRateLimiting]
     [HttpGet("{creatorId:guid}/follow")]
     public async Task<IActionResult> GetFollowStatus(Guid creatorId)
     {

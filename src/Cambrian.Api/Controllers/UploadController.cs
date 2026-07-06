@@ -34,7 +34,6 @@ public class UploadController : BaseController
     }
 
     [Authorize(Policy = "CanUploadTrack")]
-    [Authorize(Policy = "VerifiedEmail")]
     [RequireCreatorTier]
     [RequireUsername]
     [HttpPost("upload")]
@@ -44,6 +43,9 @@ public class UploadController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         _logger.LogInformation("EVENT: UploadStarted userId:{UserId} title:{Title}", userId, request.Title);
         request.CreatorId = userId;
+
+        var verificationGate = RequireVerifiedEmailToPublish(request.SaveAsDraft);
+        if (verificationGate is not null) return verificationGate;
 
         try
         {
@@ -77,7 +79,6 @@ public class UploadController : BaseController
     // 402 + UPGRADE_REQUIRED code the frontend can detect to launch the upgrade flow.
 
     [Authorize(Policy = "CanUploadTrack")]
-    [Authorize(Policy = "VerifiedEmail")]
     [RequireCreatorTier]
     [RequireUsername]
     [HttpPost("/api/tracks")]
@@ -87,6 +88,9 @@ public class UploadController : BaseController
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         _logger.LogInformation("EVENT: TrackCreateStarted userId:{UserId} title:{Title}", userId, request.Title);
         request.CreatorId = userId;
+
+        var verificationGate = RequireVerifiedEmailToPublish(request.SaveAsDraft);
+        if (verificationGate is not null) return verificationGate;
 
         try
         {
@@ -112,6 +116,26 @@ public class UploadController : BaseController
             Cambrian.Application.Observability.CambrianMetrics.UploadFailed.Add(1);
             return ErrorResponse(ex.Message);
         }
+    }
+
+    // Drafts (SaveAsDraft=true, Track.Visibility stays "hidden") never require a
+    // verified email — only a track that goes public on upload does. Mirrors the
+    // structured body VerifiedEmailForbiddenResponseMiddleware produces for the
+    // other VerifiedEmail-gated endpoints, since this check can't run at the
+    // attribute level (SaveAsDraft isn't known until the form body is bound).
+    private IActionResult? RequireVerifiedEmailToPublish(bool? saveAsDraft)
+    {
+        if (saveAsDraft == true) return null;
+        if (User.HasClaim(c => c.Type == "email_verified" && c.Value == "true")) return null;
+
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            error = new
+            {
+                code = "email_not_verified",
+                message = "Verify your email before publishing a track. Save it as a draft in the meantime.",
+            }
+        });
     }
 
     // ───── POST /uploads/image — generic image upload ─────

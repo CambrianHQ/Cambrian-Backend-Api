@@ -72,6 +72,40 @@ public sealed class VerifiedEmailPolicyTests : IClassFixture<CambrianApiFixture>
         await AssertBlockedByEmailGate(res);
     }
 
+    // Regression: bulk album upload (draft) was rejected with 403 for every track on an
+    // unverified account, because the VerifiedEmail gate applied unconditionally. Drafts
+    // (SaveAsDraft=true) stay hidden until the creator publishes, so they must not require
+    // a verified email — only actually going public should.
+    [Fact]
+    public async Task Upload_AllowsDraftUpload_ForUnverifiedCreator()
+    {
+        var seed = Guid.NewGuid().ToString("N");
+        using var client = await _fixture.CreateUnverifiedClientAsync(
+            $"ve-draft-{seed}@cambrian.com", role: "Creator", username: $"vedraft{seed[..8]}");
+
+        using var form = BuildUploadForm(saveAsDraft: true);
+        var res = await client.PostAsync("/upload", form);
+
+        var body = await res.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+        Assert.DoesNotContain("email_not_verified", body);
+    }
+
+    [Fact]
+    public async Task CreateTrack_AllowsDraftUpload_ForUnverifiedCreator()
+    {
+        var seed = Guid.NewGuid().ToString("N");
+        using var client = await _fixture.CreateUnverifiedClientAsync(
+            $"ve-draft2-{seed}@cambrian.com", role: "Creator", username: $"vedraft2{seed[..8]}");
+
+        using var form = BuildUploadForm(saveAsDraft: true);
+        var res = await client.PostAsync("/api/tracks", form);
+
+        var body = await res.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+        Assert.DoesNotContain("email_not_verified", body);
+    }
+
     // ──────────────── Verified accounts clear the email gate (controls) ────────────────
 
     [Fact]
@@ -124,10 +158,12 @@ public sealed class VerifiedEmailPolicyTests : IClassFixture<CambrianApiFixture>
         Assert.DoesNotContain("email_not_verified", body);
     }
 
-    private static MultipartFormDataContent BuildUploadForm()
+    private static MultipartFormDataContent BuildUploadForm(bool saveAsDraft = false)
     {
         var content = new MultipartFormDataContent();
         content.Add(new StringContent("Verified Email Upload"), "Title");
+        if (saveAsDraft)
+            content.Add(new StringContent("true"), "SaveAsDraft");
 
         var audio = new ByteArrayContent(new byte[] { 0xFF, 0xFB, 0x90, 0x00 });
         audio.Headers.ContentType = new MediaTypeHeaderValue("audio/mpeg");

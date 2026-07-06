@@ -657,7 +657,12 @@ public class CreatorProfileController : BaseController
         return OkResponse(new { following = false, followerCount });
     }
 
+    // A page can render many tracks/creators at once and check follow status for
+    // each one individually (one request per card) until the frontend batches this
+    // into a single call. Exempted from rate limiting so that burst doesn't consume
+    // the same per-user quota as sensitive actions like verification resend.
     [Authorize]
+    [DisableRateLimiting]
     [HttpGet("{slug}/follow")]
     public async Task<IActionResult> GetFollowStatus(string slug)
     {
