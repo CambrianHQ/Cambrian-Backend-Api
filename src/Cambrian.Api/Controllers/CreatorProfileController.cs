@@ -19,7 +19,12 @@ namespace Cambrian.Api.Controllers;
 /// Creator profile management. Gate UI behind feature flag "creator_profiles".
 /// </summary>
 [Route("creator-profile")]
-[EnableRateLimiting("auth")]
+// A normal edit session (load, banner upload, avatar upload, save, list
+// collections) costs 6-8 requests on its own — the "auth" policy's 10/min
+// (meant for login/register brute-force protection) left a second image
+// re-upload or a quick follow-up save one request away from a 429. See the
+// "creatorProfile" policy in Program.cs for the sizing rationale.
+[EnableRateLimiting("creatorProfile")]
 public class CreatorProfileController : BaseController
 {
     private readonly ICreatorProfileRepository _profiles;
@@ -39,7 +44,14 @@ public class CreatorProfileController : BaseController
         ".jpg", ".jpeg", ".png", ".webp"
     };
 
-    private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB
+    private const long MaxImageSize = 10 * 1024 * 1024; // 10 MB — album/collection covers (AlbumEditorModal advertises "up to 10MB")
+
+    // Banner/avatar specifically: matches the client's enforced cap
+    // (CREATOR_PROFILE_MAX_IMAGE_BYTES / "5 MB max" copy in ImageUploadField)
+    // and bounds the worst-case payload the /{username}/opengraph-image route
+    // has to fetch and rasterize per share-card render — an oversized banner
+    // there is a direct path to a Cloudflare Worker CPU/memory limit error.
+    private const long MaxProfileImageSize = 5 * 1024 * 1024; // 5 MB
 
     public CreatorProfileController(ICreatorProfileRepository profiles, IObjectStorage storage, IStorefrontService storefront, IFeatureFlagRepository flags, ICreatorIdentityRepository creators, ITrackRepository tracks, ITransactionManager transactions, ICatalogService catalog, ITrackVisibilityPolicy trackVisibility, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ILogger<CreatorProfileController> logger)
     {
@@ -308,20 +320,20 @@ public class CreatorProfileController : BaseController
     [RequireCreatorTier]
     [HttpPost("me/cover-image-upload")]
     [HttpPost("me/banner")]
-    [RequestSizeLimit(10 * 1024 * 1024)]
+    [RequestSizeLimit(5 * 1024 * 1024)]
     public async Task<IActionResult> UploadBanner(IFormFile file)
     {
         string? url;
         try
         {
-            url = await UploadImage(file, "banners");
+            url = await UploadImage(file, "banners", MaxProfileImageSize);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Banner upload failed: storage={StorageType}", _storage.GetType().Name);
             return StatusCode(502, new { success = false, error = "Image upload failed. Storage may be misconfigured." });
         }
-        if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 10 MB).");
+        if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 5 MB).");
 
         var userId = GetRequiredUserId()!;
         try
@@ -358,20 +370,20 @@ public class CreatorProfileController : BaseController
     [HttpPost("me/profile-image-upload")]
     [HttpPost("me/avatar")]
     [HttpPost("/settings/profile/avatar")]
-    [RequestSizeLimit(10 * 1024 * 1024)]
+    [RequestSizeLimit(5 * 1024 * 1024)]
     public async Task<IActionResult> UploadAvatar(IFormFile file)
     {
         string? url;
         try
         {
-            url = await UploadImage(file, "avatars");
+            url = await UploadImage(file, "avatars", MaxProfileImageSize);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Avatar upload failed: storage={StorageType}", _storage.GetType().Name);
             return StatusCode(502, new { success = false, error = "Image upload failed. Storage may be misconfigured." });
         }
-        if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 10 MB).");
+        if (url is null) return ErrorResponse("Invalid image file. Accepted: jpg, jpeg, png, webp (max 5 MB).");
 
         var userId = GetRequiredUserId()!;
         try
@@ -690,10 +702,10 @@ public class CreatorProfileController : BaseController
     /// Validates and uploads an image. Returns the public URL on success, null for validation
     /// failures, or throws on storage errors (caller should catch and return 502).
     /// </summary>
-    private async Task<string?> UploadImage(IFormFile? file, string folder)
+    private async Task<string?> UploadImage(IFormFile? file, string folder, long maxBytes = MaxImageSize)
     {
         if (file is null || file.Length == 0) return null;
-        if (file.Length > MaxImageSize) return null;
+        if (file.Length > maxBytes) return null;
 
         var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant() ?? "";
         if (!AllowedImageExtensions.Contains(ext)) return null;

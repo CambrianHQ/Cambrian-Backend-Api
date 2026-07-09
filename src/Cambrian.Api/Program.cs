@@ -375,6 +375,24 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
+
+    // Creator profile editing (CreatorProfileController): get/put profile, banner/avatar
+    // upload, collections CRUD, follow/unfollow, public profile view. Previously shared
+    // the "auth" policy (10/min) meant for login/register brute-force protection — a
+    // single normal edit session (load profile, upload a banner, upload an avatar, save,
+    // list collections) already costs 6-8 requests, so a second image re-upload or a
+    // quick follow-up save routinely 429'd. This mirrors the "community"/"mcp" pattern
+    // at a limit sized for a real editing session instead of a sensitive auth endpoint.
+    options.AddPolicy("creatorProfile", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? ClientRateLimitKey.FromConnection(ctx),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
 });
 
 // CORS

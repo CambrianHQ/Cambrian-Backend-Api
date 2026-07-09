@@ -21,11 +21,11 @@ public static class CreatorProfileSectionValidator
     /// <summary>Trims/de-dupes free-text tag lists in place. Returns an error message or null.</summary>
     public static string? NormalizeStudioSetup(StudioSetupDto setup)
     {
-        setup.Daw = NullIfEmpty(setup.Daw);
         setup.WorkflowNotes = NullIfEmpty(setup.WorkflowNotes);
 
         foreach (var (label, get, set) in new (string, Func<List<string>?>, Action<List<string>?>)[]
         {
+            ("DAW", () => setup.Daw, v => setup.Daw = v),
             ("AI tools", () => setup.AiTools, v => setup.AiTools = v),
             ("Instruments", () => setup.Instruments, v => setup.Instruments = v),
             ("Hardware", () => setup.Hardware, v => setup.Hardware = v),
