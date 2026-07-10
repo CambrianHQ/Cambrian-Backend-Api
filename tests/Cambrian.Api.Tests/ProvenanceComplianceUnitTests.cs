@@ -1,4 +1,6 @@
 using System.Text;
+using Cambrian.Application.DTOs.Catalog;
+using Cambrian.Application.DTOs.Provenance;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Provenance;
 using Cambrian.Application.Services;
@@ -119,14 +121,30 @@ public sealed class ProvenanceComplianceUnitTests
 
     // ── ComplianceScoreService ──
 
-    private static ComplianceScoreService CreateComplianceService(ProvenanceAnchor? anchor, TrackAuthorship? authorship)
+    private static ComplianceScoreService CreateComplianceService(
+        ProvenanceAnchor? anchor,
+        TrackAuthorship? authorship,
+        TrackLyricsDto? lyrics = null,
+        BehindTheTrackDto? creationProcess = null,
+        AuthorshipRecord? authorshipRecord = null,
+        bool hasCreatorProfile = false)
     {
         var anchors = Substitute.For<IProvenanceAnchorRepository>();
         anchors.GetByTrackIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(anchor);
         var auth = Substitute.For<ITrackAuthorshipRepository>();
         auth.GetByTrackIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(authorship);
-        return new ComplianceScoreService(anchors, auth);
+        var details = Substitute.For<ITrackDetailsRepository>();
+        details.GetLyricsAsync(Arg.Any<Guid>()).Returns(lyrics);
+        details.GetCreationProcessAsync(Arg.Any<Guid>()).Returns(creationProcess);
+        var records = Substitute.For<IAuthorshipRecordRepository>();
+        records.GetLatestForTrackAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(authorshipRecord);
+        var profiles = Substitute.For<ICreatorProfileRepository>();
+        profiles.HasUsableProfileAsync(Arg.Any<string>()).Returns(hasCreatorProfile);
+        return new ComplianceScoreService(anchors, auth, details, records, profiles);
     }
+
+    private static ComplianceChecklistItemDto ChecklistItem(ComplianceScoreResponse response, string key) =>
+        response.ChecklistItems.Single(i => i.Key == key);
 
     [Fact]
     public async Task ComplianceScore_BareUnsignedTrack_ScoresZeroAndAllFail()
@@ -176,6 +194,119 @@ public sealed class ProvenanceComplianceUnitTests
             new ProvenanceAnchor { TrackId = track.Id, Status = "anchored" }, null).ComputeAsync(track); // pass (20)
 
         Assert.Equal(stamped.Score + 10, anchored.Score);
+    }
+
+    [Fact]
+    public async Task ComplianceChecklist_AiDisclosureFromDdex_IsComplete()
+    {
+        var track = new Track
+        {
+            Id = Guid.NewGuid(),
+            Title = "Beat",
+            AiDisclosureDdex = """{"aiGenerated":true,"tools":["Suno"]}""",
+        };
+
+        var result = await CreateComplianceService(null, null).ComputeAsync(track);
+
+        var item = ChecklistItem(result, "ai_disclosure");
+        Assert.Equal("complete", item.Status);
+        Assert.Contains("satisfies the AI disclosure checklist item", item.Explanation);
+    }
+
+    [Fact]
+    public async Task ComplianceChecklist_MissingAiDisclosure_IsIncomplete()
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat" };
+
+        var result = await CreateComplianceService(null, null).ComputeAsync(track);
+
+        var item = ChecklistItem(result, "ai_disclosure");
+        Assert.Equal("incomplete", item.Status);
+    }
+
+    [Fact]
+    public async Task ComplianceChecklist_AuthorshipRecord_IsOptionalPaidVerification_WhenMissing()
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat" };
+
+        var result = await CreateComplianceService(null, null).ComputeAsync(track);
+
+        var item = ChecklistItem(result, "authorship_record");
+        Assert.Contains("optional paid verification", item.Label.ToLowerInvariant());
+        Assert.Equal("optional_paid_verification", item.Status);
+        Assert.False(item.IsPaidRequirement);
+        Assert.Contains("not required", item.Explanation.ToLowerInvariant());
+    }
+
+    [Fact]
+    public async Task ComplianceChecklist_FreeMaxScore_RemainsHundredWithoutPaidAuthorshipRecord()
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat" };
+
+        var result = await CreateComplianceService(null, null).ComputeAsync(track);
+
+        Assert.Equal(100, result.FreeMaxScore);
+    }
+
+    [Fact]
+    public async Task ComplianceChecklist_RightsAttestation_MissingIsIncompleteWithoutPaidLanguage()
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat", CommercialRightsVerified = false };
+
+        var result = await CreateComplianceService(null, null).ComputeAsync(track);
+
+        var item = ChecklistItem(result, "rights");
+        Assert.Equal("incomplete", item.Status);
+        Assert.Contains("free creator attestation", item.Explanation.ToLowerInvariant());
+        Assert.Contains("not a paid verification", item.Explanation.ToLowerInvariant());
+    }
+
+    [Fact]
+    public async Task ComplianceScore_BackwardCompatibility_KeepsExistingScoreAndChecks()
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat" };
+
+        var result = await CreateComplianceService(null, null).ComputeAsync(track);
+
+        Assert.Equal(0, result.Score);
+        Assert.Equal(new[]
+        {
+            "commercialRightsVerified",
+            "authorshipDocumented",
+            "aiDisclosurePresent",
+            "provenanceAnchored",
+            "metadataComplete",
+        }, result.Checks.Select(c => c.Name));
+    }
+
+    [Fact]
+    public async Task ComplianceChecklist_DoesNotExposePrivateNarrativeContent()
+    {
+        const string privateText = "PRIVATE_NARRATIVE_SHOULD_NOT_LEAK";
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat", Visibility = "hidden" };
+        var authorship = new TrackAuthorship
+        {
+            TrackId = track.Id,
+            Edits = privateText,
+            ProcessNotes = privateText,
+            AiDisclosure = privateText,
+        };
+        var creationProcess = new BehindTheTrackDto
+        {
+            TrackId = track.Id.ToString(),
+            Story = privateText,
+            DAW = privateText,
+            HumanContributionNotes = privateText,
+            ToolsUsed = new[] { privateText },
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        var result = await CreateComplianceService(null, authorship, creationProcess: creationProcess)
+            .ComputeAsync(track);
+
+        var explanations = string.Join(" ", result.ChecklistItems.Select(i => i.Explanation));
+        Assert.DoesNotContain(privateText, explanations);
+        Assert.All(result.ChecklistItems, i => Assert.False(string.IsNullOrWhiteSpace(i.TargetSection)));
     }
 
     // ── ProvenanceService (pending anchor record; no chain write) ──

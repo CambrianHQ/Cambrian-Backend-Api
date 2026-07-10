@@ -25,6 +25,15 @@ public class AuthorshipRecordRepository : IAuthorshipRecordRepository
             r => r.RecordHash == recordHash && r.Status == "issued",
             ct);
 
+    public Task<AuthorshipRecord?> GetLatestForTrackAsync(Guid trackId, CancellationToken ct = default) =>
+        _db.AuthorshipRecords
+            .AsNoTracking()
+            .Where(r => r.TrackId == trackId)
+            .OrderByDescending(r => r.Status == "issued" ? 1 : 0)
+            .ThenByDescending(r => r.IssuedAt)
+            .ThenByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
     public async Task AddAsync(AuthorshipRecord record, CancellationToken ct = default)
     {
         _db.AuthorshipRecords.Add(record);

@@ -6,6 +6,8 @@ public interface ICreatorProfileRepository
 {
     Task<CreatorProfileDto?> GetByUserIdAsync(string userId);
 
+    Task<bool> HasUsableProfileAsync(string userId);
+
     /// <summary>Batch-load lightweight profile info for multiple creators (slug + profile image only).</summary>
     Task<Dictionary<string, (string? Slug, string? ProfileImageUrl)>> GetSlugsByUserIdsAsync(IEnumerable<string> userIds);
 

@@ -1,3 +1,4 @@
+using Cambrian.Api.Common;
 using Cambrian.Application.DTOs.Provenance;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -45,6 +46,7 @@ public sealed class TrackProvenanceController : BaseController
 
     // ───── GET /api/tracks/{id}/compliance-score (Free+) ─────
     [HttpGet("compliance-score")]
+    [ProducesResponseType(typeof(ApiResponse<ComplianceScoreResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetComplianceScore(string id, CancellationToken ct)
     {
         await _plans.RequireFeatureAsync(GetRequiredUserId()!, FlagComplianceRead, ct);

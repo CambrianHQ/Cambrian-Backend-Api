@@ -51,6 +51,7 @@ public interface IAuthorshipRecordRepository
     Task<AuthorshipRecord?> GetAsync(Guid id, CancellationToken ct = default);
     Task<AuthorshipRecord?> GetForOwnerAsync(Guid id, string creatorId, CancellationToken ct = default);
     Task<AuthorshipRecord?> GetByHashAsync(string recordHash, CancellationToken ct = default);
+    Task<AuthorshipRecord?> GetLatestForTrackAsync(Guid trackId, CancellationToken ct = default);
     Task AddAsync(AuthorshipRecord record, CancellationToken ct = default);
     Task UpdateAsync(AuthorshipRecord record, CancellationToken ct = default);
 }
