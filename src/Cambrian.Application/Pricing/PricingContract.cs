@@ -28,8 +28,8 @@ public static class PricingContract
     }
 
     // ── Subscriptions (delegate to TierManifest) ──
-    public static int CreatorSubscriptionCents => TierManifest.Creator.PriceCents; // 1500
-    public static int ProSubscriptionCents => TierManifest.Pro.PriceCents;         // 3900
+    public static int CreatorSubscriptionCents => TierManifest.Creator.PriceCents; // 599
+    public static int ProSubscriptionCents => TierManifest.Pro.PriceCents;         // 1299
 
     // ── Release Ready monthly credit grants (delegate to TierManifest) ──
     public static int CreatorMonthlyReleaseReadyCredits => TierManifest.Creator.ReleaseReadyCreditsPerMonth; // 3
@@ -50,8 +50,8 @@ public static class PricingContract
     };
 
     // ── Authorship Record (mirrors AuthorshipRecordService.DefaultPriceCents) ──
-    /// <summary>Launch default ($29). Config key <c>AuthorshipRecord:PriceCents</c> overrides it.</summary>
-    public const int AuthorshipRecordDefaultCents = 2900;
+    /// <summary>Launch default ($10). Config key <c>AuthorshipRecord:PriceCents</c> overrides it.</summary>
+    public const int AuthorshipRecordDefaultCents = 1000;
 
     /// <summary>
     /// Configured Authorship Record price, honoring the <c>AuthorshipRecord:PriceCents</c>

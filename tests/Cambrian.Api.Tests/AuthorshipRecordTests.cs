@@ -256,7 +256,7 @@ public class AuthorshipRecordTests : IClassFixture<CambrianApiFixture>
                 {
                     ["id"] = sessionId,
                     ["client_reference_id"] = $"{userId}:authorship:{recordId}",
-                    ["amount_total"] = 2900,
+                    ["amount_total"] = 1000,
                 },
             },
         });

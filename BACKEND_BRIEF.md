@@ -428,8 +428,8 @@ buyout) are **legacy marketplace** surface — see §8.
 | Plan | slug | price | maxTracks | platform fee |
 |---|---|---|---|---|
 | Free | `free` | $0 | 10 | 35% |
-| Creator | `creator` | $15/mo (1500¢) | unlimited | 15% |
-| Pro / Label | `pro` | $39/mo (3900¢) | unlimited | 10% |
+| Creator | `creator` | $5.99/mo (599¢) | unlimited | 15% |
+| Pro / Label | `pro` | $12.99/mo (1299¢) | unlimited | 10% |
 
 ### Publishable config for the frontend
 - **No Stripe publishable key is exposed by the API**, and **none is needed** — checkout and portal

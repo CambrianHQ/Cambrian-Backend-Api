@@ -33,7 +33,7 @@ public static class TierManifest
         DisplayName = "Creator",
         UploadLimit = null,  // unlimited
         FeeRate = 0.15m,
-        PriceCents = 1500,
+        PriceCents = 599,
         StripePriceConfigKey = "Stripe:Prices:Creator",
         // Marketing copy published via /tiers/config — list only what works today.
         // Roadmap items (PDF certificates, DDEX/C2PA export, Verified Clean badge) are
@@ -56,7 +56,7 @@ public static class TierManifest
         DisplayName = "Pro / Label",
         UploadLimit = null,  // unlimited
         FeeRate = 0.10m,
-        PriceCents = 3900,
+        PriceCents = 1299,
         StripePriceConfigKey = "Stripe:Prices:Pro",
         // Roadmap items (Copyright Office assistance, bulk upload + scheduling, sync-pool)
         // are surfaced as "coming soon" on the frontend, not advertised as included here.

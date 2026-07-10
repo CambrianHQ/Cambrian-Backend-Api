@@ -44,7 +44,7 @@ Notes:
 - Evidence body: `{ evidence: [{fileKey, description?}], declarations: [],
   narrative?, generator: {tool?, version?, prompts: []} }` — file refs are
   storage keys of previously-uploaded files.
-- Payment is the existing $29 checkout (configurable `AuthorshipRecord:PriceCents`);
+- Payment is the existing $10 checkout (configurable `AuthorshipRecord:PriceCents`);
   the platform Stripe webhook issues the record on `checkout.session.completed`
   with `clientReferenceId = "{userId}:authorship:{recordId}"`.
 - The issued certificate contains: canonical record JSON, its SHA-256

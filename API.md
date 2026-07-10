@@ -13,8 +13,8 @@ cookie. All endpoints below require auth except `POST /api/stripe/webhook`.
 | Plan | Slug | Price | Max tracks | Platform fee |
 |------|------|-------|-----------|--------------|
 | Free | `free` | $0 | 10 | 35% |
-| Creator | `creator` | $15/mo | unlimited | 15% |
-| Pro / Label | `pro` | $39/mo | unlimited | 10% |
+| Creator | `creator` | $5.99/mo | unlimited | 15% |
+| Pro / Label | `pro` | $12.99/mo | unlimited | 10% |
 
 ---
 
@@ -129,8 +129,8 @@ Set these in the environment / secrets store (never in source):
 | `Stripe:SecretKey` (`STRIPE_SECRET_KEY`) | Stripe API key (Billing + Connect) |
 | `Stripe:WebhookSecret` (`STRIPE_WEBHOOK_SECRET`) | Webhook signature secret |
 | `Stripe:ConnectWebhookSecret` (`STRIPE_CONNECT_WEBHOOK_SECRET`) | Stripe Connect webhook signature secret for tips/fan subscriptions |
-| `Stripe:Prices:Creator` | Stripe **Price ID** for the $15 Creator plan |
-| `Stripe:Prices:Pro` | Stripe **Price ID** for the $39 Pro/Label plan |
+| `Stripe:Prices:Creator` | Stripe **Price ID** for the $5.99 Creator plan |
+| `Stripe:Prices:Pro` | Stripe **Price ID** for the $12.99 Pro/Label plan |
 | `App:FrontendUrl` | Base URL for checkout/portal return redirects |
 
 Subscription Billing is kept separate from the existing Stripe **Connect** payout flow.

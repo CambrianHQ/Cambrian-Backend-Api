@@ -14,7 +14,7 @@ namespace Cambrian.Application.Services;
 public sealed class AuthorshipRecordService : IAuthorshipRecordService
 {
     private const string RecordVersion = "cambrian-authorship-v1";
-    private const int DefaultPriceCents = 2900; // $29 launch price
+    private const int DefaultPriceCents = 1000; // $10 launch price
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
