@@ -1,0 +1,16 @@
+{
+  "name": "cambrian-email-creator-update",
+  "private": true,
+  "type": "module",
+  "description": "One-off script: email every Creator account about recent platform updates (mastering, Behind The Track, albums, provenance).",
+  "scripts": {
+    "recipients": "node generate-recipients.mjs",
+    "dry-run": "node send-creator-update-email.mjs",
+    "send": "node send-creator-update-email.mjs --send",
+    "test-batch": "node send-creator-update-email.mjs --send --limit=5"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "resend": "^4.0.1"
+  }
+}

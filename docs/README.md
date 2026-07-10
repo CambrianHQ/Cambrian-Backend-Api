@@ -9,6 +9,7 @@ The live backend is:
 - [Quickstart](./quickstart.md)
 - [Interactive explorer](./api-explorer.html)
 - [MCP integration](./tutorials/build-music-aware-mcp-agent.md)
+- [Staging contract sync follow-up](./staging-contract-sync-follow-up.md)
 - [OpenAPI](https://cambrian-backend-api.onrender.com/openapi.json)
 - [Endpoint manifest](https://cambrian-backend-api.onrender.com/manifest.json)
 
