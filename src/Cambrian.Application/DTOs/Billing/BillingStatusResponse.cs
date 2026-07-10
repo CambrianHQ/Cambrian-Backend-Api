@@ -8,6 +8,8 @@ public class BillingStatusResponse
 
     public DateTime? ExpiresAt { get; set; }
 
+    public DateTime? TrialEndsAt { get; set; }
+
     /// <summary>Creator tier: "Free" or "Pro".</summary>
     public string CreatorTier { get; set; } = "Free";
 

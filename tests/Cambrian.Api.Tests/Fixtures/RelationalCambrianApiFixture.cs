@@ -412,7 +412,9 @@ public sealed class RecordingPaymentGateway : IPaymentGateway
         string clientReferenceId,
         string successUrl,
         string cancelUrl,
-        string? customerEmail = null)
+        string? customerEmail = null,
+        string? customerId = null,
+        int? trialPeriodDays = null)
     {
         if (_nextCreateFailure is not null)
         {
@@ -435,6 +437,15 @@ public sealed class RecordingPaymentGateway : IPaymentGateway
 
     public Task<string> EnsureCustomerAsync(string email)
         => Task.FromResult($"cus_test_{email}");
+
+    // Records the scheduled-cancel call so cancel tests can assert Stripe was told
+    // to cancel at period end (rather than the old fire-and-forget local downgrade).
+    public string? CanceledSubscriptionId { get; private set; }
+    public Task<DateTime?> CancelSubscriptionAtPeriodEndAsync(string stripeSubscriptionId)
+    {
+        CanceledSubscriptionId = stripeSubscriptionId;
+        return Task.FromResult<DateTime?>(DateTime.UtcNow.AddMonths(1));
+    }
 
     public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl)
         => Task.FromResult($"https://billing.stripe.test/portal/{customerId}");

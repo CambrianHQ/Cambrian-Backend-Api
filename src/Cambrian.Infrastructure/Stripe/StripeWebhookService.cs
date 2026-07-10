@@ -21,6 +21,7 @@ public class StripeWebhookService : IWebhookService
 {
     private const string EventSubscriptionDeleted = "customer.subscription.deleted";
     private const string EventSubscriptionUpdated = "customer.subscription.updated";
+    private const string EventSubscriptionTrialWillEnd = "customer.subscription.trial_will_end";
     private const string EventInvoicePaid = "invoice.paid";
     private const string EventInvoicePaymentFailed = "invoice.payment_failed";
     private const string EventPaymentIntentSucceeded = "payment_intent.succeeded";
@@ -117,6 +118,12 @@ public class StripeWebhookService : IWebhookService
                 stripeCustomerId = sub?.CustomerId;
                 stripeSubscriptionId = sub?.Id;
             }
+            else if (eventType == EventSubscriptionTrialWillEnd)
+            {
+                var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
+                stripeCustomerId = sub?.CustomerId;
+                stripeSubscriptionId = sub?.Id;
+            }
             else if (eventType == EventInvoicePaid)
             {
                 var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
@@ -149,7 +156,7 @@ public class StripeWebhookService : IWebhookService
                 "Stripe webhook event deserialization failed after signature verification. Falling back to minimal JSON parsing.");
 
             ValidateStripeSignature(payload, signature, _webhookSecret);
-            (eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId)
+            (eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId, stripeSubscriptionId)
                 = ParseSignedEventFallback(payload);
         }
 
@@ -200,7 +207,7 @@ public class StripeWebhookService : IWebhookService
     }
 
     private static (string? EventId, string EventType, string? ClientReferenceId, long? AmountTotal,
-        string? StripeCustomerId, string? StripeSessionId, string? StripePaymentIntentId)
+        string? StripeCustomerId, string? StripeSessionId, string? StripePaymentIntentId, string? StripeSubscriptionId)
         ParseSignedEventFallback(string payload)
     {
         using var doc = JsonDocument.Parse(payload);
@@ -215,6 +222,7 @@ public class StripeWebhookService : IWebhookService
         string? stripeCustomerId = null;
         string? stripeSessionId = null;
         string? stripePaymentIntentId = null;
+        string? stripeSubscriptionId = null;
 
         if (root.TryGetProperty("data", out var data) && data.TryGetProperty("object", out var obj))
         {
@@ -226,8 +234,19 @@ public class StripeWebhookService : IWebhookService
                     : null;
                 stripeSessionId = obj.TryGetProperty("id", out var sessionProp) ? sessionProp.GetString() : null;
                 stripeCustomerId = obj.TryGetProperty("customer", out var customerProp) ? customerProp.GetString() : null;
+                if (obj.TryGetProperty("subscription", out var subscriptionProp))
+                {
+                    stripeSubscriptionId = subscriptionProp.ValueKind == JsonValueKind.String
+                        ? subscriptionProp.GetString()
+                        : subscriptionProp.TryGetProperty("id", out var subscriptionIdProp) ? subscriptionIdProp.GetString() : null;
+                }
             }
-            else if (eventType is EventSubscriptionDeleted or EventInvoicePaid or EventInvoicePaymentFailed)
+            else if (eventType is EventSubscriptionDeleted or EventSubscriptionUpdated or EventSubscriptionTrialWillEnd)
+            {
+                stripeCustomerId = obj.TryGetProperty("customer", out var customerProp) ? customerProp.GetString() : null;
+                stripeSubscriptionId = obj.TryGetProperty("id", out var subscriptionProp) ? subscriptionProp.GetString() : null;
+            }
+            else if (eventType is EventInvoicePaid or EventInvoicePaymentFailed)
             {
                 stripeCustomerId = obj.TryGetProperty("customer", out var customerProp) ? customerProp.GetString() : null;
             }
@@ -238,7 +257,7 @@ public class StripeWebhookService : IWebhookService
             }
         }
 
-        return (eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId);
+        return (eventId, eventType, clientReferenceId, amountTotal, stripeCustomerId, stripeSessionId, stripePaymentIntentId, stripeSubscriptionId);
     }
 
     internal async Task ProcessEventAsync(
@@ -325,7 +344,7 @@ public class StripeWebhookService : IWebhookService
             if (eventType == EventTypes.CheckoutSessionCompleted)
             {
                 purchaseAnalyticsEvent = await HandleCheckoutCompleted(
-                    normalizedEventId, clientReferenceId, amountTotal, stripeSessionId, stripeCustomerId, stripeSubscriptionId);
+                    normalizedEventId, clientReferenceId, amountTotal, stripeSessionId, stripeCustomerId, stripeSubscriptionId, payload);
             }
             else if (eventType == EventSubscriptionDeleted)
             {
@@ -334,6 +353,10 @@ public class StripeWebhookService : IWebhookService
             else if (eventType == EventSubscriptionUpdated)
             {
                 await HandleSubscriptionUpdated(stripeCustomerId, stripeSubscriptionId, payload);
+            }
+            else if (eventType == EventSubscriptionTrialWillEnd)
+            {
+                await HandleSubscriptionTrialWillEnd(stripeCustomerId, stripeSubscriptionId, payload);
             }
             else if (eventType == EventInvoicePaid)
             {
@@ -498,7 +521,8 @@ public class StripeWebhookService : IWebhookService
         long? amountTotal,
         string? stripeSessionId,
         string? stripeCustomerId,
-        string? stripeSubscriptionId = null)
+        string? stripeSubscriptionId = null,
+        string? payload = null)
     {
         if (clientReferenceId is null)
         {
@@ -517,7 +541,7 @@ public class StripeWebhookService : IWebhookService
                 throw new InvalidOperationException(
                     "Subscription payment cannot be fulfilled because the Stripe session ID is missing.");
             return await HandleSubscriptionCheckout(
-                eventId, parts[0], parts[2], stripeCustomerId, stripeSubscriptionId, stripeSessionId);
+                eventId, parts[0], parts[2], stripeCustomerId, stripeSubscriptionId, stripeSessionId, payload);
         }
 
         // AuthorshipRecordService sets clientReferenceId = "userId:authorship:recordId".
@@ -657,11 +681,20 @@ public class StripeWebhookService : IWebhookService
         string tier,
         string? stripeCustomerId,
         string? stripeSubscriptionId = null,
-        string? stripeSessionId = null)
+        string? stripeSessionId = null,
+        string? payload = null)
     {
         // Normalize the tier slug to a known tier config (creator/pro/free).
         var tierConfig = TierManifest.For(tier);
         tier = tierConfig.Slug;
+        var stripeSnapshot = await ResolveCheckoutSubscriptionSnapshotAsync(stripeSubscriptionId, payload);
+        var localStatus = MapStripeStatusToSub(stripeSnapshot?.Status);
+        if (localStatus is not "trialing")
+        {
+            localStatus = "active";
+        }
+        var trialEndsAt = stripeSnapshot?.TrialEndsAt;
+        var expiresAt = stripeSnapshot?.PeriodEnd ?? trialEndsAt ?? DateTime.UtcNow.AddMonths(1);
 
         // Webhook idempotency: if this exact checkout session was already fulfilled,
         // do nothing. A duplicate/retried checkout.session.completed must not create a
@@ -675,7 +708,7 @@ public class StripeWebhookService : IWebhookService
 
         // Cancel any existing subscription for this user
         var existing = await _db.Subscriptions
-            .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == "active");
+            .FirstOrDefaultAsync(s => s.UserId == userId && (s.Status == "active" || s.Status == "trialing"));
 
         if (existing is not null)
         {
@@ -689,12 +722,13 @@ public class StripeWebhookService : IWebhookService
             Id = Guid.NewGuid(),
             UserId = userId,
             Plan = tier,
-            Status = "active",
+            Status = localStatus,
             StripeCustomerId = stripeCustomerId,
             StripeSubscriptionId = stripeSubscriptionId,
             StripeSessionId = stripeSessionId,
             StartedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddMonths(1)
+            ExpiresAt = expiresAt,
+            TrialEndsAt = trialEndsAt
         };
         _db.Subscriptions.Add(subscription);
 
@@ -723,6 +757,8 @@ public class StripeWebhookService : IWebhookService
             {
                 ["plan"] = tier,
                 ["interval"] = "month",
+                ["status"] = localStatus,
+                ["trial_ends_at"] = trialEndsAt,
                 ["stripe_customer_id"] = stripeCustomerId,
                 ["stripe_subscription_id"] = stripeSubscriptionId,
                 ["stripe_session_id"] = stripeSessionId
@@ -799,7 +835,9 @@ public class StripeWebhookService : IWebhookService
         }
 
         var activeSub = await _db.Subscriptions
-            .FirstOrDefaultAsync(s => s.UserId == user.Id && s.Status == "active");
+            .Where(s => s.UserId == user.Id && (s.Status == "active" || s.Status == "trialing" || s.Status == "past_due"))
+            .OrderByDescending(s => s.StartedAt)
+            .FirstOrDefaultAsync();
 
         if (activeSub is not null)
         {
@@ -844,6 +882,7 @@ public class StripeWebhookService : IWebhookService
         string? status = null;
         string? priceId = null;
         long? periodEndUnix = null;
+        long? trialEndUnix = null;
         var customerId = stripeCustomerId;
 
         if (!string.IsNullOrEmpty(payload))
@@ -857,6 +896,7 @@ public class StripeWebhookService : IWebhookService
                     customerId ??= obj.TryGetProperty("customer", out var c) ? c.GetString() : null;
                     status = obj.TryGetProperty("status", out var s) ? s.GetString() : null;
                     periodEndUnix = ExtractPeriodEnd(obj);
+                    trialEndUnix = ExtractTrialEnd(obj);
                     priceId = ExtractPriceId(obj);
                 }
             }
@@ -892,6 +932,10 @@ public class StripeWebhookService : IWebhookService
         var expiresAt = periodEndUnix is > 0
             ? DateTimeOffset.FromUnixTimeSeconds(periodEndUnix.Value).UtcDateTime
             : (DateTime?)null;
+        var trialEndsAt = trialEndUnix is > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(trialEndUnix.Value).UtcDateTime
+            : (DateTime?)null;
+        var shouldDowngradeTrial = ShouldDowngradeFailedTrial(status, sub, trialEndsAt);
 
         if (sub is not null)
         {
@@ -900,9 +944,16 @@ public class StripeWebhookService : IWebhookService
             if (!string.IsNullOrEmpty(stripeSubscriptionId)) sub.StripeSubscriptionId ??= stripeSubscriptionId;
             sub.StripeCustomerId ??= customerId;
             if (expiresAt is not null) sub.ExpiresAt = expiresAt;
+            if (trialEndsAt is not null) sub.TrialEndsAt = trialEndsAt;
+            if (shouldDowngradeTrial) sub.ExpiresAt = DateTime.UtcNow;
         }
 
-        if (tierSlug is not null)
+        if (shouldDowngradeTrial)
+        {
+            user.Tier = TierManifest.Free.Slug;
+            user.CreatorTier = CreatorTier.Free;
+        }
+        else if (tierSlug is not null)
         {
             var tierConfig = TierManifest.For(tierSlug);
             user.Tier = tierConfig.Slug;
@@ -917,6 +968,76 @@ public class StripeWebhookService : IWebhookService
             user.Id, customerId, tierSlug ?? "(unchanged)", userStatus);
     }
 
+    /// <summary>
+    /// Handle customer.subscription.trial_will_end — acknowledge Stripe's notice and
+    /// keep the local trial end date fresh. User-facing reminder UX is intentionally
+    /// handled outside the webhook; this event must not downgrade or charge anyone.
+    /// </summary>
+    private async Task HandleSubscriptionTrialWillEnd(string? stripeCustomerId, string? stripeSubscriptionId, string? payload)
+    {
+        var customerId = stripeCustomerId;
+        var subscriptionId = stripeSubscriptionId;
+        DateTime? trialEndsAt = null;
+
+        if (!string.IsNullOrEmpty(payload))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(payload);
+                if (doc.RootElement.TryGetProperty("data", out var data) &&
+                    data.TryGetProperty("object", out var obj))
+                {
+                    customerId ??= obj.TryGetProperty("customer", out var c) ? c.GetString() : null;
+                    subscriptionId ??= obj.TryGetProperty("id", out var id) ? id.GetString() : null;
+                    var trialEndUnix = ExtractTrialEnd(obj);
+                    trialEndsAt = trialEndUnix is > 0
+                        ? DateTimeOffset.FromUnixTimeSeconds(trialEndUnix.Value).UtcDateTime
+                        : null;
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "customer.subscription.trial_will_end: failed to parse payload");
+            }
+        }
+
+        if (string.IsNullOrEmpty(customerId))
+        {
+            _logger.LogWarning("customer.subscription.trial_will_end: no customer id resolved");
+            return;
+        }
+
+        var user = await FindUserByStripeCustomerAsync(customerId);
+        if (user is null)
+        {
+            _logger.LogWarning(
+                "customer.subscription.trial_will_end: could not match Stripe customer {CustomerId} to a local user.",
+                customerId);
+            return;
+        }
+
+        var sub = await _db.Subscriptions
+            .Where(s => s.UserId == user.Id)
+            .OrderByDescending(s => s.StartedAt)
+            .FirstOrDefaultAsync();
+
+        if (sub is not null)
+        {
+            if (!string.IsNullOrEmpty(subscriptionId)) sub.StripeSubscriptionId ??= subscriptionId;
+            sub.StripeCustomerId ??= customerId;
+            if (trialEndsAt is not null) sub.TrialEndsAt = trialEndsAt;
+            if (sub.Status == "active" && sub.TrialEndsAt is not null && sub.TrialEndsAt > DateTime.UtcNow)
+            {
+                sub.Status = "trialing";
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        _logger.LogInformation(
+            "Subscription trial will end: User={UserId} StripeCustomer={CustomerId} TrialEndsAt={TrialEndsAt}",
+            user.Id, customerId, trialEndsAt);
+    }
+
     /// <summary>Match a Stripe price id to a tier slug using configured price ids.</summary>
     private string? MapPriceToTierSlug(string? priceId)
     {
@@ -924,6 +1045,71 @@ public class StripeWebhookService : IWebhookService
         if (priceId == _config["Stripe:Prices:Creator"]) return "creator";
         if (priceId == _config["Stripe:Prices:Pro"]) return "pro";
         return null;
+    }
+
+    private sealed record StripeSubscriptionSnapshot(
+        string? Status,
+        DateTime? TrialEndsAt,
+        DateTime? PeriodEnd,
+        string? PriceId);
+
+    private async Task<StripeSubscriptionSnapshot?> ResolveCheckoutSubscriptionSnapshotAsync(string? stripeSubscriptionId, string? payload)
+    {
+        var snapshot = ExtractCheckoutSubscriptionSnapshot(payload);
+        if (snapshot is not null)
+            return snapshot;
+
+        // Tests and dev fallback payloads do not configure Stripe. In production,
+        // failing to read the subscription should retry the webhook instead of
+        // silently losing trial_end.
+        if (string.IsNullOrWhiteSpace(stripeSubscriptionId) || string.IsNullOrWhiteSpace(_config["Stripe:SecretKey"]))
+            return null;
+
+        var service = new global::Stripe.SubscriptionService();
+        var subscription = await service.GetAsync(stripeSubscriptionId);
+        return new StripeSubscriptionSnapshot(
+            subscription.Status,
+            subscription.TrialEnd,
+            null,
+            null);
+    }
+
+    private static StripeSubscriptionSnapshot? ExtractCheckoutSubscriptionSnapshot(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                !data.TryGetProperty("object", out var obj) ||
+                !obj.TryGetProperty("subscription", out var subscription) ||
+                subscription.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            return ExtractSubscriptionSnapshot(subscription);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static StripeSubscriptionSnapshot ExtractSubscriptionSnapshot(JsonElement obj)
+    {
+        var status = obj.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null;
+        var trialEndUnix = ExtractTrialEnd(obj);
+        var periodEndUnix = ExtractPeriodEnd(obj);
+        var trialEndsAt = trialEndUnix is > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(trialEndUnix.Value).UtcDateTime
+            : (DateTime?)null;
+        var periodEnd = periodEndUnix is > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(periodEndUnix.Value).UtcDateTime
+            : (DateTime?)null;
+        return new StripeSubscriptionSnapshot(status, trialEndsAt, periodEnd, ExtractPriceId(obj));
     }
 
     private static string MapStripeStatusToUser(string? stripeStatus) => (stripeStatus ?? "").ToLowerInvariant() switch
@@ -936,9 +1122,23 @@ public class StripeWebhookService : IWebhookService
 
     private static string MapStripeStatusToSub(string? stripeStatus) => (stripeStatus ?? "").ToLowerInvariant() switch
     {
+        "trialing" => "trialing",
+        "active" => "active",
+        "past_due" or "unpaid" or "incomplete" => "past_due",
         "canceled" or "incomplete_expired" => "cancelled",
         _ => "active"
     };
+
+    private static bool ShouldDowngradeFailedTrial(string? stripeStatus, Cambrian.Domain.Entities.Subscription? sub, DateTime? trialEndsAt)
+    {
+        var normalized = (stripeStatus ?? "").ToLowerInvariant();
+        if (normalized is not ("past_due" or "unpaid" or "incomplete"))
+            return false;
+
+        return sub?.Status == "trialing"
+            || sub?.TrialEndsAt is not null
+            || trialEndsAt is not null;
+    }
 
     private static string? ExtractPriceId(JsonElement obj)
     {
@@ -970,6 +1170,13 @@ public class StripeWebhookService : IWebhookService
             return itemEnd.GetInt64();
 
         return null;
+    }
+
+    private static long? ExtractTrialEnd(JsonElement obj)
+    {
+        return obj.TryGetProperty("trial_end", out var trialEnd) && trialEnd.ValueKind == JsonValueKind.Number
+            ? trialEnd.GetInt64()
+            : null;
     }
 
     /// <summary>

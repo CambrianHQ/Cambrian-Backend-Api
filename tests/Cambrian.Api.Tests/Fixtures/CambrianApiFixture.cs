@@ -527,13 +527,18 @@ internal sealed class FakePaymentGateway : IPaymentGateway
         string clientReferenceId,
         string successUrl,
         string cancelUrl,
-        string? customerEmail = null)
+        string? customerEmail = null,
+        string? customerId = null,
+        int? trialPeriodDays = null)
     {
         return Task.FromResult($"https://checkout.stripe.com/fake-sub?price={priceId}&ref={clientReferenceId}");
     }
 
     public Task<string> EnsureCustomerAsync(string email)
         => Task.FromResult($"cus_fake_{email}");
+
+    public Task<DateTime?> CancelSubscriptionAtPeriodEndAsync(string stripeSubscriptionId)
+        => Task.FromResult<DateTime?>(DateTime.UtcNow.AddMonths(1));
 
     public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl)
         => Task.FromResult($"https://billing.stripe.com/fake-portal?customer={customerId}");

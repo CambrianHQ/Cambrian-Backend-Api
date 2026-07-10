@@ -6,6 +6,8 @@ public interface ISubscriptionRepository
 {
     Task<Subscription?> GetActiveAsync(string userId);
 
+    Task<bool> HasAnyForUserOrCustomerAsync(string userId, string? stripeCustomerId);
+
     /// <summary>
     /// Flip Status 'active' -> 'expired' for subscriptions past their ExpiresAt.
     /// Returns the number expired. Idempotent; safe to run repeatedly.

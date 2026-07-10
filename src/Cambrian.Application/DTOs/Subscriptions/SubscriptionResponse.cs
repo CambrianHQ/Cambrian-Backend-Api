@@ -11,4 +11,6 @@ public class SubscriptionResponse
     public DateTime StartedAt { get; set; }
 
     public DateTime? ExpiresAt { get; set; }
+
+    public DateTime? TrialEndsAt { get; set; }
 }

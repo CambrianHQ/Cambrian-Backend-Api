@@ -10,9 +10,9 @@ public enum CreatorTier
     /// <summary>Free tier ($0): up to 10 tracks, 35% platform fee, basic analytics, provenance stamp.</summary>
     Free = 0,
 
-    /// <summary>Pro/Label tier ($39/mo): unlimited uploads, 10% platform fee, full suite + API + sync pool.</summary>
+    /// <summary>Pro/Label tier ($12.99/mo): unlimited uploads, 10% platform fee, full suite + API + sync pool.</summary>
     Pro = 1,
 
-    /// <summary>Creator tier ($15/mo): unlimited uploads, 15% platform fee, full provenance suite + analytics.</summary>
+    /// <summary>Creator tier ($5.99/mo): unlimited uploads, 15% platform fee, full provenance suite + analytics.</summary>
     Creator = 2
 }

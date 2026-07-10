@@ -12,12 +12,14 @@ public class SubscriptionService : ISubscriptionService
     private readonly ISubscriptionRepository _subscriptions;
     private readonly ITransactionManager _transactions;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly IPaymentGateway _gateway;
 
-    public SubscriptionService(ISubscriptionRepository subscriptions, ITransactionManager transactions, UserManager<ApplicationUser> users)
+    public SubscriptionService(ISubscriptionRepository subscriptions, ITransactionManager transactions, UserManager<ApplicationUser> users, IPaymentGateway gateway)
     {
         _subscriptions = subscriptions;
         _transactions = transactions;
         _users = users;
+        _gateway = gateway;
     }
 
     public Task<IReadOnlyCollection<PlanResponse>> GetPlansAsync()
@@ -57,7 +59,8 @@ public class SubscriptionService : ISubscriptionService
             Plan = sub?.Plan ?? "free",
             Status = sub?.Status ?? "active",
             StartedAt = sub?.StartedAt ?? default,
-            ExpiresAt = sub?.ExpiresAt
+            ExpiresAt = sub?.ExpiresAt,
+            TrialEndsAt = sub?.TrialEndsAt
         };
     }
 
@@ -82,7 +85,13 @@ public class SubscriptionService : ISubscriptionService
                     SyncCreatorTier(user);
                     await _users.UpdateAsync(user);
                 }
-                return new SubscriptionResponse { Plan = existing.Plan, Status = existing.Status };
+                return new SubscriptionResponse
+                {
+                    Plan = existing.Plan,
+                    Status = existing.Status,
+                    TrialEndsAt = existing.TrialEndsAt,
+                    ExpiresAt = existing.ExpiresAt
+                };
             }
         }
 
@@ -134,7 +143,8 @@ public class SubscriptionService : ISubscriptionService
                 Plan = subscription.Plan,
                 Status = subscription.Status,
                 StartedAt = subscription.StartedAt,
-                ExpiresAt = subscription.ExpiresAt
+                ExpiresAt = subscription.ExpiresAt,
+                TrialEndsAt = subscription.TrialEndsAt
             };
         }
         catch
@@ -150,14 +160,32 @@ public class SubscriptionService : ISubscriptionService
         if (existing is null)
             throw new InvalidOperationException("No active subscription to cancel.");
 
-        await _subscriptions.CancelAsync(existing.Id);
+        // Cancel at PERIOD END, not immediately. Two bugs this fixes:
+        //  1. The old path never called Stripe at all, so a "cancelled" subscriber
+        //     kept getting charged every month forever.
+        //  2. It immediately set Tier = "free", stripping paid access (API, credits,
+        //     lower fee, unlimited) the instant they cancelled — even though they had
+        //     already paid through the end of the current period.
+        // Now: schedule Stripe cancel_at_period_end, keep the subscriber on their tier
+        // and their local subscription active until ExpiresAt, and let the existing
+        // customer.subscription.deleted webhook do the downgrade when the period ends.
+        DateTime? periodEnd = null;
+        if (!string.IsNullOrWhiteSpace(existing.StripeSubscriptionId))
+        {
+            periodEnd = await _gateway.CancelSubscriptionAtPeriodEndAsync(existing.StripeSubscriptionId);
+        }
+
+        // Keep the row active so it still grants the tier; set ExpiresAt to the paid-through
+        // date as a backstop for the webhook (ExpireLapsedAsync will fail it closed at period end).
+        existing.ExpiresAt = periodEnd ?? existing.ExpiresAt;
+        await _subscriptions.UpdateAsync(existing);
 
         var user = await _users.FindByIdAsync(userId);
         if (user is not null)
         {
-            user.Tier = "free";
-            user.SubscriptionStatus = "Cancelled";
-            SyncCreatorTier(user);
+            // Tier is intentionally NOT changed here — access continues until the
+            // period-end webhook. Only mark that a cancellation is pending.
+            user.SubscriptionStatus = "Cancelling";
             await _users.UpdateAsync(user);
         }
     }
@@ -172,7 +200,8 @@ public class SubscriptionService : ISubscriptionService
             Plan = s.Plan,
             Status = s.Status,
             StartedAt = s.StartedAt,
-            ExpiresAt = s.ExpiresAt
+            ExpiresAt = s.ExpiresAt,
+            TrialEndsAt = s.TrialEndsAt
         }).ToList();
     }
 

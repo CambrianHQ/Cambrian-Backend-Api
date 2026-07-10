@@ -16,27 +16,37 @@ public class SubscriptionRepository : ISubscriptionRepository
     public async Task<Subscription?> GetActiveAsync(string userId)
     {
         // EXPIRY ENFORCEMENT: a subscription only grants a tier while it is both
-        // Status='active' AND not past ExpiresAt. A null ExpiresAt means no set
-        // end (an ongoing Stripe sub) and stays active. This is the read-time
-        // enforcement — the moment ExpiresAt passes, /auth/me resolves the user
-        // back down to free, with no reliance on a sweep having run yet.
+        // current and not past its end date. Trialing rows grant the full tier
+        // until TrialEndsAt, then fail closed to free if Stripe has not sent the
+        // active conversion webhook yet.
         var now = DateTime.UtcNow;
         return await _db.Subscriptions
             .Where(s => s.UserId == userId
-                && s.Status == "active"
-                && (s.ExpiresAt == null || s.ExpiresAt > now))
+                && (
+                    (s.Status == "active" && (s.ExpiresAt == null || s.ExpiresAt > now))
+                    || (s.Status == "trialing" && ((s.TrialEndsAt ?? s.ExpiresAt) == null || (s.TrialEndsAt ?? s.ExpiresAt) > now))
+                ))
             .OrderByDescending(s => s.StartedAt)
             .FirstOrDefaultAsync();
     }
 
+    public async Task<bool> HasAnyForUserOrCustomerAsync(string userId, string? stripeCustomerId)
+    {
+        return await _db.Subscriptions.AnyAsync(s =>
+            s.UserId == userId
+            || (!string.IsNullOrWhiteSpace(stripeCustomerId) && s.StripeCustomerId == stripeCustomerId));
+    }
+
     public async Task<int> ExpireLapsedAsync(DateTime nowUtc)
     {
-        // Data-hygiene sweep: flip Status 'active' -> 'expired' for subscriptions
-        // whose ExpiresAt has passed, so the stored Status stays truthful for
-        // admin/reporting and any other Status=='active' query. Tier enforcement
+        // Data-hygiene sweep: flip current subscriptions to 'expired' after their
+        // access window passes, so admin/reporting stays truthful. Tier enforcement
         // does NOT depend on this having run (see GetActiveAsync).
+        // whose ExpiresAt has passed, so the stored Status stays truthful for
         var lapsed = await _db.Subscriptions
-            .Where(s => s.Status == "active" && s.ExpiresAt != null && s.ExpiresAt <= nowUtc)
+            .Where(s =>
+                (s.Status == "active" && s.ExpiresAt != null && s.ExpiresAt <= nowUtc)
+                || (s.Status == "trialing" && (s.TrialEndsAt ?? s.ExpiresAt) != null && (s.TrialEndsAt ?? s.ExpiresAt) <= nowUtc))
             .ToListAsync();
         if (lapsed.Count == 0) return 0;
         foreach (var s in lapsed) s.Status = "expired";

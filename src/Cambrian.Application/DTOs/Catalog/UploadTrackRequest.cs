@@ -32,6 +32,18 @@ public class UploadTrackRequest
     [SafeMetadata]
     public string? Subgenre { get; set; }
 
+    /// <summary>Tempo (BPM) — the upload wizard collects this and Release Ready
+    /// requires it, so dropping it here forced creators to re-enter it on the
+    /// edit page before their first master run.</summary>
+    [MaxLength(20)]
+    [SafeMetadata]
+    public string? Tempo { get; set; }
+
+    /// <summary>Mood — same Release Ready metadata requirement as Tempo.</summary>
+    [MaxLength(120)]
+    [SafeMetadata]
+    public string? Mood { get; set; }
+
     public decimal? Price { get; set; }
 
     [MaxLength(200)]

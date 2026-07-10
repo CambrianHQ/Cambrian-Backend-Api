@@ -12,6 +12,8 @@ namespace Cambrian.Application.Services;
 
 public sealed class BillingService : IBillingService
 {
+    private const int CreatorTrialDays = 14;
+
     private readonly ISubscriptionRepository _subscriptions;
     private readonly ISubscriptionService _subscriptionService;
     private readonly IPaymentGateway _gateway;
@@ -49,13 +51,23 @@ public sealed class BillingService : IBillingService
         {
             var tierConfig = TierManifest.For(tier);
             var priceId = ResolvePriceId(tierConfig);
+            string? stripeCustomerId = null;
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                stripeCustomerId = await _gateway.EnsureCustomerAsync(userEmail);
+            }
+
+            var hasPriorSubscription = await _subscriptions.HasAnyForUserOrCustomerAsync(userId, stripeCustomerId);
+            int? trialPeriodDays = hasPriorSubscription ? null : CreatorTrialDays;
 
             var subUrl = await _gateway.CreateSubscriptionCheckoutByPriceAsync(
                 priceId,
                 clientReferenceId: $"{userId}:subscription:{tier}",
                 successUrl,
                 cancelUrl,
-                customerEmail: userEmail);
+                customerEmail: stripeCustomerId is null ? userEmail : null,
+                customerId: stripeCustomerId,
+                trialPeriodDays: trialPeriodDays);
 
             return new CheckoutResponse { CheckoutUrl = subUrl };
         }
@@ -140,6 +152,7 @@ public sealed class BillingService : IBillingService
             Tier = planLabel,
             Status = sub?.Status ?? "active",
             ExpiresAt = sub?.ExpiresAt,
+            TrialEndsAt = sub?.TrialEndsAt,
             CreatorTier = tierConfig.Tier.ToString(),
             UploadCount = user?.UploadCount ?? 0,
             UploadLimit = tierConfig.UploadLimit,

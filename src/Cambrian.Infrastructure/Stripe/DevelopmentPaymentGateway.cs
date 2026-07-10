@@ -67,7 +67,9 @@ public sealed class DevelopmentPaymentGateway : IPaymentGateway
         string clientReferenceId,
         string successUrl,
         string cancelUrl,
-        string? customerEmail = null)
+        string? customerEmail = null,
+        string? customerId = null,
+        int? trialPeriodDays = null)
     {
         var sessionId = $"cs_dev_sub_{Guid.NewGuid():N}";
         _sessions[sessionId] = new CheckoutSessionInfo
@@ -83,6 +85,10 @@ public sealed class DevelopmentPaymentGateway : IPaymentGateway
 
     public Task<string> EnsureCustomerAsync(string email)
         => Task.FromResult($"cus_dev_{Uri.EscapeDataString(email)}");
+
+    public Task<DateTime?> CancelSubscriptionAtPeriodEndAsync(string stripeSubscriptionId)
+        // No Stripe in dev — pretend the current period ends a month out.
+        => Task.FromResult<DateTime?>(DateTime.UtcNow.AddMonths(1));
 
     public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl)
         => Task.FromResult($"{_frontendUrl}/settings/billing?portal=dev&customer={Uri.EscapeDataString(customerId)}");

@@ -50,10 +50,12 @@ public sealed class BillingTierTests
     [InlineData("PRO", ProPrice)]
     public async Task CreateCheckout_UsesConfiguredPriceId_ForTier(string tier, string expectedPriceId)
     {
-        var (sut, gateway, _, _) = CreateSut();
+        var (sut, gateway, subs, _) = CreateSut();
         gateway.CreateSubscriptionCheckoutByPriceAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<int?>())
             .Returns("https://checkout.stripe.test/session");
+        gateway.EnsureCustomerAsync("u@test.com").Returns("cus_trial_user");
+        subs.HasAnyForUserOrCustomerAsync("user-1", "cus_trial_user").Returns(false);
 
         var result = await sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = tier }, "user-1", "u@test.com");
 
@@ -63,7 +65,31 @@ public sealed class BillingTierTests
             Arg.Is<string>(r => r.StartsWith("user-1:subscription:")),
             Arg.Any<string>(),
             Arg.Any<string>(),
-            "u@test.com");
+            null,
+            "cus_trial_user",
+            14);
+    }
+
+    [Fact]
+    public async Task CreateCheckout_SkipsTrial_WhenUserOrCustomerAlreadyHadSubscription()
+    {
+        var (sut, gateway, subs, _) = CreateSut();
+        gateway.EnsureCustomerAsync("u@test.com").Returns("cus_existing");
+        subs.HasAnyForUserOrCustomerAsync("user-1", "cus_existing").Returns(true);
+        gateway.CreateSubscriptionCheckoutByPriceAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns("https://checkout.stripe.test/session");
+
+        await sut.CreateCheckoutAsync(new BillingCheckoutRequest { Tier = "creator" }, "user-1", "u@test.com");
+
+        await gateway.Received(1).CreateSubscriptionCheckoutByPriceAsync(
+            CreatorPrice,
+            "user-1:subscription:creator",
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            null,
+            "cus_existing",
+            null);
     }
 
     [Theory]

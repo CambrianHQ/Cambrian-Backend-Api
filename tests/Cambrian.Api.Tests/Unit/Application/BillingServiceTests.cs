@@ -51,8 +51,12 @@ public sealed class BillingServiceTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>())
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>())
             .Returns("https://checkout.stripe.test/subscription/cs_sub_123");
+        _gateway.EnsureCustomerAsync("buyer@example.com").Returns("cus_trial_buyer");
+        _subscriptions.HasAnyForUserOrCustomerAsync("user-1", "cus_trial_buyer").Returns(false);
 
         var response = await _sut.CreateCheckoutAsync(
             new BillingCheckoutRequest { Tier = "pro" },
@@ -68,7 +72,9 @@ public sealed class BillingServiceTests
             "user-1:subscription:pro",
             "http://localhost:5173/payment?payment_success=true&session_id={CHECKOUT_SESSION_ID}",
             "http://localhost:5173/payment",
-            "buyer@example.com");
+            null,
+            "cus_trial_buyer",
+            14);
     }
 
     [Fact]

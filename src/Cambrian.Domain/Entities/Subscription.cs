@@ -26,4 +26,6 @@ public class Subscription
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? ExpiresAt { get; set; }
+
+    public DateTime? TrialEndsAt { get; set; }
 }

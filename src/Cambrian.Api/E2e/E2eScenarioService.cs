@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Pricing;
 using Cambrian.Domain.Entities;
 using Cambrian.Domain.Enums;
 using Cambrian.Persistence;
@@ -660,10 +661,10 @@ public sealed class E2eScenarioService
         var creditPack = CreditPackCatalog.FindByCredits(creditCount);
         var (clientReferenceId, amountTotal) = kind.ToLowerInvariant() switch
         {
-            "subscription" => ($"{userId}:subscription:{tier ?? "creator"}", (long?)1500),
+            "subscription" => ($"{userId}:subscription:{tier ?? "creator"}", (long?)TierManifest.For(tier ?? "creator").PriceCents),
             "credits" when creditPack is not null => ($"{userId}:credits:{creditCount}", (long?)creditPack.PriceCents),
             "credits" => throw new ArgumentException($"Unsupported E2E credit count '{creditCount}'.", nameof(credits)),
-            "authorship" => ($"{userId}:authorship:{recordId ?? SeedAuthorshipRecordId}", (long?)2900),
+            "authorship" => ($"{userId}:authorship:{recordId ?? SeedAuthorshipRecordId}", (long?)PricingContract.AuthorshipRecordDefaultCents),
             _ => throw new ArgumentException($"Unknown checkout kind '{kind}'.", nameof(kind)),
         };
 

@@ -102,22 +102,41 @@ public class StripeFacade : IPaymentGateway
         string clientReferenceId,
         string successUrl,
         string cancelUrl,
-        string? customerEmail = null)
+        string? customerEmail = null,
+        string? customerId = null,
+        int? trialPeriodDays = null)
     {
         if (string.IsNullOrWhiteSpace(priceId))
             throw new InvalidOperationException("A Stripe Price ID is required for subscription checkout.");
 
+        var hasTrial = trialPeriodDays is > 0;
         var options = new SessionCreateOptions
         {
             Mode = "subscription",
-            Customer = customerEmail != null ? await FindOrCreateCustomerAsync(customerEmail) : null,
+            Customer = !string.IsNullOrWhiteSpace(customerId)
+                ? customerId
+                : customerEmail != null ? await FindOrCreateCustomerAsync(customerEmail) : null,
+            PaymentMethodCollection = hasTrial ? "always" : null,
             SuccessUrl = successUrl,
             CancelUrl = cancelUrl,
             ClientReferenceId = clientReferenceId,
             LineItems = new List<SessionLineItemOptions>
             {
                 new() { Price = priceId, Quantity = 1 }
-            }
+            },
+            SubscriptionData = hasTrial
+                ? new SessionSubscriptionDataOptions
+                {
+                    TrialPeriodDays = trialPeriodDays,
+                    TrialSettings = new SessionSubscriptionDataTrialSettingsOptions
+                    {
+                        EndBehavior = new SessionSubscriptionDataTrialSettingsEndBehaviorOptions
+                        {
+                            MissingPaymentMethod = "cancel"
+                        }
+                    }
+                }
+                : null
         };
 
         var service = new SessionService();
@@ -126,6 +145,23 @@ public class StripeFacade : IPaymentGateway
     }
 
     public Task<string> EnsureCustomerAsync(string email) => FindOrCreateCustomerAsync(email);
+
+    public async Task<DateTime?> CancelSubscriptionAtPeriodEndAsync(string stripeSubscriptionId)
+    {
+        if (string.IsNullOrWhiteSpace(stripeSubscriptionId))
+            throw new InvalidOperationException("A Stripe subscription ID is required to schedule cancellation.");
+
+        var service = new SubscriptionService();
+        // Schedule cancellation instead of deleting now — the subscriber keeps
+        // access (and we keep collecting the final period they already paid for)
+        // until the period ends, when Stripe emits customer.subscription.deleted.
+        var updated = await service.UpdateAsync(stripeSubscriptionId, new SubscriptionUpdateOptions
+        {
+            CancelAtPeriodEnd = true,
+        });
+
+        return updated.CurrentPeriodEnd == default ? null : updated.CurrentPeriodEnd;
+    }
 
     public async Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl)
     {

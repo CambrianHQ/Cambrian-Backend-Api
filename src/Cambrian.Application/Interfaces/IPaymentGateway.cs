@@ -40,7 +40,19 @@ public interface IPaymentGateway
         string clientReferenceId,
         string successUrl,
         string cancelUrl,
-        string? customerEmail = null);
+        string? customerEmail = null,
+        string? customerId = null,
+        int? trialPeriodDays = null);
+
+    /// <summary>
+    /// Schedule a subscription to cancel at the end of the current paid period
+    /// (Stripe <c>cancel_at_period_end = true</c>). The subscriber keeps access
+    /// until the period ends, at which point Stripe fires
+    /// <c>customer.subscription.deleted</c> and the webhook downgrades them.
+    /// Returns the current period end (when access actually lapses), or null if
+    /// it could not be determined. Idempotent — safe to call on an already-scheduled sub.
+    /// </summary>
+    Task<DateTime?> CancelSubscriptionAtPeriodEndAsync(string stripeSubscriptionId);
 
     /// <summary>
     /// Find an existing Stripe billing Customer by email, or create one. Returns the customer ID.

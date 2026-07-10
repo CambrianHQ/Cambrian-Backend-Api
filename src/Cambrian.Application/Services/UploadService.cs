@@ -162,6 +162,8 @@ public class UploadService : IUploadService
         request.PrimaryGenre = MetadataSanitizer.NormalizeOptional(request.PrimaryGenre, "Primary genre");
         request.Subgenre = MetadataSanitizer.NormalizeOptional(request.Subgenre, "Subgenre");
         request.Genre = MetadataSanitizer.NormalizeOptional(request.Genre, "Genre");
+        request.Tempo = MetadataSanitizer.NormalizeOptional(request.Tempo, "Tempo");
+        request.Mood = MetadataSanitizer.NormalizeOptional(request.Mood, "Mood");
         request.Tags = MetadataSanitizer.NormalizeOptional(request.Tags, "Tags");
         request.NewAlbumTitle = MetadataSanitizer.NormalizeOptional(request.NewAlbumTitle, "Album title");
         request.NewAlbumDescription = MetadataSanitizer.NormalizeOptional(request.NewAlbumDescription, "Album description");
@@ -271,6 +273,8 @@ public class UploadService : IUploadService
             CambrianTrackId = TrackIdDto.Generate(),
             Title = request.Title,
             Description = request.Description,
+            Tempo = request.Tempo,
+            Mood = request.Mood,
             ContentHash = contentHash,
             Signature = stamp?.Signature,
             SignedAt = stamp?.SignedAt,
