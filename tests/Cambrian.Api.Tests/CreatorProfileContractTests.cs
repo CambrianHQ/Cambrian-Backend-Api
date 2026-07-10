@@ -134,9 +134,11 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
             showEarnings = false,
             showDownloadStats = false,
             // Free-text by design: niche gear must round-trip verbatim, not map to an enum.
+            // Daw is a tag list — same chip/array shape and validation as the other
+            // studio fields (aiTools, instruments, hardware, plugins, gear).
             studioSetup = new
             {
-                daw = "Ableton Live 12 + Reaper for stems",
+                daw = new[] { "Ableton Live 12", "Reaper for stems" },
                 aiTools = new[] { "Suno v5.5", "RVC" },
                 instruments = new[] { "kalimba", "Otamatone Deluxe" },
                 plugins = new[] { "FabFilter Pro-Q 4" },
@@ -150,7 +152,8 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         });
         putRes.EnsureSuccessStatusCode();
         var putData = (await putRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
-        Assert.Equal("Ableton Live 12 + Reaper for stems", putData.GetProperty("studioSetup").GetProperty("daw").GetString());
+        Assert.Equal("Ableton Live 12", putData.GetProperty("studioSetup").GetProperty("daw")[0].GetString());
+        Assert.Equal("Reaper for stems", putData.GetProperty("studioSetup").GetProperty("daw")[1].GetString());
         Assert.Equal("Otamatone Deluxe", putData.GetProperty("studioSetup").GetProperty("instruments")[1].GetString());
         Assert.Equal(2, putData.GetProperty("journeyEntries").GetArrayLength());
 
@@ -174,8 +177,32 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         });
         putRes2.EnsureSuccessStatusCode();
         var kept = (await putRes2.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
-        Assert.Equal("Ableton Live 12 + Reaper for stems", kept.GetProperty("studioSetup").GetProperty("daw").GetString());
+        Assert.Equal("Ableton Live 12", kept.GetProperty("studioSetup").GetProperty("daw")[0].GetString());
         Assert.Equal(2, kept.GetProperty("journeyEntries").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task UpsertProfile_AcceptsLegacyStringDaw_ForBackwardCompatibility()
+    {
+        // Profiles saved before Daw became a tag list stored it as a plain JSON
+        // string. The FlexibleStringListConverter must still accept that shape on
+        // write (a client resubmitting an old payload) and always normalize it to
+        // the array shape on the way back out.
+        var email = $"creator-legacy-daw-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email, "Test1234!@");
+
+        var slug = $"legacy-daw-{Guid.NewGuid():N}"[..20];
+        var json = $$"""
+            { "slug": "{{slug}}", "bio": "x", "showEarnings": false, "showDownloadStats": false,
+              "studioSetup": { "daw": "FL Studio 21" } }
+            """;
+        var putRes = await client.PutAsync("/creator-profile/me",
+            new StringContent(json, System.Text.Encoding.UTF8, "application/json"));
+        putRes.EnsureSuccessStatusCode();
+        var putData = (await putRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        var dawTags = putData.GetProperty("studioSetup").GetProperty("daw");
+        Assert.Equal(JsonValueKind.Array, dawTags.ValueKind);
+        Assert.Equal("FL Studio 21", dawTags[0].GetString());
     }
 
     [Fact]
@@ -470,6 +497,60 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         form.Add(new ByteArrayContent(new byte[] { 0xFF, 0xD8 }), "file", "banner.jpg");
         var res = await client.PostAsync("/creator-profile/me/banner", form);
         Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
+    /// <summary>
+    /// Banner/avatar uploads must reject anything over 5 MB — matching the client's advertised
+    /// and enforced "5 MB max" copy (ImageUploadField / CREATOR_PROFILE_MAX_IMAGE_BYTES) and,
+    /// separately, bounding the worst-case payload the /{username}/opengraph-image share-card
+    /// route has to fetch and rasterize (an oversized banner there was the root cause of
+    /// Cloudflare 1102 "Worker exceeded resource limits" on public profile views/shares).
+    /// The previous 10 MB cap matched neither.
+    /// </summary>
+    [Fact]
+    public async Task UploadBanner_RejectsFileOverFiveMegabytes()
+    {
+        var email = $"creator-bigbanner-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email, "Test1234!@");
+
+        var oversized = new byte[6 * 1024 * 1024]; // 6 MB, over the 5 MB cap
+        var pngMagicBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        Array.Copy(pngMagicBytes, oversized, pngMagicBytes.Length);
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(oversized), "file", "huge-banner.png");
+        var res = await client.PostAsync("/creator-profile/me/banner", form);
+
+        // Either the [RequestSizeLimit] pipeline guard or the in-handler MaxProfileImageSize
+        // check can reject it first depending on buffering — both must fail the request, never
+        // silently accept and store a payload that big.
+        Assert.NotEqual(HttpStatusCode.OK, res.StatusCode);
+    }
+
+    /// <summary>
+    /// Album/collection cover art keeps its own, separate, larger 10 MB cap (advertised as
+    /// "up to 10MB" in AlbumEditorModal) — the banner/avatar tightening to 5 MB must not have
+    /// collaterally shrunk this unrelated upload path.
+    /// </summary>
+    [Fact]
+    public async Task UploadCollectionCover_StillAllowsUpToTenMegabytes()
+    {
+        var email = $"creator-albumcover-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email, "Test1234!@");
+
+        var createRes = await client.PostAsJsonAsync("/creator-profile/me/collections", new { title = "Test Album" });
+        createRes.EnsureSuccessStatusCode();
+        var collectionId = (await createRes.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").GetProperty("id").GetString();
+
+        var eightMb = new byte[8 * 1024 * 1024]; // over the 5 MB profile-image cap, under the 10 MB album cap
+        var pngMagicBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        Array.Copy(pngMagicBytes, eightMb, pngMagicBytes.Length);
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(eightMb), "file", "cover.png");
+        var res = await client.PostAsync($"/creator-profile/me/collections/{collectionId}/cover", form);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
     }
 
     /// <summary>

@@ -36,6 +36,12 @@ function rel(filePath) {
   return path.relative(ROOT, filePath).replace(/\\/g, "/");
 }
 
+// Strip // line comments so mentions in prose (e.g. "one scoped DbContext, no
+// concurrent queries") don't get misread as code referencing the type.
+function stripLineComments(src) {
+  return src.replace(/\/\/[^\n]*/g, "");
+}
+
 // ── Checks ────────────────────────────────────────────────
 
 const violations = [];
@@ -61,7 +67,7 @@ function checkContractExists() {
 // 2. Controllers must not use DbContext directly
 function checkNoDbContextInControllers(controllerFiles) {
   for (const f of controllerFiles) {
-    const src = readText(f);
+    const src = stripLineComments(readText(f));
     if (/CambrianDbContext|DbContext/i.test(src)) {
       fail("no-direct-db-access-from-controllers", f, "Controller references DbContext directly");
     }

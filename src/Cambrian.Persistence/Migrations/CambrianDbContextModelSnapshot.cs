@@ -1902,6 +1902,22 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DAW")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("HumanContributionNotes")
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
+
+                    b.Property<string>("ProductionNotes")
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
+
+                    b.Property<string>("PromptNotes")
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
+
                     b.Property<string>("Story")
                         .HasMaxLength(5000)
                         .HasColumnType("character varying(5000)");
@@ -1912,6 +1928,10 @@ namespace Cambrian.Persistence.Migrations
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VocalChain")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<string>("YoutubeUrl")
                         .HasMaxLength(500)
@@ -1930,6 +1950,9 @@ namespace Cambrian.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("IsExplicit")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Language")
                         .IsRequired()
@@ -1990,6 +2013,57 @@ namespace Cambrian.Persistence.Migrations
                     b.HasKey("TrackId");
 
                     b.ToTable("TrackStats", (string)null);
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.TrackVideoProof", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TrackId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("VideoType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Visibility")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("public");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrackId", "SortOrder")
+                        .HasDatabaseName("IX_TrackVideoProofs_TrackId_SortOrder");
+
+                    b.ToTable("TrackVideoProofs", (string)null);
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.WalletTransaction", b =>
@@ -2444,6 +2518,17 @@ namespace Cambrian.Persistence.Migrations
                     b.HasOne("Cambrian.Domain.Entities.Track", "Track")
                         .WithOne()
                         .HasForeignKey("Cambrian.Domain.Entities.TrackStat", "TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.TrackVideoProof", b =>
+                {
+                    b.HasOne("Cambrian.Domain.Entities.Track", "Track")
+                        .WithMany()
+                        .HasForeignKey("TrackId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

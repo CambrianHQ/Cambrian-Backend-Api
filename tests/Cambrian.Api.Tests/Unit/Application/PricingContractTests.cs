@@ -18,8 +18,8 @@ public sealed class PricingContractTests
     [Fact]
     public void Subscriptions_MatchCanonicalCents()
     {
-        PricingContract.CreatorSubscriptionCents.Should().Be(1500); // $15/mo
-        PricingContract.ProSubscriptionCents.Should().Be(3900);     // $39/mo
+        PricingContract.CreatorSubscriptionCents.Should().Be(599);  // $5.99/mo
+        PricingContract.ProSubscriptionCents.Should().Be(1299);    // $12.99/mo
     }
 
     [Fact]
@@ -41,10 +41,10 @@ public sealed class PricingContractTests
     }
 
     [Fact]
-    public void AuthorshipRecord_DefaultsTo2900()
+    public void AuthorshipRecord_DefaultsTo1000()
     {
-        PricingContract.AuthorshipRecordDefaultCents.Should().Be(2900); // $29
-        PricingContract.ResolveAuthorshipRecordCents(Config(new())).Should().Be(2900);
+        PricingContract.AuthorshipRecordDefaultCents.Should().Be(1000); // $10
+        PricingContract.ResolveAuthorshipRecordCents(Config(new())).Should().Be(1000);
     }
 
     [Fact]

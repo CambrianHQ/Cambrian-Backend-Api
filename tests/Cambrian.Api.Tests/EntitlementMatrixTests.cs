@@ -42,8 +42,8 @@ public sealed class EntitlementMatrixTests
 
     [Theory]
     [InlineData("free", 0)]
-    [InlineData("creator", 1500)]
-    [InlineData("pro", 3900)]
+    [InlineData("creator", 599)]
+    [InlineData("pro", 1299)]
     public void TierManifest_Prices_MatchSpec(string slug, int expectedCents)
     {
         Assert.Equal(expectedCents, TierManifest.For(slug).PriceCents);

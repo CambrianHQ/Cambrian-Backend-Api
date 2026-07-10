@@ -155,6 +155,36 @@ public sealed class CreatorIdentityRepositoryCompatibilityTests : IDisposable
                 "CreatedAt" TEXT NOT NULL
             );
             """);
+
+        // Engagement enrichment reads these tables after the legacy track projection.
+        // Keep them empty; this compatibility test only needs the tables to exist so
+        // the repository can return zero plays/sales/authorship metadata.
+        ExecuteNonQuery(
+            """
+            CREATE TABLE "StreamSessions" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "TrackId" TEXT NOT NULL
+            );
+            """);
+
+        ExecuteNonQuery(
+            """
+            CREATE TABLE "Purchases" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "TrackId" TEXT NOT NULL,
+                "Status" TEXT NOT NULL
+            );
+            """);
+
+        ExecuteNonQuery(
+            """
+            CREATE TABLE "AuthorshipRecords" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "TrackId" TEXT NOT NULL,
+                "Status" TEXT NOT NULL,
+                "IssuedAt" TEXT NULL
+            );
+            """);
     }
 
     private void ExecuteNonQuery(string sql)

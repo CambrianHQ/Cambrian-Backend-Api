@@ -93,6 +93,8 @@ public sealed class TrackProvenanceEndpointsTests : IClassFixture<CambrianApiFix
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
         Assert.True(data.GetProperty("score").GetInt32() is >= 0 and <= 100);
         Assert.Equal(5, data.GetProperty("checks").GetArrayLength());
+        Assert.True(data.GetProperty("checklistItems").GetArrayLength() > 0);
+        Assert.Equal(100, data.GetProperty("freeMaxScore").GetInt32());
     }
 
     // ── Authorship workflow (Creator+, owner) ──

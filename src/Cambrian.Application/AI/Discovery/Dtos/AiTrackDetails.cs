@@ -1,14 +1,14 @@
 namespace Cambrian.Application.AI.Discovery.Dtos;
 
-public class AiTrackDetailsDto
+public class AiTrackDetails
 {
     public string TrackId { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
 
-    public AiCreatorSummaryDto Creator { get; set; } = new();
+    public AiCreatorSummary Creator { get; set; } = new();
 
-    public AiTrackAttributesDto Attributes { get; set; } = new();
+    public AiTrackAttributes Attributes { get; set; } = new();
 
     public List<string> Tags { get; set; } = new();
     public string? AiGenerator { get; set; }
@@ -17,8 +17,8 @@ public class AiTrackDetailsDto
 
     public string WhyThisWorks { get; set; } = string.Empty;
 
-    public AiLicenseSummaryDto LicenseSummary { get; set; } = new();
-    public AiTrackPreviewDto Preview { get; set; } = new();
+    public AiLicenseSummary LicenseSummary { get; set; } = new();
+    public AiTrackPreview Preview { get; set; } = new();
 
     public string? WaveformImageUrl { get; set; }
     public string? CoverImageUrl { get; set; }

@@ -1,6 +1,6 @@
 namespace Cambrian.Application.AI.Discovery.Dtos;
 
-public class AiTrackAttributesDto
+public class AiTrackAttributes
 {
     public string? Genre { get; set; }
     public string? Subgenre { get; set; }

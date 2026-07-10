@@ -38,7 +38,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         _logger = logger;
     }
 
-    public async Task<AiTrackSearchResponseDto> SearchAsync(SearchTracksQuery query)
+    public async Task<AiTrackSearchResponse> SearchAsync(SearchTracksQuery query)
     {
         // Map new query fields to existing repository filter params
         bool? instrumental = query.InstrumentalOnly ? true : null;
@@ -53,9 +53,9 @@ public class TrackDiscoveryService : ITrackDiscoveryService
             query.Mood, null, instrumental, null);
 
         if (tracks.Count == 0)
-            return new AiTrackSearchResponseDto
+            return new AiTrackSearchResponse
             {
-                Results = new List<AiTrackSearchResultDto>(),
+                Results = new List<AiTrackSearchResult>(),
                 Page = query.Page,
                 PageSize = query.PageSize,
                 TotalCount = totalCount,
@@ -69,7 +69,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
             .ToDictionary(u => u.Id);
 
         // Score, rank, and build AI responses
-        var results = new List<AiTrackSearchResultDto>(tracks.Count);
+        var results = new List<AiTrackSearchResult>(tracks.Count);
         foreach (var track in tracks)
         {
             creatorMap.TryGetValue(track.CreatorId, out var creator);
@@ -93,7 +93,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         // Re-sort by score descending
         results.Sort((a, b) => b.Score.CompareTo(a.Score));
 
-        return new AiTrackSearchResponseDto
+        return new AiTrackSearchResponse
         {
             Results = results,
             Page = query.Page,
@@ -103,7 +103,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         };
     }
 
-    public async Task<AiTrackDetailsDto?> GetTrackDetailsAsync(string trackId)
+    public async Task<AiTrackDetails?> GetTrackDetailsAsync(string trackId)
     {
         var track = await ResolveTrackAsync(trackId);
         if (track is null) return null;
@@ -117,7 +117,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         return details;
     }
 
-    public async Task<AiTrackPreviewDto?> GetPreviewAsync(string trackId)
+    public async Task<AiTrackPreview?> GetPreviewAsync(string trackId)
     {
         var track = await ResolveTrackAsync(trackId);
         if (track is null) return null;
@@ -139,7 +139,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
         return file is not null;
     }
 
-    public async Task<AiCreatorProfileDto?> GetCreatorProfileAsync(string creatorId)
+    public async Task<AiCreatorProfile?> GetCreatorProfileAsync(string creatorId)
     {
         // Try by username first, then by userId
         var dto = await _creators.GetByUsernameAsync(creatorId);
@@ -168,7 +168,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
 
         var highlights = creatorTracks
             .Take(5)
-            .Select(t => new AiCreatorCatalogHighlightDto
+            .Select(t => new AiCreatorCatalogHighlight
             {
                 TrackId = t.CambrianTrackId,
                 Title = t.Title,
@@ -177,7 +177,7 @@ public class TrackDiscoveryService : ITrackDiscoveryService
             })
             .ToList();
 
-        return new AiCreatorProfileDto
+        return new AiCreatorProfile
         {
             CreatorId = dto.UserId,
             DisplayName = dto.DisplayName ?? dto.Username ?? "Unknown Artist",
@@ -190,6 +190,14 @@ public class TrackDiscoveryService : ITrackDiscoveryService
             FeaturedMoods = featuredMoods,
             CatalogHighlights = highlights
         };
+    }
+
+    public async Task<List<AiLicenseOption>?> GetLicenseOptionsAsync(string trackId)
+    {
+        var track = await ResolveTrackAsync(trackId);
+        if (track is null) return null;
+
+        return TrackAiResponseBuilder.BuildLicenseOptions(track);
     }
 
     private async Task<Track?> ResolveTrackAsync(string trackId)

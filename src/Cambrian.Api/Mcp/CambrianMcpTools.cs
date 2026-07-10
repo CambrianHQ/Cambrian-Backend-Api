@@ -53,7 +53,7 @@ public class CambrianMcpTools
             PageSize = Math.Clamp(pageSize, 1, 50)
         };
 
-        AiTrackSearchResponseDto results = await discovery.SearchAsync(searchQuery);
+        AiTrackSearchResponse results = await discovery.SearchAsync(searchQuery);
         return JsonSerializer.Serialize(results, JsonOptions);
     }
 

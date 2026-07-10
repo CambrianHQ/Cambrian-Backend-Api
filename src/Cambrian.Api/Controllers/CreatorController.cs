@@ -194,7 +194,7 @@ public class CreatorController : BaseController
         if (language is null)
             return ErrorResponse("Language must be a valid language tag (e.g. 'en', 'pt-BR').");
 
-        var saved = await _trackDetails.UpsertLyricsAsync(trackId, lyrics, language);
+        var saved = await _trackDetails.UpsertLyricsAsync(trackId, lyrics, language, request.IsExplicit);
         return OkResponse(saved);
     }
 
@@ -214,6 +214,11 @@ public class CreatorController : BaseController
         if (!ownsLegacy && !ownsUuid) return ForbiddenResponse("You can only edit your own tracks.");
 
         var story = MetadataSanitizer.NormalizeOptional(request.Story, "Story");
+        var daw = MetadataSanitizer.NormalizeOptional(request.DAW, "DAW");
+        var vocalChain = MetadataSanitizer.NormalizeOptional(request.VocalChain, "Vocal chain");
+        var promptNotes = MetadataSanitizer.NormalizeOptional(request.PromptNotes, "Prompt notes");
+        var productionNotes = MetadataSanitizer.NormalizeOptional(request.ProductionNotes, "Production notes");
+        var humanContributionNotes = MetadataSanitizer.NormalizeOptional(request.HumanContributionNotes, "Human contribution notes");
         var youtubeUrl = request.YoutubeUrl?.Trim();
         if (!string.IsNullOrEmpty(youtubeUrl) && !IsYoutubeUrl(youtubeUrl))
             return ErrorResponse("Process video must be a YouTube URL (youtube.com or youtu.be).");
@@ -233,13 +238,16 @@ public class CreatorController : BaseController
         if (tools.Count > 0 && System.Text.Json.JsonSerializer.Serialize(tools).Length > 2000)
             return ErrorResponse("Tools list is too long — remove some tools or shorten their names.");
 
-        if (story is null && youtubeUrl is null && tools.Count == 0)
+        if (story is null && daw is null && vocalChain is null && promptNotes is null
+            && productionNotes is null && humanContributionNotes is null
+            && youtubeUrl is null && tools.Count == 0)
         {
             await _trackDetails.DeleteCreationProcessAsync(trackId);
             return OkResponse<object?>(null, "Behind The Track removed.");
         }
 
-        var saved = await _trackDetails.UpsertCreationProcessAsync(trackId, story, youtubeUrl, tools);
+        var saved = await _trackDetails.UpsertCreationProcessAsync(
+            trackId, story, daw, vocalChain, promptNotes, productionNotes, humanContributionNotes, youtubeUrl, tools);
         return OkResponse(saved);
     }
 

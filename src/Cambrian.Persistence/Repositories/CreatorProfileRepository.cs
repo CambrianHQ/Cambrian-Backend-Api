@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Cambrian.Application.DTOs.CreatorProfile;
 using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Albums;
 using Cambrian.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +18,18 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         var p = await _db.CreatorProfiles.AsNoTracking()
             .FirstOrDefaultAsync(x => x.UserId == userId);
         return p is null ? null : await MapToDtoAsync(p);
+    }
+
+    public Task<bool> HasUsableProfileAsync(string userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return Task.FromResult(false);
+
+        return _db.CreatorProfiles.AsNoTracking()
+            .AnyAsync(p => p.UserId == userId
+                           && (p.Slug != ""
+                               || p.Bio != ""
+                               || (p.ProfileImageUrl != null && p.ProfileImageUrl != "")));
     }
 
     public async Task<Dictionary<string, (string? Slug, string? ProfileImageUrl)>> GetSlugsByUserIdsAsync(IEnumerable<string> userIds)
@@ -181,6 +194,24 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return entity?.CreatorId;
     }
 
+    public async Task<TrackCollectionDto?> GetPublicCollectionBySlugAsync(string slug)
+    {
+        var normalized = (slug ?? "").Trim().ToLowerInvariant();
+        if (normalized.Length == 0) return null;
+
+        // Slug is only unique per creator, so two creators can share one. Only
+        // publicly-visible albums (public | unlisted) are ever resolvable by a
+        // bare slug — draft/private stay owner-only and are filtered out here,
+        // so this endpoint can never surface a hidden album. Most-recent wins
+        // when a slug legitimately collides across creators.
+        var entity = await _db.TrackCollections.AsNoTracking()
+            .Where(c => c.Slug.ToLower() == normalized
+                        && (c.Visibility == AlbumVisibility.Public || c.Visibility == AlbumVisibility.Unlisted))
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync();
+        return entity is null ? null : MapCollectionToDto(entity);
+    }
+
     public async Task<TrackCollectionDto> AddCollectionAsync(string creatorId, string title, string? description, string? coverImageUrl, string trackIds,
         string? visibility = null, DateTime? releaseDate = null)
     {
@@ -193,7 +224,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             Description = description,
             CoverImageUrl = coverImageUrl,
             TrackIds = trackIds,
-            Visibility = NormalizeCollectionVisibility(visibility) ?? "public",
+            Visibility = NormalizeCollectionVisibility(visibility) ?? AlbumVisibility.Default,
             ReleaseDate = releaseDate,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -295,11 +326,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return result;
     }
 
-    private static string? NormalizeCollectionVisibility(string? visibility)
-    {
-        var normalized = visibility?.Trim().ToLowerInvariant();
-        return normalized is "public" or "hidden" ? normalized : null;
-    }
+    private static string? NormalizeCollectionVisibility(string? visibility) =>
+        AlbumVisibility.Normalize(visibility);
 
     private async Task<string> GenerateCollectionSlugAsync(string creatorId, string title, Guid? excludeId = null)
     {
@@ -435,7 +463,12 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         TrackIds = string.IsNullOrWhiteSpace(c.TrackIds)
             ? Array.Empty<string>()
             : c.TrackIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-        Visibility = string.IsNullOrEmpty(c.Visibility) ? "public" : c.Visibility,
+        // Fail-closed read normalization: empty falls back to the historical
+        // default (public); the legacy "hidden" maps to "private"; any
+        // unrecognized value collapses to "private" so it can never leak.
+        Visibility = string.IsNullOrWhiteSpace(c.Visibility)
+            ? AlbumVisibility.Public
+            : (AlbumVisibility.Normalize(c.Visibility) ?? AlbumVisibility.Private),
         ReleaseDate = c.ReleaseDate,
         CreatedAt = c.CreatedAt,
         UpdatedAt = c.UpdatedAt,
