@@ -25,6 +25,8 @@ public class CreatorController : BaseController
     private readonly IUploadService _upload;
     private readonly ITrackReadinessCache _readinessCache;
     private readonly ITrackDetailsRepository _trackDetails;
+    private readonly ITrackAuthorshipRepository _authorship;
+    private readonly IComplianceScoreService _compliance;
     private readonly ILogger<CreatorController> _logger;
 
     public CreatorController(
@@ -35,6 +37,8 @@ public class CreatorController : BaseController
         IUploadService upload,
         ITrackReadinessCache readinessCache,
         ITrackDetailsRepository trackDetails,
+        ITrackAuthorshipRepository authorship,
+        IComplianceScoreService compliance,
         ILogger<CreatorController> logger)
     {
         _creator = creator;
@@ -44,6 +48,8 @@ public class CreatorController : BaseController
         _upload = upload;
         _readinessCache = readinessCache;
         _trackDetails = trackDetails;
+        _authorship = authorship;
+        _compliance = compliance;
         _logger = logger;
     }
 
@@ -79,6 +85,29 @@ public class CreatorController : BaseController
         var userId = GetRequiredUserId()!;
         var revenue = await _creator.GetRevenueAsync(userId);
         return OkResponse(revenue);
+    }
+
+    /// <summary>
+    /// Owner-scoped track detail: the same shape the mutation endpoints return,
+    /// including the free readiness attestations (aiDisclosure,
+    /// commercialRightsVerified) and the evaluated releaseReadiness state. This
+    /// is how the edit page hydrates saved attestations — the public
+    /// GET /tracks/{id} DTO intentionally never carries them.
+    /// </summary>
+    [Authorize(Policy = "CanEditOwnTrack")]
+    [HttpGet("tracks/{trackId:guid}")]
+    public async Task<IActionResult> GetOwnTrack(Guid trackId)
+    {
+        var userId = GetRequiredUserId()!;
+        var track = await _tracks.GetByIdAsync(trackId);
+        if (track is null) return NotFoundResponse("Track not found.");
+
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(userId);
+        var ownsLegacy = track.CreatorId == userId;
+        var ownsUuid = creatorUuid.HasValue && track.CreatorUuid == creatorUuid.Value;
+        if (!ownsLegacy && !ownsUuid) return ForbiddenResponse("You can only view your own tracks here.");
+
+        return OkResponse(await BuildMutationResponseAsync(userId, track));
     }
 
     [Authorize(Policy = "CanEditOwnTrack")]
@@ -139,9 +168,61 @@ public class CreatorController : BaseController
             track.Visibility = visibility;
         }
 
+        // Free readiness attestations. These write the exact fields the
+        // compliance checklist evaluates (ComplianceScoreService): the
+        // checklist's ai_disclosure item reads TrackAuthorship.AiDisclosure
+        // and its rights item reads Track.CommercialRightsVerified. Before
+        // this, no self-serve surface wrote either — the checklist items were
+        // impossible to complete from the edit page.
+        if (request.RightsConfirmed.HasValue)
+            track.CommercialRightsVerified = request.RightsConfirmed.Value;
+        if (request.AiDisclosure is not null)
+            await UpsertAiDisclosureAsync(track.Id, request.AiDisclosure);
+        if (request.RightsConfirmed.HasValue || request.AiDisclosure is not null)
+        {
+            _logger.LogInformation(
+                "EVENT: readiness_attestation_saved trackId:{TrackId} rightsConfirmed:{Rights} aiDisclosureState:{AiState}",
+                track.Id,
+                request.RightsConfirmed?.ToString() ?? "unchanged",
+                request.AiDisclosure is null ? "unchanged"
+                    : string.IsNullOrWhiteSpace(request.AiDisclosure) ? "cleared" : "present");
+        }
+
         await _tracks.UpdateAsync(track);
         _readinessCache.Invalidate(track.Id);
         return OkResponse(await BuildMutationResponseAsync(userId, track));
+    }
+
+    /// <summary>
+    /// Targeted upsert of the AI-use disclosure on the TrackAuthorship companion
+    /// row. Unlike the Creator+ authorship suite upsert, this touches ONLY the
+    /// AiDisclosure column so a details-page save can never wipe narrative
+    /// authorship fields (edits, arrangement, process notes).
+    /// </summary>
+    private async Task UpsertAiDisclosureAsync(Guid trackId, string aiDisclosure)
+    {
+        var normalized = string.IsNullOrWhiteSpace(aiDisclosure) ? null : aiDisclosure.Trim();
+        var now = DateTime.UtcNow;
+        var row = await _authorship.GetByTrackIdAsync(trackId);
+
+        if (row is null)
+        {
+            if (normalized is null) return; // nothing stored, nothing to clear
+            await _authorship.AddAsync(new Domain.Entities.TrackAuthorship
+            {
+                Id = Guid.NewGuid(),
+                TrackId = trackId,
+                AiDisclosure = normalized,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            return;
+        }
+
+        if (row.AiDisclosure == normalized) return;
+        row.AiDisclosure = normalized;
+        row.UpdatedAt = now;
+        await _authorship.UpdateAsync(row);
     }
 
     [Authorize(Policy = "CanEditOwnTrack")]
@@ -314,6 +395,14 @@ public class CreatorController : BaseController
         var linkedCollection = await FindLinkedCollectionAsync(userId, track.Id);
         var pricing = TrackPricingSnapshot.FromTrack(track);
 
+        // Saves return the canonical persisted attestations plus the freshly
+        // evaluated readiness state, so the checklist UI can never show a stale
+        // "incomplete" after a successful save. The evaluator is the same
+        // ComplianceScoreService that GET /api/tracks/{id}/compliance-score uses —
+        // one authority, two surfaces.
+        var authorship = await _authorship.GetByTrackIdAsync(track.Id);
+        var releaseReadiness = await _compliance.ComputeAsync(track);
+
         return new
         {
             id = track.Id,
@@ -335,7 +424,10 @@ public class CreatorController : BaseController
             exclusivePriceCents = pricing.ExclusivePriceCents,
             copyrightBuyoutPriceCents = pricing.CopyrightBuyoutPriceCents,
             collectionId = linkedCollection?.Id,
-            collectionTitle = linkedCollection?.Title
+            collectionTitle = linkedCollection?.Title,
+            aiDisclosure = authorship?.AiDisclosure,
+            commercialRightsVerified = track.CommercialRightsVerified,
+            releaseReadiness
         };
     }
 

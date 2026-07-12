@@ -21,12 +21,16 @@ public sealed class CreatorControllerTests
     private readonly IUploadService _upload = Substitute.For<IUploadService>();
     private readonly ITrackReadinessCache _readinessCache = Substitute.For<ITrackReadinessCache>();
     private readonly ITrackDetailsRepository _trackDetails = Substitute.For<ITrackDetailsRepository>();
+    private readonly ITrackAuthorshipRepository _authorship = Substitute.For<ITrackAuthorshipRepository>();
+    private readonly IComplianceScoreService _compliance = Substitute.For<IComplianceScoreService>();
     private readonly ILogger<CreatorController> _logger = Substitute.For<ILogger<CreatorController>>();
     private readonly CreatorController _controller;
 
     public CreatorControllerTests()
     {
-        _controller = new CreatorController(_creator, _tracks, _creators, _profiles, _upload, _readinessCache, _trackDetails, _logger);
+        _compliance.ComputeAsync(Arg.Any<Track>(), Arg.Any<CancellationToken>())
+            .Returns(new Cambrian.Application.DTOs.Provenance.ComplianceScoreResponse());
+        _controller = new CreatorController(_creator, _tracks, _creators, _profiles, _upload, _readinessCache, _trackDetails, _authorship, _compliance, _logger);
         var httpContext = new DefaultHttpContext();
         httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
         [

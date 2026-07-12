@@ -261,6 +261,53 @@ public sealed class ProvenanceComplianceUnitTests
         Assert.Contains("not a paid verification", item.Explanation.ToLowerInvariant());
     }
 
+    // ── Release-readiness contradiction regression (observed on a live prod track) ──
+    // A creator filled Behind-the-Track prompt notes (which the UI used to claim
+    // satisfied AI disclosure) and could never complete ai_disclosure/rights.
+    // These pin the EXACT source fields each requirement reads.
+
+    [Theory]
+    [InlineData(null, false)]                                  // no authorship row semantics via empty text
+    [InlineData("", false)]                                    // saved but empty
+    [InlineData("   ", false)]                                 // whitespace only
+    [InlineData("No generative AI was used.", true)]           // explicit "no AI" counts
+    [InlineData("Suno v5 for stems; vocals + mix are mine.", true)]
+    public async Task ComplianceChecklist_AiDisclosure_EvaluatesAuthorshipText(string? disclosure, bool expectedComplete)
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat" };
+        var authorship = new TrackAuthorship { TrackId = track.Id, AiDisclosure = disclosure };
+
+        var result = await CreateComplianceService(null, authorship).ComputeAsync(track);
+
+        Assert.Equal(expectedComplete ? "complete" : "incomplete", ChecklistItem(result, "ai_disclosure").Status);
+    }
+
+    [Fact]
+    public async Task ComplianceChecklist_BttPromptNotesAlone_DoNotSatisfyAiDisclosure()
+    {
+        // The prod contradiction: prompt notes count for daw_tools but must not
+        // silently satisfy ai_disclosure — disclosure has to be explicit.
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat" };
+        var btt = new BehindTheTrackDto { TrackId = track.Id.ToString(), PromptNotes = "942 chars of prompts…" };
+
+        var result = await CreateComplianceService(null, authorship: null, creationProcess: btt).ComputeAsync(track);
+
+        Assert.Equal("incomplete", ChecklistItem(result, "ai_disclosure").Status);
+        Assert.Equal("complete", ChecklistItem(result, "daw_tools").Status);
+    }
+
+    [Theory]
+    [InlineData(false, "incomplete")]
+    [InlineData(true, "complete")]
+    public async Task ComplianceChecklist_Rights_EvaluatesTrackCommercialRightsFlag(bool attested, string expected)
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat", CommercialRightsVerified = attested };
+
+        var result = await CreateComplianceService(null, null).ComputeAsync(track);
+
+        Assert.Equal(expected, ChecklistItem(result, "rights").Status);
+    }
+
     [Fact]
     public async Task ComplianceScore_BackwardCompatibility_KeepsExistingScoreAndChecks()
     {
