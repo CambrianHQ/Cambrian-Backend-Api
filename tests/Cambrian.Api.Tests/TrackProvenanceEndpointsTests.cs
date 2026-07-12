@@ -145,6 +145,72 @@ public sealed class TrackProvenanceEndpointsTests : IClassFixture<CambrianApiFix
         Assert.Equal(1, await db.TrackAuthorships.CountAsync(a => a.TrackId == trackId));
     }
 
+    // Regression: the "Release Readiness" checklist lets a creator edit the AI-disclosure
+    // and rights-attestation sections independently ("go to field" → save just that
+    // section). Both previously lived on this single full-replace endpoint, so saving
+    // one section with the other field omitted silently reset it — the checklist would
+    // loop forever between "AI disclosure incomplete" and "rights attestation incomplete"
+    // as each save wiped the other. Omitted (null) fields must now leave prior values alone.
+    [Fact]
+    public async Task Authorship_SavingOneSectionOnly_DoesNotResetOtherPreviouslySavedSections()
+    {
+        var (client, userId) = await CreatorClientAsync("creator-partial");
+        var trackId = await _fixture.SeedTrackAsync(userId);
+
+        (await client.PostAsJsonAsync($"/api/tracks/{trackId}/authorship", new
+        {
+            aiDisclosure = "Suno v4 used for the initial sketch; arrangement is human.",
+            commercialRightsVerified = true,
+        })).EnsureSuccessStatusCode();
+
+        // Frontend "AI disclosure" field save — only that field is on the wire.
+        (await client.PostAsJsonAsync($"/api/tracks/{trackId}/authorship", new
+        {
+            aiDisclosure = "Suno v4 used for the initial sketch; arrangement and mix are human.",
+        })).EnsureSuccessStatusCode();
+
+        var afterAiSave = (await (await client.GetAsync($"/api/tracks/{trackId}/authorship"))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal("Suno v4 used for the initial sketch; arrangement and mix are human.", afterAiSave.GetProperty("aiDisclosure").GetString());
+        Assert.True(afterAiSave.GetProperty("commercialRightsVerified").GetBoolean());
+
+        // Frontend "Rights / ownership attestation" field save — only that field is on the wire.
+        (await client.PostAsJsonAsync($"/api/tracks/{trackId}/authorship", new
+        {
+            commercialRightsVerified = true,
+        })).EnsureSuccessStatusCode();
+
+        var afterRightsSave = (await (await client.GetAsync($"/api/tracks/{trackId}/authorship"))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal("Suno v4 used for the initial sketch; arrangement and mix are human.", afterRightsSave.GetProperty("aiDisclosure").GetString());
+        Assert.True(afterRightsSave.GetProperty("commercialRightsVerified").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Authorship_ExplicitEmptyOrFalse_StillClearsField()
+    {
+        var (client, userId) = await CreatorClientAsync("creator-explicit-clear");
+        var trackId = await _fixture.SeedTrackAsync(userId);
+
+        (await client.PostAsJsonAsync($"/api/tracks/{trackId}/authorship", new
+        {
+            aiDisclosure = "No generative AI used",
+            commercialRightsVerified = true,
+        })).EnsureSuccessStatusCode();
+
+        // Explicit "" / false (not omitted) must still overwrite, unlike a truly omitted field.
+        (await client.PostAsJsonAsync($"/api/tracks/{trackId}/authorship", new
+        {
+            aiDisclosure = "",
+            commercialRightsVerified = false,
+        })).EnsureSuccessStatusCode();
+
+        var data = (await (await client.GetAsync($"/api/tracks/{trackId}/authorship"))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal(JsonValueKind.Null, data.GetProperty("aiDisclosure").ValueKind);
+        Assert.False(data.GetProperty("commercialRightsVerified").GetBoolean());
+    }
+
     [Fact]
     public async Task PostAuthorship_OnAnotherCreatorsTrack_Returns403()
     {
