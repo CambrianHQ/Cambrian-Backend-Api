@@ -75,4 +75,41 @@ public sealed class WeeklyChartRepository : IWeeklyChartRepository
         await _db.WeeklyChartSnapshots.AddRangeAsync(rows, ct);
         await _db.SaveChangesAsync(ct);
     }
+
+    public async Task<IReadOnlyList<DateTime>> ListWeekStartsAsync(int limit, CancellationToken ct = default)
+    {
+        var capped = Math.Clamp(limit, 1, 520);
+        return await _db.WeeklyChartSnapshots
+            .AsNoTracking()
+            .Select(s => s.WeekStartUtc)
+            .Distinct()
+            .OrderByDescending(w => w)
+            .Take(capped)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<WeeklyChartSnapshot>> GetTopRowsForWeeksAsync(IReadOnlyCollection<DateTime> weekStartsUtc, CancellationToken ct = default)
+    {
+        if (weekStartsUtc.Count == 0) return Array.Empty<WeeklyChartSnapshot>();
+        return await _db.WeeklyChartSnapshots
+            .AsNoTracking()
+            .Where(s => s.Rank == 1 && weekStartsUtc.Contains(s.WeekStartUtc))
+            .OrderByDescending(s => s.WeekStartUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> GetUsernamesByUserIdsAsync(IReadOnlyCollection<string> userIds, CancellationToken ct = default)
+    {
+        if (userIds.Count == 0) return new Dictionary<string, string>();
+        var rows = await _db.Creators
+            .AsNoTracking()
+            .Where(c => userIds.Contains(c.UserId) && c.Username != "")
+            .Select(c => new { c.UserId, c.Username })
+            .ToListAsync(ct);
+        // A user id can theoretically map to at most one creator row (unique FK),
+        // but guard against duplicates rather than throwing on ToDictionary.
+        var map = new Dictionary<string, string>(rows.Count);
+        foreach (var row in rows) map[row.UserId] = row.Username;
+        return map;
+    }
 }

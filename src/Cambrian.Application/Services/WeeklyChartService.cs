@@ -44,10 +44,98 @@ public sealed class WeeklyChartService : IWeeklyChartService
             rows = await repo.GetLatestWeekAsync(ct);
         }
 
-        if (rows.Count > 0) return ToResponse(rows);
+        if (rows.Count > 0) return ToResponse(rows, await ResolveUsernamesAsync(repo, rows, ct));
 
         // Nothing persisted at all (fresh deploy) — compute once, persisted.
         return await AggregateAsync(ct);
+    }
+
+    public async Task<ChartArchiveIndexResponse> GetArchiveIndexAsync(int limit = 104, CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IWeeklyChartRepository>();
+
+        var currentWeekStart = StartOfIsoWeekUtc(DateTime.UtcNow);
+        var completedWeeks = (await repo.ListWeekStartsAsync(limit + 1, ct))
+            .Where(w => w < currentWeekStart)
+            .Take(limit)
+            .ToList();
+
+        var topRows = await repo.GetTopRowsForWeeksAsync(completedWeeks, ct);
+        var topByWeek = topRows.ToDictionary(r => r.WeekStartUtc, r => r);
+
+        var weeks = completedWeeks
+            .Select(weekStart =>
+            {
+                topByWeek.TryGetValue(weekStart, out var top);
+                return new ChartArchiveWeekSummary
+                {
+                    IsoWeek = ToIsoWeekKey(weekStart),
+                    WeekOf = weekStart.ToString("o"),
+                    WeekEnd = weekStart.AddDays(7).ToString("o"),
+                    // The index only carries the headline row; entry count is
+                    // resolved on the week page itself (always ≤ ChartSize).
+                    Entries = top is null ? 0 : ChartSize,
+                    TopTrackId = top?.TrackId.ToString(),
+                    TopTrackTitle = top?.Title,
+                    TopTrackArtist = top?.Artist,
+                };
+            })
+            .ToList();
+
+        return new ChartArchiveIndexResponse { Weeks = weeks };
+    }
+
+    public async Task<WeeklyChartsResponse?> GetArchivedWeekAsync(DateTime weekStartUtc, CancellationToken ct = default)
+    {
+        // The running (and any future) week is never archived — it lives on
+        // /scene and still changes. This keeps archive URLs permanent records.
+        var normalized = StartOfIsoWeekUtc(weekStartUtc);
+        if (normalized >= StartOfIsoWeekUtc(DateTime.UtcNow)) return null;
+
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IWeeklyChartRepository>();
+
+        var rows = await repo.GetWeekAsync(normalized, ct);
+        if (rows.Count == 0) return null;
+        return ToResponse(rows, await ResolveUsernamesAsync(repo, rows, ct));
+    }
+
+    /// <summary>"2026-w28" — the URL key for a chart week's archive page.</summary>
+    public static string ToIsoWeekKey(DateTime weekStartUtc)
+    {
+        var year = System.Globalization.ISOWeek.GetYear(weekStartUtc);
+        var week = System.Globalization.ISOWeek.GetWeekOfYear(weekStartUtc);
+        return $"{year}-w{week:D2}";
+    }
+
+    /// <summary>Parse "2026-w28" / "2026-W28" to the week's Monday 00:00 UTC; null on garbage.</summary>
+    public static DateTime? ParseIsoWeekKey(string? isoWeek)
+    {
+        if (string.IsNullOrWhiteSpace(isoWeek)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(isoWeek.Trim(), @"^(\d{4})-[wW](\d{1,2})$");
+        if (!match.Success) return null;
+        var year = int.Parse(match.Groups[1].Value);
+        var week = int.Parse(match.Groups[2].Value);
+        if (week < 1 || week > 53) return null;
+        try
+        {
+            var monday = System.Globalization.ISOWeek.ToDateTime(year, week, DayOfWeek.Monday);
+            return DateTime.SpecifyKind(monday, DateTimeKind.Utc);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null; // e.g. week 53 of a 52-week year
+        }
+    }
+
+    private static async Task<IReadOnlyDictionary<string, string>> ResolveUsernamesAsync(
+        IWeeklyChartRepository repo,
+        IReadOnlyList<WeeklyChartSnapshot> rows,
+        CancellationToken ct)
+    {
+        var ids = rows.Select(r => r.CreatorId).Where(id => id.Length > 0).Distinct().ToList();
+        return await repo.GetUsernamesByUserIdsAsync(ids, ct);
     }
 
     public async Task<WeeklyChartsResponse> AggregateAsync(CancellationToken ct = default)
@@ -128,7 +216,7 @@ public sealed class WeeklyChartService : IWeeklyChartService
             }
 
             await repo.ReplaceWeekAsync(weekStart, rows, ct);
-            return ToResponse(rows);
+            return ToResponse(rows, await ResolveUsernamesAsync(repo, rows, ct));
         }
         finally
         {
@@ -136,7 +224,9 @@ public sealed class WeeklyChartService : IWeeklyChartService
         }
     }
 
-    private static WeeklyChartsResponse ToResponse(IReadOnlyList<WeeklyChartSnapshot> rows)
+    private static WeeklyChartsResponse ToResponse(
+        IReadOnlyList<WeeklyChartSnapshot> rows,
+        IReadOnlyDictionary<string, string>? usernames = null)
     {
         var entries = rows
             .OrderBy(r => r.Rank)
@@ -147,8 +237,10 @@ public sealed class WeeklyChartService : IWeeklyChartService
                 Title = r.Title,
                 Artist = r.Artist,
                 CreatorId = r.CreatorId,
+                CreatorUsername = usernames != null && usernames.TryGetValue(r.CreatorId, out var u) ? u : null,
                 CoverArtUrl = r.CoverArtUrl,
                 DeltaRank = r.DeltaRank,
+                PlaysInWindow = r.PlaysInWindow,
             })
             .ToList();
 

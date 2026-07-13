@@ -7068,19 +7068,19 @@
                     "type": "string"
                   },
                   "NonExclusivePrice": {
-                    "maximum": 79228162514264337593543950335,
+                    "maximum": 7.922816251426434e+28,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "ExclusivePrice": {
-                    "maximum": 79228162514264337593543950335,
+                    "maximum": 7.922816251426434e+28,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "CopyrightBuyoutPrice": {
-                    "maximum": 79228162514264337593543950335,
+                    "maximum": 7.922816251426434e+28,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
@@ -7260,19 +7260,19 @@
                     "type": "string"
                   },
                   "NonExclusivePrice": {
-                    "maximum": 79228162514264337593543950335,
+                    "maximum": 7.922816251426434e+28,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "ExclusivePrice": {
-                    "maximum": 79228162514264337593543950335,
+                    "maximum": 7.922816251426434e+28,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "CopyrightBuyoutPrice": {
-                    "maximum": 79228162514264337593543950335,
+                    "maximum": 7.922816251426434e+28,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
@@ -8312,6 +8312,58 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/charts/weekly/archive": {
+      "get": {
+        "tags": [
+          "Charts"
+        ],
+        "summary": "Completed Scene chart weeks, newest first (the running week is never listed).",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/charts/weekly/archive/{isoWeek}": {
+      "get": {
+        "tags": [
+          "Charts"
+        ],
+        "summary": "Final Top 50 of one completed chart week (isoWeek like 2026-w28).",
+        "parameters": [
+          {
+            "name": "isoWeek",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Malformed isoWeek key"
+          },
+          "404": {
+            "description": "No archived chart for that week"
           }
         }
       }

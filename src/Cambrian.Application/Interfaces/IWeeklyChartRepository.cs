@@ -23,4 +23,20 @@ public interface IWeeklyChartRepository
     /// transaction) — this is what makes recompute idempotent per week.
     /// </summary>
     Task ReplaceWeekAsync(DateTime weekStartUtc, IReadOnlyList<WeeklyChartSnapshot> rows, CancellationToken ct = default);
+
+    /// <summary>Distinct persisted week starts, newest first, capped at <paramref name="limit"/>.</summary>
+    Task<IReadOnlyList<DateTime>> ListWeekStartsAsync(int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Rank-1 row per given week start (weeks with no rows are omitted) —
+    /// powers the archive index without loading every week's full 50.
+    /// </summary>
+    Task<IReadOnlyList<WeeklyChartSnapshot>> GetTopRowsForWeeksAsync(IReadOnlyCollection<DateTime> weekStartsUtc, CancellationToken ct = default);
+
+    /// <summary>
+    /// Routable creator usernames for the given legacy user ids (missing
+    /// identities omitted). Single query; used to enrich chart responses at
+    /// read time so artist links survive renames.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetUsernamesByUserIdsAsync(IReadOnlyCollection<string> userIds, CancellationToken ct = default);
 }
