@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Cambrian.Api.Tests.Fixtures;
 using Cambrian.Persistence;
+using Cambrian.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -179,6 +180,100 @@ public sealed class CreatorProfileContractTests : IClassFixture<CambrianApiFixtu
         var kept = (await putRes2.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
         Assert.Equal("Ableton Live 12", kept.GetProperty("studioSetup").GetProperty("daw")[0].GetString());
         Assert.Equal(2, kept.GetProperty("journeyEntries").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task UpsertProfile_AllCreatorFields_RoundTripThroughPublicEndpoint()
+    {
+        var email = $"creator-full-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email, "Test1234!@");
+        string userId;
+        var featuredTrackId = Guid.NewGuid();
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            userId = (await db.Users.SingleAsync(x => x.Email == email)).Id;
+            db.Tracks.Add(new Track
+            {
+                Id = featuredTrackId, CreatorId = userId, Title = "Featured", AudioUrl = "tracks/featured.mp3",
+                Visibility = "public", Status = "available", CambrianTrackId = $"CAMB-TRK-{Guid.NewGuid():N}"[..18]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var slug = $"full-{Guid.NewGuid():N}"[..20];
+        var response = await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            bio = "Complete creator bio",
+            genres = new[] { "Electronic", "Ambient" },
+            profileImageUrl = "avatars/creator/avatar.png",
+            bannerImageUrl = "banners/creator/banner.png",
+            featuredTrackId,
+            socialLinks = new[] { new { platform = "website", url = "https://creator.example" } },
+            studioSetup = new
+            {
+                daw = new[] { "Ableton Live" }, gear = new[] { "SM7B" }, plugins = new[] { "Pro-Q" },
+                hardware = new[] { "Push 3" }, instruments = new[] { "Moog" }
+            },
+            showEarnings = false,
+            showDownloadStats = false,
+        });
+        response.EnsureSuccessStatusCode();
+
+        var publicResponse = await _fixture.CreateClient().GetAsync($"/creator-profile/{slug}");
+        publicResponse.EnsureSuccessStatusCode();
+        var data = (await publicResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.Equal("Complete creator bio", data.GetProperty("bio").GetString());
+        Assert.Equal("Electronic", data.GetProperty("genres")[0].GetString());
+        Assert.EndsWith("/images/avatars/creator/avatar.png", data.GetProperty("profileImageUrl").GetString());
+        Assert.EndsWith("/images/banners/creator/banner.png", data.GetProperty("bannerImageUrl").GetString());
+        Assert.Equal(featuredTrackId.ToString(), data.GetProperty("featuredTrackId").GetString());
+        Assert.Equal("https://creator.example", data.GetProperty("socialLinks")[0].GetProperty("url").GetString());
+        var studio = data.GetProperty("studioSetup");
+        Assert.Equal("Ableton Live", studio.GetProperty("daw")[0].GetString());
+        Assert.Equal("SM7B", studio.GetProperty("gear")[0].GetString());
+        Assert.Equal("Pro-Q", studio.GetProperty("plugins")[0].GetString());
+        Assert.Equal("Push 3", studio.GetProperty("hardware")[0].GetString());
+        Assert.Equal("Moog", studio.GetProperty("instruments")[0].GetString());
+    }
+
+    /// <summary>
+    /// Regression (P0 acceptance run 2026-07-12): the OWNER's profile-editor load
+    /// (GET /creator-profile/me) must return the creator's own <c>genres</c>. Genres round-trip
+    /// through the public GET /creator-profile/{slug} (covered by
+    /// <see cref="UpsertProfile_AllCreatorFields_RoundTripThroughPublicEndpoint"/>) and ARE
+    /// persisted to CreatorProfiles.Genres, but were dropped from the /me anonymous response
+    /// object — so the editor loaded genres empty and a subsequent save could silently wipe the
+    /// stored list (the upsert overwrites when sent a non-null empty list). The public-only
+    /// coverage let the /me gap ship green.
+    /// </summary>
+    [Fact]
+    public async Task GetMyProfile_ReturnsGenres_ForOwnerEditor()
+    {
+        var email = $"creator-me-genres-{Guid.NewGuid():N}@test.com";
+        var client = await CreateCreatorClientAsync(email, "Test1234!@");
+
+        var slug = $"me-genres-{Guid.NewGuid():N}"[..20];
+        (await client.PutAsJsonAsync("/creator-profile/me", new
+        {
+            slug,
+            bio = "owner editor genres",
+            genres = new[] { "Electronic", "Ambient", "Techno" },
+            showEarnings = false,
+            showDownloadStats = false,
+        })).EnsureSuccessStatusCode();
+
+        // The owner's editor loads via GET /me — it must surface genres so the form pre-fills;
+        // otherwise a re-save can silently wipe the stored genres.
+        var meRes = await client.GetAsync("/creator-profile/me");
+        meRes.EnsureSuccessStatusCode();
+        var me = (await meRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+
+        Assert.True(me.TryGetProperty("genres", out var genres), "GET /creator-profile/me must return 'genres'");
+        Assert.Equal(JsonValueKind.Array, genres.ValueKind);
+        Assert.Equal(3, genres.GetArrayLength());
+        Assert.Equal("Electronic", genres[0].GetString());
     }
 
     [Fact]

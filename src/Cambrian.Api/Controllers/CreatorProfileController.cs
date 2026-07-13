@@ -161,6 +161,11 @@ public class CreatorProfileController : BaseController
             canChangeUsername = !hasUsername,
             profile.Bio,
             profile.Niche,
+            // The owner's profile-editor load must return the creator's own genres +
+            // featured track so the editor pre-fills them (and a subsequent save can't
+            // silently wipe genres by re-submitting an empty list). Both are already
+            // populated on the DTO and returned by the public GET /creator-profile/{slug}.
+            profile.Genres,
             ProfileImageUrl = ResolveImageUrl(profile.ProfileImageUrl),
             BannerImageUrl = ResolveImageUrl(profile.BannerImageUrl),
             profile.SocialLinks,
@@ -169,6 +174,7 @@ public class CreatorProfileController : BaseController
             profile.ShowEarnings,
             profile.ShowDownloadStats,
             profile.PinnedTrackIds,
+            profile.FeaturedTrackId,
             profile.Stats,
             profile.CreatedAt,
             profile.UpdatedAt
@@ -229,6 +235,18 @@ public class CreatorProfileController : BaseController
             ? JsonSerializer.Serialize(body.SocialLinks)
             : null;
 
+        string? genresJson = null;
+        if (body.Genres is not null)
+        {
+            if (body.Genres.Count > 10 || body.Genres.Any(x => string.IsNullOrWhiteSpace(x) || x.Trim().Length > 60))
+                return ErrorResponse("Genres must contain at most 10 non-empty values of 60 characters or fewer.");
+            body.Genres = body.Genres.Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            genresJson = JsonSerializer.Serialize(body.Genres);
+        }
+
+        if (body.FeaturedTrackId.HasValue && !await AllTracksOwnedByCreatorAsync(body.FeaturedTrackId.Value.ToString(), userId))
+            return ForbiddenResponse("Featured track must belong to the authenticated creator.");
+
         // "What's in my studio" — free-text/tag fields by design (niche gear must
         // never be blocked by a dropdown taxonomy). Normalize tags, cap sizes.
         string? studioSetupJson = null;
@@ -253,10 +271,16 @@ public class CreatorProfileController : BaseController
         }
 
         await using var tx = await _transactions.BeginTransactionAsync();
-
+        try
+        {
         var saved = await _profiles.UpsertAsync(userId, slug, body.Bio?.Trim() ?? "",
             body.Niche?.Trim(), socialLinksJson, body.ShowEarnings, body.ShowDownloadStats,
-            studioSetupJson: studioSetupJson, journeyEntriesJson: journeyEntriesJson);
+            bannerImageUrl: body.BannerImageUrl, profileImageUrl: body.ProfileImageUrl,
+            studioSetupJson: studioSetupJson, journeyEntriesJson: journeyEntriesJson,
+            genresJson: genresJson);
+
+        if (body.FeaturedTrackId.HasValue)
+            saved = await _profiles.UpdatePinnedTracksAsync(userId, body.FeaturedTrackId.Value.ToString());
 
         var displayName = body.DisplayName?.Trim();
 
@@ -290,7 +314,9 @@ public class CreatorProfileController : BaseController
                 }
                 if (!string.IsNullOrEmpty(displayName))
                     appUser.DisplayName = displayName;
-                await _userManager.UpdateAsync(appUser);
+                var identityResult = await _userManager.UpdateAsync(appUser);
+                if (!identityResult.Succeeded)
+                    throw new InvalidOperationException("Creator identity mirror could not be persisted.");
             }
         }
 
@@ -299,6 +325,25 @@ public class CreatorProfileController : BaseController
         saved.ProfileImageUrl = ResolveImageUrl(saved.ProfileImageUrl);
         saved.BannerImageUrl = ResolveImageUrl(saved.BannerImageUrl);
         return OkResponse(saved);
+        }
+        catch (Exception ex)
+        {
+            await _transactions.RollbackAsync();
+            Cambrian.Application.Observability.CambrianMetrics.ProfileSaveFailed.Add(1);
+            _logger.LogError(ex,
+                "EVENT: profile_save_failed userId:{UserId} category:persistence correlationId:{CorrelationId}",
+                userId, HttpContext.TraceIdentifier);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                success = false,
+                error = new
+                {
+                    code = "profile_save_failed",
+                    message = "Creator profile could not be saved. No partial changes were committed.",
+                    correlationId = HttpContext.TraceIdentifier,
+                }
+            });
+        }
     }
 
     // ───── Partial update: toggle showEarnings / showDownloadStats ─────
