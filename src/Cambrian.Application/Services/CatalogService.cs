@@ -196,6 +196,19 @@ public class CatalogService : ICatalogService
         return BuildTrackResponse(t, feeRate, creatorSlug, creatorProfileImageUrl, stats);
     }
 
+    /// <summary>
+    /// The one artist-display-name fallback chain for a track: first-class Creator
+    /// display name, then Creator username, then the legacy ApplicationUser display
+    /// name, then "Unknown Artist". Shared with WeeklyChartService so the Scene chart
+    /// never shows a different artist name than the catalog for the same track.
+    /// </summary>
+    public static string ResolveArtistName(Track t) =>
+        !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
+            ? t.CreatorEntity.DisplayName
+            : t.CreatorEntity?.Username
+              ?? t.Creator?.DisplayName
+              ?? "Unknown Artist";
+
     private static TrackResponse BuildTrackResponse(Track t, decimal feeRate, string? creatorSlug, string? creatorProfileImageUrl, TrackStats? stats = null)
     {
         // Fallback: if NonExclusivePriceCents is 0, use legacy Price field (matches checkout logic)
@@ -230,11 +243,7 @@ public class CatalogService : ICatalogService
             CreatorId = t.CreatorId,
             CreatorSlug = canonicalSlug,
             CreatorProfileImageUrl = canonicalImage,
-            Artist = !string.IsNullOrWhiteSpace(t.CreatorEntity?.DisplayName)
-                ? t.CreatorEntity.DisplayName
-                : t.CreatorEntity?.Username
-                  ?? t.Creator?.DisplayName
-                  ?? "Unknown Artist",
+            Artist = ResolveArtistName(t),
             Plays = stats?.Plays ?? 0,
             Sales = stats?.Sales ?? 0,
             AuthorshipRecordId = stats?.AuthorshipRecordId,

@@ -1,3 +1,5 @@
+using Cambrian.Api.Common;
+using Cambrian.Application.DTOs.Charts;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,9 +8,11 @@ using Microsoft.Extensions.Logging;
 namespace Cambrian.Api.Controllers;
 
 /// <summary>
-/// "The Scene" weekly charts. Reads are public; aggregation is admin-triggered
-/// on demand (residue R17) — there is no scheduled job yet, so the admin POST
-/// is how the chart is (re)populated and made testable.
+/// "The Scene" weekly charts. Reads are public. Aggregation is driven by the
+/// scheduled WeeklyChartWorker (every WeeklyChartService.RecomputeInterval)
+/// AND admin-triggerable on demand — both call the same idempotent
+/// AggregateAsync. Un-versioned (alongside /api/public, ai-discovery) rather
+/// than under /api/v1 — see docs/api-contracts.md for the full route contract.
 /// </summary>
 public sealed class ChartsController : BaseController
 {
@@ -24,6 +28,7 @@ public sealed class ChartsController : BaseController
     /// <summary>GET /api/charts/weekly — the canonical weekly chart.</summary>
     [AllowAnonymous]
     [HttpGet("/api/charts/weekly")]
+    [ProducesResponseType(typeof(ApiResponse<WeeklyChartsResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Weekly(CancellationToken ct)
     {
         var chart = await _charts.GetCurrentAsync(ct);
@@ -36,6 +41,7 @@ public sealed class ChartsController : BaseController
     /// </summary>
     [AllowAnonymous]
     [HttpGet("/api/charts/weekly/archive")]
+    [ProducesResponseType(typeof(ApiResponse<ChartArchiveIndexResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Archive([FromQuery] int limit = 104, CancellationToken ct = default)
     {
         var index = await _charts.GetArchiveIndexAsync(Math.Clamp(limit, 1, 520), ct);
@@ -49,6 +55,9 @@ public sealed class ChartsController : BaseController
     /// </summary>
     [AllowAnonymous]
     [HttpGet("/api/charts/weekly/archive/{isoWeek}")]
+    [ProducesResponseType(typeof(ApiResponse<WeeklyChartsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ArchivedWeek(string isoWeek, CancellationToken ct)
     {
         var weekStart = Application.Services.WeeklyChartService.ParseIsoWeekKey(isoWeek);
@@ -63,6 +72,7 @@ public sealed class ChartsController : BaseController
     /// <summary>POST /admin/charts/aggregate — recompute the weekly chart now.</summary>
     [HttpPost("/admin/charts/aggregate")]
     [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ApiResponse<WeeklyChartsResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Aggregate(CancellationToken ct)
     {
         _logger.LogInformation("EVENT: WeeklyChartAggregationTriggered");

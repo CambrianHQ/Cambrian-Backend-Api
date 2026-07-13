@@ -3,16 +3,19 @@ using Cambrian.Application.DTOs.Charts;
 namespace Cambrian.Application.Interfaces;
 
 /// <summary>
-/// Computes and serves the weekly "The Scene" chart. Aggregation is on-demand
-/// (admin-triggered) and cached in-process — there is no scheduled job yet, so
-/// the admin trigger is how charts become populated/testable. (residue R17)
+/// Computes and serves the weekly "The Scene" chart. Recompute is scheduled
+/// (WeeklyChartWorker, every WeeklyChartService.RecomputeInterval — see that
+/// constant for the current freshness target) AND admin-triggerable on demand
+/// (POST /admin/charts/aggregate) — both call the same idempotent AggregateAsync,
+/// so overlapping triggers are harmless. Reads are served from the persisted
+/// WeeklyChartSnapshots table, not an in-process cache.
 /// </summary>
 public interface IWeeklyChartService
 {
-    /// <summary>Current cached chart; aggregates lazily on first access.</summary>
+    /// <summary>Current persisted chart for the running week; computes it once if nothing has ever been persisted.</summary>
     Task<WeeklyChartsResponse> GetCurrentAsync(CancellationToken ct = default);
 
-    /// <summary>Recompute the chart now (admin trigger) and return the snapshot.</summary>
+    /// <summary>Recompute the chart now (scheduled worker or admin trigger) and return the snapshot.</summary>
     Task<WeeklyChartsResponse> AggregateAsync(CancellationToken ct = default);
 
     /// <summary>

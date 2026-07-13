@@ -363,6 +363,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/charts/weekly/archive",
+      "requiresAuth": false,
+      "tag": "Charts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/charts/weekly/archive/{isoWeek}",
+      "requiresAuth": false,
+      "tag": "Charts"
+    },
+    {
+      "method": "GET",
       "path": "/api/config/entitlements",
       "requiresAuth": false,
       "tag": "Config"

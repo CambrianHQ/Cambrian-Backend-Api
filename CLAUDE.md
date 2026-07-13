@@ -22,6 +22,7 @@ Verified during the test-debt cleanup pass (2026-07-06):
   - The 4 skips are `Cambrian.Api.Tests.StabilityTests` upload-validation tests, each with an explicit tracking reason: "Phase A validation reverted in c7e31bf — restore UploadService title/price guard to re-enable."
 - `node scripts/validate-contracts.cjs` exits successfully (non-blocking), reporting seven architecture-compliance warnings — see "Contracts And Governance" below for the current list.
 - `node scripts/check-contract-drift.cjs` exits `0` with "Contract drift checks passed." — no drift, no false positives.
+  - **Stale as of the charts-and-rankings audit (2026-07-13):** this script now exits `1` with 9 pre-existing failures unrelated to charts (Albums/BehindTheTrack/proof-videos/lyrics status-code and route-parity drift that landed in commits after 2026-07-06). Verified this is baseline drift, not something the charts audit introduced, by running the script against `HEAD` with and without the charts changes stashed — identical failure set both times. Not fixed as part of the charts audit (out of scope); needs its own pass.
 
 Previously known failures, now resolved:
 
@@ -123,6 +124,16 @@ The backend includes these major areas:
   - `src/Cambrian.Persistence/Configurations/EntitlementConfiguration.cs`
   - `src/Cambrian.Persistence/Migrations/20260424004954_AddEntitlementsTable.cs`
 - MCP/AI discovery code exists under `src/Cambrian.Application/AI/Discovery` and `src/Cambrian.Api/Controllers/AiDiscoveryController.cs`, including a `GET /ai-discovery/tracks/{trackId}/licenses` endpoint. The AI schema contract (`Cambrian.Api.Tests.AI.AiDiscoveryContractTests`) is green — the `Ai*` DTOs (no `Dto` suffix) and their `Ai*Response` wrappers are documented in `contracts/openapi.v1.json`.
+- **Charts — "The Scene" weekly rankings** (hardened in the charts-and-rankings audit, 2026-07-13). Un-versioned routes, all in `src/Cambrian.Api/Controllers/ChartsController.cs`:
+  - `GET /api/charts/weekly` — the running week (public).
+  - `GET /api/charts/weekly/archive` / `GET /api/charts/weekly/archive/{isoWeek}` — permanent record of completed weeks (public).
+  - `POST /admin/charts/aggregate` — recompute now (Admin).
+  - `/charts/weekly` (no `/api` prefix, `Program.cs`) is a deliberately un-documented alias, excluded from OpenAPI.
+  - One UTC window (`WeeklyChartService.StartOfIsoWeekUtc` — Monday 00:00 UTC, ISO week), one eligibility predicate (`WeeklyChartRepository.EligibleTracks` — public, `Status == "available"`, not `ExclusiveSold`, creator not suspended), one deterministic order (score desc → qualified plays desc → `Track.CreatedAt` desc → track id asc).
+  - `Track.TrendingScore` is a dead column (default `0m`, never written by any production process — see `ICatalogService.cs`'s own doc comment) and the chart never reads it. Ranking candidates come directly from `StreamSessions` in the chart window on eligible tracks (`WeeklyChartRepository.GetQualifiedPlayCountsInWindowAsync`), not from a catalog "popular"/"trending" listing — a pre-audit version capped the candidate pool at a 200-track "popular" slice ordered by that same dead column, which could silently exclude a genuinely high-play track from the chart.
+  - Recompute is scheduled (`WeeklyChartWorker`, `WeeklyChartService.RecomputeInterval` — currently 60s) and admin-triggerable; both call the same idempotent `AggregateAsync`. Reads carry `generatedAt`/`dataThrough`/`stale` so the frontend can show honest freshness rather than silently presenting old data as current.
+  - Tests: `tests/Cambrian.Api.Tests/WeeklyChartRankingTests.cs` (deterministic ranking, tie-breaks, UTC boundary, archive pagination stability, eligibility exclusions, freshness), plus the pre-existing `WeeklyChartSnapshotTests.cs`, `WeeklyChartArchiveTests.cs`, `ChartsControllerTests.cs`.
+  - `TrackStat`/`CreatorStat` (including `CreatorStat.TrendingScore`, a separate column from `Track.TrendingScore`) are declared entities with doc comments describing a "stats recompute job" that does not exist in this codebase — also dead, but out of scope for the charts audit since nothing chart-related reads them.
 
 ## Database And Migrations
 

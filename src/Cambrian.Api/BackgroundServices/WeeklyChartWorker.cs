@@ -1,4 +1,5 @@
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Services;
 
 namespace Cambrian.Api.BackgroundServices;
 
@@ -8,11 +9,16 @@ namespace Cambrian.Api.BackgroundServices;
 /// is idempotent per week (WeeklyChartService replaces the week's rows in one
 /// transaction), so overlapping admin triggers are harmless. Mirrors the
 /// MasteringWorker pattern: PeriodicTimer + never let one tick kill the loop.
+///
+/// Interval is WeeklyChartService.RecomputeInterval — the single source of
+/// truth for the chart's freshness target (currently 60s) — rather than a
+/// second hardcoded constant here, so the worker's actual cadence and the
+/// staleness threshold reported to the frontend can never drift apart.
 /// </summary>
 public sealed class WeeklyChartWorker : BackgroundService
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
-    private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan Interval = WeeklyChartService.RecomputeInterval;
+    private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(5);
 
     private readonly IWeeklyChartService _charts;
     private readonly ILogger<WeeklyChartWorker> _logger;
@@ -25,7 +31,7 @@ public sealed class WeeklyChartWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("EVENT: WeeklyChartWorkerStarted intervalHours:{Hours}", Interval.TotalHours);
+        _logger.LogInformation("EVENT: WeeklyChartWorkerStarted intervalSeconds:{Seconds}", Interval.TotalSeconds);
 
         // Small startup delay so we don't compete with app warmup / migrations.
         try

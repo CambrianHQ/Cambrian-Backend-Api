@@ -98,13 +98,16 @@ public sealed class WeeklyChartSnapshotTests : IClassFixture<CambrianApiFixture>
         Assert.Equal("weekly_plays", data.GetProperty("basis").GetString());
 
         var entries = data.GetProperty("entries").EnumerateArray().ToList();
-        var hotRank = entries.First(e => e.GetProperty("trackId").GetString() == playedThisWeek.ToString())
-            .GetProperty("rank").GetInt32();
-        var oldRank = entries.First(e => e.GetProperty("trackId").GetString() == playedLastMonth.ToString())
-            .GetProperty("rank").GetInt32();
+        var hot = entries.Single(e => e.GetProperty("trackId").GetString() == playedThisWeek.ToString());
+        Assert.Equal(1, hot.GetProperty("rank").GetInt32());
+        Assert.Equal(5, hot.GetProperty("playsInWindow").GetInt32());
+        Assert.Equal(5, hot.GetProperty("lifetimePlays").GetInt64());
 
-        Assert.True(hotRank < oldRank,
-            $"in-window plays must outrank stale all-time plays (hot={hotRank}, old={oldRank})");
+        // Zero in-window plays means zero qualified plays — a track can't ride
+        // 50 stale all-time plays onto THIS week's chart at all, let alone
+        // outrank an actually-played track. Authoritative play data, not
+        // all-time popularity, decides who's a candidate this week.
+        Assert.DoesNotContain(entries, e => e.GetProperty("trackId").GetString() == playedLastMonth.ToString());
     }
 
     [Fact]

@@ -2940,7 +2940,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -2952,7 +2969,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -8328,13 +8362,32 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer"
+              "type": "integer",
+              "format": "int32",
+              "default": 104
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartArchiveIndexResponseApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartArchiveIndexResponseApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChartArchiveIndexResponseApiResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -8357,13 +8410,64 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              }
+            }
           },
           "400": {
-            "description": "Malformed isoWeek key"
+            "description": "Malformed isoWeek key",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           },
           "404": {
-            "description": "No archived chart for that week"
+            "description": "No archived chart for that week",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -8933,6 +9037,213 @@
           "newPassword": {
             "minLength": 8,
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChartArchiveIndexResponse": {
+        "type": "object",
+        "properties": {
+          "weeks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartArchiveWeekSummary"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChartArchiveIndexResponseApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ChartArchiveIndexResponse"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChartArchiveWeekSummary": {
+        "type": "object",
+        "properties": {
+          "isoWeek": {
+            "type": "string",
+            "nullable": true
+          },
+          "weekOf": {
+            "type": "string",
+            "nullable": true
+          },
+          "weekEnd": {
+            "type": "string",
+            "nullable": true
+          },
+          "entries": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "topTrackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "topTrackTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "topTrackArtist": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChartEntryResponse": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "artist": {
+            "type": "string",
+            "nullable": true
+          },
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "creatorUsername": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverArtUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "deltaRank": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "playsInWindow": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lifetimePlays": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "score": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrackOfTheWeekResponse": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "artist": {
+            "type": "string",
+            "nullable": true
+          },
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverArtUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "WeeklyChartsResponse": {
+        "type": "object",
+        "properties": {
+          "weekOf": {
+            "type": "string",
+            "nullable": true
+          },
+          "weekEnd": {
+            "type": "string",
+            "nullable": true
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartEntryResponse"
+            },
+            "nullable": true
+          },
+          "trackOfTheWeek": {
+            "$ref": "#/components/schemas/TrackOfTheWeekResponse"
+          },
+          "basis": {
+            "type": "string",
+            "nullable": true
+          },
+          "generatedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataThrough": {
+            "type": "string",
+            "nullable": true
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WeeklyChartsResponseApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WeeklyChartsResponse"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

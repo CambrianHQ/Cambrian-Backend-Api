@@ -443,7 +443,9 @@ builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICreatorService, CreatorService>();
 builder.Services.AddSingleton<IFeeService, FeeService>();
 builder.Services.AddSingleton<ITierService, TierService>();
-// Weekly "The Scene" charts — singleton cache, admin-triggered aggregation (R17).
+// Weekly "The Scene" charts — reads are served from the persisted
+// WeeklyChartSnapshots table (no in-process cache); recompute is scheduled
+// (WeeklyChartWorker, below) and also admin-triggerable on demand.
 builder.Services.AddSingleton<IWeeklyChartService, WeeklyChartService>();
 builder.Services.AddScoped<IWeeklyChartRepository, WeeklyChartRepository>();
 // Weekly creator digest (creator-audit fix 10). The worker is double-gated:

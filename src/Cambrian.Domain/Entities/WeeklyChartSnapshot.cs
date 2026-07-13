@@ -39,8 +39,15 @@ public class WeeklyChartSnapshot
     /// <summary>Composite ranking score (primary input: plays in window).</summary>
     public double Score { get; set; }
 
-    /// <summary>Stream sessions started within the chart window.</summary>
+    /// <summary>Stream sessions started within the chart window ("qualified plays").</summary>
     public int PlaysInWindow { get; set; }
+
+    /// <summary>
+    /// All-time stream-session count for this track as of <see cref="ComputedAtUtc"/>,
+    /// frozen at computation time so archived weeks stay internally consistent
+    /// (a permanent record shouldn't show a lifetime count that keeps changing).
+    /// </summary>
+    public long LifetimePlays { get; set; }
 
     /// <summary>
     /// What the score was computed from: "weekly_plays" once real in-window
