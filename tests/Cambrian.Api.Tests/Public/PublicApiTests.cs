@@ -391,8 +391,20 @@ public sealed class PublicApiTests : IClassFixture<CambrianApiFixture>
             Id = Guid.NewGuid(),
             TrackId = trackId,
             StartedAt = DateTime.UtcNow,
+            IdempotencyKey = Guid.NewGuid().ToString(),
+            Qualified = true,
         });
         await db.SaveChangesAsync();
+
+        // Plays are read from the TrackStats projection, not a live COUNT — rebuild it from
+        // the event just seeded (mirrors how a real historical backfill/repair populates it).
+        var reconciliation = scope.ServiceProvider.GetRequiredService<Cambrian.Application.Interfaces.IPlayCountReconciliationService>();
+        await reconciliation.ReconcileAsync(new Cambrian.Application.DTOs.PlayCounts.ReconciliationOptions
+        {
+            TrackIds = new[] { trackId },
+            DryRun = false,
+            Repair = true,
+        });
     }
 
     private async Task SeedAuthorshipRecordAsync(Guid trackId, string creatorId, string status)

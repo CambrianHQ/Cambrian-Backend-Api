@@ -25,6 +25,12 @@ public class CreatorStat
     /// <summary>Lifetime plays across all of the creator's tracks.</summary>
     public long TotalPlays { get; set; }
 
+    /// <summary>
+    /// Lifetime count of distinct listeners across all of the creator's tracks. Maintained by the
+    /// reconciliation/rebuild pass, not incrementally on every play.
+    /// </summary>
+    public long UniqueListenerCount { get; set; }
+
     /// <summary>Plays in the trailing 30 days. Recomputed by the stats job (decays over time).</summary>
     public long MonthlyPlays { get; set; }
 

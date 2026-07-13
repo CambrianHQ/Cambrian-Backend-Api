@@ -20,8 +20,7 @@ public sealed class StreamControllerTests
     public StreamControllerTests()
     {
         var logger = Substitute.For<ILogger<StreamController>>();
-        _controller = new StreamController(_tracks, _storage, _streams, new TrackVisibilityPolicy(),
-            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()), logger);
+        _controller = new StreamController(_tracks, _storage, _streams, new TrackVisibilityPolicy(), logger);
     }
 
     private void SetAuthenticatedUser(string userId)
@@ -46,12 +45,12 @@ public sealed class StreamControllerTests
             Visibility = "public",
             CreatorId = "creator-1"
         });
-        _streams.StartAsync(trackId, "listener-1").Returns(new StreamSession
+        _streams.StartAsync(trackId, "listener-1", Arg.Any<string?>()).Returns((new StreamSession
         {
             Id = streamId,
             TrackId = trackId,
             UserId = "listener-1"
-        });
+        }, true));
         SetAuthenticatedUser("listener-1");
 
         var result = await _controller.Start(trackId: trackId.ToString());
@@ -60,6 +59,6 @@ public sealed class StreamControllerTests
         // Start should NOT call storage — audio availability is checked
         // when the client actually streams via GET /stream/{trackId}/audio.
         await _storage.DidNotReceive().OpenReadAsync(Arg.Any<string>());
-        await _streams.Received(1).StartAsync(trackId, "listener-1");
+        await _streams.Received(1).StartAsync(trackId, "listener-1", Arg.Any<string?>());
     }
 }

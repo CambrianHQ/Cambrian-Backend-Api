@@ -10,8 +10,13 @@ namespace Cambrian.Persistence.Repositories;
 public sealed class CreatorProfileRepository : ICreatorProfileRepository
 {
     private readonly CambrianDbContext _db;
+    private readonly IPlayCountService _playCounts;
 
-    public CreatorProfileRepository(CambrianDbContext db) => _db = db;
+    public CreatorProfileRepository(CambrianDbContext db, IPlayCountService playCounts)
+    {
+        _db = db;
+        _playCounts = playCounts;
+    }
 
     public async Task<CreatorProfileDto?> GetByUserIdAsync(string userId)
     {
@@ -431,11 +436,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
                     && t.Id == p.TrackId)
                              && p.Status == "completed");
 
-        // Lifetime plays across all of the creator's tracks (StreamSessions).
-        var totalPlays = await _db.StreamSessions
-            .CountAsync(s => _db.Tracks.Any(t =>
-                (t.CreatorId == userId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
-                && t.Id == s.TrackId));
+        // Lifetime plays across all of the creator's tracks — single shared definition.
+        var totalPlays = await _playCounts.GetCreatorTotalPlaysAsync(userId, creatorUuid);
 
         // Follower count — CreatorFollows keyed by the canonical Creator UUID.
         var followerCount = creatorUuid != null
@@ -448,7 +450,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         return new CreatorStatsDto
         {
             TotalDownloads = totalSales,
-            TotalPlays = totalPlays,
+            TotalPlays = (int)totalPlays,
             FollowerCount = followerCount,
         };
     }

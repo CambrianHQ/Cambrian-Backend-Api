@@ -471,6 +471,15 @@ builder.Services.AddScoped<Cambrian.Application.Interfaces.V1.IIdempotencyStore,
     Cambrian.Persistence.Repositories.IdempotencyStore>();
 builder.Services.AddScoped<Cambrian.Api.Middleware.ApiUsageActionFilter>();
 builder.Services.AddScoped<IMarketplaceIntegrityService, Cambrian.Persistence.Services.MarketplaceIntegrityService>();
+// Play counts: single source of truth reader (reads the TrackStats/CreatorStats projection),
+// plus the reconciliation service/worker that keeps it honest against durable StreamSessions.
+builder.Services.AddScoped<IPlayCountService, Cambrian.Persistence.Services.PlayCountService>();
+builder.Services.AddScoped<IPlayCountReconciliationService, Cambrian.Persistence.Services.PlayCountReconciliationService>();
+// Not in Testing — same reason as the other workers (periodic DB touch would share the test
+// host's single SQLite connection). The admin POST (/admin/play-counts/reconcile) stays
+// available in all environments as the on-demand/manual trigger.
+if (builder.Environment.EnvironmentName != TestingEnvironment)
+    builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.PlayCountReconciliationWorker>();
 builder.Services.AddScoped<IDebugService, Cambrian.Persistence.Services.DebugService>();
 builder.Services.AddScoped<IHealthService, Cambrian.Persistence.Services.HealthService>();
 builder.Services.AddScoped<IPreflightService, Cambrian.Infrastructure.Diagnostics.PreflightService>();

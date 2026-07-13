@@ -87,6 +87,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<WeeklyChartSnapshot> WeeklyChartSnapshots => Set<WeeklyChartSnapshot>();
 
+    public DbSet<PlayCountReconciliationRun> PlayCountReconciliationRuns => Set<PlayCountReconciliationRun>();
+
+    public DbSet<PlayCountReconciliationEntry> PlayCountReconciliationEntries => Set<PlayCountReconciliationEntry>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -305,6 +309,34 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<StreamSession>(e =>
         {
             e.HasKey(s => s.Id);
+            e.Property(s => s.IdempotencyKey).IsRequired().HasMaxLength(300);
+            e.Property(s => s.AnonymousKey).HasMaxLength(128);
+            // Historical rows (recorded before this column existed) default to qualified —
+            // they were real plays under the "every session counts" rule in effect when they
+            // happened, and PlayCounts:MinQualifyingSeconds defaults to 0 (same rule) today.
+            // The application always sets this explicitly on insert; the DB default only
+            // matters for the one-time backfill of pre-existing rows in the migration.
+            // Concurrency token (not a schema change — no rowversion column, just a WHERE-clause
+            // guard): two concurrent StopAsync calls for the same session that both try to flip
+            // Qualified false→true race on this value, and the loser's SaveChanges throws
+            // DbUpdateConcurrencyException instead of silently double-incrementing the
+            // TrackStats/CreatorStats projection. Works identically across the InMemory, SQLite,
+            // and Postgres providers this test suite exercises — no raw SQL / ExecuteUpdate
+            // needed, which the InMemory provider used by TrackEngagementMetricsTests can't run.
+            e.Property(s => s.Qualified).HasDefaultValue(true).IsConcurrencyToken();
+            // Durability guarantee: two requests (retries, or the same request landing on two
+            // replicas) that compute the same idempotency key can insert at most one row between
+            // them — the second insert fails the constraint rather than racing a read-then-write
+            // check. See StreamRepository.StartAsync.
+            e.HasIndex(s => s.IdempotencyKey)
+                .IsUnique()
+                .HasDatabaseName("ux_stream_sessions_idempotency_key");
+            // Backs both the authenticated debounce read (TrackId, UserId, StartedAt) and the
+            // per-track qualified-play aggregation query.
+            e.HasIndex(s => new { s.TrackId, s.UserId, s.StartedAt })
+                .HasDatabaseName("ix_stream_sessions_track_user_started");
+            e.HasIndex(s => new { s.TrackId, s.Qualified })
+                .HasDatabaseName("ix_stream_sessions_track_qualified");
             e.HasOne(s => s.Track)
                 .WithMany()
                 .HasForeignKey(s => s.TrackId)
@@ -487,6 +519,32 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         // ── Denormalized public-metrics counters (track + creator stats) ──
         builder.ApplyConfiguration(new TrackStatConfiguration());
         builder.ApplyConfiguration(new CreatorStatConfiguration());
+
+        // ── Play-count reconciliation audit trail (rebuild/drift-repair evidence) ──
+        builder.Entity<PlayCountReconciliationRun>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.RequestedBy).IsRequired().HasMaxLength(450);
+            e.Property(x => x.Scope).IsRequired().HasMaxLength(200);
+            e.Property(x => x.Status).IsRequired().HasMaxLength(20).HasDefaultValue("running");
+            e.Property(x => x.ErrorMessage).HasMaxLength(2000);
+            e.Property(x => x.StartedAtUtc).IsRequired();
+            e.HasIndex(x => x.StartedAtUtc).HasDatabaseName("ix_play_count_reconciliation_runs_started_at");
+            e.ToTable("PlayCountReconciliationRuns");
+        });
+
+        builder.Entity<PlayCountReconciliationEntry>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CreatedAtUtc).IsRequired();
+            e.HasIndex(x => x.RunId).HasDatabaseName("ix_play_count_reconciliation_entries_run_id");
+            e.HasIndex(x => x.TrackId).HasDatabaseName("ix_play_count_reconciliation_entries_track_id");
+            e.HasOne(x => x.Run)
+                .WithMany(r => r.Entries)
+                .HasForeignKey(x => x.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.ToTable("PlayCountReconciliationEntries");
+        });
 
         // ── Newsletter opt-ins ──
         builder.Entity<NewsletterSubscriber>(e =>

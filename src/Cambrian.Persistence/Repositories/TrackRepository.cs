@@ -9,10 +9,12 @@ namespace Cambrian.Persistence.Repositories;
 public class TrackRepository : ITrackRepository
 {
     private readonly CambrianDbContext _db;
+    private readonly IPlayCountService _playCounts;
 
-    public TrackRepository(CambrianDbContext db)
+    public TrackRepository(CambrianDbContext db, IPlayCountService playCounts)
     {
         _db = db;
+        _playCounts = playCounts;
     }
 
     public async Task<List<Track>> BrowseAsync()
@@ -223,14 +225,10 @@ public class TrackRepository : ITrackRepository
 
         var ids = trackIds as IList<Guid> ?? trackIds.ToList();
 
-        // Plays — one grouped count over all stream sessions for the page's tracks.
-        var plays = await _db.StreamSessions
-            .Where(s => ids.Contains(s.TrackId))
-            .GroupBy(s => s.TrackId)
-            .Select(g => new { TrackId = g.Key, Count = g.Count() })
-            .ToListAsync();
-        foreach (var row in plays)
-            if (result.TryGetValue(row.TrackId, out var stats)) stats.Plays = row.Count;
+        // Plays — the single shared definition (IPlayCountService), not a bespoke query here.
+        var plays = await _playCounts.GetTrackPlayCountsAsync(trackIds);
+        foreach (var (trackId, count) in plays)
+            if (result.TryGetValue(trackId, out var stats)) stats.Plays = (int)count;
 
         // Sales — completed purchases only.
         var sales = await _db.Purchases

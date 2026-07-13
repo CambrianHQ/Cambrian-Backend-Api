@@ -114,10 +114,10 @@ public sealed class WeeklyDigestTests : IClassFixture<CambrianApiFixture>
             var weekStart = now.Date.AddDays(-((7 + (int)now.DayOfWeek - (int)DayOfWeek.Monday) % 7));
             var reportFrom = weekStart.AddDays(-7); // digest reports the completed previous week
 
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddHours(3) });
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddHours(4) });
+            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddHours(3), IdempotencyKey = Guid.NewGuid().ToString(), Qualified = true });
+            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddHours(4), IdempotencyKey = Guid.NewGuid().ToString(), Qualified = true });
             // Outside the window (two months back) — must NOT count.
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddDays(-60) });
+            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddDays(-60), IdempotencyKey = Guid.NewGuid().ToString(), Qualified = true });
             await db.SaveChangesAsync();
         }
 

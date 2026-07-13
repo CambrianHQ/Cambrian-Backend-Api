@@ -239,6 +239,8 @@ public sealed class TracksV1LyricsTests : IClassFixture<CambrianApiFixture>
             {
                 Id = Guid.NewGuid(),
                 TrackId = trackId,
+                IdempotencyKey = Guid.NewGuid().ToString(),
+                Qualified = true,
             });
         }
 
@@ -254,6 +256,16 @@ public sealed class TracksV1LyricsTests : IClassFixture<CambrianApiFixture>
         }
 
         await db.SaveChangesAsync();
+
+        // Plays are read from the TrackStats projection, not a live COUNT — rebuild it from
+        // the events just seeded.
+        var reconciliation = scope.ServiceProvider.GetRequiredService<Cambrian.Application.Interfaces.IPlayCountReconciliationService>();
+        await reconciliation.ReconcileAsync(new Cambrian.Application.DTOs.PlayCounts.ReconciliationOptions
+        {
+            TrackIds = new[] { trackId },
+            DryRun = false,
+            Repair = true,
+        });
     }
 
     private async Task<(int Plays, int Sales)> GetPlaysAndSalesAsync(Guid trackId)

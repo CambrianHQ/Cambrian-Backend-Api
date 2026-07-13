@@ -16,6 +16,7 @@ public sealed class CreatorStatConfiguration : IEntityTypeConfiguration<CreatorS
         builder.Property(x => x.FollowerCount).HasDefaultValue(0);
         builder.Property(x => x.TrackCount).HasDefaultValue(0);
         builder.Property(x => x.TotalPlays).HasDefaultValue(0L);
+        builder.Property(x => x.UniqueListenerCount).HasDefaultValue(0L);
         builder.Property(x => x.MonthlyPlays).HasDefaultValue(0L);
         builder.Property(x => x.SubscriberCount).HasDefaultValue(0);
         builder.Property(x => x.TipCount).HasDefaultValue(0);

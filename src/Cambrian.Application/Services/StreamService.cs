@@ -51,8 +51,8 @@ public class StreamService : IStreamService
         if (track?.AudioUrl is null)
             throw new KeyNotFoundException("Track not found.");
 
-        var session = await _streams.StartAsync(parsedTrackId, userId);
-        return new { streamId = session.Id.ToString(), status = "started" };
+        var (session, isNewPlay) = await _streams.StartAsync(parsedTrackId, userId, null);
+        return new { streamId = session.Id.ToString(), status = isNewPlay ? "started" : "already_counted" };
     }
 
     public async Task StopAsync(string? streamId)

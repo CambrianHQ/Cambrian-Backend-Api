@@ -308,7 +308,9 @@ public sealed class DatabaseConsistencyTests : IDisposable
             Id = sessionId,
             TrackId = trackId,
             UserId = "user-1",
-            StartedAt = DateTime.UtcNow
+            StartedAt = DateTime.UtcNow,
+            IdempotencyKey = Guid.NewGuid().ToString(),
+            Qualified = true
         });
         await _db.SaveChangesAsync();
 

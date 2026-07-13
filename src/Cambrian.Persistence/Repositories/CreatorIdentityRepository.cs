@@ -15,11 +15,13 @@ namespace Cambrian.Persistence.Repositories;
 public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
 {
     private readonly CambrianDbContext _db;
+    private readonly IPlayCountService _playCounts;
     private readonly ILogger<CreatorIdentityRepository> _logger;
 
-    public CreatorIdentityRepository(CambrianDbContext db, ILogger<CreatorIdentityRepository> logger)
+    public CreatorIdentityRepository(CambrianDbContext db, IPlayCountService playCounts, ILogger<CreatorIdentityRepository> logger)
     {
         _db = db;
+        _playCounts = playCounts;
         _logger = logger;
     }
 
@@ -276,11 +278,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .ToList();
         if (ids.Count == 0) return;
 
-        var plays = await _db.StreamSessions
-            .Where(s => ids.Contains(s.TrackId))
-            .GroupBy(s => s.TrackId)
-            .Select(g => new { g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.Key, x => x.Count);
+        // Plays — the single shared definition (IPlayCountService), not a bespoke query here.
+        var plays = await _playCounts.GetTrackPlayCountsAsync(ids);
 
         var sales = await _db.Purchases
             .Where(p => ids.Contains(p.TrackId) && p.Status == "completed")
@@ -302,7 +301,7 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         {
             if (Guid.TryParse(it.Id, out var g))
             {
-                it.Plays = plays.GetValueOrDefault(g);
+                it.Plays = (int)plays.GetValueOrDefault(g);
                 it.Sales = sales.GetValueOrDefault(g);
                 if (authorship.TryGetValue(g, out var recId))
                     it.AuthorshipRecordId = recId.ToString();

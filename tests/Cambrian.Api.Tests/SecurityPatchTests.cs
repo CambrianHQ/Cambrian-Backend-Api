@@ -271,8 +271,7 @@ public sealed class SecurityPatchTests
         {
             var streams = Substitute.For<IStreamRepository>();
             var logger = Substitute.For<ILogger<StreamController>>();
-            Controller = new StreamController(Tracks, Storage, streams, new TrackVisibilityPolicy(),
-                new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()), logger);
+            Controller = new StreamController(Tracks, Storage, streams, new TrackVisibilityPolicy(), logger);
         }
 
         public void SetAnonymousUser()

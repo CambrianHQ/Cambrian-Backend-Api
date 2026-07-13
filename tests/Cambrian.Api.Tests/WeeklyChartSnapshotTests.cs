@@ -40,6 +40,8 @@ public sealed class WeeklyChartSnapshotTests : IClassFixture<CambrianApiFixture>
                 Id = Guid.NewGuid(),
                 TrackId = trackId,
                 StartedAt = startedAtUtc.AddMinutes(i),
+                IdempotencyKey = Guid.NewGuid().ToString(),
+                Qualified = true,
             });
         }
         await db.SaveChangesAsync();

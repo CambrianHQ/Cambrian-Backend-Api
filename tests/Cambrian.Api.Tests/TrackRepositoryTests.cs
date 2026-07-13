@@ -1,7 +1,11 @@
 using Cambrian.Domain.Entities;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
+using Cambrian.Persistence.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using NSubstitute;
 
 namespace Cambrian.Api.Tests;
 
@@ -17,7 +21,8 @@ public sealed class TrackRepositoryTests : IDisposable
             .Options;
 
         _db = new CambrianDbContext(options);
-        _repository = new TrackRepository(_db);
+        var playCounts = new PlayCountService(_db, new MemoryCache(new MemoryCacheOptions()), Substitute.For<ILogger<PlayCountService>>());
+        _repository = new TrackRepository(_db, playCounts);
     }
 
     public void Dispose() => _db.Dispose();

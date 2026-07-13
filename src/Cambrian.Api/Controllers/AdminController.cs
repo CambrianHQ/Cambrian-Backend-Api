@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Admin;
+using Cambrian.Application.DTOs.PlayCounts;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Options;
@@ -29,8 +30,9 @@ public class AdminController : BaseController
     private readonly ICreatorIdentityRepository _creators;
     private readonly IFeatureFlagRepository _flags;
     private readonly IPaymentGateway _gateway;
+    private readonly IPlayCountReconciliationService _playCountReconciliation;
 
-    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env, IOptions<StorageOptions> storageOptions, IObjectStorage storage, UserManager<ApplicationUser> users, ICreatorIdentityRepository creators, IFeatureFlagRepository flags, IPaymentGateway gateway)
+    public AdminController(IAdminService admin, IMarketplaceIntegrityService integrity, ILogger<AdminController> logger, IWebHostEnvironment env, IOptions<StorageOptions> storageOptions, IObjectStorage storage, UserManager<ApplicationUser> users, ICreatorIdentityRepository creators, IFeatureFlagRepository flags, IPaymentGateway gateway, IPlayCountReconciliationService playCountReconciliation)
     {
         _admin = admin;
         _integrity = integrity;
@@ -42,6 +44,7 @@ public class AdminController : BaseController
         _creators = creators;
         _flags = flags;
         _gateway = gateway;
+        _playCountReconciliation = playCountReconciliation;
     }
 
     private string GetAdminActor()
@@ -512,6 +515,51 @@ public class AdminController : BaseController
             connectivity = await TestStorageConnectivity()
         };
         return OkResponse(diag);
+    }
+
+    /// <summary>
+    /// POST /admin/play-counts/reconcile — compares the TrackStats/CreatorStats projection
+    /// against durable, qualified StreamSessions. Dry-run by default: mismatches are found and
+    /// recorded (auditable via the returned runId) but nothing is written. Pass repair=true to
+    /// correct them. trackIds (comma-separated) scopes the run to specific tracks; omitted scans
+    /// the whole catalog in bounded batches of batchSize.
+    /// </summary>
+    [HttpPost("play-counts/reconcile")]
+    public async Task<IActionResult> ReconcilePlayCounts(
+        [FromQuery] bool dryRun = true,
+        [FromQuery] bool repair = false,
+        [FromQuery] int batchSize = 500,
+        [FromQuery] string? trackIds = null,
+        CancellationToken ct = default)
+    {
+        IReadOnlyCollection<Guid>? scopedIds = null;
+        if (!string.IsNullOrWhiteSpace(trackIds))
+        {
+            var parsed = new List<Guid>();
+            foreach (var raw in trackIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!Guid.TryParse(raw, out var parsedId))
+                    return ErrorResponse($"Invalid trackId in trackIds: '{raw}'.");
+                parsed.Add(parsedId);
+            }
+            scopedIds = parsed;
+        }
+
+        var actor = GetAdminActor();
+        _logger.LogInformation(
+            "EVENT: PlayCountReconciliationTriggered actor:{Actor} dryRun:{DryRun} repair:{Repair} scope:{Scope}",
+            actor, dryRun, repair, scopedIds is null ? "all" : $"{scopedIds.Count} tracks");
+
+        var result = await _playCountReconciliation.ReconcileAsync(new ReconciliationOptions
+        {
+            TrackIds = scopedIds,
+            DryRun = dryRun,
+            Repair = repair,
+            BatchSize = batchSize,
+            RequestedBy = actor,
+        }, ct);
+
+        return OkResponse(result);
     }
 
     private async Task<object> TestStorageConnectivity()

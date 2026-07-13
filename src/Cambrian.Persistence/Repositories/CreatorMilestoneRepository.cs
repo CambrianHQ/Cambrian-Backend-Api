@@ -15,6 +15,7 @@ public sealed class CreatorMilestoneRepository : ICreatorMilestoneRepository
         // the milestone belongs to the CREATOR, keyed by track ownership.
         var first = await _db.StreamSessions
             .AsNoTracking()
+            .Where(s => s.Qualified)
             .Join(
                 _db.Tracks.Where(t => t.CreatorId == userId),
                 s => s.TrackId,

@@ -2,8 +2,10 @@ using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Domain.Entities;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
+using Cambrian.Persistence.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -25,7 +27,8 @@ public sealed class CreatorIdentityRepositoryCompatibilityTests : IDisposable
             .Options;
 
         _db = new CambrianDbContext(options);
-        _repository = new CreatorIdentityRepository(_db, Substitute.For<ILogger<CreatorIdentityRepository>>());
+        var playCounts = new PlayCountService(_db, new MemoryCache(new MemoryCacheOptions()), Substitute.For<ILogger<PlayCountService>>());
+        _repository = new CreatorIdentityRepository(_db, playCounts, Substitute.For<ILogger<CreatorIdentityRepository>>());
 
         CreateLegacySchema();
     }
@@ -173,6 +176,17 @@ public sealed class CreatorIdentityRepositoryCompatibilityTests : IDisposable
                 "Id" TEXT NOT NULL PRIMARY KEY,
                 "TrackId" TEXT NOT NULL,
                 "Status" TEXT NOT NULL
+            );
+            """);
+
+        // Plays are read from this projection (IPlayCountService), not StreamSessions directly.
+        // Empty table ⇒ zero plays, same as the pre-projection live-count behavior this legacy
+        // schema otherwise simulates.
+        ExecuteNonQuery(
+            """
+            CREATE TABLE "TrackStats" (
+                "TrackId" TEXT NOT NULL PRIMARY KEY,
+                "PlayCount" INTEGER NOT NULL
             );
             """);
 

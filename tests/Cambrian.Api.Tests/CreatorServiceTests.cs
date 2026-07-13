@@ -16,7 +16,7 @@ public sealed class CreatorServiceTests
     private readonly IPurchaseRepository _purchases = Substitute.For<IPurchaseRepository>();
     private readonly IPayoutRepository _payouts = Substitute.For<IPayoutRepository>();
     private readonly IWalletRepository _wallet = Substitute.For<IWalletRepository>();
-    private readonly IStreamRepository _streams = Substitute.For<IStreamRepository>();
+    private readonly IPlayCountService _playCounts = Substitute.For<IPlayCountService>();
     private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
     private readonly ICreatorProfileRepository _profiles = Substitute.For<ICreatorProfileRepository>();
     private readonly ICreatorMilestoneRepository _milestones = Substitute.For<ICreatorMilestoneRepository>();
@@ -32,7 +32,7 @@ public sealed class CreatorServiceTests
             _purchases,
             _payouts,
             _wallet,
-            _streams,
+            _playCounts,
             users,
             _creators,
             _profiles,
@@ -57,8 +57,8 @@ public sealed class CreatorServiceTests
                 CoverArtUrl = "covers/night-drive.jpg"
             }
         ]);
-        _streams.GetPlayCountsByTrackIdsAsync(Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))
-            .Returns(new Dictionary<Guid, int> { [trackId] = 9 });
+        _playCounts.GetTrackPlayCountsAsync(Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))
+            .Returns(new Dictionary<Guid, long> { [trackId] = 9 });
         _purchases.GetCompletedCountsByTrackIdsAsync(Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))
             .Returns(new Dictionary<Guid, int> { [trackId] = 3 });
         _wallet.GetCreditsByTrackAsync("creator-1", Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))
@@ -108,18 +108,19 @@ public sealed class CreatorServiceTests
             _purchases,
             _payouts,
             _wallet,
-            _streams,
+            _playCounts,
             users,
             _creators,
             _profiles,
             _milestones,
             Substitute.For<ILogger<CreatorService>>());
 
+        var trackId = Guid.NewGuid();
         _tracks.GetCreatorTrackSummariesAsync("creator-1", creatorUuid).Returns(
         [
             new CreatorTrackSummary
             {
-                Id = Guid.NewGuid(),
+                Id = trackId,
                 CambrianTrackId = "CAMB-TRK-1001",
                 Title = "Night Drive",
                 Description = "Late city energy",
@@ -143,6 +144,12 @@ public sealed class CreatorServiceTests
             }
         ]);
         _tracks.GetByCreatorIdAsync("creator-1", creatorUuid).Throws(new Exception("track list should not load full tracks"));
+        // Regression coverage: this list used to always show Plays=0/Sales=0 regardless of
+        // real activity (the projection was never populated for this call site).
+        _playCounts.GetTrackPlayCountsAsync(Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))
+            .Returns(new Dictionary<Guid, long> { [trackId] = 7 });
+        _purchases.GetCompletedCountsByTrackIdsAsync(Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))
+            .Returns(new Dictionary<Guid, int> { [trackId] = 2 });
 
         var result = await sut.GetTracksAsync("creator-1", 1, 50);
 
@@ -160,6 +167,8 @@ public sealed class CreatorServiceTests
         Assert.Equal("creator-one", track.CreatorSlug);
         Assert.Equal("profiles/creator-one.jpg", track.CreatorProfileImageUrl);
         Assert.Equal("Creator One", track.Artist);
+        Assert.Equal(7, track.Plays);
+        Assert.Equal(2, track.Sales);
         await _tracks.Received(1).GetCreatorTrackSummariesAsync("creator-1", creatorUuid);
         await _tracks.DidNotReceive().GetByCreatorIdAsync("creator-1", creatorUuid);
     }

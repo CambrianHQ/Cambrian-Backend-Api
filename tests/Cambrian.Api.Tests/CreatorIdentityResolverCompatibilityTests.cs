@@ -1,7 +1,9 @@
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
+using Cambrian.Persistence.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -23,7 +25,8 @@ public sealed class CreatorIdentityResolverCompatibilityTests : IDisposable
             .Options;
 
         _db = new CambrianDbContext(options);
-        _repository = new CreatorIdentityRepository(_db, Substitute.For<ILogger<CreatorIdentityRepository>>());
+        var playCounts = new PlayCountService(_db, new MemoryCache(new MemoryCacheOptions()), Substitute.For<ILogger<PlayCountService>>());
+        _repository = new CreatorIdentityRepository(_db, playCounts, Substitute.For<ILogger<CreatorIdentityRepository>>());
 
         CreateLegacySchema();
     }

@@ -14,7 +14,7 @@ public class CreatorService : ICreatorService
     private readonly IPurchaseRepository _purchases;
     private readonly IPayoutRepository _payouts;
     private readonly IWalletRepository _wallet;
-    private readonly IStreamRepository _streams;
+    private readonly IPlayCountService _playCounts;
     private readonly UserManager<ApplicationUser> _users;
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository _profiles;
@@ -26,7 +26,7 @@ public class CreatorService : ICreatorService
         IPurchaseRepository purchases,
         IPayoutRepository payouts,
         IWalletRepository wallet,
-        IStreamRepository streams,
+        IPlayCountService playCounts,
         UserManager<ApplicationUser> users,
         ICreatorIdentityRepository creators,
         ICreatorProfileRepository profiles,
@@ -37,7 +37,7 @@ public class CreatorService : ICreatorService
         _purchases = purchases;
         _payouts = payouts;
         _wallet = wallet;
-        _streams = streams;
+        _playCounts = playCounts;
         _users = users;
         _creators = creators;
         _profiles = profiles;
@@ -91,6 +91,21 @@ public class CreatorService : ICreatorService
                 };
             })
             .ToList();
+
+        // Populate per-track plays/sales — without this the owner's own track list always
+        // showed zero, even though the same tracks show real counts everywhere else.
+        var itemIds = items.Select(i => Guid.Parse(i.Id)).ToList();
+        if (itemIds.Count > 0)
+        {
+            var playCounts = await _playCounts.GetTrackPlayCountsAsync(itemIds);
+            var saleCounts = await _purchases.GetCompletedCountsByTrackIdsAsync(itemIds);
+            foreach (var item in items)
+            {
+                var trackId = Guid.Parse(item.Id);
+                item.Plays = (int)playCounts.GetValueOrDefault(trackId);
+                item.Sales = saleCounts.GetValueOrDefault(trackId);
+            }
+        }
 
         return new PagedResult<TrackResponse>
         {
@@ -157,10 +172,10 @@ public class CreatorService : ICreatorService
         var tracks = await _tracks.GetDashboardTrackSummariesAsync(userId, creatorUuid);
         var trackIds = tracks.Select(t => t.Id).ToList();
 
-        // Plays = COUNT(*) FROM StreamSessions WHERE TrackId IN (creator tracks)
+        // Plays — same single definition every other endpoint reads (IPlayCountService).
         var playCounts = trackIds.Count > 0
-            ? await _streams.GetPlayCountsByTrackIdsAsync(trackIds)
-            : new Dictionary<Guid, int>();
+            ? await _playCounts.GetTrackPlayCountsAsync(trackIds)
+            : new Dictionary<Guid, long>();
 
         // Sales = COUNT(*) FROM Purchases WHERE Status='completed' AND TrackId IN (creator tracks)
         var saleCounts = trackIds.Count > 0
@@ -186,7 +201,7 @@ public class CreatorService : ICreatorService
             Title = t.Title,
             CoverArtUrl = t.CoverArtUrl,
             Sales = saleCounts.GetValueOrDefault(t.Id),
-            Plays = playCounts.GetValueOrDefault(t.Id),
+            Plays = (int)playCounts.GetValueOrDefault(t.Id),
             EarnedCents = earnedByTrack.GetValueOrDefault(t.Id),
         }).ToList();
 
@@ -199,7 +214,7 @@ public class CreatorService : ICreatorService
         {
             EarningsCents = totalEarnings,
             WeeklyEarningsCents = weeklyEarnings,
-            TotalPlays = totalPlays,
+            TotalPlays = (int)totalPlays,
             TotalSales = totalSales,
             ConversionRate = conversion,
             Tracks = trackStats,

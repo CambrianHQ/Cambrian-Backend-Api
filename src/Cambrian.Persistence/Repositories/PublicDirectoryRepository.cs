@@ -13,8 +13,13 @@ namespace Cambrian.Persistence.Repositories;
 public sealed class PublicDirectoryRepository : IPublicDirectoryRepository
 {
     private readonly CambrianDbContext _db;
+    private readonly IPlayCountService _playCounts;
 
-    public PublicDirectoryRepository(CambrianDbContext db) => _db = db;
+    public PublicDirectoryRepository(CambrianDbContext db, IPlayCountService playCounts)
+    {
+        _db = db;
+        _playCounts = playCounts;
+    }
 
     /// <summary>The single definition of "public catalogue" used by every aggregate below.</summary>
     private IQueryable<Track> PublicTracks() =>
@@ -34,7 +39,7 @@ public sealed class PublicDirectoryRepository : IPublicDirectoryRepository
             .Select(t => t.CreatorId)
             .Distinct()
             .CountAsync();
-        var totalPlays = await _db.StreamSessions.CountAsync();
+        var totalPlays = (int)await _playCounts.GetPlatformTotalPlaysAsync();
         var genreCount = await pub
             .Select(t => t.Subgenre ?? t.Genre ?? t.PrimaryGenre)
             .Where(g => g != null && g != "")

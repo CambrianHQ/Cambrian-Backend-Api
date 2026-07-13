@@ -27,6 +27,7 @@ public sealed class AdminControllerTests
     private readonly IWebHostEnvironment _env = Substitute.For<IWebHostEnvironment>();
     private readonly IFeatureFlagRepository _flags = Substitute.For<IFeatureFlagRepository>();
     private readonly IPaymentGateway _gateway = Substitute.For<IPaymentGateway>();
+    private readonly IPlayCountReconciliationService _playCountReconciliation = Substitute.For<IPlayCountReconciliationService>();
     private readonly AdminController _controller;
 
     public AdminControllerTests()
@@ -37,7 +38,7 @@ public sealed class AdminControllerTests
         var userStore = Substitute.For<IUserStore<ApplicationUser>>();
         var users = Substitute.For<UserManager<ApplicationUser>>(userStore, null!, null!, null!, null!, null!, null!, null!, null!);
         var creators = Substitute.For<ICreatorIdentityRepository>();
-        _controller = new AdminController(_admin, _integrity, logger, _env, storageOptions, _storage, users, creators, _flags, _gateway);
+        _controller = new AdminController(_admin, _integrity, logger, _env, storageOptions, _storage, users, creators, _flags, _gateway, _playCountReconciliation);
         SetupAdmin();
     }
 

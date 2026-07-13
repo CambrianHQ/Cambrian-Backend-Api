@@ -3,7 +3,9 @@ using Cambrian.Application.DTOs.Creators;
 using Cambrian.Domain.Entities;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
+using Cambrian.Persistence.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -26,8 +28,9 @@ public sealed class AuditPhase3Tests : IDisposable
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         _db = new CambrianDbContext(options);
-        _profiles = new CreatorProfileRepository(_db);
-        _creators = new CreatorIdentityRepository(_db, Substitute.For<ILogger<CreatorIdentityRepository>>());
+        var playCounts = new PlayCountService(_db, new MemoryCache(new MemoryCacheOptions()), Substitute.For<ILogger<PlayCountService>>());
+        _profiles = new CreatorProfileRepository(_db, playCounts);
+        _creators = new CreatorIdentityRepository(_db, playCounts, Substitute.For<ILogger<CreatorIdentityRepository>>());
     }
 
     public void Dispose() => _db.Dispose();

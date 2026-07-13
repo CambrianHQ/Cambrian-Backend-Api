@@ -13,17 +13,20 @@ public sealed class StorefrontService : IStorefrontService
     private readonly ITrackRepository _tracks;
     private readonly IPurchaseRepository _purchases;
     private readonly ICreatorIdentityRepository _creators;
+    private readonly IPlayCountService _playCounts;
 
     public StorefrontService(
         ICreatorProfileRepository profiles,
         ITrackRepository tracks,
         IPurchaseRepository purchases,
-        ICreatorIdentityRepository creators)
+        ICreatorIdentityRepository creators,
+        IPlayCountService playCounts)
     {
         _profiles = profiles;
         _tracks = tracks;
         _purchases = purchases;
         _creators = creators;
+        _playCounts = playCounts;
     }
 
     public async Task<StorefrontResponse?> GetStorefrontAsync(string slug)
@@ -52,12 +55,31 @@ public sealed class StorefrontService : IStorefrontService
         // Map tracks to responses (pass profile for image fallback when CreatorEntity is null)
         var trackResponses = tracks.Select(t => MapTrack(t, profile)).ToList();
 
+        // Populate per-track plays/sales — without this every track on a storefront showed
+        // zero plays even though the same track's own detail page showed a real count.
+        var trackIds = trackResponses
+            .Select(t => Guid.TryParse(t.Id, out var g) ? g : Guid.Empty)
+            .Where(g => g != Guid.Empty)
+            .ToList();
+        if (trackIds.Count > 0)
+        {
+            var playCounts = await _playCounts.GetTrackPlayCountsAsync(trackIds);
+            var salesCounts = await _purchases.GetCompletedCountsByTrackIdsAsync(trackIds);
+            foreach (var track in trackResponses)
+            {
+                if (!Guid.TryParse(track.Id, out var trackId)) continue;
+                track.Plays = (int)playCounts.GetValueOrDefault(trackId);
+                track.Sales = salesCounts.GetValueOrDefault(trackId);
+            }
+        }
+
         // Build stats from completed purchases. Earnings are intentionally NOT
         // included here — this storefront is served anonymously (F18).
         var completedPurchases = purchases.Where(p => p.Status == "completed").ToList();
         var stats = new CreatorStatsDto
         {
-            TotalDownloads = completedPurchases.Count
+            TotalDownloads = completedPurchases.Count,
+            TotalPlays = (int)await _playCounts.GetCreatorTotalPlaysAsync(profile.UserId, creatorUuid),
         };
 
         // Resolve pinned tracks: creator-managed order, falling back to most recent

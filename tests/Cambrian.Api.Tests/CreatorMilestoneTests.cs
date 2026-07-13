@@ -68,8 +68,8 @@ public sealed class CreatorMilestoneTests : IClassFixture<CambrianApiFixture>
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
             // Two ANONYMOUS sessions (UserId null) — the milestone belongs to
             // the creator; listener identity is irrelevant and absent.
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = earliest });
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = earliest.AddHours(5) });
+            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = earliest, IdempotencyKey = Guid.NewGuid().ToString(), Qualified = true });
+            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = earliest.AddHours(5), IdempotencyKey = Guid.NewGuid().ToString(), Qualified = true });
             await db.SaveChangesAsync();
         }
 
@@ -84,7 +84,7 @@ public sealed class CreatorMilestoneTests : IClassFixture<CambrianApiFixture>
         using (var scope = _fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = DateTime.UtcNow });
+            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = DateTime.UtcNow, IdempotencyKey = Guid.NewGuid().ToString(), Qualified = true });
             await db.SaveChangesAsync();
         }
 
@@ -139,7 +139,7 @@ public sealed class CreatorMilestoneTests : IClassFixture<CambrianApiFixture>
         using (var scope = _fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = "listener-secret-id", StartedAt = DateTime.UtcNow.AddDays(-1) });
+            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = "listener-secret-id", StartedAt = DateTime.UtcNow.AddDays(-1), IdempotencyKey = Guid.NewGuid().ToString(), Qualified = true });
             var creatorGuid = await db.Creators
                 .Where(c => c.UserId == userId)
                 .Select(c => (Guid?)c.Id)

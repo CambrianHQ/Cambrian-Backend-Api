@@ -1,7 +1,11 @@
+using Cambrian.Application.DTOs.PlayCounts;
+using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Persistence;
 using Cambrian.Persistence.Repositories;
+using Cambrian.Persistence.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -12,10 +16,19 @@ namespace Cambrian.Api.Tests;
 /// (plays from StreamSessions, sales from completed Purchases, followers from
 /// CreatorFollows) — not zeros or fabricated values. Guards the wiring added so
 /// the frontend "play count on songs" and creator stats reflect live data.
+///
+/// Plays now read the TrackStats/CreatorStats projection (IPlayCountService), not a live
+/// COUNT over StreamSessions — see CLAUDE.md's play-count rebuild notes. These tests seed
+/// StreamSessions directly (bypassing StreamRepository's normal write path, which keeps the
+/// projection in sync automatically) to represent "durable events that already existed", then
+/// run a real repair reconciliation to populate the projection from them — exactly the rebuild
+/// path a fresh deploy or a drift repair uses, not a test-only shortcut.
 /// </summary>
 public sealed class TrackEngagementMetricsTests : IDisposable
 {
     private readonly CambrianDbContext _db;
+    private readonly IPlayCountService _playCounts;
+    private readonly IPlayCountReconciliationService _reconciliation;
 
     public TrackEngagementMetricsTests()
     {
@@ -23,9 +36,23 @@ public sealed class TrackEngagementMetricsTests : IDisposable
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         _db = new CambrianDbContext(options);
+        _playCounts = new PlayCountService(_db, new MemoryCache(new MemoryCacheOptions()), Substitute.For<ILogger<PlayCountService>>());
+        _reconciliation = new PlayCountReconciliationService(_db, Substitute.For<ILogger<PlayCountReconciliationService>>());
     }
 
     public void Dispose() => _db.Dispose();
+
+    /// <summary>Rebuilds TrackStats/CreatorStats from whatever StreamSessions exist right now.</summary>
+    private Task RebuildProjectionAsync() =>
+        _reconciliation.ReconcileAsync(new ReconciliationOptions { DryRun = false, Repair = true });
+
+    private static StreamSession QualifiedSession(Guid trackId) => new()
+    {
+        Id = Guid.NewGuid(),
+        TrackId = trackId,
+        IdempotencyKey = Guid.NewGuid().ToString(),
+        Qualified = true,
+    };
 
     [Fact]
     public async Task GetTrackStatsAsync_CountsPlays_AndOnlyCompletedSales()
@@ -41,8 +68,8 @@ public sealed class TrackEngagementMetricsTests : IDisposable
 
         // Plays: 3 for A, 1 for B
         for (var i = 0; i < 3; i++)
-            _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackA });
-        _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackB });
+            _db.StreamSessions.Add(QualifiedSession(trackA));
+        _db.StreamSessions.Add(QualifiedSession(trackB));
 
         // Sales: 2 completed + 1 pending for A (pending must NOT count); 0 for B
         _db.Purchases.AddRange(
@@ -57,8 +84,9 @@ public sealed class TrackEngagementMetricsTests : IDisposable
             new AuthorshipRecord { Id = Guid.NewGuid(), TrackId = trackB, CreatorId = "c1", Status = "pending_payment" });
 
         await _db.SaveChangesAsync();
+        await RebuildProjectionAsync();
 
-        var repo = new TrackRepository(_db);
+        var repo = new TrackRepository(_db, _playCounts);
         var stats = await repo.GetTrackStatsAsync(new[] { trackA, trackB, trackC });
 
         Assert.Equal(3, stats[trackA].Plays);
@@ -76,7 +104,7 @@ public sealed class TrackEngagementMetricsTests : IDisposable
     [Fact]
     public async Task GetTrackStatsAsync_EmptyInput_ReturnsEmpty()
     {
-        var repo = new TrackRepository(_db);
+        var repo = new TrackRepository(_db, _playCounts);
         var stats = await repo.GetTrackStatsAsync(Array.Empty<Guid>());
         Assert.Empty(stats);
     }
@@ -100,7 +128,7 @@ public sealed class TrackEngagementMetricsTests : IDisposable
 
         // trackA: 5 plays + 2 completed sales (+1 pending, which must NOT count); trackB: none
         for (var i = 0; i < 5; i++)
-            _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackA });
+            _db.StreamSessions.Add(QualifiedSession(trackA));
         _db.Purchases.AddRange(
             new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b1", Status = "completed" },
             new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b2", Status = "completed" },
@@ -113,8 +141,9 @@ public sealed class TrackEngagementMetricsTests : IDisposable
             new AuthorshipRecord { Id = Guid.NewGuid(), TrackId = trackB, CreatorId = userId, Status = "pending_payment" });
 
         await _db.SaveChangesAsync();
+        await RebuildProjectionAsync();
 
-        var repo = new CreatorIdentityRepository(_db, Substitute.For<ILogger<CreatorIdentityRepository>>());
+        var repo = new CreatorIdentityRepository(_db, _playCounts, Substitute.For<ILogger<CreatorIdentityRepository>>());
         var tracks = await repo.GetTracksByCreatorIdAsync(creatorUuid, 1, 50);
 
         var a = tracks.Single(t => t.Id == trackA.ToString());
@@ -151,7 +180,7 @@ public sealed class TrackEngagementMetricsTests : IDisposable
 
         // 4 plays
         for (var i = 0; i < 4; i++)
-            _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId });
+            _db.StreamSessions.Add(QualifiedSession(trackId));
         // 2 completed sales (downloads)
         _db.Purchases.AddRange(
             new Purchase { Id = Guid.NewGuid(), TrackId = trackId, BuyerId = "b1", Status = "completed" },
@@ -161,8 +190,9 @@ public sealed class TrackEngagementMetricsTests : IDisposable
             _db.CreatorFollows.Add(new CreatorFollow { Id = Guid.NewGuid(), CreatorId = creatorUuid, FollowerId = $"f{i}" });
 
         await _db.SaveChangesAsync();
+        await RebuildProjectionAsync();
 
-        var repo = new CreatorProfileRepository(_db);
+        var repo = new CreatorProfileRepository(_db, _playCounts);
         var profile = await repo.GetBySlugAsync("metricstar");
 
         Assert.NotNull(profile);

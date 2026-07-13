@@ -17,6 +17,13 @@ public class TrackStat
     /// <summary>Lifetime count of valid plays (threshold-counted, de-duped). See StreamSession.</summary>
     public long PlayCount { get; set; }
 
+    /// <summary>
+    /// Lifetime count of distinct listeners (COALESCE(UserId, AnonymousKey)) with at least one
+    /// qualified play. Maintained by the reconciliation/rebuild pass, not incrementally on every
+    /// play — see PlayCountReconciliationService.
+    /// </summary>
+    public long UniqueListenerCount { get; set; }
+
     /// <summary>Lifetime count of likes. Sourced from TrackBoosts (the reused upvote signal).</summary>
     public int LikeCount { get; set; }
 

@@ -33,7 +33,7 @@ public sealed class WeeklyDigestRepository : IWeeklyDigestRepository
     {
         var playRows = await _db.StreamSessions
             .AsNoTracking()
-            .Where(s => s.StartedAt >= fromUtc && s.StartedAt < toUtc)
+            .Where(s => s.Qualified && s.StartedAt >= fromUtc && s.StartedAt < toUtc)
             .Join(
                 _db.Tracks.Where(t => t.CreatorId == userId),
                 s => s.TrackId,

@@ -3,7 +3,6 @@ using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Api.Controllers;
@@ -15,16 +14,14 @@ public class StreamController : BaseController
     private readonly IObjectStorage _storage;
     private readonly IStreamRepository _streams;
     private readonly ITrackVisibilityPolicy _visibility;
-    private readonly IMemoryCache _cache;
     private readonly ILogger<StreamController> _logger;
 
-    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams, ITrackVisibilityPolicy visibility, IMemoryCache cache, ILogger<StreamController> logger)
+    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams, ITrackVisibilityPolicy visibility, ILogger<StreamController> logger)
     {
         _tracks = tracks;
         _storage = storage;
         _streams = streams;
         _visibility = visibility;
-        _cache = cache;
         _logger = logger;
     }
 
@@ -185,12 +182,13 @@ public class StreamController : BaseController
     }
 
     /// <summary>
-    /// Records the start of a play. Anonymous is allowed (F7/F1): logged-out listeners'
-    /// plays are counted, attributed to no user. To keep anonymous counts honest, they are
-    /// rate-limited to one counted play per (track, client IP) per hour, so refreshes and
-    /// fire-and-forget retries can't inflate the count. This endpoint is fast (in-process
-    /// dedup + a single insert) and must never gate playback — the frontend fires it
-    /// independently of the &lt;audio&gt; element.
+    /// Records the start of a play. Anonymous is allowed (F7/F1): logged-out listeners' plays
+    /// are counted, attributed to no user. Duplicate suppression (repeat starts by the same
+    /// user, or the same anonymous client IP, within a debounce window — see StreamRepository)
+    /// is a durable, database-backed idempotency check, not an in-process cache: it survives a
+    /// backend restart and is correct across multiple backend replicas. This endpoint is fast
+    /// (one idempotency lookup + at most one insert) and must never gate playback — the
+    /// frontend fires it independently of the &lt;audio&gt; element.
     /// </summary>
     [AllowAnonymous]
     [HttpPost("start")]
@@ -209,24 +207,16 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, userId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        // Anonymous plays are not deduped by the repository (no user to attribute to), so
-        // rate-limit them here: at most one counted play per (track, client IP) per hour.
-        // In-process cache — no extra DB round-trip on the hot path. Authenticated plays
-        // fall through to the repository's own 30-second debounce.
-        if (string.IsNullOrEmpty(userId))
-        {
-            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            var dedupeKey = $"anonplay:{parsedTrackId}:{clientIp}";
-            if (_cache.TryGetValue(dedupeKey, out _))
-                return OkResponse(new { streamId = (string?)null, status = "already_counted" });
-            _cache.Set(dedupeKey, true, TimeSpan.FromHours(1));
-        }
-
         // Audio availability is checked when the client actually streams via
         // GET /stream/{trackId}/audio. Verifying here was redundant and caused
         // 500s when storage was temporarily unreachable (B-03).
-        var session = await _streams.StartAsync(parsedTrackId, userId);
-        return OkResponse(new { streamId = session.Id.ToString(), status = "started" });
+        var clientKey = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var (session, isNewPlay) = await _streams.StartAsync(parsedTrackId, userId, clientKey);
+        return OkResponse(new
+        {
+            streamId = isNewPlay ? session.Id.ToString() : (string?)null,
+            status = isNewPlay ? "started" : "already_counted"
+        });
     }
 
     private async Task<(string? AudioKey, StorageFile? File)> OpenPlayableAudioAsync(string? audioUrl, string? cambrianTrackId, Guid trackId, string? rangeHeader = null)
