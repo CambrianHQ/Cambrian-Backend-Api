@@ -452,8 +452,16 @@ public class AdminRepository : IAdminRepository
     {
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null) return false;
-        track.Visibility = "hidden";
-        track.Status = "removed";
+
+        if (track.Status != "removed")
+        {
+            track.PreDeleteVisibility = track.Visibility;
+            track.PreDeleteStatus = track.Status;
+            track.Visibility = "hidden";
+            track.Status = "removed";
+            track.DeletedAt = DateTime.UtcNow;
+            track.DeletedByUserId = adminActor;
+        }
 
         _db.AuditLogs.Add(new AuditLog
         {
@@ -469,14 +477,40 @@ public class AdminRepository : IAdminRepository
     {
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null) return false;
-        track.Visibility = "public";
-        track.Status = "available";
+        // A purged track's storage is already gone — never resurrect it into a live URL.
+        if (track.PurgedAt is not null) return false;
+
+        track.Visibility = track.PreDeleteVisibility ?? "public";
+        track.Status = track.PreDeleteStatus ?? "available";
+        track.DeletedAt = null;
+        track.DeletedByUserId = null;
+        track.PreDeleteVisibility = null;
+        track.PreDeleteStatus = null;
 
         _db.AuditLogs.Add(new AuditLog
         {
             Action = "restore_track",
             Admin = adminActor,
             Details = $"Restored track '{track.Title}' (id={trackId})"
+        });
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> PurgeTrackAsync(Guid trackId, string adminActor)
+    {
+        var track = await _db.Tracks.FindAsync(trackId);
+        if (track is null) return false;
+        if (track.DeletedAt is null) return false; // must already be trashed
+        if (track.PurgeRequestedAt is not null) return true; // already queued — idempotent
+
+        track.PurgeRequestedAt = DateTime.UtcNow;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "purge_track",
+            Admin = adminActor,
+            Details = $"Queued permanent purge of track '{track.Title}' (id={trackId})"
         });
         await _db.SaveChangesAsync();
         return true;

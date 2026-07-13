@@ -41,10 +41,24 @@ public static class CambrianMetrics
         Meter.CreateCounter<long>("cambrian_library_grant", description: "Tracks saved/granted to a user's library.");
     public static readonly Counter<long> UploadCompleted =
         Meter.CreateCounter<long>("cambrian_upload_completed", description: "Track uploads completed.");
+    public static readonly Counter<long> UploadStarted =
+        Meter.CreateCounter<long>("cambrian_upload_started", description: "Track upload attempts started.");
     public static readonly Counter<long> UploadFailed =
         Meter.CreateCounter<long>("cambrian_upload_failed", description: "Track uploads rejected or blocked.");
+    public static readonly Counter<long> BatchUploadCompleted =
+        Meter.CreateCounter<long>("cambrian_batch_upload_completed", description: "Batch upload requests completed with per-track results.");
     public static readonly Counter<long> StreamSignedUrlIssued =
         Meter.CreateCounter<long>("cambrian_stream_signed_url_issued", description: "Signed audio stream URLs issued.");
+    public static readonly Counter<long> PlaybackUrlFailed =
+        Meter.CreateCounter<long>("cambrian_playback_url_failed", description: "Playback URL or object resolution failures.");
+    public static readonly Counter<long> VerificationEmailFailed =
+        Meter.CreateCounter<long>("cambrian_verification_email_failed", description: "Verification emails rejected by their provider.");
+    public static readonly Counter<long> ProfileSaveFailed =
+        Meter.CreateCounter<long>("cambrian_profile_save_failed", description: "Creator profile save operations that failed.");
+    public static readonly Counter<long> EntitlementChanged =
+        Meter.CreateCounter<long>("cambrian_entitlement_changed", description: "Authoritative backend entitlement changes.");
+    public static readonly Counter<long> ReleaseReadyJobFailed =
+        Meter.CreateCounter<long>("cambrian_release_ready_job_failed", description: "Release Ready background jobs that failed.");
 
     // ── Payouts ──
     public static readonly Counter<long> PayoutCreated =

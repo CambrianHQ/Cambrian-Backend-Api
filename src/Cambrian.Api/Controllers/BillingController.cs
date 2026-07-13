@@ -63,7 +63,7 @@ public class BillingController : BaseController
         if (User.IsInRole("Admin"))
             return ErrorResponse("Admin accounts cannot purchase subscriptions.");
 
-        _logger.LogInformation("EVENT: BillingCheckoutStarted userId:{UserId} tier:{Tier}", userId, request.Tier);
+        _logger.LogInformation("EVENT: checkout_started userId:{UserId} tier:{Tier}", userId, request.Tier);
         Cambrian.Application.Observability.CambrianMetrics.CheckoutStarted.Add(1);
 
         try
@@ -104,7 +104,7 @@ public class BillingController : BaseController
         if (User.IsInRole("Admin"))
             return ErrorResponse("Admin accounts cannot purchase subscriptions.");
 
-        _logger.LogInformation("EVENT: BillingCheckoutStarted userId:{UserId} tier:{Tier}", userId, request.Tier);
+        _logger.LogInformation("EVENT: checkout_started userId:{UserId} tier:{Tier}", userId, request.Tier);
         Cambrian.Application.Observability.CambrianMetrics.CheckoutStarted.Add(1);
 
         try

@@ -54,48 +54,84 @@ public class StripeConnectWebhookService : IConnectWebhookService
             throw new InvalidOperationException(
                 "Stripe Connect webhook signature verification failed. Stripe-Signature header is missing.");
 
-        // Disable the API-version throw: events may arrive under a newer account/CLI API
-        // version than Stripe.net pins. The Connect fields we read (client_reference_id,
-        // subscription, amount_total) are stable across these versions.
-        var stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret, throwOnApiVersionMismatch: false);
-
-        string? clientReferenceId = null, sessionId = null, sessionSubscriptionId = null;
-        long? amountTotal = null;
-        string? invoiceId = null, invoiceSubscriptionId = null, billingReason = null;
-        long? amountPaid = null;
-        string? subscriptionId = null;
-
-        switch (stripeEvent.Type)
-        {
-            case "checkout.session.completed":
-                var session = stripeEvent.Data.Object as Session;
-                clientReferenceId = session?.ClientReferenceId;
-                sessionId = session?.Id;
-                amountTotal = session?.AmountTotal;
-                sessionSubscriptionId = session?.SubscriptionId;
-                break;
-            case "invoice.paid":
-                var invoice = stripeEvent.Data.Object as global::Stripe.Invoice;
-                invoiceId = invoice?.Id;
-                invoiceSubscriptionId = invoice?.SubscriptionId;
-                billingReason = invoice?.BillingReason;
-                amountPaid = invoice?.AmountPaid;
-                break;
-            case "customer.subscription.deleted":
-                var sub = stripeEvent.Data.Object as global::Stripe.Subscription;
-                subscriptionId = sub?.Id;
-                break;
-        }
+        // Verify the exact request bytes first, then parse only the stable fields we use.
+        // Stripe.net's typed EventConverter can fail on newer/minimal Connect payloads even
+        // when the signature and JSON are valid; fulfillment must not depend on that converter.
+        EventUtility.ValidateSignature(payload, signature, _webhookSecret);
+        var signedContext = ParseSignedContext(payload);
 
         _logger.LogInformation(
             "Stripe Connect webhook verified: {EventType} {EventId} account:{Account}",
-            stripeEvent.Type, stripeEvent.Id, stripeEvent.Account);
+            signedContext.EventType, signedContext.EventId, signedContext.AccountId);
 
         await ProcessEventAsync(
-            stripeEvent.Id, stripeEvent.Type, stripeEvent.Account, payload,
-            clientReferenceId, sessionId, amountTotal, sessionSubscriptionId,
-            invoiceId, invoiceSubscriptionId, billingReason, amountPaid,
-            subscriptionId);
+            signedContext.EventId, signedContext.EventType, signedContext.AccountId, payload,
+            signedContext.ClientReferenceId, signedContext.SessionId, signedContext.AmountTotal, signedContext.SubscriptionId,
+            signedContext.InvoiceId, signedContext.SubscriptionId, signedContext.BillingReason, signedContext.AmountPaid,
+            signedContext.SubscriptionId, signedContext.SubscriptionStatus,
+            signedContext.PaymentStatus, signedContext.Currency);
+    }
+
+    private sealed record SignedConnectContext(
+        string? EventId,
+        string EventType,
+        string? AccountId,
+        string? ClientReferenceId,
+        string? SessionId,
+        string? SubscriptionId,
+        string? InvoiceId,
+        string? SubscriptionStatus,
+        string? PaymentStatus,
+        string? Currency,
+        long? AmountTotal,
+        long? AmountPaid,
+        string? BillingReason);
+
+    private static SignedConnectContext ParseSignedContext(string payload)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(payload);
+        var root = document.RootElement;
+        var type = root.GetProperty("type").GetString() ?? string.Empty;
+        var obj = root.GetProperty("data").GetProperty("object");
+
+        string? ReadId(string name)
+        {
+            if (!obj.TryGetProperty(name, out var value)) return null;
+            if (value.ValueKind == System.Text.Json.JsonValueKind.String) return value.GetString();
+            return value.ValueKind == System.Text.Json.JsonValueKind.Object
+                && value.TryGetProperty("id", out var id) ? id.GetString() : null;
+        }
+
+        var clientRef = obj.TryGetProperty("client_reference_id", out var cr) ? cr.GetString() : null;
+        var sessionId = type == "checkout.session.completed" ? ReadId("id") : null;
+        var subscriptionId = ReadId("subscription");
+        if (type.StartsWith("customer.subscription.", StringComparison.Ordinal))
+            subscriptionId ??= ReadId("id");
+        if (subscriptionId is null
+            && obj.TryGetProperty("parent", out var parent)
+            && parent.TryGetProperty("subscription_details", out var details)
+            && details.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (details.TryGetProperty("subscription", out var subscription))
+                subscriptionId = subscription.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? subscription.GetString()
+                    : subscription.TryGetProperty("id", out var id) ? id.GetString() : null;
+        }
+
+        return new SignedConnectContext(
+            root.TryGetProperty("id", out var eventId) ? eventId.GetString() : null,
+            type,
+            root.TryGetProperty("account", out var account) ? account.GetString() : null,
+            clientRef,
+            sessionId,
+            subscriptionId,
+            type.StartsWith("invoice.", StringComparison.Ordinal) ? ReadId("id") : null,
+            obj.TryGetProperty("status", out var status) ? status.GetString() : null,
+            obj.TryGetProperty("payment_status", out var paid) ? paid.GetString() : null,
+            obj.TryGetProperty("currency", out var currency) ? currency.GetString() : null,
+            obj.TryGetProperty("amount_total", out var amountTotal) && amountTotal.TryGetInt64(out var total) ? total : null,
+            obj.TryGetProperty("amount_paid", out var amountPaid) && amountPaid.TryGetInt64(out var paidAmount) ? paidAmount : null,
+            obj.TryGetProperty("billing_reason", out var billingReason) ? billingReason.GetString() : null);
     }
 
     /// <summary>
@@ -115,7 +151,10 @@ public class StripeConnectWebhookService : IConnectWebhookService
         string? invoiceSubscriptionId = null,
         string? billingReason = null,
         long? amountPaid = null,
-        string? subscriptionId = null)
+        string? subscriptionId = null,
+        string? subscriptionStatus = null,
+        string? paymentStatus = "paid",
+        string? currency = "usd")
     {
         if (string.IsNullOrWhiteSpace(eventId))
             throw new InvalidOperationException(
@@ -134,6 +173,21 @@ public class StripeConnectWebhookService : IConnectWebhookService
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
+            if (_db.Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
+            {
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock(hashtextextended({normalizedEventId}, 0))");
+                var completed = await _db.StripeWebhookEvents.AsNoTracking()
+                    .AnyAsync(e => e.EventId == normalizedEventId && e.Status == "completed");
+                if (completed)
+                {
+                    await transaction.CommitAsync();
+                    _logger.LogInformation("Connect webhook event {EventId} already completed after claim — skipping.", normalizedEventId);
+                    return;
+                }
+                existing = await _db.StripeWebhookEvents.FirstOrDefaultAsync(e => e.EventId == normalizedEventId);
+            }
+
             if (existing is null)
             {
                 existing = new StripeWebhookEvent
@@ -157,7 +211,8 @@ public class StripeConnectWebhookService : IConnectWebhookService
             {
                 case "checkout.session.completed":
                     await HandleCheckoutCompletedAsync(
-                        connectedAccountId, clientReferenceId, sessionId, amountTotal, sessionSubscriptionId);
+                        connectedAccountId, clientReferenceId, sessionId, amountTotal,
+                        sessionSubscriptionId, paymentStatus, currency);
                     break;
                 case "invoice.paid":
                     await HandleInvoicePaidAsync(
@@ -165,6 +220,12 @@ public class StripeConnectWebhookService : IConnectWebhookService
                     break;
                 case "customer.subscription.deleted":
                     await HandleSubscriptionDeletedAsync(connectedAccountId, subscriptionId);
+                    break;
+                case "customer.subscription.updated":
+                    await HandleSubscriptionUpdatedAsync(connectedAccountId, subscriptionId, subscriptionStatus);
+                    break;
+                case "invoice.payment_failed":
+                    await HandleInvoicePaymentFailedAsync(connectedAccountId, invoiceId, invoiceSubscriptionId);
                     break;
                 default:
                     _logger.LogInformation("Connect webhook event type {EventType} not handled.", eventType);
@@ -181,6 +242,14 @@ public class StripeConnectWebhookService : IConnectWebhookService
         {
             await transaction.RollbackAsync();
             _db.ChangeTracker.Clear();
+
+            if (IsUniqueViolation(ex))
+            {
+                _logger.LogInformation(
+                    "Connect webhook event {EventId} lost a concurrent idempotency race — treating as duplicate.",
+                    normalizedEventId);
+                return;
+            }
 
             try
             {
@@ -214,14 +283,33 @@ public class StripeConnectWebhookService : IConnectWebhookService
         }
     }
 
+    private static bool IsUniqueViolation(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (string.Equals(
+                    current.GetType().GetProperty("SqlState")?.GetValue(current) as string,
+                    "23505",
+                    StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
     // ── checkout.session.completed: tips + fan-sub activation/first payment ──
     private async Task HandleCheckoutCompletedAsync(
         string? connectedAccountId,
         string? clientReferenceId,
         string? sessionId,
         long? amountTotal,
-        string? sessionSubscriptionId)
+        string? sessionSubscriptionId,
+        string? paymentStatus,
+        string? currency)
     {
+        if (!string.Equals(paymentStatus, "paid", StringComparison.Ordinal)
+            || !string.Equals(currency, "usd", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Connect checkout is not in a paid USD state.");
+
         if (string.IsNullOrWhiteSpace(clientReferenceId))
         {
             _logger.LogError(
@@ -344,6 +432,8 @@ public class StripeConnectWebhookService : IConnectWebhookService
 
         await RequireConnectedAccountAsync(
             connectedAccountId, fanSub.ArtistUserId, $"invoice {invoiceId}");
+        fanSub.Status = "active";
+        fanSub.PaymentFailedAt = null;
         await AddEarningsOnceAsync(
             artistUserId: fanSub.ArtistUserId,
             source: "sub",
@@ -384,6 +474,43 @@ public class StripeConnectWebhookService : IConnectWebhookService
                 "EVENT: FanSubscriptionCancelled fanSubId:{FanSubId} artistId:{ArtistId}",
                 fanSub.Id, fanSub.ArtistUserId);
         }
+    }
+
+    private async Task HandleSubscriptionUpdatedAsync(
+        string? connectedAccountId, string? stripeSubscriptionId, string? stripeStatus)
+    {
+        if (string.IsNullOrWhiteSpace(stripeSubscriptionId) || string.IsNullOrWhiteSpace(stripeStatus))
+            throw new InvalidOperationException("Connect subscription update is missing subscription ID or status.");
+
+        var fanSub = await _db.FanSubscriptions
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscriptionId)
+            ?? throw new KeyNotFoundException($"Connect subscription update references unknown subscription {stripeSubscriptionId}.");
+        await RequireConnectedAccountAsync(connectedAccountId, fanSub.ArtistUserId, $"subscription {stripeSubscriptionId}");
+
+        fanSub.Status = stripeStatus switch
+        {
+            "active" or "trialing" => "active",
+            "past_due" or "unpaid" or "incomplete" => "past_due",
+            "canceled" or "incomplete_expired" => "cancelled",
+            _ => throw new InvalidOperationException($"Unsupported Connect subscription status '{stripeStatus}'."),
+        };
+        if (fanSub.Status == "past_due") fanSub.PaymentFailedAt = DateTime.UtcNow;
+        if (fanSub.Status == "active") fanSub.PaymentFailedAt = null;
+        if (fanSub.Status == "cancelled") fanSub.CancelledAt ??= DateTime.UtcNow;
+    }
+
+    private async Task HandleInvoicePaymentFailedAsync(
+        string? connectedAccountId, string? invoiceId, string? stripeSubscriptionId)
+    {
+        if (string.IsNullOrWhiteSpace(invoiceId) || string.IsNullOrWhiteSpace(stripeSubscriptionId))
+            throw new InvalidOperationException("Connect invoice.payment_failed is missing invoice or subscription ID.");
+
+        var fanSub = await _db.FanSubscriptions
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscriptionId)
+            ?? throw new KeyNotFoundException($"Connect invoice.payment_failed references unknown subscription {stripeSubscriptionId}.");
+        await RequireConnectedAccountAsync(connectedAccountId, fanSub.ArtistUserId, $"invoice {invoiceId}");
+        fanSub.Status = "past_due";
+        fanSub.PaymentFailedAt = DateTime.UtcNow;
     }
 
     // ── Append-only earnings write with (source, externalRef) idempotency ──

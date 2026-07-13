@@ -97,4 +97,19 @@ public class UploadTrackRequest
     public bool? SaveAsDraft { get; set; }
 
     public string? CreatorId { get; set; }
+
+    /// <summary>
+    /// Optional fallback transport for the client's Idempotency-Key when the caller
+    /// can't set the header directly (e.g. one item inside a batch upload). The
+    /// single-track endpoints prefer the "Idempotency-Key" header when both are present.
+    /// </summary>
+    [MaxLength(128)]
+    public string? IdempotencyKey { get; set; }
+
+    /// <summary>
+    /// When true, skips the same-creator/same-audio duplicate-content check
+    /// (returned as a "duplicate_audio_detected" failure otherwise). Set by the
+    /// client only after the creator explicitly confirms "Upload anyway".
+    /// </summary>
+    public bool? ConfirmDuplicateAudio { get; set; }
 }

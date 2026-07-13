@@ -15,7 +15,7 @@ public sealed class CheckoutAndBillingApiTests : IClassFixture<RelationalCambria
     public CheckoutAndBillingApiTests(RelationalCambrianApiFixture fixture) => _fixture = fixture;
 
     [Fact]
-    public async Task BillingCheckout_ThenConfirmSession_CreatesActiveSubscription()
+    public async Task BillingCheckout_ThenConfirmSession_DoesNotBypassWebhookFulfillment()
     {
         var buyer = await _fixture.CreateAuthenticatedClientAsync("billing-api-user@cambrian.com");
 
@@ -37,9 +37,6 @@ public sealed class CheckoutAndBillingApiTests : IClassFixture<RelationalCambria
         using var scope = _fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
 
-        db.Subscriptions.Should().ContainSingle(s =>
-            s.UserId == buyerId &&
-            s.Plan == "creator" &&
-            s.Status == "active");
+        db.Subscriptions.Should().NotContain(s => s.UserId == buyerId);
     }
 }

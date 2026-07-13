@@ -40,6 +40,13 @@ public interface IAdminRepository
     Task<bool> FlagTrackAsync(Guid trackId, string adminActor);
     Task<bool> SetTrackVisibilityAsync(Guid trackId, string visibility, string adminActor);
 
+    /// <summary>
+    /// Admin-authorized permanent deletion: only valid for an already-trashed track
+    /// (DeletedAt set). Queues the async object-storage purge (see TrackPurgeWorker) —
+    /// never deletes the Track row itself, matching the owner-facing purge flow.
+    /// </summary>
+    Task<bool> PurgeTrackAsync(Guid trackId, string adminActor);
+
     // ── Track editorial placement (idempotent, one-way) ──
     Task<bool> FeatureTrackAsync(Guid trackId, string adminActor);
     Task<bool> PinTrackAsync(Guid trackId, string adminActor);

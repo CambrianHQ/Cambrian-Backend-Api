@@ -79,6 +79,9 @@ public class AdminService : IAdminService
     public Task<bool> SetTrackVisibilityAsync(string trackId, string visibility, string adminActor)
         => Guid.TryParse(trackId, out var id) ? _admin.SetTrackVisibilityAsync(id, visibility, adminActor) : Task.FromResult(false);
 
+    public Task<bool> PurgeTrackAsync(string trackId, string adminActor)
+        => Guid.TryParse(trackId, out var id) ? _admin.PurgeTrackAsync(id, adminActor) : Task.FromResult(false);
+
     // ── Track editorial placement ──
 
     public Task<bool> FeatureTrackAsync(string trackId, string adminActor)

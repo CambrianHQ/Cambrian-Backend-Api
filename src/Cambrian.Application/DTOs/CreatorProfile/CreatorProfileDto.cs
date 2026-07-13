@@ -14,6 +14,7 @@ public class CreatorProfileDto
 
     public string Bio { get; set; } = "";
     public string? Niche { get; set; }
+    public List<string> Genres { get; set; } = new();
 
     public string? ProfileImageUrl { get; set; }
     public string? BannerImageUrl { get; set; }
@@ -33,6 +34,9 @@ public class CreatorProfileDto
 
     /// <summary>Comma-separated track GUIDs pinned by the creator.</summary>
     public string? PinnedTrackIds { get; set; }
+
+    /// <summary>The first pinned track, exposed as the stable singular featured-track contract.</summary>
+    public string? FeaturedTrackId { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

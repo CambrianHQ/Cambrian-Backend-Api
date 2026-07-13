@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
@@ -76,7 +77,10 @@ public sealed class AudioRehydrationStreamTests
         var result = await _controller.StreamAudio(track.Id.ToString());
 
         // Real (non-seed) track with a missing object must 404 — never a silent placeholder.
-        Assert.IsType<NotFoundObjectResult>(result);
+        var missing = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status404NotFound, missing.StatusCode);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(missing.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        Assert.Equal("audio_object_missing", json.RootElement.GetProperty("error").GetProperty("code").GetString());
     }
 
     [Fact]
@@ -137,6 +141,7 @@ public sealed class AudioRehydrationStreamTests
 
         var result = await _controller.StreamAudio(track.Id.ToString());
 
-        Assert.IsType<NotFoundObjectResult>(result);
+        var missing = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status404NotFound, missing.StatusCode);
     }
 }

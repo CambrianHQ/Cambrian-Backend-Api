@@ -55,7 +55,8 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
     public async Task<CreatorProfileDto> UpsertAsync(string userId, string slug, string bio, string? niche,
         string? socialLinksJson, bool showEarnings, bool showDownloadStats,
         string? bannerImageUrl = null, string? profileImageUrl = null,
-        string? studioSetupJson = null, string? journeyEntriesJson = null)
+        string? studioSetupJson = null, string? journeyEntriesJson = null,
+        string? genresJson = null)
     {
         var existing = await _db.CreatorProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId);
@@ -69,6 +70,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
                 Slug = slug,
                 Bio = bio,
                 Niche = niche,
+                Genres = genresJson,
                 SocialLinks = socialLinksJson,
                 StudioSetup = studioSetupJson,
                 JourneyEntries = journeyEntriesJson,
@@ -87,6 +89,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
         existing.Slug = slug;
         existing.Bio = bio;
         existing.Niche = niche;
+        existing.Genres = genresJson ?? existing.Genres;
         existing.SocialLinks = socialLinksJson ?? existing.SocialLinks;
         // null = "not sent, keep stored value"; the controller maps an explicit
         // empty object/list to a serialized empty value so creators CAN clear these.
@@ -388,6 +391,13 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             catch { /* ignore malformed JSON */ }
         }
 
+        List<string>? genres = null;
+        if (!string.IsNullOrEmpty(p.Genres))
+        {
+            try { genres = JsonSerializer.Deserialize<List<string>>(p.Genres); }
+            catch { /* ignore malformed legacy JSON */ }
+        }
+
         var stats = await ComputeStatsAsync(p.UserId);
 
         // Resolve canonical display name and routing username from Creator identity table
@@ -403,6 +413,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             Username = creator?.Username,
             Bio = p.Bio,
             Niche = p.Niche,
+            Genres = genres ?? new List<string>(),
             BannerImageUrl = p.BannerImageUrl,
             ProfileImageUrl = p.ProfileImageUrl,
             SocialLinks = links,
@@ -411,6 +422,7 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
             ShowEarnings = p.ShowEarnings,
             ShowDownloadStats = p.ShowDownloadStats,
             PinnedTrackIds = p.PinnedTrackIds,
+            FeaturedTrackId = p.PinnedTrackIds?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault(),
             Stats = stats,
             CreatedAt = p.CreatedAt,
             UpdatedAt = p.UpdatedAt,

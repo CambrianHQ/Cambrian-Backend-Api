@@ -32,6 +32,7 @@ namespace Cambrian.Infrastructure.Storage;
 /// </summary>
 public sealed class S3ObjectStorage : IObjectStorage
 {
+    public TimeSpan? SignedUrlLifetime => TimeSpan.FromMinutes(15);
     private const string HttpClientName = "SupabaseStorage";
 
     private readonly StorageOptions _options;

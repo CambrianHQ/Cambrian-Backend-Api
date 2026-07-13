@@ -68,6 +68,7 @@ public sealed class StripeWebhookLifecycleTests : IDisposable
             Plan = "pro",
             Status = "active",
             StripeCustomerId = "cus_local_paid",
+            StripeSubscriptionId = "sub_local_paid",
             StartedAt = DateTime.UtcNow.AddDays(-3),
             ExpiresAt = DateTime.UtcNow.AddDays(-1)
         });
@@ -79,7 +80,10 @@ public sealed class StripeWebhookLifecycleTests : IDisposable
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: "cus_local_paid",
-            stripeSessionId: null);
+            stripeSessionId: null,
+            stripeSubscriptionId: "sub_local_paid",
+            invoiceId: "in_local_paid",
+            invoicePeriodEnd: DateTime.UtcNow.AddMonths(1));
 
         var refreshedUser = await _db.Users.FindAsync(user.Id);
         var refreshedSub = await _db.Subscriptions.SingleAsync();
@@ -107,7 +111,8 @@ public sealed class StripeWebhookLifecycleTests : IDisposable
             UserId = user.Id,
             Plan = "pro",
             Status = "active",
-            StripeCustomerId = "cus_local_failed"
+            StripeCustomerId = "cus_local_failed",
+            StripeSubscriptionId = "sub_local_failed"
         });
         await _db.SaveChangesAsync();
 
@@ -117,9 +122,13 @@ public sealed class StripeWebhookLifecycleTests : IDisposable
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: "cus_local_failed",
-            stripeSessionId: null);
+            stripeSessionId: null,
+            stripeSubscriptionId: "sub_local_failed",
+            invoiceId: "in_local_failed");
 
         (await _db.Users.FindAsync(user.Id))!.SubscriptionStatus.Should().Be("PastDue");
+        (await _db.Subscriptions.SingleAsync()).Status.Should().Be("past_due");
+        (await _db.Users.FindAsync(user.Id))!.Tier.Should().Be("free");
     }
 
     [Fact]
@@ -148,6 +157,36 @@ public sealed class StripeWebhookLifecycleTests : IDisposable
             e.Status == "completed");
         _db.Purchases.Should().BeEmpty();
         _db.Subscriptions.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("charge.refunded", "refunded")]
+    [InlineData("charge.dispute.created", "disputed")]
+    public async Task CreditPackRefundOrDispute_RemovesCreditsFromAuthoritativePaidPool(string eventType, string expectedStatus)
+    {
+        var user = new ApplicationUser
+        {
+            Id = $"user-{expectedStatus}", Email = $"{expectedStatus}@test.com",
+            NormalizedEmail = $"{expectedStatus}@test.com".ToUpperInvariant(), UserName = $"{expectedStatus}@test.com"
+        };
+        _db.Users.Add(user);
+        _db.ReleaseCreditPurchases.Add(new ReleaseCreditPurchase
+        {
+            Id = Guid.NewGuid(), CreatorId = user.Id, Credits = 10, AmountCents = 6900,
+            Pack = "ten", Status = "paid", StripeSessionId = $"cs_{expectedStatus}",
+            StripePaymentIntentId = $"pi_{expectedStatus}", CreatedAt = DateTime.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+
+        await _sut.ProcessEventAsync(
+            eventId: $"evt_{expectedStatus}", eventType: eventType,
+            clientReferenceId: null, amountTotal: null, stripeCustomerId: null,
+            stripeSessionId: null, stripePaymentIntentId: $"pi_{expectedStatus}");
+
+        var purchase = await _db.ReleaseCreditPurchases.SingleAsync();
+        purchase.Status.Should().Be(expectedStatus);
+        (await _db.ReleaseCreditPurchases.Where(x => x.Status == "paid").SumAsync(x => (int?)x.Credits) ?? 0)
+            .Should().Be(0);
     }
 
     public void Dispose()

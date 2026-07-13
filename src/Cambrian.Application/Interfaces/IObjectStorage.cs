@@ -10,6 +10,9 @@ public interface IObjectStorage
 
     string GenerateSignedUrl(string key);
 
+    /// <summary>Lifetime of generated signed URLs, or null when URLs do not expire.</summary>
+    TimeSpan? SignedUrlLifetime => null;
+
     /// <summary>
     /// Generate a pre-signed URL that forces the browser to download (save)
     /// the file with the specified filename via Content-Disposition: attachment.

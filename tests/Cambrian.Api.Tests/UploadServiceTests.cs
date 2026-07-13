@@ -479,4 +479,42 @@ public sealed class UploadServiceTests
             Arg.Is<string?>(x => x == null),
             Arg.Is<string>(s => s == response.TrackId));
     }
+
+    [Fact]
+    public async Task Upload_StorageFailure_CannotPersistTrack_AndAttemptsObjectCleanup()
+    {
+        _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns<Task<string>>(_ => throw new IOException("storage unavailable"));
+
+        await Assert.ThrowsAsync<Cambrian.Application.Exceptions.UploadOperationException>(() =>
+            _sut.Upload(new UploadTrackRequest { Audio = MakeFile(), CreatorId = "c1", Title = "Beat" }));
+
+        await _tracks.DidNotReceive().AddAsync(Arg.Any<Track>());
+        await _storage.Received(1).DeleteAsync(Arg.Is<string>(x => x.StartsWith("tracks/c1/")));
+    }
+
+    [Fact]
+    public async Task Upload_PersistenceFailure_RemovesStoredAudio_AndNeverReportsSuccess()
+    {
+        _storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns("tracks/c1/audio.mp3");
+        _tracks.AddAsync(Arg.Any<Track>()).Returns<Task>(_ => throw new InvalidOperationException("database unavailable"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.Upload(new UploadTrackRequest { Audio = MakeFile(), CreatorId = "c1", Title = "Beat" }));
+
+        await _storage.Received(1).DeleteAsync(Arg.Is<string>(x => x.StartsWith("tracks/c1/")));
+    }
+
+    [Fact]
+    public async Task Upload_DuplicateAudio_RequiresExplicitConfirmation()
+    {
+        _tracks.FindActiveByCreatorAndContentHashAsync("c1", Arg.Any<Guid?>(), Arg.Any<string>())
+            .Returns(new Track { Id = Guid.NewGuid(), CreatorId = "c1", Status = "available" });
+
+        await Assert.ThrowsAsync<Cambrian.Application.Exceptions.DuplicateUploadException>(() =>
+            _sut.Upload(new UploadTrackRequest { Audio = MakeFile(), CreatorId = "c1", Title = "Beat" }));
+
+        await _storage.DidNotReceive().UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>());
+    }
 }

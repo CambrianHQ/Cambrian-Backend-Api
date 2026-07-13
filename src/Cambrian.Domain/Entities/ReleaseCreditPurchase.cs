@@ -29,5 +29,14 @@ public class ReleaseCreditPurchase
     /// <summary>Stripe checkout session id — unique, the webhook idempotency key.</summary>
     public string? StripeSessionId { get; set; }
 
+    /// <summary>Stripe PaymentIntent id used to reconcile refunds and disputes without a live API lookup.</summary>
+    public string? StripePaymentIntentId { get; set; }
+
+    public int RefundedAmountCents { get; set; }
+
+    public DateTime? RefundedAt { get; set; }
+
+    public DateTime? DisputedAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

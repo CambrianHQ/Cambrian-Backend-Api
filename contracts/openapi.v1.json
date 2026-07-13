@@ -240,6 +240,25 @@
         "tags": [
           "Admin"
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -308,6 +327,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPayoutRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPayoutRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPayoutRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -584,6 +622,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseReportRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseReportRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseReportRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -614,6 +671,28 @@
       }
     },
     "/admin/tracks/{id}/restore": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/tracks/{id}/purge": {
       "post": {
         "tags": [
           "Admin"
@@ -695,8 +774,8 @@
           }
         ],
         "responses": {
-          "501": {
-            "description": "Not Implemented"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -717,8 +796,8 @@
           }
         ],
         "responses": {
-          "501": {
-            "description": "Not Implemented"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -770,8 +849,8 @@
           "Admin"
         ],
         "responses": {
-          "501": {
-            "description": "Not Implemented"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -782,8 +861,8 @@
           "Admin"
         ],
         "responses": {
-          "501": {
-            "description": "Not Implemented"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -1224,6 +1303,240 @@
         }
       }
     },
+    "/api/v1/albums": {
+      "get": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlbumV1Request"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlbumV1Request"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlbumV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}": {
+      "get": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlbumV1Request"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlbumV1Request"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlbumV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks": {
+      "post": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks/reorder": {
+      "patch": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks/{trackId}": {
+      "delete": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/analytics/track": {
       "post": {
         "tags": [
@@ -1405,8 +1718,8 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Created"
+          "200": {
+            "description": "OK"
           }
         }
       },
@@ -1438,8 +1751,8 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "No Content"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -1575,8 +1888,8 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Created"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -2324,6 +2637,187 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/behind-the-track": {
+      "get": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/proof-videos": {
+      "post": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProofVideoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProofVideoRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProofVideoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/proof-videos/{videoId}": {
+      "patch": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "videoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProofVideoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProofVideoRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProofVideoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "videoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -3662,8 +4156,8 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Created"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -3725,8 +4219,8 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "No Content"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -4655,8 +5149,8 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Created"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -5985,6 +6479,50 @@
         }
       }
     },
+    "/api/v1/public/albums/{slug}": {
+      "get": {
+        "tags": [
+          "PublicAlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/public/creators/{username}/albums": {
+      "get": {
+        "tags": [
+          "PublicAlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/tracks/{id}/readiness": {
       "get": {
         "tags": [
@@ -6515,6 +7053,220 @@
       "get": {
         "tags": [
           "Tier"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/ai-disclosure": {
+      "get": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/ai-disclosure/revoke": {
+      "post": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeTrackAiDisclosureRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeTrackAiDisclosureRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeTrackAiDisclosureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/ai-disclosure/history": {
+      "get": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -7055,6 +7807,14 @@
                     "maxLength": 60,
                     "type": "string"
                   },
+                  "Tempo": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "Mood": {
+                    "maxLength": 120,
+                    "type": "string"
+                  },
                   "Price": {
                     "type": "number",
                     "format": "double"
@@ -7124,6 +7884,13 @@
                   },
                   "CreatorId": {
                     "type": "string"
+                  },
+                  "IdempotencyKey": {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "ConfirmDuplicateAudio": {
+                    "type": "boolean"
                   }
                 }
               },
@@ -7147,6 +7914,12 @@
                   "style": "form"
                 },
                 "Subgenre": {
+                  "style": "form"
+                },
+                "Tempo": {
+                  "style": "form"
+                },
+                "Mood": {
                   "style": "form"
                 },
                 "Price": {
@@ -7193,14 +7966,54 @@
                 },
                 "CreatorId": {
                   "style": "form"
+                },
+                "IdempotencyKey": {
+                  "style": "form"
+                },
+                "ConfirmDuplicateAudio": {
+                  "style": "form"
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Created"
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/uploads/batch": {
+      "post": {
+        "tags": [
+          "Upload"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Tracks": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/UploadTrackRequest"
+                    }
+                  }
+                }
+              },
+              "encoding": {
+                "Tracks": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -7247,6 +8060,14 @@
                     "maxLength": 60,
                     "type": "string"
                   },
+                  "Tempo": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "Mood": {
+                    "maxLength": 120,
+                    "type": "string"
+                  },
                   "Price": {
                     "type": "number",
                     "format": "double"
@@ -7316,6 +8137,13 @@
                   },
                   "CreatorId": {
                     "type": "string"
+                  },
+                  "IdempotencyKey": {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "ConfirmDuplicateAudio": {
+                    "type": "boolean"
                   }
                 }
               },
@@ -7339,6 +8167,12 @@
                   "style": "form"
                 },
                 "Subgenre": {
+                  "style": "form"
+                },
+                "Tempo": {
+                  "style": "form"
+                },
+                "Mood": {
                   "style": "form"
                 },
                 "Price": {
@@ -7385,14 +8219,20 @@
                 },
                 "CreatorId": {
                   "style": "form"
+                },
+                "IdempotencyKey": {
+                  "style": "form"
+                },
+                "ConfirmDuplicateAudio": {
+                  "style": "form"
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Created"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -7604,717 +8444,6 @@
           }
         }
       }
-    },
-    "/api/v1/albums": {
-      "get": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "List the authenticated creator's albums.",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoListV1ApiResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Create an album.",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAlbumV1Request"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Creator account required"
-          }
-        }
-      }
-    },
-    "/api/v1/albums/{id}": {
-      "get": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Get one of the creator's albums with hydrated tracks.",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumDetailV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Update album metadata (partial).",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateAlbumV1Request"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Delete an album (never deletes its tracks).",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Deleted"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/albums/{id}/tracks": {
-      "post": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Append tracks to an album.",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/albums/{id}/tracks/reorder": {
-      "patch": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Reorder an album's tracks (permutation of current members).",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/albums/{id}/tracks/{trackId}": {
-      "delete": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Remove a track from an album (the track itself survives).",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/public/albums/{slug}": {
-      "get": {
-        "tags": [
-          "PublicAlbumsV1"
-        ],
-        "summary": "Public album detail by slug or album id (public/unlisted only).",
-        "security": [],
-        "parameters": [
-          {
-            "name": "slug",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumDetailV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/public/creators/{username}/albums": {
-      "get": {
-        "tags": [
-          "PublicAlbumsV1"
-        ],
-        "summary": "List a creator's public albums.",
-        "security": [],
-        "parameters": [
-          {
-            "name": "username",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoListV1ApiResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Creator not found"
-          }
-        }
-      }
-    },
-    "/api/v1/tracks/{trackId}/behind-the-track": {
-      "get": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/tracks/{trackId}/proof-videos": {
-      "post": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProofVideoRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProofVideoRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProofVideoRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/tracks/{trackId}/proof-videos/{videoId}": {
-      "patch": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "videoId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProofVideoRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProofVideoRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProofVideoRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "videoId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
     }
   },
   "components": {
@@ -8338,6 +8467,21 @@
           "trackTitle": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddAlbumTracksV1Request": {
+        "required": [
+          "trackIds"
+        ],
+        "type": "object",
+        "properties": {
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -8439,6 +8583,92 @@
           },
           "verifiedCreator": {
             "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiDisclosureDetailsDto": {
+        "type": "object",
+        "properties": {
+          "aiVocals": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiPrimaryInstruments": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiComposition": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiLyrics": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiPostProduction": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiArtwork": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiVideo": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "generatorTool": {
+            "type": "string",
+            "nullable": true
+          },
+          "modelVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "creationDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "commercialUseLicenseBasis": {
+            "type": "string",
+            "nullable": true
+          },
+          "voiceLikenessAuthorization": {
+            "type": "string",
+            "nullable": true
+          },
+          "humanWrittenLyrics": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "humanVocals": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "humanInstruments": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "arrangementEditing": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "dawWork": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "collaborators": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "humanContributionNarrative": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -8885,6 +9115,16 @@
         },
         "additionalProperties": false
       },
+      "CloseReportRequest": {
+        "type": "object",
+        "properties": {
+          "resolutionNote": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ComplianceCheck": {
         "type": "object",
         "properties": {
@@ -8989,6 +9229,51 @@
         },
         "additionalProperties": false
       },
+      "CreateAlbumV1Request": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "artworkUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "visibility": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "releaseDate": {
+            "maxLength": 40,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateApiKeyRequest": {
         "type": "object",
         "properties": {
@@ -9042,6 +9327,48 @@
           "fileName": {
             "maxLength": 255,
             "minLength": 0,
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateProofVideoRequest": {
+        "required": [
+          "url",
+          "videoType"
+        ],
+        "type": "object",
+        "properties": {
+          "videoType": {
+            "minLength": 1,
+            "pattern": "^(YouTube|External)$",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "visibility": {
+            "pattern": "^(public|hidden)$",
             "type": "string",
             "nullable": true
           }
@@ -9406,7 +9733,7 @@
           },
           "data": {
             "type": "array",
-            "items": {},
+            "items": { },
             "nullable": true
           },
           "error": {
@@ -9525,7 +9852,7 @@
             "nullable": true
           }
         },
-        "additionalProperties": {}
+        "additionalProperties": { }
       },
       "ProvenanceInclusionRequest": {
         "required": [
@@ -9732,6 +10059,10 @@
           "sales": {
             "type": "integer",
             "format": "int32"
+          },
+          "authorshipRecordId": {
+            "type": "string",
+            "nullable": true
           },
           "aiGenerated": {
             "type": "boolean"
@@ -10592,6 +10923,71 @@
         },
         "additionalProperties": false
       },
+      "PublicTrackAiDisclosureDto": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "classification": {
+            "enum": [
+              "Unclassified",
+              "AIGenerated",
+              "AIAssisted"
+            ],
+            "type": "string"
+          },
+          "definition": {
+            "type": "string",
+            "nullable": true
+          },
+          "details": {
+            "$ref": "#/components/schemas/AiDisclosureDetailsDto"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isRevoked": {
+            "type": "boolean"
+          },
+          "correctionNotice": {
+            "type": "string",
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicTrackAiDisclosureDtoV1ApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PublicTrackAiDisclosureDto"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "meta": {
+            "$ref": "#/components/schemas/V1PaginationMeta"
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicTrackDto": {
         "type": "object",
         "properties": {
@@ -10842,6 +11238,16 @@
         },
         "additionalProperties": false
       },
+      "RejectPayoutRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ReleaseReadyCreditExpiryDefinition": {
         "type": "object",
         "properties": {
@@ -10878,6 +11284,21 @@
           },
           "creditExpiry": {
             "$ref": "#/components/schemas/ReleaseReadyCreditExpiryDefinition"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReorderAlbumTracksV1Request": {
+        "required": [
+          "trackIds"
+        ],
+        "type": "object",
+        "properties": {
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -10919,6 +11340,25 @@
             "maxLength": 500,
             "minLength": 1,
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevokeTrackAiDisclosureRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -11027,9 +11467,10 @@
         "type": "object",
         "properties": {
           "daw": {
-            "maxLength": 200,
-            "minLength": 0,
-            "type": "string",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           },
           "aiTools": {
@@ -11150,6 +11591,42 @@
         },
         "additionalProperties": false
       },
+      "UpdateAlbumV1Request": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "artworkUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "visibility": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "releaseDate": {
+            "maxLength": 40,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateCreatorProfileRequest": {
         "type": "object",
         "properties": {
@@ -11225,6 +11702,66 @@
         },
         "additionalProperties": false
       },
+      "UpdateProofVideoRequest": {
+        "type": "object",
+        "properties": {
+          "videoType": {
+            "pattern": "^(YouTube|External)$",
+            "type": "string",
+            "nullable": true
+          },
+          "url": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "visibility": {
+            "pattern": "^(public|hidden)$",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "payoutsEnabled": {
+            "type": "boolean"
+          },
+          "moderationEnabled": {
+            "type": "boolean"
+          },
+          "marketplaceEnabled": {
+            "type": "boolean"
+          },
+          "allowExclusiveListings": {
+            "type": "boolean"
+          },
+          "requireTrackReview": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateSubscriptionRequest": {
         "required": [
           "plan"
@@ -11267,10 +11804,188 @@
         },
         "additionalProperties": false
       },
+      "UploadTrackRequest": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "nullable": true
+          },
+          "coverArt": {
+            "type": "string",
+            "format": "binary",
+            "nullable": true
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "genre": {
+            "maxLength": 60,
+            "type": "string",
+            "nullable": true
+          },
+          "primaryGenre": {
+            "maxLength": 60,
+            "type": "string",
+            "nullable": true
+          },
+          "subgenre": {
+            "maxLength": 60,
+            "type": "string",
+            "nullable": true
+          },
+          "tempo": {
+            "maxLength": 20,
+            "type": "string",
+            "nullable": true
+          },
+          "mood": {
+            "maxLength": 120,
+            "type": "string",
+            "nullable": true
+          },
+          "price": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "licenseType": {
+            "maxLength": 200,
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "maxLength": 500,
+            "type": "string",
+            "nullable": true
+          },
+          "nonExclusivePrice": {
+            "maximum": 79228162514264337593543950335,
+            "minimum": 0.01,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "exclusivePrice": {
+            "maximum": 79228162514264337593543950335,
+            "minimum": 0.01,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "copyrightBuyoutPrice": {
+            "maximum": 79228162514264337593543950335,
+            "minimum": 0.01,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "nonExclusivePriceCents": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "exclusivePriceCents": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "copyrightBuyoutPriceCents": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "albumAssignmentType": {
+            "maxLength": 20,
+            "type": "string",
+            "nullable": true
+          },
+          "collectionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "newAlbumTitle": {
+            "maxLength": 200,
+            "type": "string",
+            "nullable": true
+          },
+          "newAlbumDescription": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "saveAsDraft": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "idempotencyKey": {
+            "maxLength": 128,
+            "type": "string",
+            "nullable": true
+          },
+          "confirmDuplicateAudio": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpsertBehindTheTrackRequest": {
         "type": "object",
         "properties": {
           "story": {
+            "maxLength": 5000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "daw": {
+            "maxLength": 200,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "vocalChain": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "promptNotes": {
+            "maxLength": 5000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "productionNotes": {
+            "maxLength": 5000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "humanContributionNotes": {
             "maxLength": 5000,
             "minLength": 0,
             "type": "string",
@@ -11359,6 +12074,30 @@
             "type": "string",
             "nullable": true
           },
+          "genres": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "profileImageUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "bannerImageUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "featuredTrackId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "socialLinks": {
             "type": "array",
             "items": {
@@ -11394,6 +12133,116 @@
           "rolloutPercentage": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpsertTrackAiDisclosureRequest": {
+        "type": "object",
+        "properties": {
+          "classification": {
+            "enum": [
+              "Unclassified",
+              "AIGenerated",
+              "AIAssisted"
+            ],
+            "type": "string"
+          },
+          "aiVocals": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiPrimaryInstruments": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiComposition": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiLyrics": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiPostProduction": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiArtwork": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiVideo": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "generatorTool": {
+            "maxLength": 200,
+            "type": "string",
+            "nullable": true
+          },
+          "modelVersion": {
+            "maxLength": 200,
+            "type": "string",
+            "nullable": true
+          },
+          "creationDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "commercialUseLicenseBasis": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "voiceLikenessAuthorization": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "humanWrittenLyrics": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "humanVocals": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "humanInstruments": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "arrangementEditing": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "dawWork": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "collaborators": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "humanContributionNarrative": {
+            "maxLength": 5000,
+            "type": "string",
+            "nullable": true
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "correctionReason": {
+            "maxLength": 1000,
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -11489,398 +12338,6 @@
           }
         },
         "additionalProperties": false
-      },
-      "AlbumV1Dto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "creatorId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "artworkUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "public",
-              "unlisted",
-              "private"
-            ]
-          },
-          "releaseDate": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "trackCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumCreatorSummaryV1Dto": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string"
-          },
-          "creatorId": {
-            "type": "string",
-            "nullable": true
-          },
-          "username": {
-            "type": "string",
-            "nullable": true
-          },
-          "slug": {
-            "type": "string",
-            "nullable": true
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
-          },
-          "profileImageUrl": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumDetailV1Dto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "creatorId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "artworkUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "public",
-              "unlisted",
-              "private"
-            ]
-          },
-          "releaseDate": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "trackCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "creator": {
-            "$ref": "#/components/schemas/AlbumCreatorSummaryV1Dto"
-          },
-          "tracks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PublicCatalogTrackDto"
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "CreateAlbumV1Request": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 2000
-          },
-          "artworkUrl": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 500
-          },
-          "visibility": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 20
-          },
-          "releaseDate": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 40
-          },
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "nullable": true
-          }
-        },
-        "required": [
-          "title"
-        ],
-        "additionalProperties": false
-      },
-      "UpdateAlbumV1Request": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 200
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 2000
-          },
-          "artworkUrl": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 500
-          },
-          "visibility": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 20
-          },
-          "releaseDate": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 40
-          }
-        },
-        "additionalProperties": false
-      },
-      "AddAlbumTracksV1Request": {
-        "type": "object",
-        "properties": {
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "trackIds"
-        ],
-        "additionalProperties": false
-      },
-      "ReorderAlbumTracksV1Request": {
-        "type": "object",
-        "properties": {
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "trackIds"
-        ],
-        "additionalProperties": false
-      },
-      "AlbumV1DtoV1ApiResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AlbumV1Dto"
-          },
-          "error": {
-            "type": "string",
-            "nullable": true
-          },
-          "meta": {
-            "$ref": "#/components/schemas/V1PaginationMeta"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumV1DtoListV1ApiResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AlbumV1Dto"
-            }
-          },
-          "error": {
-            "type": "string",
-            "nullable": true
-          },
-          "meta": {
-            "$ref": "#/components/schemas/V1PaginationMeta"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumDetailV1DtoV1ApiResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AlbumDetailV1Dto"
-          },
-          "error": {
-            "type": "string",
-            "nullable": true
-          },
-          "meta": {
-            "$ref": "#/components/schemas/V1PaginationMeta"
-          }
-        },
-        "additionalProperties": false
-      },
-      "CreateProofVideoRequest": {
-        "type": "object",
-        "required": [
-          "url",
-          "videoType"
-        ],
-        "properties": {
-          "videoType": {
-            "type": "string"
-          },
-          "url": {
-            "maxLength": 2000,
-            "minLength": 0,
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "description": {
-            "maxLength": 2000,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "sortOrder": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "UpdateProofVideoRequest": {
-        "type": "object",
-        "properties": {
-          "videoType": {
-            "type": "string",
-            "nullable": true
-          },
-          "url": {
-            "maxLength": 2000,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "description": {
-            "maxLength": 2000,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "sortOrder": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
       }
     },
     "securitySchemes": {
@@ -11894,7 +12351,7 @@
   },
   "security": [
     {
-      "Bearer": []
+      "Bearer": [ ]
     }
   ]
 }

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Cambrian.Api.Controllers;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Services;
@@ -61,5 +62,29 @@ public sealed class StreamControllerTests
         // when the client actually streams via GET /stream/{trackId}/audio.
         await _storage.DidNotReceive().OpenReadAsync(Arg.Any<string>());
         await _streams.Received(1).StartAsync(trackId, "listener-1");
+    }
+
+    [Fact]
+    public async Task PublishedTrack_ReturnsSignedPlaybackUrl_WithExplicitExpiration()
+    {
+        var trackId = Guid.NewGuid();
+        _tracks.GetByIdAsync(trackId).Returns(new Track
+        {
+            Id = trackId, Title = "Playable", AudioUrl = "tracks/creator/playable.mp3",
+            Visibility = "public", Status = "available", CreatorId = "creator-1"
+        });
+        _storage.OpenReadAsync("tracks/creator/playable.mp3").Returns(new StorageFile
+        {
+            Stream = new MemoryStream(new byte[] { 1 }), ContentType = "audio/mpeg", Length = 1
+        });
+        _storage.GenerateSignedUrl("tracks/creator/playable.mp3").Returns("https://storage.test/signed");
+        _storage.SignedUrlLifetime.Returns(TimeSpan.FromMinutes(15));
+        SetAuthenticatedUser("listener-1");
+
+        var result = Assert.IsType<OkObjectResult>(await _controller.Stream(trackId.ToString()));
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var data = json.RootElement.GetProperty("data");
+        Assert.Equal("https://storage.test/signed", data.GetProperty("streamUrl").GetString());
+        Assert.True(data.GetProperty("expiresAt").GetDateTime() > DateTime.UtcNow.AddMinutes(14));
     }
 }

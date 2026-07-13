@@ -26,13 +26,20 @@ jobs:
       - name: Post-deploy health check
         timeout-minutes: 5
         env:
-          PROD_API_URL: ${{ secrets.PROD_API_URL }}
-        if: env.PROD_API_URL != ''
+          # The prod API base is a PUBLIC url (published throughout docs/), so it
+          # lives in version control as a reviewable default rather than a secret
+          # that can silently drift. The secret is honored only as an override.
+          PROD_API_URL: ${{ secrets.PROD_API_URL || 'https://cambrian-backend-api.onrender.com' }}
         run: |
+          # Strip any trailing slash so we never build a `//health` url — the
+          # Render edge 404s on double-slash, which historically failed this gate
+          # even while prod was perfectly healthy.
+          BASE="${PROD_API_URL%/}"
+          echo "Health-checking ${BASE}/health"
           echo "Waiting 60s for deployment to stabilize..."
           sleep 60
           for i in 1 2 3 4 5; do
-            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${PROD_API_URL}/health" || true)
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${BASE}/health" || true)
             if [ "$STATUS" = "200" ]; then
               echo "Health check passed (attempt $i)"
               exit 0
@@ -40,5 +47,5 @@ jobs:
             echo "Health check attempt $i returned $STATUS — retrying in 15s..."
             sleep 15
           done
-          echo "::error::Health check failed after 5 attempts"
+          echo "::error::Health check failed after 5 attempts against ${BASE}/health"
           exit 1

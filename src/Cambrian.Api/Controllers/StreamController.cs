@@ -72,14 +72,25 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, streamUserId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
-        var (audioKey, audioFile) = await OpenPlayableAudioAsync(track.AudioUrl, track.CambrianTrackId, track.Id);
-        audioFile?.Dispose();
-        if (string.IsNullOrEmpty(audioKey))
-            return NotFoundResponse("Audio file not found.");
+        try
+        {
+            var (audioKey, audioFile) = await OpenPlayableAudioAsync(track.AudioUrl, track.CambrianTrackId, track.Id);
+            audioFile?.Dispose();
+            if (string.IsNullOrEmpty(audioKey))
+                return PlaybackFailure(trackId, "audio_object_missing", "Audio file not found on storage.", "missing_object", StatusCodes.Status404NotFound);
 
-        var streamUrl = _storage.GenerateSignedUrl(audioKey);
-        Cambrian.Application.Observability.CambrianMetrics.StreamSignedUrlIssued.Add(1);
-        return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl) });
+            var streamUrl = _storage.GenerateSignedUrl(audioKey);
+            var expiresAt = _storage.SignedUrlLifetime is { } lifetime ? DateTime.UtcNow.Add(lifetime) : (DateTime?)null;
+            Cambrian.Application.Observability.CambrianMetrics.StreamSignedUrlIssued.Add(1);
+            return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl), expiresAt });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "EVENT: playback_url_failed trackId:{TrackId} category:storage correlationId:{CorrelationId}",
+                trackId, HttpContext.TraceIdentifier);
+            return PlaybackFailure(trackId, "playback_url_failed", "Playback is temporarily unavailable.", "storage", StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     /// <summary>
@@ -123,7 +134,18 @@ public class StreamController : BaseController
         // Call the single-arg overload when no Range header is present so callers
         // (and tests) that only stub the no-range signature keep working; the
         // two-arg overload is only used when the client actually sent a Range.
-        var (_, file) = await OpenPlayableAudioAsync(track.AudioUrl, track.CambrianTrackId, track.Id, hasRange ? rangeHeader : null);
+        StorageFile? file;
+        try
+        {
+            (_, file) = await OpenPlayableAudioAsync(track.AudioUrl, track.CambrianTrackId, track.Id, hasRange ? rangeHeader : null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "EVENT: playback_url_failed trackId:{TrackId} category:storage correlationId:{CorrelationId}",
+                trackId, HttpContext.TraceIdentifier);
+            return PlaybackFailure(trackId, "playback_url_failed", "Playback is temporarily unavailable.", "storage", StatusCodes.Status503ServiceUnavailable);
+        }
         if (file is null)
         {
             // For demo/seed tracks whose placeholder audio was never uploaded to
@@ -139,7 +161,7 @@ public class StreamController : BaseController
                 return File(placeholder, "audio/mpeg", enableRangeProcessing: true);
             }
 
-            return NotFoundResponse("Audio file not found on storage.");
+            return PlaybackFailure(trackId, "audio_object_missing", "Audio file not found on storage.", "missing_object", StatusCodes.Status404NotFound);
         }
 
         // If the storage layer returned a seekable stream (e.g. LocalObjectStorage
@@ -242,8 +264,8 @@ public class StreamController : BaseController
                 if (!string.Equals(audioUrl, candidate, StringComparison.Ordinal))
                 {
                     _logger.LogInformation(
-                        "StreamAudio: using seeded fallback audio key for trackId={TrackId} key={AudioKey}",
-                        trackId, candidate);
+                        "StreamAudio: using seeded fallback audio for trackId={TrackId}",
+                        trackId);
                 }
 
                 return (candidate, file);
@@ -251,6 +273,19 @@ public class StreamController : BaseController
         }
 
         return (null, null);
+    }
+
+    private IActionResult PlaybackFailure(string trackId, string code, string message, string category, int statusCode)
+    {
+        Cambrian.Application.Observability.CambrianMetrics.PlaybackUrlFailed.Add(1);
+        _logger.LogWarning(
+            "EVENT: playback_url_failed trackId:{TrackId} category:{Category} code:{Code} correlationId:{CorrelationId}",
+            trackId, category, code, HttpContext.TraceIdentifier);
+        return StatusCode(statusCode, new
+        {
+            success = false,
+            error = new { code, message, trackId, category, correlationId = HttpContext.TraceIdentifier }
+        });
     }
 
     private static IEnumerable<string> GetAudioCandidates(string? audioUrl, string? cambrianTrackId)

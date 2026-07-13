@@ -285,6 +285,13 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+    c.MapType<Cambrian.Domain.Entities.AiTrackClassification>(() => new Microsoft.OpenApi.Models.OpenApiSchema
+    {
+        Type = "string",
+        Enum = Enum.GetNames<Cambrian.Domain.Entities.AiTrackClassification>()
+            .Select(x => (Microsoft.OpenApi.Any.IOpenApiAny)new Microsoft.OpenApi.Any.OpenApiString(x))
+            .ToList(),
+    });
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Description = "JWT Bearer token. Example: \"Authorization: Bearer {token}\"",
@@ -619,6 +626,7 @@ builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
 builder.Services.AddScoped<ITrackDetailsRepository, TrackDetailsRepository>();
+builder.Services.AddScoped<ITrackAiDisclosureRepository, TrackAiDisclosureRepository>();
 builder.Services.AddScoped<IPublicDirectoryRepository, PublicDirectoryRepository>();
 builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();

@@ -204,6 +204,10 @@ namespace Cambrian.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<string>("RequestHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("ResponseBody")
                         .IsRequired()
                         .HasColumnType("text");
@@ -212,6 +216,13 @@ namespace Cambrian.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("completed");
 
                     b.Property<int>("StatusCode")
                         .HasColumnType("integer");
@@ -488,6 +499,9 @@ namespace Cambrian.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<DateTime?>("DisputedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("EvidenceJson")
                         .IsRequired()
                         .HasColumnType("text");
@@ -502,9 +516,19 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<string>("ManifestJson")
                         .HasColumnType("text");
 
+                    b.Property<string>("PaymentStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("pending");
+
                     b.Property<string>("RecordHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Signature")
                         .HasMaxLength(200)
@@ -518,6 +542,10 @@ namespace Cambrian.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("StripePaymentIntentId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<string>("StripeSessionId")
                         .HasMaxLength(255)
@@ -534,6 +562,11 @@ namespace Cambrian.Persistence.Migrations
                     b.HasIndex("RecordHash")
                         .HasDatabaseName("IX_AuthorshipRecords_RecordHash")
                         .HasFilter("\"RecordHash\" IS NOT NULL");
+
+                    b.HasIndex("StripePaymentIntentId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AuthorshipRecords_StripePaymentIntentId")
+                        .HasFilter("\"StripePaymentIntentId\" IS NOT NULL");
 
                     b.HasIndex("StripeSessionId")
                         .IsUnique()
@@ -644,6 +677,10 @@ namespace Cambrian.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Genres")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("JourneyEntries")
                         .HasMaxLength(16000)
@@ -894,6 +931,9 @@ namespace Cambrian.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime?>("PaymentFailedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("PriceCents")
                         .HasColumnType("integer");
@@ -1425,10 +1465,19 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<int>("Credits")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("DisputedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Pack")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
+
+                    b.Property<int>("RefundedAmountCents")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1436,6 +1485,10 @@ namespace Cambrian.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("paid");
+
+                    b.Property<string>("StripePaymentIntentId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<string>("StripeSessionId")
                         .HasMaxLength(255)
@@ -1445,6 +1498,10 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("CreatorId")
                         .HasDatabaseName("ix_release_credit_purchases_creator");
+
+                    b.HasIndex("StripePaymentIntentId")
+                        .HasDatabaseName("ix_release_credit_purchases_payment_intent")
+                        .HasFilter("\"StripePaymentIntentId\" IS NOT NULL");
 
                     b.HasIndex("StripeSessionId")
                         .IsUnique()
@@ -1535,12 +1592,24 @@ namespace Cambrian.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("DisputedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastStripeInvoiceId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PaymentFailedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Plan")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("StartedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1634,6 +1703,13 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<Guid?>("CreatorUuid")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -1690,12 +1766,26 @@ namespace Cambrian.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<string>("PreDeleteStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("PreDeleteVisibility")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<decimal>("Price")
                         .HasColumnType("numeric");
 
                     b.Property<string>("PrimaryGenre")
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)");
+
+                    b.Property<DateTime?>("PurgeRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PurgedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Signature")
                         .HasMaxLength(200)
@@ -1756,7 +1846,161 @@ namespace Cambrian.Persistence.Migrations
 
                     b.HasIndex("CreatorUuid");
 
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("IX_Tracks_DeletedAt");
+
+                    b.HasIndex("PurgeRequestedAt")
+                        .HasDatabaseName("IX_Tracks_PurgeRequestedAt");
+
                     b.ToTable("Tracks");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.TrackAiDisclosure", b =>
+                {
+                    b.Property<Guid>("TrackId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool?>("AiArtwork")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("AiComposition")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("AiLyrics")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("AiPostProduction")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("AiPrimaryInstruments")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("AiVideo")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("AiVocals")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("ArrangementEditing")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Classification")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("CollaboratorsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CommercialUseLicenseBasis")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("CorrectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateOnly?>("CreationDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool?>("DawWork")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("GeneratorTool")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("HumanContributionNarrative")
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
+
+                    b.Property<bool?>("HumanInstruments")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("HumanVocals")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("HumanWrittenLyrics")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ModelVersion")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VoiceLikenessAuthorization")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("TrackId");
+
+                    b.ToTable("TrackAiDisclosures", (string)null);
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.TrackAiDisclosureRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ChangedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TrackId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrackId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("TrackAiDisclosureRevisions", (string)null);
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.TrackAuthorship", b =>
@@ -2492,6 +2736,28 @@ namespace Cambrian.Persistence.Migrations
                     b.Navigation("Creator");
 
                     b.Navigation("CreatorEntity");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.TrackAiDisclosure", b =>
+                {
+                    b.HasOne("Cambrian.Domain.Entities.Track", "Track")
+                        .WithOne()
+                        .HasForeignKey("Cambrian.Domain.Entities.TrackAiDisclosure", "TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.TrackAiDisclosureRevision", b =>
+                {
+                    b.HasOne("Cambrian.Domain.Entities.Track", "Track")
+                        .WithMany()
+                        .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Track");
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.TrackAuthorship", b =>

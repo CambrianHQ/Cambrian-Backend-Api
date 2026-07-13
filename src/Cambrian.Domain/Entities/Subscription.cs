@@ -28,4 +28,13 @@ public class Subscription
     public DateTime? ExpiresAt { get; set; }
 
     public DateTime? TrialEndsAt { get; set; }
+
+    /// <summary>Latest Stripe invoice applied to this subscription (payment audit/reconciliation).</summary>
+    public string? LastStripeInvoiceId { get; set; }
+
+    public DateTime? PaymentFailedAt { get; set; }
+
+    public DateTime? RefundedAt { get; set; }
+
+    public DateTime? DisputedAt { get; set; }
 }

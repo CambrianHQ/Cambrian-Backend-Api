@@ -3,6 +3,7 @@ using Cambrian.Api.Common;
 using Cambrian.Application.Auth;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Validation;
 using Cambrian.Domain.Enums;
@@ -693,6 +694,19 @@ public class AuthController : BaseController
         catch (InvalidOperationException ex)
         {
             return ErrorResponse(ex.Message);
+        }
+        catch (VerificationEmailDeliveryException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                success = false,
+                error = new
+                {
+                    code = "verification_email_failed",
+                    message = ex.Message,
+                    correlationId = HttpContext.TraceIdentifier,
+                }
+            });
         }
     }
 

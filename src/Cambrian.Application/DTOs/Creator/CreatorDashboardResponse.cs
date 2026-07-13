@@ -76,4 +76,7 @@ public class CreatorTrackSummary
     public string? AudioUrl { get; set; }
     public string? CoverArtUrl { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>When this track was moved to Trash; null unless it's soft-deleted.</summary>
+    public DateTime? DeletedAt { get; set; }
 }

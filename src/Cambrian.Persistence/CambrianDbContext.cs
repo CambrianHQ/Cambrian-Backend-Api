@@ -15,6 +15,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Track> Tracks => Set<Track>();
 
+    public DbSet<TrackAiDisclosure> TrackAiDisclosures => Set<TrackAiDisclosure>();
+
+    public DbSet<TrackAiDisclosureRevision> TrackAiDisclosureRevisions => Set<TrackAiDisclosureRevision>();
+
     public DbSet<Creator> Creators => Set<Creator>();
 
     public DbSet<Purchase> Purchases => Set<Purchase>();
@@ -119,7 +123,14 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.StatusCode).IsRequired();
             e.Property(x => x.CreatedAt).IsRequired();
             e.Property(x => x.ExpiresAt).IsRequired();
+            // Additive: request-payload fingerprint (mismatch => 409 idempotency_key_reused)
+            // and claim lifecycle (processing/completed/failed) for the upload finalization
+            // idempotency boundary. Nullable/defaulted so existing rows stay valid.
+            e.Property(x => x.RequestHash).HasMaxLength(64);
+            e.Property(x => x.Status).IsRequired().HasMaxLength(16).HasDefaultValue("completed");
             // Composite uniqueness: a (key, user, route) triple maps to exactly one stored response.
+            // This is the DB-enforced backstop that makes claiming a key race-safe across
+            // concurrently running API instances — see IdempotencyStore.TryBeginAsync.
             e.HasIndex(x => new { x.Key, x.UserId, x.RouteKey })
                 .IsUnique()
                 .HasDatabaseName("ux_api_idempotency_keys_key_user_route");
@@ -348,6 +359,7 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(cp => cp.Slug).IsUnique();
             e.Property(cp => cp.Bio).HasMaxLength(2000);
             e.Property(cp => cp.Niche).HasMaxLength(100);
+            e.Property(cp => cp.Genres).HasMaxLength(1000);
             e.Property(cp => cp.SocialLinks).HasMaxLength(2000);
             e.Property(cp => cp.BannerImageUrl).HasMaxLength(500);
             e.Property(cp => cp.ProfileImageUrl).HasMaxLength(500);
@@ -464,6 +476,14 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(t => t.FeaturedByUserId).HasMaxLength(450);
             e.Property(t => t.IsPinned).HasDefaultValue(false);
             e.Property(t => t.PinnedByUserId).HasMaxLength(450);
+
+            // Trash / restore / permanent-delete — additive, all nullable. The row is
+            // never SQL-deleted; see Track.PurgeRequestedAt/PurgedAt doc comments.
+            e.Property(t => t.DeletedByUserId).HasMaxLength(450);
+            e.Property(t => t.PreDeleteVisibility).HasMaxLength(20);
+            e.Property(t => t.PreDeleteStatus).HasMaxLength(30);
+            e.HasIndex(t => t.DeletedAt).HasDatabaseName("IX_Tracks_DeletedAt");
+            e.HasIndex(t => t.PurgeRequestedAt).HasDatabaseName("IX_Tracks_PurgeRequestedAt");
         });
 
         // ── §9 provenance + authorship (additive tables) ──
@@ -472,6 +492,10 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
         // ── Behind The Track: proof videos (additive table) ──
         builder.ApplyConfiguration(new TrackVideoProofConfiguration());
+
+        // ── Additive AI disclosure and immutable revision history ──
+        builder.ApplyConfiguration(new TrackAiDisclosureConfiguration());
+        builder.ApplyConfiguration(new TrackAiDisclosureRevisionConfiguration());
 
         // ── Release Ready mastering ──
         builder.ApplyConfiguration(new MasteringJobConfiguration());

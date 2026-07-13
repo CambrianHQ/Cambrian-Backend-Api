@@ -134,4 +134,44 @@ public class Track
     public DateTime? PinnedAt { get; set; }
 
     public string? PinnedByUserId { get; set; }
+
+    /// <summary>
+    /// When the owner (or an admin) moved this track to Trash. Null unless
+    /// <see cref="Status"/> is "removed". Alongside <see cref="Status"/> and
+    /// <see cref="Visibility"/> (the existing soft-delete signal every public
+    /// read path already filters on), this gives Trash a real timestamp to sort/show.
+    /// </summary>
+    public DateTime? DeletedAt { get; set; }
+
+    /// <summary>User ID that performed the removal (the owner, or an admin acting on their behalf).</summary>
+    public string? DeletedByUserId { get; set; }
+
+    /// <summary>
+    /// <see cref="Visibility"/> immediately before this delete, so Restore can put
+    /// a track back exactly where it was (e.g. a hidden draft restores to hidden,
+    /// not suddenly public).
+    /// </summary>
+    public string? PreDeleteVisibility { get; set; }
+
+    /// <summary>
+    /// <see cref="Status"/> immediately before this delete. Restore uses this
+    /// (falling back to "available") rather than always resetting to "available",
+    /// so trashing-then-restoring a copyright-transferred or exclusive-sold track
+    /// can never resurrect it into a sellable state.
+    /// </summary>
+    public string? PreDeleteStatus { get; set; }
+
+    /// <summary>
+    /// Set when the owner requests permanent deletion from Trash. The track row
+    /// itself is never SQL-deleted (Purchases/LibraryItems/AuthorshipRecord/
+    /// ProvenanceAnchor reference it for financial and provenance history) — this
+    /// only queues the async object-storage purge; see TrackPurgeWorker.
+    /// </summary>
+    public DateTime? PurgeRequestedAt { get; set; }
+
+    /// <summary>
+    /// Set by TrackPurgeWorker once the audio/cover objects have been deleted from
+    /// storage and the URLs blanked. A non-null value blocks Restore.
+    /// </summary>
+    public DateTime? PurgedAt { get; set; }
 }

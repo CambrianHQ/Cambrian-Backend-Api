@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Validation;
 using Cambrian.Domain.Entities;
@@ -174,7 +175,7 @@ public class AuthService : IAuthService
         // do NOT swallow truly fatal errors (OutOfMemoryException, etc.) — those propagate.
         try
         {
-            await IssueAndSendVerificationLinkAsync(user);
+            await IssueAndSendVerificationLinkAsync(user, enforceCooldown: false);
         }
         catch (Exception ex) when (
             ex is InvalidOperationException
@@ -482,7 +483,7 @@ public class AuthService : IAuthService
         if (string.IsNullOrEmpty(user.Email))
             throw new InvalidOperationException("Account has no email address on file.");
 
-        await IssueAndSendVerificationLinkAsync(user);
+        await IssueAndSendVerificationLinkAsync(user, enforceCooldown: true);
     }
 
     /// <inheritdoc />
@@ -522,16 +523,27 @@ public class AuthService : IAuthService
     /// Generate a verification token, store its hash, and email the link to the user.
     /// Used both for the initial registration send and for re-sends.
     /// </summary>
-    private async Task IssueAndSendVerificationLinkAsync(ApplicationUser user)
+    private async Task IssueAndSendVerificationLinkAsync(ApplicationUser user, bool enforceCooldown)
     {
+        var now = DateTime.UtcNow;
+        var previousToken = user.EmailVerificationToken;
+        var previousExpiry = user.EmailVerificationTokenExpiry;
+        // IssuedAt is derivable from the existing 24-hour expiry, avoiding a
+        // migration while keeping the cooldown durable across instances.
+        if (enforceCooldown && previousToken is not null && previousExpiry > now.AddHours(24).AddMinutes(-5))
+            throw new InvalidOperationException("A verification email was sent recently. Please wait 5 minutes before requesting another.");
+
         var rawBytes = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .TrimEnd('=')
             .Replace('+', '-')
             .Replace('/', '_');
         var plaintext = $"{user.Id}.{rawBytes}";
         user.EmailVerificationToken = HashResetCode(plaintext);
-        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
-        await _users.UpdateAsync(user);
+        user.EmailVerificationTokenExpiry = now.AddHours(24);
+        var tokenUpdateTask = _users.UpdateAsync(user);
+        var tokenUpdate = tokenUpdateTask is null ? IdentityResult.Success : await tokenUpdateTask;
+        if (tokenUpdate is not null && !tokenUpdate.Succeeded)
+            throw new InvalidOperationException("Verification token could not be persisted.");
 
         var frontendUrl = _config["App:FrontendUrl"]?.TrimEnd('/') ?? "";
         var link = $"{frontendUrl}/auth/verify-email?token={Uri.EscapeDataString(plaintext)}";
@@ -547,7 +559,31 @@ public class AuthService : IAuthService
             <p><a href="{safeLink}">Verify email</a></p>
             <p>This link expires in 24 hours. If you did not create a Cambrian account, you can ignore this email.</p>
             """;
-        await _email.SendAsync(user.Email!, "Cambrian — Verify your email", html);
+        try
+        {
+            await _email.SendAsync(user.Email!, "Cambrian — Verify your email", html);
+        }
+        catch (Exception ex)
+        {
+            // A provider failure must not invalidate the last successfully
+            // delivered token. Restore the prior state before surfacing failure.
+            user.EmailVerificationToken = previousToken;
+            user.EmailVerificationTokenExpiry = previousExpiry;
+            var restoreTask = _users.UpdateAsync(user);
+            var restoreResult = restoreTask is null ? IdentityResult.Success : await restoreTask;
+            if (restoreResult is not null && !restoreResult.Succeeded)
+            {
+                _logger.LogCritical(
+                    "EVENT: verification_email_failed category:token_restore userHash:{UserHash} correlationId:{CorrelationId}",
+                    HashUserId(user.Id), System.Diagnostics.Activity.Current?.TraceId.ToString());
+            }
+
+            Observability.CambrianMetrics.VerificationEmailFailed.Add(1);
+            _logger.LogError(ex,
+                "EVENT: verification_email_failed category:provider userHash:{UserHash} correlationId:{CorrelationId}",
+                HashUserId(user.Id), System.Diagnostics.Activity.Current?.TraceId.ToString());
+            throw new VerificationEmailDeliveryException(ex);
+        }
     }
 
     // -- Helpers --

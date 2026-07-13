@@ -78,7 +78,7 @@ public sealed class BillingServiceTests
     }
 
     [Fact]
-    public async Task ConfirmCheckoutAsync_UpgradesSubscription_WhenPaidSessionBelongsToCaller()
+    public async Task ConfirmCheckoutAsync_ReportsPaid_ButDoesNotGrantSubscription()
     {
         _gateway.GetCheckoutSessionAsync("cs_sub_123").Returns(new CheckoutSessionInfo
         {
@@ -86,15 +86,12 @@ public sealed class BillingServiceTests
             Status = "paid",
             ClientReferenceId = "user-77:subscription:pro"
         });
-        _subscriptionService.UpdateAsync(Arg.Any<UpdateSubscriptionRequest>(), Arg.Any<string>())
-            .Returns(new SubscriptionResponse { Plan = "pro", Status = "active" });
-
         var response = await _sut.ConfirmCheckoutAsync("cs_sub_123", "user-77");
 
         response.Status.Should().Be("paid");
         response.Tier.Should().Be("pro");
-        await _subscriptionService.Received(1)
-            .UpdateAsync(Arg.Is<UpdateSubscriptionRequest>(r => r.Plan == "pro"), "user-77");
+        await _subscriptionService.DidNotReceiveWithAnyArgs()
+            .UpdateAsync(default!, default!);
     }
 
     [Fact]

@@ -15,6 +15,10 @@ public sealed class ReleaseCreditPurchaseConfiguration : IEntityTypeConfiguratio
         builder.Property(p => p.Pack).HasMaxLength(40);
         builder.Property(p => p.Status).HasMaxLength(20).HasDefaultValue("paid").IsRequired();
         builder.Property(p => p.StripeSessionId).HasMaxLength(255);
+        builder.Property(p => p.StripePaymentIntentId).HasMaxLength(255);
+        builder.HasIndex(p => p.StripePaymentIntentId)
+            .HasFilter("\"StripePaymentIntentId\" IS NOT NULL")
+            .HasDatabaseName("ix_release_credit_purchases_payment_intent");
 
         // Webhook idempotency: one grant per Stripe session (mirrors Purchase).
         builder.HasIndex(p => p.StripeSessionId)

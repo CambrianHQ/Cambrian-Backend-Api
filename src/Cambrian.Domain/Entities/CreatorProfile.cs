@@ -17,6 +17,9 @@ public sealed class CreatorProfile
     public string Bio { get; set; } = "";
     public string? Niche { get; set; } // e.g. "cinematic AI composer"
 
+    /// <summary>Creator-selected public genres, stored as a JSON string array.</summary>
+    public string? Genres { get; set; }
+
     // --- Social links (JSON or pipe-delimited) ---
     public string? SocialLinks { get; set; } // stored as JSON string
 

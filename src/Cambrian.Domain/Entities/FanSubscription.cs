@@ -19,7 +19,7 @@ public class FanSubscription
     /// <summary>Monthly price in cents, frozen at subscribe time.</summary>
     public int PriceCents { get; set; }
 
-    /// <summary>pending | active | cancelled.</summary>
+    /// <summary>pending | active | past_due | cancelled | checkout_failed.</summary>
     public string Status { get; set; } = "pending";
 
     /// <summary>Stripe subscription id on the artist's connected account.</summary>
@@ -31,4 +31,5 @@ public class FanSubscription
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ActivatedAt { get; set; }
     public DateTime? CancelledAt { get; set; }
+    public DateTime? PaymentFailedAt { get; set; }
 }
