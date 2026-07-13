@@ -54,8 +54,8 @@ public sealed class ComplianceScoreService : IComplianceScoreService
         var checks = new List<ComplianceCheck>
         {
             CommercialRights(track),
-            AuthorshipDocumented(authorship),
-            AiDisclosure(authorship),
+            AuthorshipDocumented(authorship, creationProcess),
+            AiDisclosure(authorship, track),
             ProvenanceAnchored(anchor, stamped: !string.IsNullOrWhiteSpace(track.Signature)),
             MetadataComplete(track),
         };
@@ -90,13 +90,18 @@ public sealed class ComplianceScoreService : IComplianceScoreService
             ? Check("commercialRightsVerified", "pass", "Commercial rights have been attested for this track.")
             : Check("commercialRightsVerified", "fail", "Commercial rights have not been verified yet.");
 
-    private static ComplianceCheck AuthorshipDocumented(TrackAuthorship? a)
+    private static ComplianceCheck AuthorshipDocumented(TrackAuthorship? a, BehindTheTrackDto? creation)
     {
-        var hasNarrative = a is not null && (
+        // Mirrors the checklist's hasHumanContribution: the free Behind-the-Track
+        // human-contribution note documents authorship just as the plan-gated
+        // TrackAuthorship narrative does. Without this, a free creator's completed
+        // "human contribution" checklist item never moved the score.
+        var hasNarrative = (a is not null && (
             !string.IsNullOrWhiteSpace(a.Edits) ||
             !string.IsNullOrWhiteSpace(a.ArrangementNotes) ||
             !string.IsNullOrWhiteSpace(a.ProcessNotes) ||
-            a.LyricsAuthored);
+            a.LyricsAuthored))
+            || !string.IsNullOrWhiteSpace(creation?.HumanContributionNotes);
 
         if (hasNarrative)
             return Check("authorshipDocumented", "pass", "Authorship details have been documented.");
@@ -106,8 +111,12 @@ public sealed class ComplianceScoreService : IComplianceScoreService
             : Check("authorshipDocumented", "warn", "Authorship record exists but has no details.");
     }
 
-    private static ComplianceCheck AiDisclosure(TrackAuthorship? a) =>
-        a is not null && !string.IsNullOrWhiteSpace(a.AiDisclosure)
+    // Mirrors the checklist's hasAiDisclosure: an explicit disclosure — the free
+    // AiDisclosureDdex or the TrackAuthorship disclosure — satisfies this. Prompt /
+    // process notes deliberately do NOT: an AI-use disclosure has to be explicit.
+    private static ComplianceCheck AiDisclosure(TrackAuthorship? a, Track track) =>
+        !string.IsNullOrWhiteSpace(track.AiDisclosureDdex)
+        || (a is not null && !string.IsNullOrWhiteSpace(a.AiDisclosure))
             ? Check("aiDisclosurePresent", "pass", "An AI-use disclosure has been provided.")
             : Check("aiDisclosurePresent", "fail", "No AI-use disclosure has been provided.");
 
