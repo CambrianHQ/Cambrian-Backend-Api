@@ -34,6 +34,9 @@ public sealed class S3ObjectStorage : IObjectStorage
 {
     private const string HttpClientName = "SupabaseStorage";
 
+    /// <summary>Total attempts (including the first) for a single UploadAsync call.</summary>
+    private const int UploadMaxAttempts = 3;
+
     private readonly StorageOptions _options;
     private readonly AmazonS3Client _client;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -94,52 +97,129 @@ public sealed class S3ObjectStorage : IObjectStorage
             throw;
         }
 
-        try
+        // A blip on the storage origin (dropped connection, transient 5xx/429) shouldn't
+        // sacrifice an entire upload — the caller has already paid the cost of getting the
+        // file to this API. Retry those quick-failing cases; a genuine timeout is not
+        // retried since the larger HttpClient timeout above is the fix for that case and
+        // stacking more multi-minute attempts on top of it risks tripping an upstream
+        // gateway timeout instead of helping.
+        for (var attempt = 1; attempt <= UploadMaxAttempts; attempt++)
         {
-            var http = _httpClientFactory.CreateClient(HttpClientName);
-            using var req = new HttpRequestMessage(HttpMethod.Put, presignedUrl)
-            {
-                Content = new StreamContent(file),
-            };
-            // Content-Type MUST match the value used when the URL was signed,
-            // otherwise Supabase/S3 will reject with SignatureDoesNotMatch.
-            req.Content.Headers.ContentType =
-                System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+            var isLastAttempt = attempt == UploadMaxAttempts;
+            if (file.CanSeek)
+                file.Seek(0, SeekOrigin.Begin);
 
-            using var resp = await http.SendAsync(req);
-
-            if (!resp.IsSuccessStatusCode)
+            try
             {
+                var http = _httpClientFactory.CreateClient(HttpClientName);
+                using var req = new HttpRequestMessage(HttpMethod.Put, presignedUrl)
+                {
+                    // StreamContent.Dispose() disposes the stream it wraps, and req is
+                    // disposed at the end of every attempt (including ones we retry after).
+                    // Wrap file so that doesn't tear down the caller's stream out from
+                    // under the next attempt's Seek(0).
+                    Content = new StreamContent(new NonDisposingStream(file)),
+                };
+                // Content-Type MUST match the value used when the URL was signed,
+                // otherwise Supabase/S3 will reject with SignatureDoesNotMatch.
+                req.Content.Headers.ContentType =
+                    System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+
+                using var resp = await http.SendAsync(req);
+
+                if (resp.IsSuccessStatusCode)
+                {
+                    _logger.LogDebug("S3 upload complete: key={Key} attempt={Attempt}", normalised, attempt);
+                    return normalised;
+                }
+
                 string body = string.Empty;
                 try { body = await resp.Content.ReadAsStringAsync(); } catch { /* best-effort */ }
                 _logger.LogError(
-                    "[STORAGE-DIAG] S3 Upload non-success: status={Status} bucket={Bucket} endpoint={Endpoint} region={Region} usePathStyle={UsePathStyle} key={Key} body={Body}",
+                    "[STORAGE-DIAG] S3 Upload non-success: status={Status} bucket={Bucket} endpoint={Endpoint} region={Region} usePathStyle={UsePathStyle} key={Key} attempt={Attempt}/{MaxAttempts} body={Body}",
                     (int)resp.StatusCode, _options.Bucket, _options.Endpoint, _options.Region, _options.UsePathStyle,
-                    normalised, body.Length > 500 ? body[..500] : body);
+                    normalised, attempt, UploadMaxAttempts, body.Length > 500 ? body[..500] : body);
+
+                if (!isLastAttempt && IsTransientStatus(resp.StatusCode))
+                {
+                    await Task.Delay(RetryDelay(attempt));
+                    continue;
+                }
+
                 throw new InvalidOperationException(
                     $"S3 upload failed: {(int)resp.StatusCode} {resp.StatusCode}");
             }
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex,
-                "[STORAGE-DIAG] S3 Upload HttpRequestException: bucket={Bucket} key={Key} message={Message} innerType={InnerType} innerMessage={InnerMessage}",
-                _options.Bucket, normalised, ex.Message,
-                ex.InnerException?.GetType().FullName, ex.InnerException?.Message);
-            throw;
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogError(ex,
-                "[STORAGE-DIAG] S3 Upload timeout/canceled: bucket={Bucket} key={Key} message={Message}",
-                _options.Bucket, normalised, ex.Message);
-            throw;
+            catch (HttpRequestException ex) when (!isLastAttempt)
+            {
+                _logger.LogWarning(ex,
+                    "[STORAGE-DIAG] S3 Upload HttpRequestException, retrying: bucket={Bucket} key={Key} attempt={Attempt}/{MaxAttempts} message={Message} innerType={InnerType} innerMessage={InnerMessage}",
+                    _options.Bucket, normalised, attempt, UploadMaxAttempts, ex.Message,
+                    ex.InnerException?.GetType().FullName, ex.InnerException?.Message);
+                await Task.Delay(RetryDelay(attempt));
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex,
+                    "[STORAGE-DIAG] S3 Upload HttpRequestException: bucket={Bucket} key={Key} message={Message} innerType={InnerType} innerMessage={InnerMessage}",
+                    _options.Bucket, normalised, ex.Message,
+                    ex.InnerException?.GetType().FullName, ex.InnerException?.Message);
+                throw;
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogError(ex,
+                    "[STORAGE-DIAG] S3 Upload timeout/canceled: bucket={Bucket} key={Key} attempt={Attempt}/{MaxAttempts} message={Message}",
+                    _options.Bucket, normalised, attempt, UploadMaxAttempts, ex.Message);
+                throw;
+            }
         }
 
-        _logger.LogDebug("S3 upload complete: key={Key}", normalised);
+        // Unreachable: the loop above always either returns on success or throws on the
+        // last attempt.
+        throw new InvalidOperationException($"S3 upload failed: retries exhausted for key={normalised}");
+    }
 
-        // Return just the key — callers use GetPublicUrl / GenerateSignedUrl to build URLs.
-        return normalised;
+    private static bool IsTransientStatus(System.Net.HttpStatusCode status) =>
+        status is System.Net.HttpStatusCode.TooManyRequests
+            or System.Net.HttpStatusCode.InternalServerError
+            or System.Net.HttpStatusCode.BadGateway
+            or System.Net.HttpStatusCode.ServiceUnavailable
+            or System.Net.HttpStatusCode.GatewayTimeout;
+
+    private static TimeSpan RetryDelay(int attempt) => TimeSpan.FromMilliseconds(300 * attempt);
+
+    /// <summary>
+    /// Delegates everything to the wrapped stream except Dispose/DisposeAsync, which are
+    /// no-ops — the caller (not StreamContent) owns the wrapped stream's lifetime. Needed
+    /// because UploadAsync's retry loop re-seeks and resends the same stream across
+    /// attempts, but each attempt's HttpRequestMessage/StreamContent gets disposed at the
+    /// end of that attempt.
+    /// </summary>
+    private sealed class NonDisposingStream : Stream
+    {
+        private readonly Stream _inner;
+        public NonDisposingStream(Stream inner) => _inner = inner;
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => _inner.CanWrite;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            _inner.ReadAsync(buffer, offset, count, cancellationToken);
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(buffer, cancellationToken);
+        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) =>
+            _inner.CopyToAsync(destination, bufferSize, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => _inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => _inner.Write(buffer, offset, count);
+
+        protected override void Dispose(bool disposing) { /* caller owns _inner's lifetime */ }
+        public override ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     public string GenerateSignedUrl(string key)

@@ -142,7 +142,14 @@ internal static class StartupExtensions
                 // so we keep the SDK for signing and use HttpClient for transport.
                 builder.Services.AddHttpClient("SupabaseStorage", c =>
                 {
-                    c.Timeout = TimeSpan.FromSeconds(30);
+                    // Uploads are proxied through this API to the storage origin (client → API →
+                    // Supabase/S3), so the transfer time stacks on top of whatever the browser
+                    // already spent. 30s was too tight for audio files approaching the 100MB
+                    // cap and caused TaskCanceledException mid-publish, losing all typed
+                    // metadata since the track row isn't created until after the upload
+                    // succeeds. 100s comfortably covers a 100MB file at realistic
+                    // backend-to-backend throughput.
+                    c.Timeout = TimeSpan.FromSeconds(100);
                 });
                 builder.Services.AddSingleton<IObjectStorage, S3ObjectStorage>();
                 break;
