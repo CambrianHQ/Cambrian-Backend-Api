@@ -34,7 +34,7 @@ public sealed class S3ObjectStorageUploadRetryTests
     [Fact]
     public async Task UploadAsync_RetriesOnce_ThenSucceeds_AfterTransient503()
     {
-        var handler = new SequencedHandler(HttpStatusCode.ServiceUnavailable, HttpStatusCode.OK);
+        using var handler = new SequencedHandler(HttpStatusCode.ServiceUnavailable, HttpStatusCode.OK);
         var storage = BuildStorage(handler);
 
         var key = await storage.UploadAsync(
@@ -47,7 +47,7 @@ public sealed class S3ObjectStorageUploadRetryTests
     [Fact]
     public async Task UploadAsync_GivesUpAfterMaxAttempts_OnPersistentTransientFailure()
     {
-        var handler = new SequencedHandler(
+        using var handler = new SequencedHandler(
             HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable);
         var storage = BuildStorage(handler);
 
@@ -62,7 +62,7 @@ public sealed class S3ObjectStorageUploadRetryTests
     {
         // 403 (bad signature/credentials) fails identically every time — retrying just
         // wastes time, so it should fail on the first attempt.
-        var handler = new SequencedHandler(HttpStatusCode.Forbidden, HttpStatusCode.OK);
+        using var handler = new SequencedHandler(HttpStatusCode.Forbidden, HttpStatusCode.OK);
         var storage = BuildStorage(handler);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -81,6 +81,7 @@ public sealed class S3ObjectStorageUploadRetryTests
     private sealed class SequencedHandler : HttpMessageHandler
     {
         private readonly Queue<HttpStatusCode> _responses;
+        private readonly List<HttpResponseMessage> _issued = new();
         public int CallCount { get; private set; }
 
         public SequencedHandler(params HttpStatusCode[] responses) => _responses = new Queue<HttpStatusCode>(responses);
@@ -94,11 +95,23 @@ public sealed class S3ObjectStorageUploadRetryTests
                     $"Unexpected extra HTTP call #{CallCount} — test only stubbed {CallCount - 1} responses.");
 
             var status = _responses.Dequeue();
-            return Task.FromResult(new HttpResponseMessage(status)
+            var response = new HttpResponseMessage(status)
             {
                 Content = new StringContent(string.Empty),
                 RequestMessage = request,
-            });
+            };
+            _issued.Add(response);
+            return Task.FromResult(response);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                foreach (var response in _issued)
+                    response.Dispose();
+            }
+            base.Dispose(disposing);
         }
     }
 }

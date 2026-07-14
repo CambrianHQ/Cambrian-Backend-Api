@@ -186,7 +186,7 @@ public sealed class S3ObjectStorage : IObjectStorage
             or System.Net.HttpStatusCode.ServiceUnavailable
             or System.Net.HttpStatusCode.GatewayTimeout;
 
-    private static TimeSpan RetryDelay(int attempt) => TimeSpan.FromMilliseconds(300 * attempt);
+    private static TimeSpan RetryDelay(int attempt) => TimeSpan.FromMilliseconds(300d * attempt);
 
     /// <summary>
     /// Delegates everything to the wrapped stream except Dispose/DisposeAsync, which are
