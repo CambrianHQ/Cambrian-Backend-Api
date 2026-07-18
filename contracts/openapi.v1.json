@@ -7372,6 +7372,37 @@
         }
       }
     },
+    "/release-ready/jobs/{id}/download-url": {
+      "get": {
+        "tags": [
+          "ReleaseReady"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "wav"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/stream": {
       "get": {
         "tags": [
