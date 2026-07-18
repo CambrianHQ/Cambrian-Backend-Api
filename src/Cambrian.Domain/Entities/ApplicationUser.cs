@@ -20,6 +20,25 @@ public class ApplicationUser : IdentityUser
     /// <summary>Creator-specific tier (Free or Pro). Only meaningful when Role includes Creator access.</summary>
     public CreatorTier CreatorTier { get; set; } = CreatorTier.Free;
 
+    /// <summary>
+    /// A paid creator plan (Creator/Pro) makes this a creator account. Must be
+    /// called whenever <see cref="CreatorTier"/> is raised: capabilities derive
+    /// from <see cref="Role"/>, so a paid creator tier on a listener-role
+    /// account unlocks nothing — Stripe connect and profile setup still refuse
+    /// while Stripe bills the trial/subscription (real support case, 2026-07).
+    /// Mirrors the admin comp-grant path (AdminRepository.UpgradeCreatorTierAsync).
+    /// Never demotes; Admin keeps its role.
+    /// </summary>
+    /// <returns>True when the role was promoted to Creator.</returns>
+    public bool EnsureCreatorRoleForTier()
+    {
+        if (CreatorTier == CreatorTier.Free) return false;
+        if (string.Equals(Role, "Creator", StringComparison.OrdinalIgnoreCase)) return false;
+        if (string.Equals(Role, "Admin", StringComparison.OrdinalIgnoreCase)) return false;
+        Role = "Creator";
+        return true;
+    }
+
     /// <summary>Number of tracks this creator has uploaded (denormalized for fast limit checks).</summary>
     public int UploadCount { get; set; }
 

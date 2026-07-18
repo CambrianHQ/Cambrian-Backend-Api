@@ -979,6 +979,8 @@ public class StripeWebhookService : IWebhookService
         {
             user.Tier = tier;
             user.CreatorTier = tier == "paid" ? CreatorTier.Free : tierConfig.Tier;
+            // A creator plan makes the account a creator — role drives capabilities.
+            user.EnsureCreatorRoleForTier();
             user.SubscriptionStatus = "Active";
         }
 
@@ -1052,6 +1054,7 @@ public class StripeWebhookService : IWebhookService
         var tier = TierManifest.For(latestSubscription.Plan);
         user.Tier = latestSubscription.Plan;
         user.CreatorTier = latestSubscription.Plan == "paid" ? CreatorTier.Free : tier.Tier;
+        user.EnsureCreatorRoleForTier();
 
         user.SubscriptionStatus = "Active";
         await _db.SaveChangesAsync();
@@ -1114,6 +1117,7 @@ public class StripeWebhookService : IWebhookService
         {
             user.Tier = replacement.Plan;
             user.CreatorTier = replacement.Plan == "paid" ? CreatorTier.Free : TierManifest.For(replacement.Plan).Tier;
+            user.EnsureCreatorRoleForTier();
             user.SubscriptionStatus = "Active";
         }
 
@@ -1231,6 +1235,7 @@ public class StripeWebhookService : IWebhookService
             var tierConfig = TierManifest.For(tierSlug);
             user.Tier = tierConfig.Slug;
             user.CreatorTier = tierConfig.Tier;
+            user.EnsureCreatorRoleForTier();
         }
         user.SubscriptionStatus = userStatus;
 

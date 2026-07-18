@@ -213,6 +213,8 @@ public class SubscriptionService : ISubscriptionService
     {
         // "paid" is a buyer plan with no creator tier — treat as Free for creator capabilities.
         user.CreatorTier = TierManifest.For(user.Tier ?? "free").Tier;
+        // A creator plan makes the account a creator — role drives capabilities.
+        user.EnsureCreatorRoleForTier();
     }
 
 }
