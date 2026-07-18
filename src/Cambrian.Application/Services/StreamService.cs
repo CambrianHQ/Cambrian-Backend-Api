@@ -6,13 +6,11 @@ public class StreamService : IStreamService
 {
     private readonly ITrackRepository _tracks;
     private readonly IObjectStorage _storage;
-    private readonly IStreamRepository _streams;
 
-    public StreamService(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams)
+    public StreamService(ITrackRepository tracks, IObjectStorage storage)
     {
         _tracks = tracks;
         _storage = storage;
-        _streams = streams;
     }
 
     public async Task<IReadOnlyCollection<object>> ListStreamableAsync(int take = 20)
@@ -42,24 +40,4 @@ public class StreamService : IStreamService
         return new { trackId, streamUrl };
     }
 
-    public async Task<object> StartAsync(string? trackId, string? userId)
-    {
-        if (string.IsNullOrWhiteSpace(trackId) || !Guid.TryParse(trackId, out var parsedTrackId))
-            throw new ArgumentException("trackId must be a valid GUID.");
-
-        var track = await _tracks.GetByIdAsync(parsedTrackId);
-        if (track?.AudioUrl is null)
-            throw new KeyNotFoundException("Track not found.");
-
-        var session = await _streams.StartAsync(parsedTrackId, userId);
-        return new { streamId = session.Id.ToString(), status = "started" };
-    }
-
-    public async Task StopAsync(string? streamId)
-    {
-        if (string.IsNullOrWhiteSpace(streamId) || !Guid.TryParse(streamId, out var sid))
-            throw new ArgumentException("streamId must be a valid GUID.");
-
-        await _streams.StopAsync(sid);
-    }
 }

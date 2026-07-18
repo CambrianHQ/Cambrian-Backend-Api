@@ -1,4 +1,5 @@
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.DTOs.Admin;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,13 +11,20 @@ public class HealthService : IHealthService
     private readonly CambrianDbContext _db;
     private readonly IHostEnvironment _env;
     private readonly IObjectStorage _storage;
+    private readonly IPlayReconciliationService _playReconciliation;
     private readonly ILogger<HealthService> _logger;
 
-    public HealthService(CambrianDbContext db, IHostEnvironment env, IObjectStorage storage, ILogger<HealthService> logger)
+    public HealthService(
+        CambrianDbContext db,
+        IHostEnvironment env,
+        IObjectStorage storage,
+        IPlayReconciliationService playReconciliation,
+        ILogger<HealthService> logger)
     {
         _db = db;
         _env = env;
         _storage = storage;
+        _playReconciliation = playReconciliation;
         _logger = logger;
     }
 
@@ -36,6 +44,8 @@ public class HealthService : IHealthService
         var purchaseCount = 0;
         var userCount = 0;
         var pendingPurchases = 0;
+        PlayPipelineHealthDetails? playPipeline = null;
+        string? playPipelineError = null;
 
         if (dbHealthy)
         {
@@ -45,18 +55,26 @@ public class HealthService : IHealthService
                 purchaseCount = await _db.Purchases.CountAsync();
                 userCount = await _db.Users.CountAsync();
                 pendingPurchases = await _db.Purchases.CountAsync(p => p.Status == "pending");
+                playPipeline = await GetPlayPipelineHealthAsync();
             }
-            catch
+            catch (Exception ex)
             {
                 // stats unavailable — still report health
+                playPipelineError = ex.GetType().Name;
+                _logger.LogWarning(ex, "Play-pipeline health details are unavailable");
             }
         }
 
-        _logger.LogInformation("Health check: status={Status} db={DbStatus}", dbHealthy ? "ok" : "degraded", dbHealthy ? "connected" : "unreachable");
+        var healthy = dbHealthy && playPipeline?.Status == "ok";
+        _logger.LogInformation(
+            "Health check: status={Status} db={DbStatus} playPipeline={PlayPipelineStatus}",
+            healthy ? "ok" : "degraded",
+            dbHealthy ? "connected" : "unreachable",
+            playPipeline?.Status ?? "unavailable");
 
         return new
         {
-            status = dbHealthy ? "ok" : "degraded",
+            status = healthy ? "ok" : "degraded",
             timestamp = DateTime.UtcNow,
             environment = _env.EnvironmentName,
             database = dbHealthy ? "connected" : "unreachable",
@@ -66,9 +84,15 @@ public class HealthService : IHealthService
                 purchases = purchaseCount,
                 users = userCount,
                 pendingPurchases
-            }
+            },
+            playPipeline = playPipeline is not null
+                ? (object)playPipeline
+                : new { status = "unavailable", error = playPipelineError },
         };
     }
+
+    public Task<PlayPipelineHealthDetails> GetPlayPipelineHealthAsync(CancellationToken ct = default)
+        => _playReconciliation.GetHealthDetailsAsync(ct);
 
     public async Task<object> GetStorageDiagAsync()
     {

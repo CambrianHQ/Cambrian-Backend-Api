@@ -119,6 +119,7 @@ public sealed class CreatorIdentityRepositoryCompatibilityTests : IDisposable
                 "ProfileImageUrl" TEXT NULL,
                 "Bio" TEXT NOT NULL,
                 "Niche" TEXT NULL,
+                "Genres" TEXT NULL,
                 "SocialLinks" TEXT NULL,
                 "StudioSetup" TEXT NULL,
                 "JourneyEntries" TEXT NULL,

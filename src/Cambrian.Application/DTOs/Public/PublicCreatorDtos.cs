@@ -49,13 +49,13 @@ public sealed class PublicCreatorSummaryDto : PublicSeoResource
 }
 
 /// <summary>
-/// Real, non-financial engagement stats for a creator. All values are computed live
-/// from transactional tables. Earnings/payout/revenue figures are intentionally absent.
+/// Real, non-financial engagement stats for a creator. Qualified plays come from the
+/// transactionally maintained projection. Earnings/payout/revenue figures are absent.
 /// </summary>
 public sealed class PublicCreatorStatsDto
 {
-    /// <summary>Lifetime plays across all of the creator's tracks (stream sessions).</summary>
-    public int Plays { get; set; }
+    /// <summary>Lifetime qualified plays across all of the creator's tracks.</summary>
+    public long Plays { get; set; }
 
     /// <summary>Number of followers (CreatorFollows).</summary>
     public int Followers { get; set; }

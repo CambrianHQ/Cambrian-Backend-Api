@@ -24,7 +24,7 @@ namespace Cambrian.Api.Controllers;
 [Produces("application/json")]
 public sealed class PublicController : BaseController
 {
-    private const int ShortCacheSeconds = 300;    // 5 minutes — dynamic discovery data
+    private const int ShortCacheSeconds = 15;      // count-bearing discovery data
     private const int LongCacheSeconds = 3600;     // 1 hour — evergreen content
 
     private readonly IPublicApiService _public;

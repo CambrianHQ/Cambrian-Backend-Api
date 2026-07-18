@@ -37,8 +37,8 @@ public sealed class TrackSortingTests
             TrackSorting.Apply(Sample(), "newest").Select(t => t.Title).ToArray());
 
     [Fact]
-    public void Trending_OrdersByTrendingScoreDescending()
-        => Assert.Equal(new[] { "Alpha", "Charlie", "Bravo" },
+    public void Trending_HelperFallback_DoesNotReadLegacyTrendingScore()
+        => Assert.Equal(new[] { "Alpha", "Bravo", "Charlie" },
             TrackSorting.Apply(Sample(), "trending").Select(t => t.Title).ToArray());
 
     [Fact]

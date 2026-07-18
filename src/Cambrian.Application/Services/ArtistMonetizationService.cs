@@ -104,14 +104,24 @@ public sealed class ArtistMonetizationService : IArtistMonetizationService
         await _fanSubs.AddAsync(fanSub, ct);
 
         var frontendUrl = FrontendUrl();
-        var checkoutUrl = await _gateway.CreateConnectedSubscriptionCheckoutAsync(
-            accountId,
-            priceCents,
-            $"Monthly support for {artist.DisplayName ?? artist.UserName}",
-            clientReferenceId: $"{payerUserId}:fansub:{fanSub.Id}",
-            successUrl: $"{frontendUrl}/artists/{artistIdentifier}?subscribed=true",
-            cancelUrl: $"{frontendUrl}/artists/{artistIdentifier}",
-            applicationFeePercent: IArtistMonetizationService.FanSubscriptionFeePercent);
+        string checkoutUrl;
+        try
+        {
+            checkoutUrl = await _gateway.CreateConnectedSubscriptionCheckoutAsync(
+                accountId,
+                priceCents,
+                $"Monthly support for {artist.DisplayName ?? artist.UserName}",
+                clientReferenceId: $"{payerUserId}:fansub:{fanSub.Id}",
+                successUrl: $"{frontendUrl}/artists/{artistIdentifier}?subscribed=true",
+                cancelUrl: $"{frontendUrl}/artists/{artistIdentifier}",
+                applicationFeePercent: IArtistMonetizationService.FanSubscriptionFeePercent);
+        }
+        catch
+        {
+            fanSub.Status = "checkout_failed";
+            await _fanSubs.UpdateAsync(fanSub, ct);
+            throw;
+        }
 
         _logger.LogInformation(
             "EVENT: FanSubscriptionCheckoutCreated artistId:{ArtistId} fanId:{FanId} priceCents:{Price} fanSubId:{FanSubId}",

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cambrian.Application.DTOs.Catalog;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -21,17 +22,25 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         return entity is null ? null : MapLyrics(entity);
     }
 
-    public async Task<TrackLyricsDto> UpsertLyricsAsync(Guid trackId, string lyrics, string language, bool? isExplicit)
+    public async Task<TrackLyricsDto> UpsertLyricsAsync(
+        Guid trackId, string lyrics, string language, bool? isExplicit, int? expectedVersion = null)
     {
+        await using var transaction = _db.Database.IsRelational()
+            ? await _db.Database.BeginTransactionAsync()
+            : null;
         var existing = await _db.TrackLyrics.FindAsync(trackId);
         if (existing is null)
         {
+            if (expectedVersion.HasValue)
+                throw new TrackLyricsConcurrencyException(trackId);
+
             existing = new TrackLyrics
             {
                 TrackId = trackId,
                 Lyrics = lyrics,
                 Language = language,
                 IsExplicit = isExplicit,
+                Version = 1,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             };
@@ -39,23 +48,60 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         }
         else
         {
+            if (!expectedVersion.HasValue || expectedVersion.Value != existing.Version)
+                throw new TrackLyricsConcurrencyException(trackId);
+
             existing.Lyrics = lyrics;
             existing.Language = language;
             existing.IsExplicit = isExplicit;
+            existing.Version++;
             existing.UpdatedAt = DateTime.UtcNow;
         }
 
-        await _db.SaveChangesAsync();
+        try
+        {
+            var affected = await _db.SaveChangesAsync();
+            if (affected != 1)
+                throw new InvalidOperationException($"Lyrics persistence affected {affected} rows; expected exactly one.");
+            if (transaction is not null) await transaction.CommitAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (transaction is not null) await transaction.RollbackAsync();
+            throw new TrackLyricsConcurrencyException(trackId);
+        }
+
         return MapLyrics(existing);
     }
 
-    public async Task DeleteLyricsAsync(Guid trackId)
+    public async Task<bool> DeleteLyricsAsync(Guid trackId, int expectedVersion)
     {
+        await using var transaction = _db.Database.IsRelational()
+            ? await _db.Database.BeginTransactionAsync()
+            : null;
         var existing = await _db.TrackLyrics.FindAsync(trackId);
-        if (existing is not null)
+        if (existing is null)
         {
-            _db.TrackLyrics.Remove(existing);
-            await _db.SaveChangesAsync();
+            if (transaction is not null) await transaction.CommitAsync();
+            return false;
+        }
+
+        if (existing.Version != expectedVersion)
+            throw new TrackLyricsConcurrencyException(trackId);
+
+        _db.TrackLyrics.Remove(existing);
+        try
+        {
+            var affected = await _db.SaveChangesAsync();
+            if (affected != 1)
+                throw new InvalidOperationException($"Lyrics deletion affected {affected} rows; expected exactly one.");
+            if (transaction is not null) await transaction.CommitAsync();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (transaction is not null) await transaction.RollbackAsync();
+            throw new TrackLyricsConcurrencyException(trackId);
         }
     }
 
@@ -203,6 +249,7 @@ public class TrackDetailsRepository : ITrackDetailsRepository
         Lyrics = l.Lyrics,
         Language = l.Language,
         IsExplicit = l.IsExplicit,
+        Version = l.Version,
         CreatedAt = l.CreatedAt,
         UpdatedAt = l.UpdatedAt,
     };

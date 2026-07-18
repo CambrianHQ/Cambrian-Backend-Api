@@ -138,6 +138,39 @@ public sealed class LocalObjectStorage : IObjectStorage
         });
     }
 
+    public Task<StorageObjectMetadata?> GetMetadataAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var normalized = NormalizeKey(key);
+        var path = SafeResolvePath(normalized);
+        if (!File.Exists(path))
+            return Task.FromResult<StorageObjectMetadata?>(null);
+        var info = new FileInfo(path);
+        return Task.FromResult<StorageObjectMetadata?>(new StorageObjectMetadata(
+            normalized.Replace(Path.DirectorySeparatorChar, '/'),
+            info.Length,
+            ContentTypeFor(path),
+            null,
+            info.LastWriteTimeUtc));
+    }
+
+    public async IAsyncEnumerable<StorageObjectMetadata> ListAsync(
+        string? prefix = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var normalizedPrefix = string.IsNullOrWhiteSpace(prefix) ? "" : NormalizeKey(prefix);
+        foreach (var path in Directory.EnumerateFiles(_basePath, "*", SearchOption.AllDirectories))
+        {
+            ct.ThrowIfCancellationRequested();
+            var key = Path.GetRelativePath(_basePath, path).Replace(Path.DirectorySeparatorChar, '/');
+            if (!key.StartsWith(normalizedPrefix, StringComparison.Ordinal))
+                continue;
+            var info = new FileInfo(path);
+            yield return new StorageObjectMetadata(key, info.Length, ContentTypeFor(path), null, info.LastWriteTimeUtc);
+            await Task.Yield();
+        }
+    }
+
     public Task DeleteAsync(string key)
     {
         var filePath = SafeResolvePath(key);
@@ -145,4 +178,29 @@ public sealed class LocalObjectStorage : IObjectStorage
             File.Delete(filePath);
         return Task.CompletedTask;
     }
+
+    private static string NormalizeKey(string key)
+    {
+        var normalized = key.Replace('\\', '/');
+        if (normalized.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized["/uploads/".Length..];
+        else if (normalized.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized["uploads/".Length..];
+        return normalized.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+    }
+
+    private static string ContentTypeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".mp3" => "audio/mpeg",
+        ".wav" => "audio/wav",
+        ".flac" => "audio/flac",
+        ".aac" => "audio/aac",
+        ".ogg" => "audio/ogg",
+        ".m4a" => "audio/mp4",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".png" => "image/png",
+        ".webp" => "image/webp",
+        ".pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    };
 }

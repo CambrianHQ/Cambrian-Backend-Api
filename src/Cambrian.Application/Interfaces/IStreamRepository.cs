@@ -1,14 +1,10 @@
-using Cambrian.Domain.Entities;
-
 namespace Cambrian.Application.Interfaces;
 
+/// <summary>
+/// Read-only lifetime play projection used by creator/catalog surfaces. Qualified-play
+/// mutation is exclusively owned by <see cref="IPlaybackTrackingService"/>.
+/// </summary>
 public interface IStreamRepository
 {
-    Task<StreamSession> StartAsync(Guid trackId, string? userId);
-
-    Task StopAsync(Guid sessionId);
-
-    Task<StreamSession?> GetByIdAsync(Guid id);
-
-    Task<Dictionary<Guid, int>> GetPlayCountsByTrackIdsAsync(IEnumerable<Guid> trackIds);
+    Task<Dictionary<Guid, long>> GetPlayCountsByTrackIdsAsync(IEnumerable<Guid> trackIds);
 }

@@ -387,6 +387,15 @@ public class AdminController : BaseController
         return OkResponse(new { success = true, message = "Track restored." });
     }
 
+    [HttpPost("tracks/{id}/purge")]
+    public async Task<IActionResult> PurgeTrack(string id)
+    {
+        _logger.LogInformation("[Admin] PurgeTrack id={TrackId}", id);
+        var ok = await _admin.PurgeTrackAsync(id, GetAdminActor());
+        if (!ok) return ConflictResponse("Track must be in Trash (removed) before it can be permanently deleted.");
+        return OkResponse(new { success = true, message = "Track queued for permanent deletion." });
+    }
+
     [HttpPost("tracks/{id}/hide")]
     public async Task<IActionResult> HideTrack(string id)
     {
@@ -444,12 +453,14 @@ public class AdminController : BaseController
     // --- Collections and tags ---
 
     [HttpPost("collections/curate")]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
     public IActionResult CurateCollection()
     {
         return StatusCode(501, new { error = "Collection curation is not yet implemented." });
     }
 
     [HttpPost("tags/manage")]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
     public IActionResult ManageTags()
     {
         return StatusCode(501, new { error = "Tag management is not yet implemented." });

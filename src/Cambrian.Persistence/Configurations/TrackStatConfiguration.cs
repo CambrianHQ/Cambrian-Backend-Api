@@ -14,6 +14,8 @@ public sealed class TrackStatConfiguration : IEntityTypeConfiguration<TrackStat>
         builder.HasKey(x => x.TrackId);
 
         builder.Property(x => x.PlayCount).HasDefaultValue(0L);
+        builder.Property(x => x.LegacyPlayCount).HasDefaultValue(0L);
+        builder.Property(x => x.QualifiedPlayCount).HasDefaultValue(0L);
         builder.Property(x => x.LikeCount).HasDefaultValue(0);
         builder.Property(x => x.SalesCount).HasDefaultValue(0);
         builder.Property(x => x.TipCount).HasDefaultValue(0);

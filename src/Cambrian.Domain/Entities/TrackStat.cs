@@ -17,6 +17,12 @@ public class TrackStat
     /// <summary>Lifetime count of valid plays (threshold-counted, de-duped). See StreamSession.</summary>
     public long PlayCount { get; set; }
 
+    /// <summary>Frozen pre-ledger count retained during the qualified-play migration.</summary>
+    public long LegacyPlayCount { get; set; }
+
+    /// <summary>Count backed by the append-only QualifiedPlayEvents ledger.</summary>
+    public long QualifiedPlayCount { get; set; }
+
     /// <summary>Lifetime count of likes. Sourced from TrackBoosts (the reused upvote signal).</summary>
     public int LikeCount { get; set; }
 
@@ -34,6 +40,9 @@ public class TrackStat
 
     /// <summary>UTC time this row was last written.</summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>UTC time this row was last reconciled with the event ledger.</summary>
+    public DateTime? ReconciledAtUtc { get; set; }
 
     // ── Navigation ──
     public Track Track { get; set; } = null!;

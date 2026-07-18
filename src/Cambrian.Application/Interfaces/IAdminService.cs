@@ -35,6 +35,9 @@ public interface IAdminService
     Task<bool> FlagTrackAsync(string trackId, string adminActor);
     Task<bool> SetTrackVisibilityAsync(string trackId, string visibility, string adminActor);
 
+    /// <summary>Admin-authorized permanent purge of an already-trashed track. See IAdminRepository.PurgeTrackAsync.</summary>
+    Task<bool> PurgeTrackAsync(string trackId, string adminActor);
+
     // ── Track editorial placement ──
     Task<bool> FeatureTrackAsync(string trackId, string adminActor);
     Task<bool> PinTrackAsync(string trackId, string adminActor);

@@ -675,8 +675,31 @@ public sealed class E2eScenarioService
             ["client_reference_id"] = clientReferenceId,
             ["amount_total"] = amountTotal,
             ["customer"] = CustomerIdFor(userId),
-            ["subscription"] = $"sub_e2e_{userId[..8]}",
+            ["payment_status"] = "paid",
+            ["currency"] = "usd",
         };
+        if (kind.Equals("subscription", StringComparison.OrdinalIgnoreCase))
+        {
+            var resolvedTier = TierManifest.For(tier ?? "creator");
+            data["subscription"] = new Dictionary<string, object?>
+            {
+                ["id"] = $"sub_e2e_{userId[..8]}",
+                ["status"] = "active",
+                ["items"] = new Dictionary<string, object?>
+                {
+                    ["data"] = new[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["price"] = new Dictionary<string, object?>
+                            {
+                                ["id"] = _config[resolvedTier.StripePriceConfigKey!]
+                            }
+                        }
+                    }
+                }
+            };
+        }
 
         return await ProcessAsync(evt, "checkout.session.completed", data, ct);
     }
@@ -697,9 +720,15 @@ public sealed class E2eScenarioService
         var data = new Dictionary<string, object?>
         {
             ["object"] = stripeObject,
-            ["id"] = $"{stripeObject}_e2e_{userId[..8]}",
+            ["id"] = stripeObject == "subscription"
+                ? $"sub_e2e_{userId[..8]}"
+                : $"{stripeObject}_e2e_{userId[..8]}",
             ["customer"] = CustomerIdFor(userId),
         };
+        if (type.StartsWith("invoice.", StringComparison.Ordinal))
+        {
+            data["subscription"] = $"sub_e2e_{userId[..8]}";
+        }
         return await ProcessAsync(evt, type, data, ct);
     }
 

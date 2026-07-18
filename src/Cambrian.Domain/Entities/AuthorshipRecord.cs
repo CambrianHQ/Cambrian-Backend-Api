@@ -53,6 +53,16 @@ public class AuthorshipRecord
     /// <summary>Stripe checkout session that paid for this record (idempotency anchor).</summary>
     public string? StripeSessionId { get; set; }
 
+    /// <summary>PaymentIntent used to reconcile refunds and disputes without a live Stripe lookup.</summary>
+    public string? StripePaymentIntentId { get; set; }
+
+    /// <summary>pending | paid | refunded | disputed.</summary>
+    public string PaymentStatus { get; set; } = "pending";
+
+    public DateTime? RefundedAt { get; set; }
+
+    public DateTime? DisputedAt { get; set; }
+
     public DateTime? IssuedAt { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

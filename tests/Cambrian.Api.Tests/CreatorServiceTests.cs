@@ -58,7 +58,7 @@ public sealed class CreatorServiceTests
             }
         ]);
         _streams.GetPlayCountsByTrackIdsAsync(Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))
-            .Returns(new Dictionary<Guid, int> { [trackId] = 9 });
+            .Returns(new Dictionary<Guid, long> { [trackId] = 9 });
         _purchases.GetCompletedCountsByTrackIdsAsync(Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))
             .Returns(new Dictionary<Guid, int> { [trackId] = 3 });
         _wallet.GetCreditsByTrackAsync("creator-1", Arg.Is<List<Guid>>(ids => ids.SequenceEqual(new[] { trackId })))

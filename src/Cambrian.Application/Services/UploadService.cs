@@ -20,6 +20,8 @@ public class UploadService : IUploadService
     private readonly ILogger<UploadService> _logger;
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository? _profiles;
+    private readonly ITransactionManager? _transactions;
+    private readonly IMediaStateMachine? _mediaStateMachine;
 
     /// <summary>
     /// Optional so existing direct constructions (unit tests) keep working. When wired
@@ -143,7 +145,9 @@ public class UploadService : IUploadService
         ICreatorIdentityRepository creators,
         ICreatorProfileRepository? profiles = null,
         IProvenanceService? provenance = null,
-        IProvenanceSigner? signer = null)
+        IProvenanceSigner? signer = null,
+        ITransactionManager? transactions = null,
+        IMediaStateMachine? mediaStateMachine = null)
     {
         _storage = storage;
         _tracks = tracks;
@@ -153,9 +157,11 @@ public class UploadService : IUploadService
         _profiles = profiles;
         _provenance = provenance;
         _signer = signer;
+        _transactions = transactions;
+        _mediaStateMachine = mediaStateMachine;
     }
 
-    public async Task<UploadTrackResponse> Upload(UploadTrackRequest request)
+    public async Task<UploadTrackResponse> Upload(UploadTrackRequest request, string? idempotencyKey = null)
     {
         request.Title = MetadataSanitizer.NormalizeRequired(request.Title, "Track title");
         request.Description = MetadataSanitizer.NormalizeOptional(request.Description, "Track description");
@@ -173,6 +179,23 @@ public class UploadService : IUploadService
 
         if (string.IsNullOrWhiteSpace(request.CreatorId))
             throw new ArgumentException("CreatorId is required.");
+
+        IAsyncDisposable? transactionHandle = null;
+        var transactionCommitted = false;
+        var audioUploadAttempted = false;
+        var coverUploadAttempted = false;
+        var trackPersisted = false;
+        Guid? persistedTrackId = null;
+        string? audioKey = null;
+        string? coverKey = null;
+
+        try
+        {
+            if (_transactions is not null)
+            {
+                transactionHandle = await _transactions.BeginSerializableTransactionAsync();
+                await _transactions.AcquireAdvisoryLockAsync($"track-upload:{request.CreatorId}");
+            }
 
         // ── Tier-based upload limit enforcement ──
         var creator = await _users.FindByIdAsync(request.CreatorId);
@@ -211,6 +234,7 @@ public class UploadService : IUploadService
             .Replace("/", "")
             .Replace("\\", "");
         var key = $"tracks/{request.CreatorId}/{Guid.NewGuid()}{extension}";
+        audioKey = key;
 
         await using var stream = request.Audio.OpenReadStream();
 
@@ -223,9 +247,19 @@ public class UploadService : IUploadService
         // ComputeSha256Hex resets the stream to 0 so the upload below re-reads it.
         var contentHash = ContentHashing.ComputeSha256Hex(stream);
 
+        // Resolve identity before storage writes so duplicate detection is free
+        // of side effects. A retry with an Idempotency-Key is replayed by the API;
+        // an intentional second listing requires explicit creator confirmation.
+        var creatorUuid = await _creators.GetCreatorIdForUserAsync(request.CreatorId!);
+        var duplicateLookup = _tracks.FindActiveByCreatorAndContentHashAsync(request.CreatorId, creatorUuid, contentHash);
+        var duplicate = duplicateLookup is null ? null : await duplicateLookup;
+        if (duplicate is not null && request.ConfirmDuplicateAudio != true)
+            throw new DuplicateUploadException(duplicate.Id);
+
         // §9 provenance: free, instant signed stamp over (contentHash, signedAt).
         var stamp = _signer?.Sign(contentHash, DateTime.UtcNow);
 
+        audioUploadAttempted = true;
         var audioUrl = await _storage.UploadAsync(
             stream,
             key,
@@ -233,7 +267,11 @@ public class UploadService : IUploadService
 
         string? coverArtUrl = null;
         if (request.CoverArt is not null && request.CoverArt.Length > 0)
-            coverArtUrl = await UploadCoverArtAsync(request.CreatorId!, request.CoverArt);
+        {
+            coverKey = BuildCoverArtKey(request.CreatorId!, request.CoverArt);
+            coverUploadAttempted = true;
+            coverArtUrl = await UploadCoverArtAsync(request.CreatorId!, request.CoverArt, coverKey);
+        }
 
         // Derive cents from the dedicated price fields when provided,
         // otherwise fall back to the generic Price so tracks uploaded via the
@@ -250,9 +288,6 @@ public class UploadService : IUploadService
         const int DefaultNonExclusiveCents = 999;
         const int DefaultExclusiveCents = 4999;
         const int DefaultCopyrightBuyoutCents = 19999;
-
-        // Resolve the Creator UUID for the uploading user
-        var creatorUuid = await _creators.GetCreatorIdForUserAsync(request.CreatorId!);
 
         var resolvedNonExclusiveCents = request.NonExclusivePriceCents
             ?? (request.NonExclusivePrice.HasValue
@@ -296,12 +331,17 @@ public class UploadService : IUploadService
         };
         ApplyGenreFields(track, request.PrimaryGenre, request.Subgenre, request.Genre);
 
-        // Bulk-upload drafts: the track row is fully created (same provenance,
-        // same id, same URLs) but stays hidden until the creator publishes it.
-        if (request.SaveAsDraft == true)
+        // Production DI always supplies the media state machine. New uploads remain
+        // hidden until reconciliation validates the object and promotes TrackMedia
+        // to Ready; publishing is a separate, guarded operation.
+        if (_mediaStateMachine is not null || request.SaveAsDraft == true)
             track.Visibility = "hidden";
 
         await _tracks.AddAsync(track);
+        if (_mediaStateMachine is not null)
+            await _mediaStateMachine.InitializeLegacyAsync(track.Id, key);
+        trackPersisted = true;
+        persistedTrackId = track.Id;
 
         // §9 provenance: record a pending anchor after the track row exists (FK target).
         // The batched on-chain anchoring runs on the batch-2 job queue. Optional dependency.
@@ -312,7 +352,16 @@ public class UploadService : IUploadService
 
         // ── Increment upload count ──
         creator.UploadCount += 1;
-        await _users.UpdateAsync(creator);
+        var updateTask = _users.UpdateAsync(creator);
+        var updateResult = updateTask is null ? IdentityResult.Success : await updateTask;
+        if (updateResult is not null && !updateResult.Succeeded)
+            throw new InvalidOperationException("Creator upload count could not be persisted.");
+
+        if (_transactions is not null)
+        {
+            await _transactions.CommitAsync();
+            transactionCommitted = true;
+        }
 
         _logger.LogInformation("Track uploaded: {TrackId} by creator {CreatorId} (upload #{Count}, tier={Tier})",
             track.Id, request.CreatorId, creator.UploadCount, tierConfig.Slug);
@@ -331,9 +380,58 @@ public class UploadService : IUploadService
             CollectionTitle = linkedCollection?.Title,
             CollectionTrackIds = linkedCollection?.TrackIds ?? Array.Empty<string>(),
         };
+        }
+        catch (Exception ex)
+        {
+            if (_transactions is not null && !transactionCommitted)
+            {
+                try { await _transactions.RollbackAsync(); }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(rollbackEx, "EVENT: upload_failed category:database_rollback creatorId:{CreatorId}", request.CreatorId);
+                }
+            }
+            else if (trackPersisted && persistedTrackId.HasValue)
+            {
+                try { await _tracks.DeleteAsync(persistedTrackId.Value); }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogError(cleanupEx,
+                        "EVENT: upload_failed category:database_cleanup creatorId:{CreatorId} trackId:{TrackId}",
+                        request.CreatorId, persistedTrackId);
+                }
+            }
+
+            if (coverUploadAttempted && coverKey is not null)
+                await TryDeleteStoredObjectAsync(coverKey, request.CreatorId, "cover");
+            if (audioUploadAttempted && audioKey is not null)
+                await TryDeleteStoredObjectAsync(audioKey, request.CreatorId, "audio");
+
+            Observability.CambrianMetrics.UploadFailed.Add(1);
+            _logger.LogError(ex,
+                "EVENT: upload_failed category:{Category} creatorId:{CreatorId} fileName:{FileName}",
+                ClassifyFailure(ex), request.CreatorId, request.Audio?.FileName);
+
+            if (ex is ArgumentException or UpgradeRequiredException or InvalidOperationException)
+                throw;
+
+            throw new UploadOperationException(
+                "upload_failed",
+                "Track upload could not be completed. No track was published.",
+                ClassifyFailure(ex),
+                ex);
+        }
+        finally
+        {
+            if (transactionHandle is not null)
+                await transactionHandle.DisposeAsync();
+        }
     }
 
-    public async Task<string> UploadCoverArtAsync(string creatorId, IFormFile coverArt)
+    public Task<string> UploadCoverArtAsync(string creatorId, IFormFile coverArt) =>
+        UploadCoverArtAsync(creatorId, coverArt, BuildCoverArtKey(creatorId, coverArt));
+
+    private async Task<string> UploadCoverArtAsync(string creatorId, IFormFile coverArt, string coverKey)
     {
         if (string.IsNullOrWhiteSpace(creatorId))
             throw new ArgumentException("CreatorId is required.");
@@ -355,7 +453,6 @@ public class UploadService : IUploadService
             throw new ArgumentException(
                 $"Cover art MIME type '{imgMime}' is not allowed.");
 
-        var coverKey = $"covers/{creatorId}/{Guid.NewGuid()}{imgExt}";
         await using var coverStream = coverArt.OpenReadStream();
 
         if (!ValidateMagicBytes(coverStream, imgExt, ImageMagicBytes))
@@ -375,6 +472,35 @@ public class UploadService : IUploadService
         // left every newly-uploaded track cover broken (falling back to initials).
         return coverKey;
     }
+
+    private static string BuildCoverArtKey(string creatorId, IFormFile coverArt)
+    {
+        var extension = Path.GetExtension(coverArt.FileName)?.ToLowerInvariant() ?? string.Empty;
+        return $"covers/{creatorId}/{Guid.NewGuid()}{extension}";
+    }
+
+    private async Task TryDeleteStoredObjectAsync(string key, string? creatorId, string kind)
+    {
+        try
+        {
+            await _storage.DeleteAsync(key);
+        }
+        catch (Exception cleanupEx)
+        {
+            _logger.LogError(cleanupEx,
+                "EVENT: upload_failed category:storage_cleanup creatorId:{CreatorId} objectKind:{ObjectKind}",
+                creatorId, kind);
+        }
+    }
+
+    private static string ClassifyFailure(Exception ex) => ex switch
+    {
+        ArgumentException => "validation",
+        UpgradeRequiredException => "entitlement",
+        InvalidOperationException => "persistence",
+        _ when ex.GetType().Name.Contains("Storage", StringComparison.OrdinalIgnoreCase) => "storage",
+        _ => "unexpected",
+    };
 
     private async Task<TrackCollectionDto?> AssignTrackToCollectionAsync(UploadTrackRequest request, Track track)
     {

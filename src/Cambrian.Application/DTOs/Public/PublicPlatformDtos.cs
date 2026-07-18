@@ -15,8 +15,8 @@ public sealed class PublicPlatformStatsDto : PublicSeoResource
     /// <summary>Number of distinct genres present in the public catalogue.</summary>
     public int GenreCount { get; set; }
 
-    /// <summary>Lifetime plays across the platform (stream sessions).</summary>
-    public int TotalPlays { get; set; }
+    /// <summary>Lifetime qualified plays across eligible public tracks.</summary>
+    public long TotalPlays { get; set; }
 
     /// <summary>Number of issued (paid, signed) authorship records.</summary>
     public int AuthorshipRecordCount { get; set; }

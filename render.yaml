@@ -94,10 +94,25 @@ services:
       # Google OAuth
       - key: Google__ClientId
         sync: false
+      # Playback media hardening -- Production startup fails closed without both
+      # signing keys (32+ chars, and they must differ) and the absolute https
+      # playback base URL. See docs/PRODUCTION_AUDIO_PLAYBACK_CONTRACT.md.
+      - key: PlaybackMedia__TicketSigningKey
+        sync: false
+      - key: PlaybackMedia__ProductionProbeSigningKey
+        sync: false
+      - key: PlaybackMedia__ProductionPlaybackBaseUrl
+        value: https://cambrian-backend-api.onrender.com
       - key: RateLimiting__GlobalPermitLimit
         value: "100"
       - key: RateLimiting__AuthPermitLimit
         value: "10"
+      # Playback endpoints (audio proxy, start/stop, playback-info) and telemetry
+      # use dedicated session-aware policies instead of the shared global bucket.
+      - key: RateLimiting__PlaybackPermitLimit
+        value: "300"
+      - key: RateLimiting__PlaybackTelemetryPermitLimit
+        value: "120"
       - key: App__FrontendUrl
         value: https://cambrianmusic.com
       - key: App__CorsOrigins

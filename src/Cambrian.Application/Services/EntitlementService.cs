@@ -63,8 +63,9 @@ public sealed class EntitlementService : IEntitlementService
         };
 
         var added = await _entitlements.AddAsync(row, ct);
+        Observability.CambrianMetrics.EntitlementChanged.Add(1);
         _logger.LogInformation(
-            "Entitlement granted: id={EntId} user={UserId} resource={ResourceType}:{ResourceId} level={Level} source={SourceType}:{SourceId}",
+            "EVENT: entitlement_changed action:granted id:{EntId} userId:{UserId} resourceType:{ResourceType} resourceId:{ResourceId} level:{Level} sourceType:{SourceType} sourceId:{SourceId}",
             added.Id, userId, resourceType, resourceId, accessLevel, sourceType, sourceId);
         return added;
     }
@@ -83,8 +84,9 @@ public sealed class EntitlementService : IEntitlementService
         row.RevokedReason = reason;
         await _entitlements.UpdateAsync(row, ct);
 
+        Observability.CambrianMetrics.EntitlementChanged.Add(1);
         _logger.LogInformation(
-            "Entitlement revoked: id={EntId} user={UserId} reason={Reason}",
+            "EVENT: entitlement_changed action:revoked id:{EntId} userId:{UserId} reason:{Reason}",
             entitlementId, row.UserId, reason);
         return true;
     }

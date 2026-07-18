@@ -3,7 +3,9 @@ using Cambrian.Api.Middleware;
 using Cambrian.Api.Security;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.V1;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -29,19 +31,25 @@ public class TracksV1Controller : ControllerBase
     private readonly ITrackDetailsRepository _trackDetails;
     private readonly ITrackRepository _tracks;
     private readonly ICreatorIdentityRepository _creators;
+    private readonly IPublicUrlResolver _urls;
+    private readonly ILogger<TracksV1Controller> _logger;
 
     public TracksV1Controller(
         ICatalogService catalog,
         ITrackVisibilityPolicy visibility,
         ITrackDetailsRepository trackDetails,
         ITrackRepository tracks,
-        ICreatorIdentityRepository creators)
+        ICreatorIdentityRepository creators,
+        IPublicUrlResolver urls,
+        ILogger<TracksV1Controller> logger)
     {
         _catalog = catalog;
         _visibility = visibility;
         _trackDetails = trackDetails;
         _tracks = tracks;
         _creators = creators;
+        _urls = urls;
+        _logger = logger;
     }
 
     /// <summary>
@@ -75,6 +83,9 @@ public class TracksV1Controller : ControllerBase
             instrumental: instrumental,
             duration: null);
 
+        foreach (var track in result.Items)
+            ResolvePublicUrls(track);
+
         var meta = new V1PaginationMeta
         {
             Page = result.Page,
@@ -88,15 +99,20 @@ public class TracksV1Controller : ControllerBase
         return Ok(V1ApiResponse<IEnumerable<object>>.Ok(result.Items.Cast<object>(), meta));
     }
 
-    /// <summary>Get a single track by its Cambrian track ID (CAMB-TRK-XXXX) or UUID.</summary>
+    /// <summary>
+    /// Get a single track by its Cambrian track ID (CAMB-TRK-XXXX) or UUID.
+    /// 404 when the track doesn't exist or isn't visible to the requester —
+    /// never distinguishes those cases so draft/private tracks can't be enumerated.
+    /// </summary>
     [HttpGet("tracks/{id}")]
     [AllowAnonymous]
     public async Task<ActionResult<V1ApiResponse<object>>> GetTrack(string id)
     {
-        var track = await _catalog.GetTrackAsync(id);
+        var track = await ResolveVisibleTrackAsync(id);
         if (track is null)
             return NotFound(V1ApiResponse<object>.Fail("Track not found."));
 
+        ResolvePublicUrls(track);
         return Ok(V1ApiResponse<object>.Ok((object)track));
     }
 
@@ -142,11 +158,12 @@ public class TracksV1Controller : ControllerBase
 
     /// <summary>
     /// Create or update lyrics for a track. Creator-owned; never touches the
-    /// Track row itself, so engagement (plays/sales) is unaffected. Sending
-    /// empty/whitespace lyrics removes the row (lyrics are optional).
+    /// Track row itself, so engagement (plays/sales) is unaffected. Removal
+    /// requires explicit delete intent and the latest version.
     /// </summary>
     [Authorize(Policy = "CanEditOwnTrack")]
     [HttpPut("tracks/{trackId:guid}/lyrics")]
+    [ProducesResponseType(typeof(V1ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<ActionResult<V1ApiResponse<object>>> UpsertTrackLyrics(Guid trackId, [FromBody] UpsertTrackLyricsRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -163,19 +180,75 @@ public class TracksV1Controller : ControllerBase
         if (!ownsLegacy && !ownsUuid)
             return StatusCode(403, V1ApiResponse<object>.Fail("You can only edit your own tracks."));
 
-        var lyrics = request.Lyrics?.Trim() ?? "";
-        if (lyrics.Length == 0)
+        var existingLyrics = await _trackDetails.GetLyricsAsync(trackId);
+        if (request.DeleteLyrics)
         {
-            await _trackDetails.DeleteLyricsAsync(trackId);
-            return Ok(V1ApiResponse<object>.Ok(null!));
+            if (existingLyrics is null)
+                return Ok(V1ApiResponse<object>.Ok(null!));
+            if (!request.Version.HasValue)
+                return Conflict(V1ApiResponse<object>.Fail("Reload the latest lyrics before deleting them."));
+
+            try
+            {
+                await _trackDetails.DeleteLyricsAsync(trackId, request.Version.Value);
+                _logger.LogInformation(
+                    "Track lyrics operation completed TrackId:{TrackId} CreatorId:{CreatorId} Operation:delete Result:success",
+                    trackId, userId);
+                return Ok(V1ApiResponse<object>.Ok(null!));
+            }
+            catch (TrackLyricsConcurrencyException)
+            {
+                _logger.LogWarning(
+                    "Track lyrics operation rejected TrackId:{TrackId} CreatorId:{CreatorId} Operation:delete ErrorCode:lyrics_version_conflict",
+                    trackId, userId);
+                return Conflict(V1ApiResponse<object>.Fail("These lyrics changed in another session. Reload before deleting them."));
+            }
         }
+
+        var lyrics = request.Lyrics ?? "";
+        if (string.IsNullOrWhiteSpace(lyrics))
+            return BadRequest(V1ApiResponse<object>.Fail("Lyrics cannot be empty. Use the explicit delete action to remove them."));
+        if (existingLyrics is not null && !request.Version.HasValue)
+            return Conflict(V1ApiResponse<object>.Fail("Reload the latest lyrics before saving changes."));
 
         var language = NormalizeLanguageTag(request.Language);
         if (language is null)
             return BadRequest(V1ApiResponse<object>.Fail("Language must be a valid language tag (e.g. 'en', 'pt-BR')."));
 
-        var saved = await _trackDetails.UpsertLyricsAsync(trackId, lyrics, language, request.IsExplicit);
-        return Ok(V1ApiResponse<object>.Ok((object)saved));
+        try
+        {
+            var saved = await _trackDetails.UpsertLyricsAsync(
+                trackId, lyrics, language, request.IsExplicit, request.Version);
+            _logger.LogInformation(
+                "Track lyrics operation completed TrackId:{TrackId} CreatorId:{CreatorId} Operation:upsert Result:success Version:{Version}",
+                trackId, userId, saved.Version);
+            return Ok(V1ApiResponse<object>.Ok((object)saved));
+        }
+        catch (TrackLyricsConcurrencyException)
+        {
+            _logger.LogWarning(
+                "Track lyrics operation rejected TrackId:{TrackId} CreatorId:{CreatorId} Operation:upsert ErrorCode:lyrics_version_conflict",
+                trackId, userId);
+            return Conflict(V1ApiResponse<object>.Fail("These lyrics changed in another session. Reload and review the latest version before saving."));
+        }
+    }
+
+    /// <summary>
+    /// Rewrites storage-derived URLs so raw object keys (bucket layout +
+    /// creator user IDs) never leave the backend: audio is routed through the
+    /// /stream proxy and images through the /images proxy. Uses the config-based
+    /// <see cref="IPublicUrlResolver"/> (never the inbound Host header). Safe to
+    /// mutate in place — the catalog service builds fresh DTOs per call and this
+    /// controller does not cache them.
+    /// </summary>
+    private void ResolvePublicUrls(TrackResponse track)
+    {
+        if (!string.IsNullOrEmpty(track.AudioUrl))
+            track.AudioUrl = _urls.AudioStreamUrl(track.Id);
+        if (!string.IsNullOrEmpty(track.CoverArtUrl))
+            track.CoverArtUrl = _urls.ImageUrl(track.CoverArtUrl);
+        if (!string.IsNullOrEmpty(track.CreatorProfileImageUrl))
+            track.CreatorProfileImageUrl = _urls.ImageUrl(track.CreatorProfileImageUrl);
     }
 
     /// <summary>Resolves a track and applies the shared visibility policy (C4).</summary>

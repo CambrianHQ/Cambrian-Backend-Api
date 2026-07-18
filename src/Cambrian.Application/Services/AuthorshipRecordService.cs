@@ -80,13 +80,24 @@ public sealed class AuthorshipRecordService : IAuthorshipRecordService
             throw new InvalidOperationException("App:FrontendUrl must be configured for authorship checkout.");
 
         var priceCents = _config.GetValue<int?>("AuthorshipRecord:PriceCents") ?? DefaultPriceCents;
-        var checkoutUrl = await _gateway.CreateCheckoutSessionAsync(
-            priceCents,
-            "Cambrian Authorship Record",
-            clientReferenceId: $"{userId}:authorship:{record.Id}",
-            successUrl: $"{frontendUrl}/authorship-records/{record.Id}?paid=true",
-            cancelUrl: $"{frontendUrl}/authorship-records/{record.Id}?cancelled=true",
-            customerEmail: user.Email);
+        string checkoutUrl;
+        try
+        {
+            checkoutUrl = await _gateway.CreateCheckoutSessionAsync(
+                priceCents,
+                "Cambrian Authorship Record",
+                clientReferenceId: $"{userId}:authorship:{record.Id}",
+                successUrl: $"{frontendUrl}/authorship-records/{record.Id}?paid=true",
+                cancelUrl: $"{frontendUrl}/authorship-records/{record.Id}?cancelled=true",
+                customerEmail: user.Email);
+        }
+        catch
+        {
+            record.Status = "checkout_failed";
+            record.PaymentStatus = "failed";
+            await _records.UpdateAsync(record, ct);
+            throw;
+        }
 
         _logger.LogInformation(
             "EVENT: AuthorshipRecordCreated recordId:{RecordId} trackId:{TrackId} userId:{UserId} evidenceFiles:{Files}",

@@ -80,6 +80,7 @@ public sealed class AlbumsV1Controller : AlbumV1ControllerBase
     // ───── Read one (owner detail with hydrated tracks) ─────
 
     [HttpGet("albums/{id}")]
+    [ProducesResponseType(typeof(V1ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAlbum(string id)
     {
         var userId = GetRequiredUserId()!;
@@ -99,6 +100,7 @@ public sealed class AlbumsV1Controller : AlbumV1ControllerBase
 
     [HttpPatch("albums/{id}")]
     [RequireCreatorTier]
+    [ProducesResponseType(typeof(V1ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateAlbum(string id, [FromBody] UpdateAlbumV1Request body)
     {
         var userId = GetRequiredUserId()!;
@@ -126,6 +128,7 @@ public sealed class AlbumsV1Controller : AlbumV1ControllerBase
 
     [HttpDelete("albums/{id}")]
     [RequireCreatorTier]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteAlbum(string id)
     {
         var userId = GetRequiredUserId()!;

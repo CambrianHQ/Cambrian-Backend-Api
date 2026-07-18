@@ -21,6 +21,12 @@ public class UpsertCreatorProfileRequest
     [StringLength(100)]
     [SafeMetadata]
     public string? Niche { get; set; }
+    public List<string>? Genres { get; set; }
+    [StringLength(500)]
+    public string? ProfileImageUrl { get; set; }
+    [StringLength(500)]
+    public string? BannerImageUrl { get; set; }
+    public Guid? FeaturedTrackId { get; set; }
     public List<SocialLinkDto>? SocialLinks { get; set; }
 
     /// <summary>Optional studio/gear section. Omit (null) to keep the stored value; send an empty object to clear.</summary>

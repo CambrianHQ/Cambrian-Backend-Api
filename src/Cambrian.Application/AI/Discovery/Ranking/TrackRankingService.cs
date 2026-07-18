@@ -5,28 +5,25 @@ namespace Cambrian.Application.AI.Discovery.Ranking;
 
 /// <summary>
 /// Heuristic scoring engine. Combines text relevance, attribute match depth,
-/// trending momentum, and use-case alignment into a single 0–1 score.
+/// and use-case alignment into a single 0–1 score.
 /// Pure computation — no I/O.
 /// </summary>
 public class TrackRankingService : ITrackRankingService
 {
     // Weight distribution (must sum to 1.0)
-    private const double W_TextMatch = 0.30;
-    private const double W_AttributeMatch = 0.25;
-    private const double W_UseCaseMatch = 0.25;
-    private const double W_Trending = 0.20;
+    private const double W_TextMatch = 0.375;
+    private const double W_AttributeMatch = 0.3125;
+    private const double W_UseCaseMatch = 0.3125;
 
     public double ComputeScore(Track track, SearchTracksQuery query)
     {
         var textScore = ScoreTextMatch(track, query.Query);
         var attrScore = ScoreAttributeMatch(track, query);
         var useCaseScore = ScoreUseCaseMatch(track, query.UseCase);
-        var trendingScore = NormalizeTrending(track.TrendingScore);
 
         var raw = (textScore * W_TextMatch)
                 + (attrScore * W_AttributeMatch)
-                + (useCaseScore * W_UseCaseMatch)
-                + (trendingScore * W_Trending);
+                + (useCaseScore * W_UseCaseMatch);
 
         return Math.Clamp(raw, 0.0, 1.0);
     }
@@ -111,10 +108,4 @@ public class TrackRankingService : ITrackRankingService
         return string.Equals(track.UseCase, useCase, StringComparison.OrdinalIgnoreCase) ? 1.0 : 0.2;
     }
 
-    private static double NormalizeTrending(decimal trendingScore)
-    {
-        // Sigmoid-like normalization: maps 0→0, 100→~0.9, 1000→~0.99
-        var d = (double)trendingScore;
-        return d / (d + 100.0);
-    }
 }

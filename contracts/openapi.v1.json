@@ -240,6 +240,25 @@
         "tags": [
           "Admin"
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -308,6 +327,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPayoutRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPayoutRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectPayoutRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -584,6 +622,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseReportRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseReportRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseReportRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -614,6 +671,28 @@
       }
     },
     "/admin/tracks/{id}/restore": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/tracks/{id}/purge": {
       "post": {
         "tags": [
           "Admin"
@@ -695,8 +774,8 @@
           }
         ],
         "responses": {
-          "501": {
-            "description": "Not Implemented"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -717,8 +796,8 @@
           }
         ],
         "responses": {
-          "501": {
-            "description": "Not Implemented"
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -1220,6 +1299,274 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/albums": {
+      "get": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlbumV1Request"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlbumV1Request"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlbumV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}": {
+      "get": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlbumV1Request"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlbumV1Request"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlbumV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks": {
+      "post": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks/reorder": {
+      "patch": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/albums/{id}/tracks/{trackId}": {
+      "delete": {
+        "tags": [
+          "AlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -2334,6 +2681,255 @@
         }
       }
     },
+    "/api/v1/tracks/{trackId}/behind-the-track": {
+      "get": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/proof-videos": {
+      "post": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProofVideoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProofVideoRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProofVideoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/proof-videos/{videoId}": {
+      "patch": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "videoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProofVideoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProofVideoRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProofVideoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "BehindTheTrackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "videoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/billing/checkout": {
       "post": {
         "tags": [
@@ -2940,6 +3536,68 @@
         ],
         "responses": {
           "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/charts/weekly/archive": {
+      "get": {
+        "tags": [
+          "Charts"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 104
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/charts/weekly/archive/{isoWeek}": {
+      "get": {
+        "tags": [
+          "Charts"
+        ],
+        "parameters": [
+          {
+            "name": "isoWeek",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": "OK"
           }
         }
@@ -2952,7 +3610,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyChartsResponseApiResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -3095,6 +3770,27 @@
       }
     },
     "/creator/tracks/{trackId}": {
+      "get": {
+        "tags": [
+          "Creator"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
       "put": {
         "tags": [
           "Creator"
@@ -5094,6 +5790,81 @@
         }
       }
     },
+    "/admin/media-reconciliation/runs": {
+      "get": {
+        "tags": [
+          "MediaReconciliation"
+        ],
+        "parameters": [
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MediaReconciliation"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/media-reconciliation/runs/{runId}": {
+      "get": {
+        "tags": [
+          "MediaReconciliation"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/newsletter": {
       "post": {
         "tags": [
@@ -5298,6 +6069,278 @@
         "tags": [
           "Payout"
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/playback/telemetry": {
+      "post": {
+        "tags": [
+          "PlaybackTelemetryV1"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackTelemetryBatch"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackTelemetryBatch"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackTelemetryBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Content Too Large",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/playback": {
+      "get": {
+        "tags": [
+          "PlaybackV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackInfoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/play-reconciliation/dry-run": {
+      "post": {
+        "tags": [
+          "PlayReconciliation"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayReconciliationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayReconciliationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayReconciliationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/play-reconciliation/repair": {
+      "post": {
+        "tags": [
+          "PlayReconciliation"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayReconciliationRepairRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayReconciliationRepairRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayReconciliationRepairRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -5985,6 +7028,50 @@
         }
       }
     },
+    "/api/v1/public/albums/{slug}": {
+      "get": {
+        "tags": [
+          "PublicAlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/public/creators/{username}/albums": {
+      "get": {
+        "tags": [
+          "PublicAlbumsV1"
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/tracks/{id}/readiness": {
       "get": {
         "tags": [
@@ -6350,6 +7437,26 @@
             "description": "OK"
           }
         }
+      },
+      "head": {
+        "tags": [
+          "Stream"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/stream/start": {
@@ -6370,24 +7477,81 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/StreamStartRequest"
+                "$ref": "#/components/schemas/PlaybackStartRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/StreamStartRequest"
+                "$ref": "#/components/schemas/PlaybackStartRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/StreamStartRequest"
+                "$ref": "#/components/schemas/PlaybackStartRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStartResponseApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStartResponseApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStartResponseApiResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -6410,24 +7574,101 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/StreamStopRequest"
+                "$ref": "#/components/schemas/PlaybackStopRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/StreamStopRequest"
+                "$ref": "#/components/schemas/PlaybackStopRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/StreamStopRequest"
+                "$ref": "#/components/schemas/PlaybackStopRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStopResponseApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStopResponseApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStopResponseApiResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -6515,6 +7756,220 @@
       "get": {
         "tags": [
           "Tier"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/ai-disclosure": {
+      "get": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTrackAiDisclosureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTrackAiDisclosureDtoV1ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/ai-disclosure/revoke": {
+      "post": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeTrackAiDisclosureRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeTrackAiDisclosureRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeTrackAiDisclosureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/tracks/{trackId}/ai-disclosure/history": {
+      "get": {
+        "tags": [
+          "TrackAiDisclosureV1"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -7055,6 +8510,14 @@
                     "maxLength": 60,
                     "type": "string"
                   },
+                  "Tempo": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "Mood": {
+                    "maxLength": 120,
+                    "type": "string"
+                  },
                   "Price": {
                     "type": "number",
                     "format": "double"
@@ -7068,19 +8531,19 @@
                     "type": "string"
                   },
                   "NonExclusivePrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "ExclusivePrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "CopyrightBuyoutPrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
@@ -7124,6 +8587,13 @@
                   },
                   "CreatorId": {
                     "type": "string"
+                  },
+                  "IdempotencyKey": {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "ConfirmDuplicateAudio": {
+                    "type": "boolean"
                   }
                 }
               },
@@ -7147,6 +8617,12 @@
                   "style": "form"
                 },
                 "Subgenre": {
+                  "style": "form"
+                },
+                "Tempo": {
+                  "style": "form"
+                },
+                "Mood": {
                   "style": "form"
                 },
                 "Price": {
@@ -7193,14 +8669,54 @@
                 },
                 "CreatorId": {
                   "style": "form"
+                },
+                "IdempotencyKey": {
+                  "style": "form"
+                },
+                "ConfirmDuplicateAudio": {
+                  "style": "form"
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Created"
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/uploads/batch": {
+      "post": {
+        "tags": [
+          "Upload"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Tracks": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/UploadTrackRequest"
+                    }
+                  }
+                }
+              },
+              "encoding": {
+                "Tracks": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -7247,6 +8763,14 @@
                     "maxLength": 60,
                     "type": "string"
                   },
+                  "Tempo": {
+                    "maxLength": 20,
+                    "type": "string"
+                  },
+                  "Mood": {
+                    "maxLength": 120,
+                    "type": "string"
+                  },
                   "Price": {
                     "type": "number",
                     "format": "double"
@@ -7260,19 +8784,19 @@
                     "type": "string"
                   },
                   "NonExclusivePrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "ExclusivePrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
                   },
                   "CopyrightBuyoutPrice": {
-                    "maximum": 7.922816251426434e+28,
+                    "maximum": 79228162514264337593543950335,
                     "minimum": 0.01,
                     "type": "number",
                     "format": "double"
@@ -7316,6 +8840,13 @@
                   },
                   "CreatorId": {
                     "type": "string"
+                  },
+                  "IdempotencyKey": {
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "ConfirmDuplicateAudio": {
+                    "type": "boolean"
                   }
                 }
               },
@@ -7339,6 +8870,12 @@
                   "style": "form"
                 },
                 "Subgenre": {
+                  "style": "form"
+                },
+                "Tempo": {
+                  "style": "form"
+                },
+                "Mood": {
                   "style": "form"
                 },
                 "Price": {
@@ -7384,6 +8921,12 @@
                   "style": "form"
                 },
                 "CreatorId": {
+                  "style": "form"
+                },
+                "IdempotencyKey": {
+                  "style": "form"
+                },
+                "ConfirmDuplicateAudio": {
                   "style": "form"
                 }
               }
@@ -7604,769 +9147,6 @@
           }
         }
       }
-    },
-    "/api/v1/albums": {
-      "get": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "List the authenticated creator's albums.",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoListV1ApiResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Create an album.",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAlbumV1Request"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Creator account required"
-          }
-        }
-      }
-    },
-    "/api/v1/albums/{id}": {
-      "get": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Get one of the creator's albums with hydrated tracks.",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumDetailV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Update album metadata (partial).",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateAlbumV1Request"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Delete an album (never deletes its tracks).",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Deleted"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/albums/{id}/tracks": {
-      "post": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Append tracks to an album.",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddAlbumTracksV1Request"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/albums/{id}/tracks/reorder": {
-      "patch": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Reorder an album's tracks (permutation of current members).",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReorderAlbumTracksV1Request"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/albums/{id}/tracks/{trackId}": {
-      "delete": {
-        "tags": [
-          "AlbumsV1"
-        ],
-        "summary": "Remove a track from an album (the track itself survives).",
-        "security": [
-          {
-            "Bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/public/albums/{slug}": {
-      "get": {
-        "tags": [
-          "PublicAlbumsV1"
-        ],
-        "summary": "Public album detail by slug or album id (public/unlisted only).",
-        "security": [],
-        "parameters": [
-          {
-            "name": "slug",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumDetailV1DtoV1ApiResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
-    "/api/v1/public/creators/{username}/albums": {
-      "get": {
-        "tags": [
-          "PublicAlbumsV1"
-        ],
-        "summary": "List a creator's public albums.",
-        "security": [],
-        "parameters": [
-          {
-            "name": "username",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AlbumV1DtoListV1ApiResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Creator not found"
-          }
-        }
-      }
-    },
-    "/api/v1/tracks/{trackId}/behind-the-track": {
-      "get": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertBehindTheTrackRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/tracks/{trackId}/proof-videos": {
-      "post": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProofVideoRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProofVideoRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProofVideoRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/tracks/{trackId}/proof-videos/{videoId}": {
-      "patch": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "videoId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProofVideoRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProofVideoRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProofVideoRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "BehindTheTrackV1"
-        ],
-        "parameters": [
-          {
-            "name": "trackId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "videoId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectV1ApiResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/charts/weekly/archive": {
-      "get": {
-        "tags": [
-          "Charts"
-        ],
-        "summary": "Completed Scene chart weeks, newest first (the running week is never listed).",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/charts/weekly/archive/{isoWeek}": {
-      "get": {
-        "tags": [
-          "Charts"
-        ],
-        "summary": "Final Top 50 of one completed chart week (isoWeek like 2026-w28).",
-        "parameters": [
-          {
-            "name": "isoWeek",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "400": {
-            "description": "Malformed isoWeek key"
-          },
-          "404": {
-            "description": "No archived chart for that week"
-          }
-        }
-      }
     }
   },
   "components": {
@@ -8390,6 +9170,21 @@
           "trackTitle": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddAlbumTracksV1Request": {
+        "required": [
+          "trackIds"
+        ],
+        "type": "object",
+        "properties": {
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -8491,6 +9286,92 @@
           },
           "verifiedCreator": {
             "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AiDisclosureDetailsDto": {
+        "type": "object",
+        "properties": {
+          "aiVocals": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiPrimaryInstruments": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiComposition": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiLyrics": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiPostProduction": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiArtwork": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiVideo": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "generatorTool": {
+            "type": "string",
+            "nullable": true
+          },
+          "modelVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "creationDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "commercialUseLicenseBasis": {
+            "type": "string",
+            "nullable": true
+          },
+          "voiceLikenessAuthorization": {
+            "type": "string",
+            "nullable": true
+          },
+          "humanWrittenLyrics": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "humanVocals": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "humanInstruments": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "arrangementEditing": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "dawWork": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "collaborators": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "humanContributionNarrative": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -8937,6 +9818,71 @@
         },
         "additionalProperties": false
       },
+      "ChartEntryResponse": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weeklyQualifiedPlays": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lifetimePlays": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rankingScore": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "artist": {
+            "type": "string",
+            "nullable": true
+          },
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "creatorUsername": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverArtUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "deltaRank": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "playsInWindow": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CloseReportRequest": {
+        "type": "object",
+        "properties": {
+          "resolutionNote": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ComplianceCheck": {
         "type": "object",
         "properties": {
@@ -9041,6 +9987,51 @@
         },
         "additionalProperties": false
       },
+      "CreateAlbumV1Request": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "artworkUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "visibility": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "releaseDate": {
+            "maxLength": 40,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateApiKeyRequest": {
         "type": "object",
         "properties": {
@@ -9094,6 +10085,48 @@
           "fileName": {
             "maxLength": 255,
             "minLength": 0,
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateProofVideoRequest": {
+        "required": [
+          "url",
+          "videoType"
+        ],
+        "type": "object",
+        "properties": {
+          "videoType": {
+            "minLength": 1,
+            "pattern": "^(YouTube|External)$",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "visibility": {
+            "pattern": "^(public|hidden)$",
             "type": "string",
             "nullable": true
           }
@@ -9210,6 +10243,15 @@
           "visibility": {
             "maxLength": 20,
             "type": "string",
+            "nullable": true
+          },
+          "aiDisclosure": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "rightsConfirmed": {
+            "type": "boolean",
             "nullable": true
           }
         },
@@ -9458,7 +10500,7 @@
           },
           "data": {
             "type": "array",
-            "items": {},
+            "items": { },
             "nullable": true
           },
           "error": {
@@ -9552,6 +10594,421 @@
         },
         "additionalProperties": false
       },
+      "PlayReconciliationRepairRequest": {
+        "type": "object",
+        "properties": {
+          "trackBatchSize": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "eventBatchSize": {
+            "maximum": 5000,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlayReconciliationRequest": {
+        "type": "object",
+        "properties": {
+          "mismatchLimit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "error": {
+            "$ref": "#/components/schemas/PlaybackError"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackInfoData": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mediaState": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentType": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentLength": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          },
+          "traceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "backendRelease": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackInfoError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          },
+          "traceId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackInfoErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "error": {
+            "$ref": "#/components/schemas/PlaybackInfoError"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackInfoResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PlaybackInfoData"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackStartRequest": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientEventId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackStartResponse": {
+        "type": "object",
+        "properties": {
+          "streamId": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "qualificationThresholdSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "deduplicationWindowMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "serverTimeUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "anonymousSessionAccepted": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackStartResponseApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PlaybackStartResponse"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackStopRequest": {
+        "type": "object",
+        "properties": {
+          "streamId": {
+            "type": "string",
+            "nullable": true
+          },
+          "activePlaybackSeconds": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "pausedSeconds": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "seekCount": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "endingPositionSeconds": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "clientEventId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackStopResponse": {
+        "type": "object",
+        "properties": {
+          "streamId": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "qualified": {
+            "type": "boolean"
+          },
+          "counted": {
+            "type": "boolean"
+          },
+          "idempotentReplay": {
+            "type": "boolean"
+          },
+          "activePlaybackSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "qualificationThresholdSeconds": {
+            "type": "number",
+            "format": "double"
+          },
+          "qualifiedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lifetimePlayCount": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "serverTimeUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackStopResponseApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PlaybackStopResponse"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackTelemetryBatch": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaybackTelemetryEvent"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlaybackTelemetryEvent": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string",
+            "nullable": true
+          },
+          "trackId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "playbackSessionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "frontendRelease": {
+            "type": "string",
+            "nullable": true
+          },
+          "backendRelease": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          },
+          "browserFamily": {
+            "type": "string",
+            "nullable": true
+          },
+          "browserVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaErrorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "readyState": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "networkState": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "timeToFirstPlaybackMs": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "stallCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "mediaHost": {
+            "type": "string",
+            "nullable": true
+          },
+          "responseStatusCategory": {
+            "type": "string",
+            "nullable": true
+          },
+          "eventTimestampUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -9577,7 +11034,7 @@
             "nullable": true
           }
         },
-        "additionalProperties": {}
+        "additionalProperties": { }
       },
       "ProvenanceInclusionRequest": {
         "required": [
@@ -9779,11 +11236,15 @@
           },
           "plays": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "sales": {
             "type": "integer",
             "format": "int32"
+          },
+          "authorshipRecordId": {
+            "type": "string",
+            "nullable": true
           },
           "aiGenerated": {
             "type": "boolean"
@@ -10014,7 +11475,7 @@
         "properties": {
           "plays": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "followers": {
             "type": "integer",
@@ -10468,7 +11929,7 @@
           },
           "totalPlays": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "authorshipRecordCount": {
             "type": "integer",
@@ -10644,6 +12105,71 @@
         },
         "additionalProperties": false
       },
+      "PublicTrackAiDisclosureDto": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "classification": {
+            "enum": [
+              "Unclassified",
+              "AIGenerated",
+              "AIAssisted"
+            ],
+            "type": "string"
+          },
+          "definition": {
+            "type": "string",
+            "nullable": true
+          },
+          "details": {
+            "$ref": "#/components/schemas/AiDisclosureDetailsDto"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isRevoked": {
+            "type": "boolean"
+          },
+          "correctionNotice": {
+            "type": "string",
+            "nullable": true
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicTrackAiDisclosureDtoV1ApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PublicTrackAiDisclosureDto"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "meta": {
+            "$ref": "#/components/schemas/V1PaginationMeta"
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicTrackDto": {
         "type": "object",
         "properties": {
@@ -10753,7 +12279,7 @@
           },
           "plays": {
             "type": "integer",
-            "format": "int32"
+            "format": "int64"
           },
           "sales": {
             "type": "integer",
@@ -10894,6 +12420,16 @@
         },
         "additionalProperties": false
       },
+      "RejectPayoutRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ReleaseReadyCreditExpiryDefinition": {
         "type": "object",
         "properties": {
@@ -10930,6 +12466,21 @@
           },
           "creditExpiry": {
             "$ref": "#/components/schemas/ReleaseReadyCreditExpiryDefinition"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReorderAlbumTracksV1Request": {
+        "required": [
+          "trackIds"
+        ],
+        "type": "object",
+        "properties": {
+          "trackIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -10971,6 +12522,34 @@
             "maxLength": 500,
             "minLength": 1,
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevokeTrackAiDisclosureRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunRequest": {
+        "type": "object",
+        "properties": {
+          "remediate": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -11051,37 +12630,14 @@
         },
         "additionalProperties": false
       },
-      "StreamStartRequest": {
-        "type": "object",
-        "properties": {
-          "trackId": {
-            "type": "string",
-            "nullable": true
-          },
-          "title": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "StreamStopRequest": {
-        "type": "object",
-        "properties": {
-          "streamId": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
       "StudioSetupDto": {
         "type": "object",
         "properties": {
           "daw": {
-            "maxLength": 200,
-            "minLength": 0,
-            "type": "string",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "nullable": true
           },
           "aiTools": {
@@ -11180,6 +12736,36 @@
         },
         "additionalProperties": false
       },
+      "TrackOfTheWeekResponse": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "artist": {
+            "type": "string",
+            "nullable": true
+          },
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverArtUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "TrendingTrackResponse": {
         "type": "object",
         "properties": {
@@ -11191,11 +12777,51 @@
             "type": "string",
             "nullable": true
           },
+          "plays": {
+            "type": "integer",
+            "format": "int64"
+          },
           "score": {
             "type": "number",
             "format": "double"
           },
           "useCase": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateAlbumV1Request": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "artworkUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "visibility": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "releaseDate": {
+            "maxLength": 40,
+            "minLength": 0,
             "type": "string",
             "nullable": true
           }
@@ -11277,6 +12903,66 @@
         },
         "additionalProperties": false
       },
+      "UpdateProofVideoRequest": {
+        "type": "object",
+        "properties": {
+          "videoType": {
+            "pattern": "^(YouTube|External)$",
+            "type": "string",
+            "nullable": true
+          },
+          "url": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "visibility": {
+            "pattern": "^(public|hidden)$",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "payoutsEnabled": {
+            "type": "boolean"
+          },
+          "moderationEnabled": {
+            "type": "boolean"
+          },
+          "marketplaceEnabled": {
+            "type": "boolean"
+          },
+          "allowExclusiveListings": {
+            "type": "boolean"
+          },
+          "requireTrackReview": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateSubscriptionRequest": {
         "required": [
           "plan"
@@ -11319,10 +13005,188 @@
         },
         "additionalProperties": false
       },
+      "UploadTrackRequest": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "nullable": true
+          },
+          "coverArt": {
+            "type": "string",
+            "format": "binary",
+            "nullable": true
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "genre": {
+            "maxLength": 60,
+            "type": "string",
+            "nullable": true
+          },
+          "primaryGenre": {
+            "maxLength": 60,
+            "type": "string",
+            "nullable": true
+          },
+          "subgenre": {
+            "maxLength": 60,
+            "type": "string",
+            "nullable": true
+          },
+          "tempo": {
+            "maxLength": 20,
+            "type": "string",
+            "nullable": true
+          },
+          "mood": {
+            "maxLength": 120,
+            "type": "string",
+            "nullable": true
+          },
+          "price": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "licenseType": {
+            "maxLength": 200,
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "maxLength": 500,
+            "type": "string",
+            "nullable": true
+          },
+          "nonExclusivePrice": {
+            "maximum": 79228162514264337593543950335,
+            "minimum": 0.01,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "exclusivePrice": {
+            "maximum": 79228162514264337593543950335,
+            "minimum": 0.01,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "copyrightBuyoutPrice": {
+            "maximum": 79228162514264337593543950335,
+            "minimum": 0.01,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "nonExclusivePriceCents": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "exclusivePriceCents": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "copyrightBuyoutPriceCents": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "albumAssignmentType": {
+            "maxLength": 20,
+            "type": "string",
+            "nullable": true
+          },
+          "collectionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "newAlbumTitle": {
+            "maxLength": 200,
+            "type": "string",
+            "nullable": true
+          },
+          "newAlbumDescription": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "saveAsDraft": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "creatorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "idempotencyKey": {
+            "maxLength": 128,
+            "type": "string",
+            "nullable": true
+          },
+          "confirmDuplicateAudio": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpsertBehindTheTrackRequest": {
         "type": "object",
         "properties": {
           "story": {
+            "maxLength": 5000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "daw": {
+            "maxLength": 200,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "vocalChain": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "promptNotes": {
+            "maxLength": 5000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "productionNotes": {
+            "maxLength": 5000,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "humanContributionNotes": {
             "maxLength": 5000,
             "minLength": 0,
             "type": "string",
@@ -11411,6 +13275,30 @@
             "type": "string",
             "nullable": true
           },
+          "genres": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "profileImageUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "bannerImageUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "featuredTrackId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "socialLinks": {
             "type": "array",
             "items": {
@@ -11450,6 +13338,116 @@
         },
         "additionalProperties": false
       },
+      "UpsertTrackAiDisclosureRequest": {
+        "type": "object",
+        "properties": {
+          "classification": {
+            "enum": [
+              "Unclassified",
+              "AIGenerated",
+              "AIAssisted"
+            ],
+            "type": "string"
+          },
+          "aiVocals": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiPrimaryInstruments": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiComposition": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiLyrics": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiPostProduction": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiArtwork": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "aiVideo": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "generatorTool": {
+            "maxLength": 200,
+            "type": "string",
+            "nullable": true
+          },
+          "modelVersion": {
+            "maxLength": 200,
+            "type": "string",
+            "nullable": true
+          },
+          "creationDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "commercialUseLicenseBasis": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "voiceLikenessAuthorization": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "humanWrittenLyrics": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "humanVocals": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "humanInstruments": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "arrangementEditing": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "dawWork": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "collaborators": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "humanContributionNarrative": {
+            "maxLength": 5000,
+            "type": "string",
+            "nullable": true
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "correctionReason": {
+            "maxLength": 1000,
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpsertTrackLyricsRequest": {
         "type": "object",
         "properties": {
@@ -11468,6 +13466,16 @@
           "isExplicit": {
             "type": "boolean",
             "nullable": true
+          },
+          "version": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "deleteLyrics": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -11532,404 +13540,80 @@
         },
         "additionalProperties": false
       },
+      "WeeklyChartsResponse": {
+        "type": "object",
+        "properties": {
+          "weekOf": {
+            "type": "string",
+            "nullable": true
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartEntryResponse"
+            },
+            "nullable": true
+          },
+          "trackOfTheWeek": {
+            "$ref": "#/components/schemas/TrackOfTheWeekResponse"
+          },
+          "chartWindowStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "chartWindowEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dataThrough": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isStale": {
+            "type": "boolean"
+          },
+          "basis": {
+            "type": "string",
+            "nullable": true
+          },
+          "computedAt": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "WeeklyChartsResponseApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WeeklyChartsResponse"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "WithdrawRequest": {
         "type": "object",
         "properties": {
           "amount": {
             "type": "number",
             "format": "double"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumV1Dto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "creatorId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "artworkUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "public",
-              "unlisted",
-              "private"
-            ]
-          },
-          "releaseDate": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "trackCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumCreatorSummaryV1Dto": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string"
-          },
-          "creatorId": {
-            "type": "string",
-            "nullable": true
-          },
-          "username": {
-            "type": "string",
-            "nullable": true
-          },
-          "slug": {
-            "type": "string",
-            "nullable": true
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
-          },
-          "profileImageUrl": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumDetailV1Dto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "creatorId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "artworkUrl": {
-            "type": "string",
-            "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "public",
-              "unlisted",
-              "private"
-            ]
-          },
-          "releaseDate": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "trackCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "creator": {
-            "$ref": "#/components/schemas/AlbumCreatorSummaryV1Dto"
-          },
-          "tracks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PublicCatalogTrackDto"
-            }
-          }
-        },
-        "additionalProperties": false
-      },
-      "CreateAlbumV1Request": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 1
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 2000
-          },
-          "artworkUrl": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 500
-          },
-          "visibility": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 20
-          },
-          "releaseDate": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 40
-          },
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "nullable": true
-          }
-        },
-        "required": [
-          "title"
-        ],
-        "additionalProperties": false
-      },
-      "UpdateAlbumV1Request": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 200
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 2000
-          },
-          "artworkUrl": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 500
-          },
-          "visibility": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 20
-          },
-          "releaseDate": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 40
-          }
-        },
-        "additionalProperties": false
-      },
-      "AddAlbumTracksV1Request": {
-        "type": "object",
-        "properties": {
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "trackIds"
-        ],
-        "additionalProperties": false
-      },
-      "ReorderAlbumTracksV1Request": {
-        "type": "object",
-        "properties": {
-          "trackIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "trackIds"
-        ],
-        "additionalProperties": false
-      },
-      "AlbumV1DtoV1ApiResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AlbumV1Dto"
-          },
-          "error": {
-            "type": "string",
-            "nullable": true
-          },
-          "meta": {
-            "$ref": "#/components/schemas/V1PaginationMeta"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumV1DtoListV1ApiResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AlbumV1Dto"
-            }
-          },
-          "error": {
-            "type": "string",
-            "nullable": true
-          },
-          "meta": {
-            "$ref": "#/components/schemas/V1PaginationMeta"
-          }
-        },
-        "additionalProperties": false
-      },
-      "AlbumDetailV1DtoV1ApiResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AlbumDetailV1Dto"
-          },
-          "error": {
-            "type": "string",
-            "nullable": true
-          },
-          "meta": {
-            "$ref": "#/components/schemas/V1PaginationMeta"
-          }
-        },
-        "additionalProperties": false
-      },
-      "CreateProofVideoRequest": {
-        "type": "object",
-        "required": [
-          "url",
-          "videoType"
-        ],
-        "properties": {
-          "videoType": {
-            "type": "string"
-          },
-          "url": {
-            "maxLength": 2000,
-            "minLength": 0,
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "description": {
-            "maxLength": 2000,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "sortOrder": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "UpdateProofVideoRequest": {
-        "type": "object",
-        "properties": {
-          "videoType": {
-            "type": "string",
-            "nullable": true
-          },
-          "url": {
-            "maxLength": 2000,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "description": {
-            "maxLength": 2000,
-            "minLength": 0,
-            "type": "string",
-            "nullable": true
-          },
-          "sortOrder": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "nullable": true
           }
         },
         "additionalProperties": false
@@ -11946,7 +13630,7 @@
   },
   "security": [
     {
-      "Bearer": []
+      "Bearer": [ ]
     }
   ]
 }

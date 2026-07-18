@@ -1,3 +1,5 @@
+using Cambrian.Application.DTOs.Admin;
+
 namespace Cambrian.Application.Interfaces;
 
 /// <summary>
@@ -7,6 +9,9 @@ public interface IHealthService
 {
     /// <summary>Runs a health check including DB connectivity and entity counts.</summary>
     Task<object> GetHealthAsync();
+
+    /// <summary>Returns protected qualified-play aggregation and chart freshness details.</summary>
+    Task<PlayPipelineHealthDetails> GetPlayPipelineHealthAsync(CancellationToken ct = default);
 
     /// <summary>Checks storage state for a sample of tracks.</summary>
     Task<object> GetStorageDiagAsync();

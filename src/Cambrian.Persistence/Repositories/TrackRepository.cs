@@ -20,7 +20,7 @@ public class TrackRepository : ITrackRepository
         try
         {
             return await BuildTrackQuery()
-                .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public")
+                .Where(IsPublicCatalogTrack)
                 .OrderByDescending(t => t.CreatedAt)
                 .Take(200)
                 .ToListAsync();
@@ -28,7 +28,7 @@ public class TrackRepository : ITrackRepository
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             return await BuildLegacyCompatibleTrackQuery()
-                .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public")
+                .Where(IsPublicCatalogTrack)
                 .OrderByDescending(t => t.CreatedAt)
                 .Take(200)
                 .ToListAsync();
@@ -46,7 +46,7 @@ public class TrackRepository : ITrackRepository
         try
         {
             var query = ApplyBrowseFilters(
-                BuildTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
+                BuildTrackQuery().Where(IsPublicCatalogTrack),
                 genre, search, mood, tempo, instrumental, duration,
                 includeTaxonomyColumns: true,
                 includeTagSearch: _db.Database.IsRelational());
@@ -59,7 +59,7 @@ public class TrackRepository : ITrackRepository
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             var query = ApplyBrowseFilters(
-                BuildLegacyCompatibleTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
+                BuildLegacyCompatibleTrackQuery().Where(IsPublicCatalogTrack),
                 genre, search, mood, tempo, instrumental, duration,
                 includeTaxonomyColumns: false,
                 includeTagSearch: _db.Database.IsRelational());
@@ -82,6 +82,18 @@ public class TrackRepository : ITrackRepository
         {
             return await BuildLegacyCompatibleTrackQuery()
                 .FirstOrDefaultAsync(t => t.Id == id && t.Status != "removed");
+        }
+    }
+
+    public async Task<Track?> GetByIdIncludingRemovedAsync(Guid id)
+    {
+        try
+        {
+            return await BuildTrackQuery().FirstOrDefaultAsync(t => t.Id == id);
+        }
+        catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
+        {
+            return await BuildLegacyCompatibleTrackQuery().FirstOrDefaultAsync(t => t.Id == id);
         }
     }
 
@@ -122,7 +134,8 @@ public class TrackRepository : ITrackRepository
     public async Task<List<CreatorDashboardTrackSummary>> GetDashboardTrackSummariesAsync(string creatorId, Guid? creatorUuid = null)
     {
         return await _db.Tracks
-            .Where(t => t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+            .Where(t => (t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                && t.Status != "removed")
             .OrderByDescending(t => t.CreatedAt)
             .Select(t => new CreatorDashboardTrackSummary
             {
@@ -136,33 +149,60 @@ public class TrackRepository : ITrackRepository
     public async Task<List<CreatorTrackSummary>> GetCreatorTrackSummariesAsync(string creatorId, Guid? creatorUuid = null)
     {
         return await _db.Tracks
-            .Where(t => t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+            .Where(t => (t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                && t.Status != "removed")
             .OrderByDescending(t => t.CreatedAt)
-            .Select(t => new CreatorTrackSummary
-            {
-                Id = t.Id,
-                CambrianTrackId = t.CambrianTrackId,
-                Title = t.Title,
-                Description = t.Description,
-                Genre = t.Genre,
-                Mood = t.Mood,
-                Tempo = t.Tempo,
-                Tags = t.Tags.ToList(),
-                Instrumental = t.Instrumental,
-                Visibility = t.Visibility,
-                Price = t.Price,
-                NonExclusivePriceCents = t.NonExclusivePriceCents,
-                ExclusivePriceCents = t.ExclusivePriceCents,
-                CopyrightBuyoutPriceCents = t.CopyrightBuyoutPriceCents,
-                ExclusiveSold = t.ExclusiveSold,
-                Status = t.Status,
-                LicenseType = t.LicenseType,
-                Duration = t.Duration,
-                AudioUrl = t.AudioUrl,
-                CoverArtUrl = t.CoverArtUrl,
-                CreatedAt = t.CreatedAt,
-            })
+            .Select(t => ToCreatorTrackSummary(t))
             .ToListAsync();
+    }
+
+    public async Task<List<CreatorTrackSummary>> GetTrashedTrackSummariesAsync(string creatorId, Guid? creatorUuid = null)
+    {
+        return await _db.Tracks
+            .Where(t => (t.CreatorId == creatorId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                && t.Status == "removed" && t.PurgedAt == null)
+            .OrderByDescending(t => t.DeletedAt)
+            .Select(t => ToCreatorTrackSummary(t))
+            .ToListAsync();
+    }
+
+    private static CreatorTrackSummary ToCreatorTrackSummary(Track t) => new()
+    {
+        Id = t.Id,
+        CambrianTrackId = t.CambrianTrackId,
+        Title = t.Title,
+        Description = t.Description,
+        Genre = t.Genre,
+        Mood = t.Mood,
+        Tempo = t.Tempo,
+        Tags = t.Tags.ToList(),
+        Instrumental = t.Instrumental,
+        Visibility = t.Visibility,
+        Price = t.Price,
+        NonExclusivePriceCents = t.NonExclusivePriceCents,
+        ExclusivePriceCents = t.ExclusivePriceCents,
+        CopyrightBuyoutPriceCents = t.CopyrightBuyoutPriceCents,
+        ExclusiveSold = t.ExclusiveSold,
+        Status = t.Status,
+        LicenseType = t.LicenseType,
+        Duration = t.Duration,
+        AudioUrl = t.AudioUrl,
+        CoverArtUrl = t.CoverArtUrl,
+        CreatedAt = t.CreatedAt,
+        DeletedAt = t.DeletedAt,
+    };
+
+    public async Task<Track?> FindActiveByCreatorAndContentHashAsync(string? creatorId, Guid? creatorUuid, string contentHash)
+    {
+        if (string.IsNullOrWhiteSpace(contentHash))
+            return null;
+
+        return await _db.Tracks
+            .Where(t => ((creatorId != null && t.CreatorId == creatorId) || (creatorUuid != null && t.CreatorUuid == creatorUuid))
+                && t.Status != "removed"
+                && t.ContentHash == contentHash)
+            .OrderBy(t => t.CreatedAt)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<List<Track>> GetStorefrontTracksAsync(string creatorId, Guid? creatorUuid = null)
@@ -195,7 +235,7 @@ public class TrackRepository : ITrackRepository
         try
         {
             var query = ApplyBrowseFilters(
-                _db.Tracks.Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
+                _db.Tracks.Where(IsPublicCatalogTrack),
                 genre, search, mood, tempo, instrumental, duration,
                 includeTaxonomyColumns: true,
                 includeTagSearch: _db.Database.IsRelational());
@@ -204,8 +244,31 @@ public class TrackRepository : ITrackRepository
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             var query = ApplyBrowseFilters(
-                BuildLegacyCompatibleTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
+                BuildLegacyCompatibleTrackQuery().Where(IsPublicCatalogTrack),
                 genre, search, mood, tempo, instrumental, duration,
+                includeTaxonomyColumns: false,
+                includeTagSearch: _db.Database.IsRelational());
+            return await query.CountAsync();
+        }
+    }
+
+    public async Task<int> CountTrendingAsync(string? genre = null,
+        string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null)
+    {
+        try
+        {
+            var query = ApplyBrowseFilters(
+                _db.Tracks.Where(IsEligiblePublicTrack),
+                genre, search: null, mood, tempo, instrumental, duration,
+                includeTaxonomyColumns: true,
+                includeTagSearch: _db.Database.IsRelational());
+            return await query.CountAsync();
+        }
+        catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
+        {
+            var query = ApplyBrowseFilters(
+                BuildLegacyCompatibleTrackQuery().Where(IsEligiblePublicTrack),
+                genre, search: null, mood, tempo, instrumental, duration,
                 includeTaxonomyColumns: false,
                 includeTagSearch: _db.Database.IsRelational());
             return await query.CountAsync();
@@ -223,11 +286,11 @@ public class TrackRepository : ITrackRepository
 
         var ids = trackIds as IList<Guid> ?? trackIds.ToList();
 
-        // Plays — one grouped count over all stream sessions for the page's tracks.
-        var plays = await _db.StreamSessions
+        // Plays — transactionally maintained qualified-play projection.
+        var plays = await _db.TrackStats
+            .AsNoTracking()
             .Where(s => ids.Contains(s.TrackId))
-            .GroupBy(s => s.TrackId)
-            .Select(g => new { TrackId = g.Key, Count = g.Count() })
+            .Select(s => new { s.TrackId, Count = s.PlayCount })
             .ToListAsync();
         foreach (var row in plays)
             if (result.TryGetValue(row.TrackId, out var stats)) stats.Plays = row.Count;
@@ -290,6 +353,9 @@ public class TrackRepository : ITrackRepository
                 OriginalCreatorId = t.OriginalCreatorId,
                 Visibility = t.Visibility,
                 CreatedAt = t.CreatedAt,
+                DeletedAt = t.DeletedAt,
+                PurgeRequestedAt = t.PurgeRequestedAt,
+                PurgedAt = t.PurgedAt,
                 CreatorId = t.CreatorId,
                 CreatorUuid = t.CreatorUuid,
                 Tags = t.Tags,
@@ -413,8 +479,42 @@ public class TrackRepository : ITrackRepository
         return query;
     }
 
-    private static IQueryable<Track> ApplySort(IQueryable<Track> query, string? sort)
-        => TrackSorting.Apply(query, sort);
+    private IQueryable<Track> ApplySort(IQueryable<Track> query, string? sort)
+    {
+        var normalized = sort?.Trim().ToLowerInvariant();
+        if (normalized is "trending" or "popular")
+        {
+            return query
+                .Where(IsEligiblePublicTrack)
+                .OrderByDescending(t => _db.TrackStats
+                    .Where(s => s.TrackId == t.Id)
+                    .Select(s => (long?)s.PlayCount)
+                    .FirstOrDefault() ?? 0L)
+                .ThenByDescending(t => t.CreatedAt)
+                .ThenBy(t => t.Id);
+        }
+
+        return TrackSorting.Apply(query, sort);
+    }
+
+    // Preserve the established additive catalog contract. Legacy public rows can
+    // still be browsed even when they predate today's ranking eligibility fields.
+    private static readonly System.Linq.Expressions.Expression<Func<Track, bool>> IsPublicCatalogTrack = t =>
+        !t.ExclusiveSold
+        && t.Status != "copyright_transferred"
+        && t.Visibility == "public";
+
+    // Ranking is stricter than general browse: only currently playable releases
+    // can compete for chart/trending placement.
+    private static readonly System.Linq.Expressions.Expression<Func<Track, bool>> IsEligiblePublicTrack = t =>
+        !t.ExclusiveSold
+        && (t.Status == "available" || t.Status == "active")
+        && t.Visibility == "public"
+        && t.DeletedAt == null
+        && t.PurgeRequestedAt == null
+        && t.PurgedAt == null
+        && t.AudioUrl != null
+        && t.AudioUrl.Trim() != string.Empty;
 
     // Columns added to the Track entity after the original Tracks schema shipped.
     // The legacy-compatible write path (Insert/UpdateLegacyCompatibleTrackAsync)
@@ -494,15 +594,93 @@ public class TrackRepository : ITrackRepository
         }
     }
 
-    public async Task DeleteAsync(Guid id)
+    public async Task DeleteAsync(Guid id, string? deletedByUserId = null)
+    {
+        var now = DateTime.UtcNow;
+
+        if (!_db.Database.IsRelational())
+        {
+            var inMemoryTrack = await _db.Tracks.FindAsync(id);
+            if (inMemoryTrack is not null && inMemoryTrack.Status != "removed")
+            {
+                inMemoryTrack.PreDeleteVisibility = inMemoryTrack.Visibility;
+                inMemoryTrack.PreDeleteStatus = inMemoryTrack.Status;
+                inMemoryTrack.Visibility = "hidden";
+                inMemoryTrack.Status = "removed";
+                inMemoryTrack.DeletedAt = now;
+                inMemoryTrack.DeletedByUserId = deletedByUserId;
+                await _db.SaveChangesAsync();
+            }
+
+            return;
+        }
+
+        var trackedEntry = _db.ChangeTracker
+            .Entries<Track>()
+            .FirstOrDefault(e => e.Entity.Id == id);
+
+        if (trackedEntry is not null && trackedEntry.Entity.Status != "removed")
+        {
+            trackedEntry.Entity.PreDeleteVisibility = trackedEntry.Entity.Visibility;
+            trackedEntry.Entity.PreDeleteStatus = trackedEntry.Entity.Status;
+            trackedEntry.Entity.Visibility = "hidden";
+            trackedEntry.Entity.Status = "removed";
+            trackedEntry.Entity.DeletedAt = now;
+            trackedEntry.Entity.DeletedByUserId = deletedByUserId;
+            trackedEntry.State = EntityState.Unchanged;
+        }
+
+        // Creator deletes must preserve historical purchase/library references — this only
+        // ever flips Visibility/Status/trash markers, never a real row delete. Guarded by
+        // Status != 'removed' so a repeat call can't clobber the original
+        // PreDeleteVisibility/PreDeleteStatus/DeletedAt with re-stamped values.
+        try
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE "Tracks"
+                SET "PreDeleteVisibility" = "Visibility", "PreDeleteStatus" = "Status",
+                    "Visibility" = 'hidden', "Status" = 'removed', "DeletedAt" = {now}, "DeletedByUserId" = {deletedByUserId}
+                WHERE "Id" = {NormalizeGuid(id)} AND "Status" != 'removed'
+                """);
+        }
+        catch (Exception ex) when (IsMissingTrashColumn(ex))
+        {
+            // Legacy/stale schemas still preserve the original soft-delete
+            // invariant even before additive trash metadata columns are deployed.
+            await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE "Tracks"
+                SET "Visibility" = 'hidden', "Status" = 'removed'
+                WHERE "Id" = {NormalizeGuid(id)} AND "Status" != 'removed'
+                """);
+        }
+    }
+
+    private static bool IsMissingTrashColumn(Exception ex)
+    {
+        var message = ex.ToString();
+        return message.Contains("no such column", StringComparison.OrdinalIgnoreCase)
+            && (message.Contains("PreDeleteVisibility", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("PreDeleteStatus", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("DeletedAt", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("DeletedByUserId", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task RestoreAsync(Guid id)
     {
         if (!_db.Database.IsRelational())
         {
             var inMemoryTrack = await _db.Tracks.FindAsync(id);
-            if (inMemoryTrack is not null)
+            if (inMemoryTrack is not null && inMemoryTrack.PurgedAt is null)
             {
-                inMemoryTrack.Visibility = "hidden";
-                inMemoryTrack.Status = "removed";
+                var requestedVisibility = inMemoryTrack.PreDeleteVisibility ?? "public";
+                var mediaReady = !string.Equals(requestedVisibility, "public", StringComparison.OrdinalIgnoreCase)
+                    || await _db.TrackMedia.AnyAsync(x => x.TrackId == id && x.State == TrackMediaStates.Ready && x.ObjectKey != null);
+                inMemoryTrack.Visibility = mediaReady ? requestedVisibility : "hidden";
+                inMemoryTrack.Status = inMemoryTrack.PreDeleteStatus ?? "available";
+                inMemoryTrack.DeletedAt = null;
+                inMemoryTrack.DeletedByUserId = null;
+                inMemoryTrack.PreDeleteVisibility = null;
+                inMemoryTrack.PreDeleteStatus = null;
                 await _db.SaveChangesAsync();
             }
 
@@ -515,14 +693,70 @@ public class TrackRepository : ITrackRepository
 
         if (trackedEntry is not null)
         {
-            trackedEntry.Entity.Visibility = "hidden";
-            trackedEntry.Entity.Status = "removed";
+            var requestedVisibility = trackedEntry.Entity.PreDeleteVisibility ?? "public";
+            var mediaReady = !string.Equals(requestedVisibility, "public", StringComparison.OrdinalIgnoreCase)
+                || await _db.TrackMedia.AnyAsync(x => x.TrackId == id && x.State == TrackMediaStates.Ready && x.ObjectKey != null);
+            trackedEntry.Entity.Visibility = mediaReady ? requestedVisibility : "hidden";
+            trackedEntry.Entity.Status = trackedEntry.Entity.PreDeleteStatus ?? "available";
+            trackedEntry.Entity.DeletedAt = null;
+            trackedEntry.Entity.DeletedByUserId = null;
+            trackedEntry.Entity.PreDeleteVisibility = null;
+            trackedEntry.Entity.PreDeleteStatus = null;
             trackedEntry.State = EntityState.Unchanged;
         }
 
-        // Creator deletes must preserve historical purchase/library references.
-        await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE \"Tracks\" SET \"Visibility\" = {"hidden"}, \"Status\" = {"removed"} WHERE \"Id\" = {NormalizeGuid(id)}");
+        // A purged track's storage is already gone — restoring it would show a track
+        // page with a dead audio URL, so PurgedAt permanently blocks restore.
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE "Tracks"
+            SET "Visibility" = CASE
+                    WHEN COALESCE("PreDeleteVisibility", 'public') <> 'public' THEN COALESCE("PreDeleteVisibility", 'public')
+                    WHEN EXISTS (
+                        SELECT 1 FROM "TrackMedia" tm
+                        WHERE tm."TrackId" = "Tracks"."Id" AND tm."State" = 'Ready' AND tm."ObjectKey" IS NOT NULL
+                    ) THEN 'public'
+                    ELSE 'hidden'
+                END,
+                "Status" = COALESCE("PreDeleteStatus", 'available'),
+                "DeletedAt" = NULL, "DeletedByUserId" = NULL, "PreDeleteVisibility" = NULL, "PreDeleteStatus" = NULL
+            WHERE "Id" = {NormalizeGuid(id)} AND "PurgedAt" IS NULL
+            """);
+    }
+
+    public async Task RequestPurgeAsync(Guid id)
+    {
+        var now = DateTime.UtcNow;
+
+        if (!_db.Database.IsRelational())
+        {
+            var inMemoryTrack = await _db.Tracks.FindAsync(id);
+            if (inMemoryTrack is not null && inMemoryTrack.DeletedAt is not null && inMemoryTrack.PurgeRequestedAt is null)
+            {
+                inMemoryTrack.PurgeRequestedAt = now;
+                await _db.SaveChangesAsync();
+            }
+
+            return;
+        }
+
+        var trackedEntry = _db.ChangeTracker
+            .Entries<Track>()
+            .FirstOrDefault(e => e.Entity.Id == id);
+
+        if (trackedEntry is not null)
+        {
+            trackedEntry.Entity.PurgeRequestedAt = now;
+            trackedEntry.State = EntityState.Unchanged;
+        }
+
+        // Only queues the async purge (see TrackPurgeWorker) — never touches storage or
+        // AudioUrl/CoverArtUrl here, so a failure mid-request can't leave the database
+        // and object storage in a partially-deleted state relative to each other.
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE "Tracks"
+            SET "PurgeRequestedAt" = {now}
+            WHERE "Id" = {NormalizeGuid(id)} AND "DeletedAt" IS NOT NULL AND "PurgeRequestedAt" IS NULL
+            """);
     }
 
     private async Task InsertLegacyCompatibleTrackAsync(Track track)

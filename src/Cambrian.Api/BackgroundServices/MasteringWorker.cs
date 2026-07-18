@@ -265,7 +265,8 @@ public sealed class MasteringWorker : BackgroundService
         }
 
         SentrySdk.CaptureException(ex);
-        _logger.LogError(ex, "EVENT: MasteringJobFailed jobId:{JobId}", job.Id);
+        Cambrian.Application.Observability.CambrianMetrics.ReleaseReadyJobFailed.Add(1);
+        _logger.LogError(ex, "EVENT: release_ready_job_failed jobId:{JobId}", job.Id);
     }
 
     private static string Truncate(string s) => s.Length <= 1000 ? s : s[..1000];

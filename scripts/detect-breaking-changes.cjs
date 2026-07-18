@@ -102,7 +102,7 @@ function breaking(category, detail) {
 
 // ── 1. Removed endpoints ──────────────────────────────────
 
-const METHODS = ["get", "post", "put", "delete", "patch"];
+const METHODS = ["get", "head", "post", "put", "delete", "patch"];
 
 for (const [pathKey, pathItem] of Object.entries(baseline.paths || {})) {
   for (const method of METHODS) {

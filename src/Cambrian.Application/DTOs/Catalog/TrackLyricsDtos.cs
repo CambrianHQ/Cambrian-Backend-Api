@@ -9,13 +9,14 @@ public class TrackLyricsDto
     public string Lyrics { get; set; } = "";
     public string Language { get; set; } = "en";
     public bool? IsExplicit { get; set; }
+    public int Version { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 
 /// <summary>
-/// Creator upsert for track lyrics. Sending empty/whitespace lyrics removes
-/// the lyrics row entirely (lyrics are optional, never required).
+/// Creator upsert for track lyrics. Deletion requires explicit intent so a
+/// stale/default payload cannot silently erase a newer save.
 /// </summary>
 public class UpsertTrackLyricsRequest
 {
@@ -28,4 +29,11 @@ public class UpsertTrackLyricsRequest
 
     /// <summary>Explicit content marker. Null leaves the flag unset/unchanged on delete-then-recreate.</summary>
     public bool? IsExplicit { get; set; }
+
+    /// <summary>Version returned by the latest GET/PUT. Required when the row already exists.</summary>
+    [Range(1, int.MaxValue)]
+    public int? Version { get; set; }
+
+    /// <summary>Must be true to intentionally remove an existing lyrics row.</summary>
+    public bool DeleteLyrics { get; set; }
 }

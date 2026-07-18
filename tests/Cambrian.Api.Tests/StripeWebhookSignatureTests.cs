@@ -42,7 +42,14 @@ public sealed class StripeWebhookSignatureTests : IClassFixture<SignedStripeWebh
                     "object": "checkout.session",
                     "id": "cs_signed_{{Guid.NewGuid():N}}",
                     "client_reference_id": "{{userId}}:subscription:creator",
-                    "customer": "cus_signed_{{Guid.NewGuid():N}}"
+                    "customer": "cus_signed_{{Guid.NewGuid():N}}",
+                    "payment_status": "paid",
+                    "currency": "usd",
+                    "subscription": {
+                        "id": "sub_signed_{{Guid.NewGuid():N}}",
+                        "status": "active",
+                        "items": { "data": [{ "price": { "id": "price_test_creator" } }] }
+                    }
                 }
             }
         }
@@ -88,7 +95,14 @@ public sealed class StripeWebhookSignatureTests : IClassFixture<SignedStripeWebh
                     "object": "checkout.session",
                     "id": "cs_subcred_{{Guid.NewGuid():N}}",
                     "client_reference_id": "{{userId}}:subscription:creator",
-                    "customer": "cus_subcred_{{Guid.NewGuid():N}}"
+                    "customer": "cus_subcred_{{Guid.NewGuid():N}}",
+                    "payment_status": "paid",
+                    "currency": "usd",
+                    "subscription": {
+                        "id": "sub_subcred_{{Guid.NewGuid():N}}",
+                        "status": "active",
+                        "items": { "data": [{ "price": { "id": "price_test_creator" } }] }
+                    }
                 }
             }
         }

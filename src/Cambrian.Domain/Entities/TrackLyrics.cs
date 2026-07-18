@@ -19,6 +19,12 @@ public sealed class TrackLyrics
     /// <summary>Creator-flagged explicit content marker. Null when not set.</summary>
     public bool? IsExplicit { get; set; }
 
+    /// <summary>
+    /// Optimistic-concurrency version. Clients must echo the version returned by
+    /// GET/PUT when updating or intentionally deleting an existing lyrics row.
+    /// </summary>
+    public int Version { get; set; } = 1;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

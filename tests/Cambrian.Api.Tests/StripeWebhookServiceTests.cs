@@ -418,28 +418,27 @@ public sealed class StripeWebhookServiceTests : IDisposable
     public async Task ProcessEventAsync_SubscriptionDeleted_HandlesGracefully()
     {
         var svc = CreateService();
-        await svc.ProcessEventAsync(
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => svc.ProcessEventAsync(
             eventId: UniqueEventId(),
             eventType: "customer.subscription.deleted",
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: "cus_test_123",
-            stripeSessionId: null);
-        // No exception = handled gracefully; logs warning about manual review
+            stripeSessionId: null,
+            stripeSubscriptionId: "sub_unknown"));
     }
 
     [Fact]
     public async Task ProcessEventAsync_SubscriptionDeleted_NoCustomerId_DoesNotThrow()
     {
         var svc = CreateService();
-        await svc.ProcessEventAsync(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ProcessEventAsync(
             eventId: UniqueEventId(),
             eventType: "customer.subscription.deleted",
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: null,
-            stripeSessionId: null);
-        // No exception = handles missing customer ID gracefully
+            stripeSessionId: null));
     }
 
     // ── Audit gap closer: cancel/downgrade must REVOKE the paid entitlement ──
@@ -469,6 +468,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
             Plan = "pro",
             Status = "active",
             StripeCustomerId = customerId,
+            StripeSubscriptionId = "sub_cancel_pro",
             StartedAt = DateTime.UtcNow.AddDays(-10),
             ExpiresAt = DateTime.UtcNow.AddDays(20),
         });
@@ -481,7 +481,8 @@ public sealed class StripeWebhookServiceTests : IDisposable
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: customerId,
-            stripeSessionId: null);
+            stripeSessionId: null,
+            stripeSubscriptionId: "sub_cancel_pro");
 
         // Tier is reset to free — both the string field and the authoritative enum —
         // and the subscription is marked cancelled.
@@ -574,28 +575,28 @@ public sealed class StripeWebhookServiceTests : IDisposable
     public async Task ProcessEventAsync_InvoicePaymentFailed_HandlesGracefully()
     {
         var svc = CreateService();
-        await svc.ProcessEventAsync(
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => svc.ProcessEventAsync(
             eventId: UniqueEventId(),
             eventType: "invoice.payment_failed",
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: "cus_test_456",
-            stripeSessionId: null);
-        // No exception = handled gracefully; logs warning about retry
+            stripeSessionId: null,
+            stripeSubscriptionId: "sub_unknown",
+            invoiceId: "in_unknown"));
     }
 
     [Fact]
     public async Task ProcessEventAsync_InvoicePaymentFailed_NoCustomerId_DoesNotThrow()
     {
         var svc = CreateService();
-        await svc.ProcessEventAsync(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ProcessEventAsync(
             eventId: UniqueEventId(),
             eventType: "invoice.payment_failed",
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: null,
-            stripeSessionId: null);
-        // No exception = handles missing customer ID gracefully
+            stripeSessionId: null));
     }
 
     [Fact]
@@ -610,7 +611,9 @@ public sealed class StripeWebhookServiceTests : IDisposable
             clientReferenceId: null,
             amountTotal: null,
             stripeCustomerId: "cus_unknown_paid",
-            stripeSessionId: null));
+            stripeSessionId: null,
+            stripeSubscriptionId: "sub_unknown_paid",
+            invoiceId: "in_unknown_paid"));
 
         var evt = await _db.StripeWebhookEvents.SingleAsync(e => e.EventId == eventId);
         Assert.Equal("failed", evt.Status);

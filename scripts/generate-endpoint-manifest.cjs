@@ -106,7 +106,7 @@ function parseController(filePath) {
       continue;
     }
 
-    const httpAttrs = [...attrText.matchAll(/\[Http(Get|Post|Put|Delete|Patch)\s*(?:\(\s*"([^"]*)"\s*\))?\s*\]/gi)];
+    const httpAttrs = [...attrText.matchAll(/\[Http(Get|Head|Post|Put|Delete|Patch)\s*(?:\(\s*"([^"]*)"\s*\))?\s*\]/gi)];
     if (httpAttrs.length === 0) continue;
 
     const methodAuthorizeArgs = parseAttributeArgs(attrText, "Authorize");
@@ -170,7 +170,7 @@ function inferAuth(pathName, method, operation) {
 
 const endpoints = [];
 for (const [pathName, pathItem] of Object.entries(spec.paths || {})) {
-  for (const method of ["get", "post", "put", "delete", "patch"]) {
+  for (const method of ["get", "head", "post", "put", "delete", "patch"]) {
     const operation = pathItem[method];
     if (!operation) continue;
 

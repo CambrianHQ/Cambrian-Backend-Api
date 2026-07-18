@@ -20,6 +20,8 @@ public sealed class AuthorshipRecordConfiguration : IEntityTypeConfiguration<Aut
         builder.Property(x => x.SignatureAlgorithm).HasMaxLength(40);
         builder.Property(x => x.KeyId).HasMaxLength(32);
         builder.Property(x => x.StripeSessionId).HasMaxLength(255);
+        builder.Property(x => x.StripePaymentIntentId).HasMaxLength(255);
+        builder.Property(x => x.PaymentStatus).HasMaxLength(20).HasDefaultValue("pending").IsRequired();
 
         builder.HasIndex(x => x.CreatorId).HasDatabaseName("IX_AuthorshipRecords_CreatorId");
         builder.HasIndex(x => x.TrackId).HasDatabaseName("IX_AuthorshipRecords_TrackId");
@@ -32,5 +34,10 @@ public sealed class AuthorshipRecordConfiguration : IEntityTypeConfiguration<Aut
             .IsUnique()
             .HasFilter("\"StripeSessionId\" IS NOT NULL")
             .HasDatabaseName("IX_AuthorshipRecords_StripeSessionId");
+
+        builder.HasIndex(x => x.StripePaymentIntentId)
+            .IsUnique()
+            .HasFilter("\"StripePaymentIntentId\" IS NOT NULL")
+            .HasDatabaseName("IX_AuthorshipRecords_StripePaymentIntentId");
     }
 }

@@ -9,7 +9,7 @@ namespace Cambrian.Api.Tests;
 
 /// <summary>
 /// Regression: public track + creator DTOs must surface REAL engagement counts
-/// (plays from StreamSessions, sales from completed Purchases, followers from
+/// (qualified plays from TrackStats, sales from completed Purchases, followers from
 /// CreatorFollows) — not zeros or fabricated values. Guards the wiring added so
 /// the frontend "play count on songs" and creator stats reflect live data.
 /// </summary>
@@ -39,10 +39,10 @@ public sealed class TrackEngagementMetricsTests : IDisposable
             new Track { Id = trackB, Title = "B", CreatorId = "c1" },
             new Track { Id = trackC, Title = "C", CreatorId = "c1" });
 
-        // Plays: 3 for A, 1 for B
-        for (var i = 0; i < 3; i++)
-            _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackA });
-        _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackB });
+        // Qualified lifetime plays: 3 for A, 1 for B.
+        _db.TrackStats.AddRange(
+            new TrackStat { TrackId = trackA, PlayCount = 3 },
+            new TrackStat { TrackId = trackB, PlayCount = 1 });
 
         // Sales: 2 completed + 1 pending for A (pending must NOT count); 0 for B
         _db.Purchases.AddRange(
@@ -82,7 +82,21 @@ public sealed class TrackEngagementMetricsTests : IDisposable
     }
 
     [Fact]
-    public async Task GetTracksByCreatorIdAsync_PopulatesPlaysAndSales_FromStreamSessionsAndPurchases()
+    public async Task GetTrackStatsAsync_PreservesBigintPlayCounts()
+    {
+        var trackId = Guid.NewGuid();
+        var expected = (long)int.MaxValue + 42;
+        _db.Tracks.Add(new Track { Id = trackId, Title = "Big", CreatorId = "c-big" });
+        _db.TrackStats.Add(new TrackStat { TrackId = trackId, PlayCount = expected });
+        await _db.SaveChangesAsync();
+
+        var stats = await new TrackRepository(_db).GetTrackStatsAsync(new[] { trackId });
+
+        Assert.Equal(expected, stats[trackId].Plays);
+    }
+
+    [Fact]
+    public async Task GetTracksByCreatorIdAsync_PopulatesPlaysAndSales_FromTrackStatsAndPurchases()
     {
         // Regression: the public creator profile (/creator/tracks/{slug}) showed
         // zero plays even when the catalog showed real counts — GetTracksByCreatorIdAsync
@@ -98,9 +112,8 @@ public sealed class TrackEngagementMetricsTests : IDisposable
             new Track { Id = trackA, Title = "A", CreatorId = userId, CreatorUuid = creatorUuid, Visibility = "public", Status = "available" },
             new Track { Id = trackB, Title = "B", CreatorId = userId, CreatorUuid = creatorUuid, Visibility = "public", Status = "available" });
 
-        // trackA: 5 plays + 2 completed sales (+1 pending, which must NOT count); trackB: none
-        for (var i = 0; i < 5; i++)
-            _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackA });
+        // trackA: 5 qualified plays + 2 completed sales (+1 pending); trackB: none
+        _db.TrackStats.Add(new TrackStat { TrackId = trackA, PlayCount = 5 });
         _db.Purchases.AddRange(
             new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b1", Status = "completed" },
             new Purchase { Id = Guid.NewGuid(), TrackId = trackA, BuyerId = "b2", Status = "completed" },
@@ -149,9 +162,8 @@ public sealed class TrackEngagementMetricsTests : IDisposable
         });
         _db.Tracks.Add(new Track { Id = trackId, Title = "T", CreatorId = userId, CreatorUuid = creatorUuid });
 
-        // 4 plays
-        for (var i = 0; i < 4; i++)
-            _db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId });
+        // 4 qualified plays
+        _db.TrackStats.Add(new TrackStat { TrackId = trackId, PlayCount = 4 });
         // 2 completed sales (downloads)
         _db.Purchases.AddRange(
             new Purchase { Id = Guid.NewGuid(), TrackId = trackId, BuyerId = "b1", Status = "completed" },

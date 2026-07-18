@@ -44,6 +44,15 @@ public sealed class TracksV1LyricsTests : IClassFixture<CambrianApiFixture>
         Guid.Parse(putData.GetProperty("trackId").GetString()!).Should().Be(trackId);
         putData.GetProperty("lyrics").GetString().Should().Be("Verse one\nChorus shining bright");
         putData.GetProperty("isExplicit").GetBoolean().Should().BeTrue();
+        putData.GetProperty("version").GetInt32().Should().Be(1);
+
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var freshDb = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            var persisted = await freshDb.TrackLyrics.AsNoTracking().SingleAsync(x => x.TrackId == trackId);
+            persisted.Lyrics.Should().Be("Verse one\nChorus shining bright");
+            persisted.Version.Should().Be(1);
+        }
 
         var anon = _fixture.CreateClient();
         var getRes = await anon.GetAsync($"/api/v1/tracks/{trackId}/lyrics");
@@ -51,6 +60,12 @@ public sealed class TracksV1LyricsTests : IClassFixture<CambrianApiFixture>
         var getData = (await getRes.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
         getData.GetProperty("lyrics").GetString().Should().Be("Verse one\nChorus shining bright");
         getData.GetProperty("isExplicit").GetBoolean().Should().BeTrue();
+
+        var compliance = (await (await client.GetAsync($"/api/tracks/{trackId}/compliance-score"))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        var lyricsItem = compliance.GetProperty("checklistItems").EnumerateArray()
+            .Single(x => x.GetProperty("key").GetString() == "lyrics");
+        lyricsItem.GetProperty("status").GetString().Should().Be("complete");
     }
 
     [Fact]
@@ -60,16 +75,20 @@ public sealed class TracksV1LyricsTests : IClassFixture<CambrianApiFixture>
         var trackId = await _fixture.SeedTrackAsync(userId, "V1 Lyrics Edit Beat");
         await RecordPlaysAndSalesAsync(trackId, plays: 3, sales: 2);
 
-        (await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
+        var createRes = await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
         {
             lyrics = "Original words",
-        })).StatusCode.Should().Be(HttpStatusCode.OK);
+        });
+        createRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var version = (await createRes.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").GetProperty("version").GetInt32();
 
         var putRes = await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
         {
             lyrics = "Updated words",
             language = "pt-BR",
             isExplicit = false,
+            version,
         });
         putRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -77,6 +96,7 @@ public sealed class TracksV1LyricsTests : IClassFixture<CambrianApiFixture>
         data.GetProperty("lyrics").GetString().Should().Be("Updated words");
         data.GetProperty("language").GetString().Should().Be("pt-BR");
         data.GetProperty("isExplicit").GetBoolean().Should().BeFalse();
+        data.GetProperty("version").GetInt32().Should().Be(2);
 
         (await CountLyricsRowsAsync(trackId)).Should().Be(1);
         (await GetPlaysAndSalesAsync(trackId)).Should().Be((3, 2));
@@ -149,20 +169,24 @@ public sealed class TracksV1LyricsTests : IClassFixture<CambrianApiFixture>
     }
 
     [Fact]
-    public async Task EmptyLyrics_DeletesRow_AndPublicGetReturns404()
+    public async Task ExplicitDelete_WithLatestVersion_DeletesRow_AndPublicGetReturns404()
     {
         var (client, userId) = await CreateCreatorAsync("v1lyr-empty");
         var trackId = await _fixture.SeedTrackAsync(userId, "V1 Empty Beat");
 
-        (await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
+        var createRes = await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
         {
             lyrics = "Soon to be removed",
-        })).StatusCode.Should().Be(HttpStatusCode.OK);
+        });
+        createRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var version = (await createRes.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").GetProperty("version").GetInt32();
         (await CountLyricsRowsAsync(trackId)).Should().Be(1);
 
         var deleteRes = await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
         {
-            lyrics = "   ",
+            deleteLyrics = true,
+            version,
         });
         deleteRes.StatusCode.Should().Be(HttpStatusCode.OK);
         (await CountLyricsRowsAsync(trackId)).Should().Be(0);
@@ -170,6 +194,61 @@ public sealed class TracksV1LyricsTests : IClassFixture<CambrianApiFixture>
         var anon = _fixture.CreateClient();
         var getRes = await anon.GetAsync($"/api/v1/tracks/{trackId}/lyrics");
         getRes.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task StaleUpdateOrDelete_CannotOverwriteNewerLyrics()
+    {
+        var (client, userId) = await CreateCreatorAsync("v1lyr-stale");
+        var trackId = await _fixture.SeedTrackAsync(userId, "V1 Stale Lyrics Beat");
+
+        var create = await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
+        {
+            lyrics = "  Verse one\r\nChorus stays  ",
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.OK);
+        var version1 = (await create.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").GetProperty("version").GetInt32();
+
+        var update = await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
+        {
+            lyrics = "Newer saved lyrics",
+            version = version1,
+        });
+        update.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
+        {
+            lyrics = "Older overwrite",
+            version = version1,
+        })).StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        (await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new
+        {
+            deleteLyrics = true,
+            version = version1,
+        })).StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var get = await client.GetFromJsonAsync<JsonElement>($"/api/v1/tracks/{trackId}/lyrics");
+        get.GetProperty("data").GetProperty("lyrics").GetString().Should().Be("Newer saved lyrics");
+        get.GetProperty("data").GetProperty("version").GetInt32().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task WhitespaceAndLineEndings_ArePersistedExactly()
+    {
+        var (client, userId) = await CreateCreatorAsync("v1lyr-whitespace");
+        var trackId = await _fixture.SeedTrackAsync(userId, "V1 Whitespace Lyrics Beat");
+        const string text = "  Verse one\r\n\r\nChorus with emoji 🎵  ";
+
+        var put = await client.PutAsJsonAsync($"/api/v1/tracks/{trackId}/lyrics", new { lyrics = text });
+        put.StatusCode.Should().Be(HttpStatusCode.OK);
+        var data = (await put.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        data.GetProperty("lyrics").GetString().Should().Be(text);
+
+        using var scope = _fixture.Services.CreateScope();
+        var freshDb = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        (await freshDb.TrackLyrics.AsNoTracking().SingleAsync(x => x.TrackId == trackId)).Lyrics.Should().Be(text);
     }
 
     [Fact]

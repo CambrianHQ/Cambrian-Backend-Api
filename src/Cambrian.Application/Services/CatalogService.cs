@@ -77,36 +77,20 @@ public class CatalogService : ICatalogService
         return track is null ? null : await MapToResponseAsync(track);
     }
 
-    /// <summary>
-    /// Trending = recent public tracks re-ranked by REAL lifetime plays. We fetch a bounded
-    /// window of the newest tracks (so the query stays cheap and uses the existing public
-    /// filters), map them — which attaches live play counts — then order by plays.
-    /// </summary>
-    private const int TrendingWindow = 250;
-
     public async Task<PagedResult<TrackResponse>> GetTrendingPagedAsync(int page, int pageSize,
         string? genre, string? mood, string? tempo, bool? instrumental, string? duration)
     {
-        var candidates = await _tracks.BrowseAsync(1, TrendingWindow, genre, null, "newest",
+        var totalCount = await _tracks.CountTrendingAsync(genre, mood, tempo, instrumental, duration);
+        var ranked = await _tracks.BrowseAsync(page, pageSize, genre, null, "trending",
             mood, tempo, instrumental, duration);
-        var mapped = await MapBatchAsync(candidates);
-
-        var ranked = mapped
-            .OrderByDescending(t => t.Plays)
-            .ThenByDescending(t => t.CreatedAt)
-            .ToList();
-
-        var pageItems = ranked
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
+        var pageItems = await MapBatchAsync(ranked);
 
         return new PagedResult<TrackResponse>
         {
             Items = pageItems,
             Page = page,
             PageSize = pageSize,
-            TotalCount = ranked.Count
+            TotalCount = totalCount
         };
     }
 

@@ -6,10 +6,10 @@ public sealed class CreatorDigestStats
     public string UserId { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
-    public int PlaysThisWeek { get; set; }
+    public long PlaysThisWeek { get; set; }
     public int NewFollowers { get; set; }
     public string? TopTrackTitle { get; set; }
-    public int TopTrackPlays { get; set; }
+    public long TopTrackPlays { get; set; }
     public int UnusedReleaseCredits { get; set; }
 }
 

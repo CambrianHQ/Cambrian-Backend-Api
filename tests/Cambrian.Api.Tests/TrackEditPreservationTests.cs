@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Cambrian.Api.Tests.Fixtures;
+using Cambrian.Application.Interfaces;
+using Cambrian.Domain.Entities;
 using Cambrian.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -68,6 +70,7 @@ public sealed class TrackEditPreservationTests : IClassFixture<CambrianApiFixtur
         var creatorUserId = await _fixture.GetUserIdAsync(creatorEmail);
 
         var trackId = await _fixture.SeedTrackAsync(creatorUserId, "Edit Safety Beat");
+        await MarkMediaReadyAsync(trackId);
 
         // Play 1: anonymous (must report "started", not "already_counted").
         var anon = _fixture.CreateClient();
@@ -145,7 +148,32 @@ public sealed class TrackEditPreservationTests : IClassFixture<CambrianApiFixtur
     private static string[] TrackIdsOf(JsonElement collection) =>
         collection.GetProperty("trackIds").EnumerateArray()
             .Select(e => e.GetString()!.ToLowerInvariant())
-            .ToArray();
+        .ToArray();
+
+    private async Task MarkMediaReadyAsync(Guid trackId)
+    {
+        using var scope = _fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var stateMachine = scope.ServiceProvider.GetRequiredService<IMediaStateMachine>();
+        var track = await db.Tracks.AsNoTracking().SingleAsync(t => t.Id == trackId);
+        var media = await stateMachine.InitializeLegacyAsync(trackId, track.AudioUrl);
+        if (media.State == TrackMediaStates.Ready)
+            return;
+
+        var validating = await stateMachine.TransitionAsync(
+            trackId, media.ConcurrencyToken, TrackMediaStates.Validating, new MediaStateMetadata());
+        await stateMachine.TransitionAsync(
+            trackId,
+            validating.ConcurrencyToken,
+            TrackMediaStates.Ready,
+            new MediaStateMetadata(
+                ValidatedAtUtc: DateTime.UtcNow,
+                SizeBytes: 4,
+                ContentType: "audio/mpeg",
+                ChecksumSha256: new string('a', 64),
+                DurationMilliseconds: 1_000,
+                ValidationVersion: "test-v1"));
+    }
 
     // ───────────────────────── 1. metadata edit ─────────────────────────
 
@@ -192,10 +220,12 @@ public sealed class TrackEditPreservationTests : IClassFixture<CambrianApiFixtur
         lyricsDto.GetProperty("trackId").GetString().Should().Be(ctx.TrackId.ToString());
         lyricsDto.GetProperty("language").GetString().Should().Be("en");
 
-        // Whitespace-only lyrics delete the companion row (never the Track row).
+        // Explicit, version-checked deletion removes only the companion row.
+        var lyricsVersion = lyricsDto.GetProperty("version").GetInt32();
         var clear = await ctx.Creator.PutAsJsonAsync($"/creator/tracks/{ctx.TrackId}/lyrics", new
         {
-            lyrics = "   ",
+            deleteLyrics = true,
+            version = lyricsVersion,
         });
         clear.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -361,6 +391,7 @@ public sealed class TrackEditPreservationTests : IClassFixture<CambrianApiFixtur
         upload.StatusCode.Should().Be(HttpStatusCode.Created);
         var uploaded = (await upload.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
         var draftId = Guid.Parse(uploaded.GetProperty("trackId").GetString()!);
+        await MarkMediaReadyAsync(draftId);
 
         // Snapshot the draft's identity straight from the DB.
         string? cambrianTrackId;

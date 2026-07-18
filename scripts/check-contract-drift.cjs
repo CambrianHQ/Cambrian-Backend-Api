@@ -36,7 +36,7 @@ function parseControllerActions(filePath) {
   const actions = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const attrMatch = lines[i].match(/\[Http(Get|Post|Put|Delete|Patch)\s*(?:\("([^"]*)"\))?\s*\]/i);
+    const attrMatch = lines[i].match(/\[Http(Get|Head|Post|Put|Delete|Patch)\s*(?:\("([^"]*)"\))?\s*\]/i);
     if (!attrMatch) continue;
 
     const httpMethod = attrMatch[1].toUpperCase();
@@ -86,7 +86,9 @@ function parseControllerActions(filePath) {
 
     // An explicit [ProducesResponseType(..., StatusCodes.StatusXxx)] documenting a 2xx
     // code is the author's stated intent — trust it over the body-shape guess above.
-    const declared2xx = [...attrBlock.matchAll(/ProducesResponseType\([^)]*StatusCodes\.Status(\d{3})\w*\)/g)]
+    // [^\]]*? spans nested parens (e.g. typeof(V1ApiResponse<T>)) but stays inside
+    // the attribute, which always terminates with ")]".
+    const declared2xx = [...attrBlock.matchAll(/ProducesResponseType\([^\]]*?StatusCodes\.Status(\d{3})\w*\s*\)\]/g)]
       .map((m) => Number(m[1]))
       .find((code) => code >= 200 && code < 300);
     if (declared2xx) successCode = declared2xx;
@@ -119,7 +121,7 @@ function report(message) {
 
 const openApiRouteKeys = new Set();
 for (const [pathName, pathItem] of Object.entries(openApi.paths || {})) {
-  for (const method of ["get", "post", "put", "delete", "patch"]) {
+  for (const method of ["get", "head", "post", "put", "delete", "patch"]) {
     if (pathItem[method]) openApiRouteKeys.add(`${method.toUpperCase()} ${pathName}`);
   }
 }

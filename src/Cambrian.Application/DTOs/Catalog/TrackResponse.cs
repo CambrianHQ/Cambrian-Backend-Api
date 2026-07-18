@@ -71,11 +71,10 @@ public class TrackResponse
     public string? Artist { get; set; }
 
     /// <summary>
-    /// Lifetime play count — number of recorded stream sessions for this track
-    /// (preview + full plays, including anonymous listeners). Sourced live from
-    /// the StreamSessions table; 0 when the track has never been streamed.
+    /// Lifetime qualified-play count for this track. Sourced from the
+    /// transactionally maintained TrackStats projection; 0 when never played.
     /// </summary>
-    public int Plays { get; set; }
+    public long Plays { get; set; }
 
     /// <summary>
     /// Number of completed (paid) purchases for this track. Sourced live from the

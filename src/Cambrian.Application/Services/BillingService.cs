@@ -212,10 +212,16 @@ public sealed class BillingService : IBillingService
             };
         }
 
-        // Activate the subscription and update user tier using the existing SubscriptionService logic
-        await _subscriptionService.UpdateAsync(new UpdateSubscriptionRequest { Plan = tier }, userId);
+        if (tier is not ("creator" or "pro" or "paid"))
+        {
+            _logger.LogWarning("Checkout session {SessionId} has unsupported tier {Tier}", sessionId, tier);
+            return new CheckoutSessionStatusResponse { SessionId = sessionId, Status = "failed" };
+        }
 
-        _logger.LogInformation("Checkout confirmed: User={UserId} Tier={Tier} Session={SessionId}",
+        // Read-only confirmation: the signed checkout.session.completed webhook is the
+        // only authority allowed to grant a tier. Polling may report Stripe's state to
+        // the frontend, but it must never write subscriptions or entitlements.
+        _logger.LogInformation("Checkout observed paid; awaiting webhook fulfillment: User={UserId} Tier={Tier} Session={SessionId}",
             userId, tier, sessionId);
 
         return new CheckoutSessionStatusResponse

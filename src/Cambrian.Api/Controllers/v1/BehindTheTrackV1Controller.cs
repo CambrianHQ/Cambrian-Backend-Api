@@ -84,6 +84,7 @@ public class BehindTheTrackV1Controller : ControllerBase
 
     [Authorize(Policy = "CanEditOwnTrack")]
     [HttpPut("behind-the-track")]
+    [ProducesResponseType(typeof(V1ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpsertBehindTheTrack(string trackId, [FromBody] UpsertBehindTheTrackRequest request)
     {
         var userId = GetRequiredUserId();
@@ -140,6 +141,7 @@ public class BehindTheTrackV1Controller : ControllerBase
 
     [Authorize(Policy = "CanEditOwnTrack")]
     [HttpPost("proof-videos")]
+    [ProducesResponseType(typeof(V1ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> AddProofVideo(string trackId, [FromBody] CreateProofVideoRequest request)
     {
         var userId = GetRequiredUserId();
@@ -171,6 +173,7 @@ public class BehindTheTrackV1Controller : ControllerBase
 
     [Authorize(Policy = "CanEditOwnTrack")]
     [HttpPatch("proof-videos/{videoId:guid}")]
+    [ProducesResponseType(typeof(V1ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateProofVideo(string trackId, Guid videoId, [FromBody] UpdateProofVideoRequest request)
     {
         var userId = GetRequiredUserId();
@@ -227,6 +230,7 @@ public class BehindTheTrackV1Controller : ControllerBase
 
     [Authorize(Policy = "CanEditOwnTrack")]
     [HttpDelete("proof-videos/{videoId:guid}")]
+    [ProducesResponseType(typeof(V1ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteProofVideo(string trackId, Guid videoId)
     {
         var userId = GetRequiredUserId();

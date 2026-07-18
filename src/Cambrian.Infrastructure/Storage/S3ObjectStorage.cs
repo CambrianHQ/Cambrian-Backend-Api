@@ -32,6 +32,7 @@ namespace Cambrian.Infrastructure.Storage;
 /// </summary>
 public sealed class S3ObjectStorage : IObjectStorage
 {
+    public TimeSpan? SignedUrlLifetime => TimeSpan.FromMinutes(15);
     private const string HttpClientName = "SupabaseStorage";
 
     /// <summary>Total attempts (including the first) for a single UploadAsync call.</summary>
@@ -336,16 +337,27 @@ public sealed class S3ObjectStorage : IObjectStorage
                 return null;
             }
 
-            // 416 Range Not Satisfiable comes back when the client asks for a range
-            // outside the object size. Surface it as "not found" so the controller
-            // can return a sensible error without crashing.
+            // Preserve 416 so the API can return RFC-compliant Content-Range:
+            // bytes */TOTAL rather than incorrectly converting it to a 404.
             if (resp.StatusCode == System.Net.HttpStatusCode.RequestedRangeNotSatisfiable)
             {
                 _logger.LogInformation(
                     "[STORAGE-DIAG] S3 OpenRead RangeNotSatisfiable: bucket={Bucket} key={Key} range={Range}",
                     _options.Bucket, normalised, rangeHeader);
-                resp.Dispose();
-                return null;
+                var total = resp.Content.Headers.ContentRange?.Length;
+                var rangeErrorResponse = resp;
+                resp = null;
+                return new StorageFile
+                {
+                    Stream = Stream.Null,
+                    ContentType = rangeErrorResponse.Content.Headers.ContentType?.MediaType ?? "application/octet-stream",
+                    Length = 0,
+                    TotalLength = total,
+                    ContentRange = total.HasValue ? $"bytes */{total.Value}" : null,
+                    IsRangeNotSatisfiable = true,
+                    StatusCode = 416,
+                    OwnedResource = rangeErrorResponse,
+                };
             }
 
             if (!resp.IsSuccessStatusCode)
@@ -386,6 +398,7 @@ public sealed class S3ObjectStorage : IObjectStorage
                 TotalLength = totalLength,
                 IsPartialContent = isPartial,
                 ContentRange = contentRangeHeader,
+                StatusCode = (int)owned.StatusCode,
                 OwnedResource = owned,
             };
         }
@@ -416,6 +429,60 @@ public sealed class S3ObjectStorage : IObjectStorage
             // If we bailed out before transferring ownership, dispose.
             resp?.Dispose();
         }
+    }
+
+    public async Task<StorageObjectMetadata?> GetMetadataAsync(string key, CancellationToken ct = default)
+    {
+        var normalised = NormaliseKey(key);
+        var url = _client.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = _options.Bucket,
+            Key = normalised,
+            Expires = DateTime.UtcNow.AddMinutes(2),
+            Verb = HttpVerb.HEAD,
+        });
+        var http = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Head, url);
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+        response.EnsureSuccessStatusCode();
+        var etag = response.Headers.ETag?.Tag?.Trim('"');
+        var lastModified = response.Content.Headers.LastModified?.UtcDateTime;
+        return new StorageObjectMetadata(
+            normalised,
+            response.Content.Headers.ContentLength ?? 0,
+            response.Content.Headers.ContentType?.MediaType,
+            etag,
+            lastModified);
+    }
+
+    public async IAsyncEnumerable<StorageObjectMetadata> ListAsync(
+        string? prefix = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        string? continuation = null;
+        do
+        {
+            var response = await _client.ListObjectsV2Async(new ListObjectsV2Request
+            {
+                BucketName = _options.Bucket,
+                Prefix = string.IsNullOrWhiteSpace(prefix) ? null : NormaliseKey(prefix),
+                ContinuationToken = continuation,
+                MaxKeys = 500,
+            }, ct);
+            foreach (var item in response.S3Objects)
+            {
+                ct.ThrowIfCancellationRequested();
+                yield return new StorageObjectMetadata(
+                    item.Key,
+                    item.Size,
+                    null,
+                    item.ETag?.Trim('"'),
+                    item.LastModified.ToUniversalTime());
+            }
+            continuation = response.IsTruncated ? response.NextContinuationToken : null;
+        } while (!string.IsNullOrEmpty(continuation));
     }
 
     /// <summary>

@@ -285,6 +285,13 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+    c.MapType<Cambrian.Domain.Entities.AiTrackClassification>(() => new Microsoft.OpenApi.Models.OpenApiSchema
+    {
+        Type = "string",
+        Enum = Enum.GetNames<Cambrian.Domain.Entities.AiTrackClassification>()
+            .Select(x => (Microsoft.OpenApi.Any.IOpenApiAny)new Microsoft.OpenApi.Any.OpenApiString(x))
+            .ToList(),
+    });
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
         Description = "JWT Bearer token. Example: \"Authorization: Bearer {token}\"",
@@ -313,10 +320,17 @@ builder.Services.AddSwaggerGen(c =>
 // Rate Limiting
 var globalLimit = builder.Configuration.GetValue("RateLimiting:GlobalPermitLimit", 100);
 var authLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
+// One listen on the ticketed flow costs playback-info + /stream/start + many ranged
+// audio GETs + /stream/stop, so playback endpoints get a dedicated, higher-permit
+// policy — and telemetry gets batch-sized headroom — instead of the general buckets.
+var playbackLimit = builder.Configuration.GetValue("RateLimiting:PlaybackPermitLimit", 300);
+var playbackTelemetryLimit = builder.Configuration.GetValue("RateLimiting:PlaybackTelemetryPermitLimit", 120);
 if (builder.Environment.EnvironmentName == TestingEnvironment)
 {
     globalLimit = int.MaxValue;
     authLimit = int.MaxValue;
+    playbackLimit = int.MaxValue;
+    playbackTelemetryLimit = int.MaxValue;
 }
 builder.Services.AddRateLimiter(options =>
 {
@@ -344,15 +358,29 @@ builder.Services.AddRateLimiter(options =>
     // Partitioned by authenticated user id (falling back to connection address for
     // anonymous requests) — see ClientRateLimitKey.FromUserOrConnection for why an
     // IP-only key isn't safe behind a reverse proxy.
+    //
+    // Endpoints on the dedicated playback policies are exempted from this shared
+    // bucket: production deliberately does not trust forwarded headers, so behind
+    // Render's proxy every anonymous client resolves to the same connection address
+    // and a single listener's ranged audio GETs would exhaust the 100/min global
+    // bucket for every other anonymous visitor. Those endpoints are instead bounded
+    // by the session-aware "playback"/"playbackTelemetry" policies below.
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
-        RateLimitPartition.GetFixedWindowLimiter(
+    {
+        var endpointPolicy = ctx.GetEndpoint()?.Metadata
+            .GetMetadata<Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute>()?.PolicyName;
+        if (endpointPolicy is "playback" or "playbackTelemetry")
+            return RateLimitPartition.GetNoLimiter("playback-exempt");
+
+        return RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ClientRateLimitKey.FromUserOrConnection(ctx),
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = globalLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
-            }));
+            });
+    });
     options.AddPolicy("auth", ctx =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: ClientRateLimitKey.FromUserOrConnection(ctx),
@@ -396,6 +424,32 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    // Ticketed playback flow (PlaybackV1Controller playback-info + StreamController
+    // audio/start/stop). Partitioned per listener — authenticated user id, then the
+    // anonymous playback session, then connection address — so one anonymous
+    // listener behind Render's shared proxy address cannot starve another's audio
+    // requests. See ClientRateLimitKey.FromUserOrPlaybackSessionOrConnection for
+    // why the client-chosen session key is acceptable here.
+    options.AddPolicy("playback", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ClientRateLimitKey.FromUserOrPlaybackSessionOrConnection(ctx),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = playbackLimit,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    options.AddPolicy("playbackTelemetry", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ClientRateLimitKey.FromUserOrPlaybackSessionOrConnection(ctx),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = playbackTelemetryLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
@@ -483,6 +537,28 @@ builder.Services.AddScoped<ICapabilityResolver, CapabilityResolver>();
 builder.Services.AddScoped<IEntitlementService, EntitlementService>();
 builder.Services.AddScoped<IPlanEntitlementService, PlanEntitlementService>();
 builder.Services.AddSingleton<ITrackVisibilityPolicy, TrackVisibilityPolicy>();
+builder.Services.Configure<PlaybackOptions>(builder.Configuration.GetSection(PlaybackOptions.SectionName));
+builder.Services
+    .AddOptions<PlaybackMediaOptions>()
+    .Bind(builder.Configuration.GetSection(PlaybackMediaOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+if (builder.Environment.IsProduction())
+{
+    var mediaConfig = builder.Configuration.GetSection(PlaybackMediaOptions.SectionName)
+        .Get<PlaybackMediaOptions>() ?? new PlaybackMediaOptions();
+    if (string.IsNullOrWhiteSpace(mediaConfig.TicketSigningKey) || mediaConfig.TicketSigningKey.Length < 32)
+        throw new InvalidOperationException("PlaybackMedia:TicketSigningKey must be at least 32 characters in Production.");
+    if (string.IsNullOrWhiteSpace(mediaConfig.ProductionProbeSigningKey) || mediaConfig.ProductionProbeSigningKey.Length < 32)
+        throw new InvalidOperationException("PlaybackMedia:ProductionProbeSigningKey must be at least 32 characters in Production.");
+    if (string.Equals(mediaConfig.TicketSigningKey, mediaConfig.ProductionProbeSigningKey, StringComparison.Ordinal))
+        throw new InvalidOperationException(
+            "PlaybackMedia:TicketSigningKey and PlaybackMedia:ProductionProbeSigningKey must differ in Production — "
+            + "reusing one key collapses the browser-ticket and internal-probe trust domains.");
+    if (!Uri.TryCreate(mediaConfig.ProductionPlaybackBaseUrl, UriKind.Absolute, out var playbackBaseUri)
+        || playbackBaseUri.Scheme != Uri.UriSchemeHttps)
+        throw new InvalidOperationException("PlaybackMedia:ProductionPlaybackBaseUrl must be an absolute https URL in Production.");
+}
 
 // §9 provenance / authorship / compliance
 // Production must supply a stable signing key so stamps verify across restarts.
@@ -580,6 +656,14 @@ builder.Services.AddHttpClient<IPurchaseAnalyticsService, Cambrian.Infrastructur
 {
     client.Timeout = TimeSpan.FromSeconds(2);
 });
+builder.Services.AddHttpClient<IPlaybackAnalyticsService, Cambrian.Infrastructure.Analytics.PostHogPlaybackAnalyticsService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(2);
+});
+builder.Services.AddHttpClient(Cambrian.Infrastructure.Validation.MediaValidationService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 builder.Services.AddScoped<IFeatureFlagService, Cambrian.Infrastructure.FeatureFlags.ConfigurationFeatureFlagService>();
 builder.Services.AddScoped<IActivityService, Cambrian.Persistence.Services.ActivityService>();
 builder.Services.AddScoped<IAnalyticsService, Cambrian.Persistence.Services.AnalyticsService>();
@@ -608,6 +692,20 @@ builder.Services.AddScoped<ITrackBoostRepository, TrackBoostRepository>();
 builder.Services.AddScoped<IPayoutRepository, PayoutRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IStreamRepository, StreamRepository>();
+builder.Services.AddScoped<IPlaybackTrackingService, Cambrian.Persistence.Services.PlaybackTrackingService>();
+builder.Services.AddScoped<IPlayReconciliationService, Cambrian.Persistence.Services.PlayReconciliationService>();
+builder.Services.AddSingleton<IPlaybackTicketService, PlaybackTicketService>();
+builder.Services.AddSingleton<IMediaProbeSignatureService, MediaProbeSignatureService>();
+builder.Services.AddSingleton<IMediaValidationService, Cambrian.Infrastructure.Validation.MediaValidationService>();
+builder.Services.AddScoped<IMediaStateMachine, Cambrian.Persistence.Services.MediaStateMachine>();
+builder.Services.AddScoped<IPlaybackAccessService, Cambrian.Persistence.Services.PlaybackAccessService>();
+builder.Services.AddScoped<IMediaReconciliationService, Cambrian.Persistence.Services.MediaReconciliationService>();
+builder.Services.AddScoped<IMediaReadinessService, Cambrian.Persistence.Services.MediaReadinessService>();
+var playbackMediaOptions = builder.Configuration.GetSection(PlaybackMediaOptions.SectionName)
+    .Get<PlaybackMediaOptions>() ?? new PlaybackMediaOptions();
+if (playbackMediaOptions.ReconciliationWorkerEnabled
+    && builder.Environment.EnvironmentName != TestingEnvironment)
+    builder.Services.AddHostedService<Cambrian.Api.BackgroundServices.MediaReconciliationWorker>();
 builder.Services.AddScoped<IWalletRepository, WalletRepository>();
 builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
 // Subscription expiry sweep (keeps Status truthful; tier enforcement is at read
@@ -619,6 +717,7 @@ builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IFeatureFlagRepository, FeatureFlagRepository>();
 builder.Services.AddScoped<ICreatorProfileRepository, CreatorProfileRepository>();
 builder.Services.AddScoped<ITrackDetailsRepository, TrackDetailsRepository>();
+builder.Services.AddScoped<ITrackAiDisclosureRepository, TrackAiDisclosureRepository>();
 builder.Services.AddScoped<IPublicDirectoryRepository, PublicDirectoryRepository>();
 builder.Services.AddScoped<ICreatorIdentityRepository, CreatorIdentityRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
@@ -775,7 +874,6 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
-app.UseRateLimiter();
 app.UseMiddleware<VerifiedEmailForbiddenResponseMiddleware>();
 
 // Bound MCP request bodies even when Content-Length is omitted/chunked.
@@ -808,6 +906,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseAuthentication();
+// Rate limiting must run AFTER authentication (and before authorization) so the
+// per-user partition keys in ClientRateLimitKey actually see claims. It previously
+// ran pre-authentication, which meant every "user id" partition silently fell back
+// to the connection address — one shared anonymous bucket behind Render's proxy.
+app.UseRateLimiter();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseMiddleware<CookieCsrfProtectionMiddleware>();
 app.UseMiddleware<Cambrian.Api.Middleware.CapabilityMiddleware>();
