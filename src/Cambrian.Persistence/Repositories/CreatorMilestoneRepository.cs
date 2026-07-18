@@ -11,21 +11,19 @@ public sealed class CreatorMilestoneRepository : ICreatorMilestoneRepository
 
     public async Task<FirstPlayMilestone?> GetFirstPlayAsync(string userId, CancellationToken ct = default)
     {
-        // Anonymous sessions count: StreamSession.UserId being null is irrelevant —
-        // the milestone belongs to the CREATOR, keyed by track ownership.
-        var first = await _db.StreamSessions
+        // Anonymous qualified plays count; listener identity is irrelevant because
+        // the accepted event carries the creator and track attribution.
+        var first = await _db.QualifiedPlayEvents
             .AsNoTracking()
-            .Join(
-                _db.Tracks.Where(t => t.CreatorId == userId),
-                s => s.TrackId,
-                t => t.Id,
-                (s, t) => new { s.StartedAt, s.TrackId })
-            .OrderBy(x => x.StartedAt)
+            .Where(p => p.CreatorId == userId)
+            .OrderBy(p => p.QualifiedAtUtc)
+            .ThenBy(p => p.Id)
+            .Select(p => new { p.QualifiedAtUtc, p.TrackId })
             .FirstOrDefaultAsync(ct);
 
         return first is null
             ? null
-            : new FirstPlayMilestone { AtUtc = first.StartedAt, TrackId = first.TrackId };
+            : new FirstPlayMilestone { AtUtc = first.QualifiedAtUtc, TrackId = first.TrackId };
     }
 
     public async Task<FirstFanMilestone?> GetFirstFanEventAsync(string userId, CancellationToken ct = default)

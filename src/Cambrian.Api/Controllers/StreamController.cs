@@ -1,10 +1,13 @@
 using System.Security.Claims;
+using Cambrian.Application.Configuration;
+using Cambrian.Application.DTOs.Playback;
 using Cambrian.Application.Interfaces;
 using Cambrian.Infrastructure.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Cambrian.Api.Controllers;
 
@@ -13,19 +16,53 @@ public class StreamController : BaseController
 {
     private readonly ITrackRepository _tracks;
     private readonly IObjectStorage _storage;
-    private readonly IStreamRepository _streams;
     private readonly ITrackVisibilityPolicy _visibility;
-    private readonly IMemoryCache _cache;
     private readonly ILogger<StreamController> _logger;
+    private readonly IPlaybackTrackingService _playback;
+    private readonly IPlaybackAccessService? _playbackAccess;
+    private readonly IPlaybackTicketService? _tickets;
+    private readonly IMediaProbeSignatureService? _probeSignatures;
+    private readonly PlaybackMediaOptions _mediaOptions;
+    private readonly string _backendRelease;
 
-    public StreamController(ITrackRepository tracks, IObjectStorage storage, IStreamRepository streams, ITrackVisibilityPolicy visibility, IMemoryCache cache, ILogger<StreamController> logger)
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public StreamController(
+        ITrackRepository tracks,
+        IObjectStorage storage,
+        ITrackVisibilityPolicy visibility,
+        ILogger<StreamController> logger,
+        IPlaybackTrackingService playback,
+        IPlaybackAccessService playbackAccess,
+        IPlaybackTicketService tickets,
+        IMediaProbeSignatureService probeSignatures,
+        IOptions<PlaybackMediaOptions> mediaOptions)
     {
         _tracks = tracks;
         _storage = storage;
-        _streams = streams;
         _visibility = visibility;
-        _cache = cache;
         _logger = logger;
+        _playback = playback;
+        _playbackAccess = playbackAccess;
+        _tickets = tickets;
+        _probeSignatures = probeSignatures;
+        _mediaOptions = mediaOptions.Value;
+        _backendRelease = ResolveBackendRelease(_mediaOptions.BackendRelease);
+    }
+
+    public StreamController(
+        ITrackRepository tracks,
+        IObjectStorage storage,
+        ITrackVisibilityPolicy visibility,
+        ILogger<StreamController> logger,
+        IPlaybackTrackingService playback)
+    {
+        _tracks = tracks;
+        _storage = storage;
+        _visibility = visibility;
+        _logger = logger;
+        _playback = playback;
+        _mediaOptions = new PlaybackMediaOptions();
+        _backendRelease = ResolveBackendRelease(_mediaOptions.BackendRelease);
     }
 
     [Authorize]
@@ -72,24 +109,28 @@ public class StreamController : BaseController
         if (!_visibility.CanAccess(track.Visibility, track.CreatorId, streamUserId, User.IsInRole("Admin")))
             return NotFoundResponse("Track not found.");
 
+        if (_playbackAccess is null || _tickets is null)
+            return PlaybackFailure(trackId, "playback_url_generation_failed", "Playback is temporarily unavailable.", "configuration", StatusCodes.Status503ServiceUnavailable);
+
+        var access = await _playbackAccess.PrepareAsync(id, streamUserId, User.IsInRole("Admin"), HttpContext.RequestAborted);
+        if (access.Outcome != PlaybackAccessOutcome.Ready)
+        {
+            var status = access.Outcome == PlaybackAccessOutcome.NotReady
+                ? StatusCodes.Status409Conflict
+                : StatusCodes.Status503ServiceUnavailable;
+            return PlaybackFailure(trackId, access.ErrorCode ?? "playback_url_generation_failed", access.SafeMessage ?? "Playback is temporarily unavailable.", "media_state", status);
+        }
+
         try
         {
-            var (audioKey, audioFile) = await OpenPlayableAudioAsync(track.AudioUrl, track.CambrianTrackId, track.Id);
-            audioFile?.Dispose();
-            if (string.IsNullOrEmpty(audioKey))
-                return PlaybackFailure(trackId, "audio_object_missing", "Audio file not found on storage.", "missing_object", StatusCodes.Status404NotFound);
-
-            var streamUrl = _storage.GenerateSignedUrl(audioKey);
-            var expiresAt = _storage.SignedUrlLifetime is { } lifetime ? DateTime.UtcNow.Add(lifetime) : (DateTime?)null;
-            Cambrian.Application.Observability.CambrianMetrics.StreamSignedUrlIssued.Add(1);
-            return OkResponse(new { trackId, streamUrl = ResolveAbsoluteUrl(streamUrl), expiresAt });
+            var issued = _tickets.Issue(id, access.AuthorizedUserId);
+            var streamUrl = ResolveAbsoluteUrl($"/stream/{id:D}/audio?ticket={Uri.EscapeDataString(issued.Ticket)}");
+            Response.Headers.CacheControl = "private, no-store";
+            return OkResponse(new { trackId, streamUrl, expiresAt = issued.ExpiresAtUtc });
         }
-        catch (Exception ex)
+        catch (InvalidOperationException)
         {
-            _logger.LogError(ex,
-                "EVENT: playback_url_failed trackId:{TrackId} category:storage correlationId:{CorrelationId}",
-                trackId, HttpContext.TraceIdentifier);
-            return PlaybackFailure(trackId, "playback_url_failed", "Playback is temporarily unavailable.", "storage", StatusCodes.Status503ServiceUnavailable);
+            return PlaybackFailure(trackId, "playback_url_generation_failed", "Playback is temporarily unavailable.", "configuration", StatusCodes.Status503ServiceUnavailable);
         }
     }
 
@@ -106,149 +147,245 @@ public class StreamController : BaseController
     /// </summary>
     [AllowAnonymous]
     [HttpGet("{trackId}/audio")]
+    [HttpHead("{trackId}/audio")]
+    [EnableRateLimiting("playback")]
     public async Task<IActionResult> StreamAudio(string trackId)
     {
+        ApplyPlaybackResponseHeaders();
         if (!Guid.TryParse(trackId, out var id))
             return ErrorResponse("trackId must be a valid GUID.");
 
-        var track = await _tracks.GetByIdAsync(id);
-        if (track is null)
-            return NotFoundResponse("Track not found.");
+        string? authoritativeObjectKey = null;
+        Cambrian.Domain.Entities.Track? track = null;
+        var probeAuthorized = _probeSignatures?.Validate(
+            Request.Headers["X-Cambrian-Media-Probe"].FirstOrDefault(), id) == true;
+        var suppliedTicket = Request.Query["ticket"].FirstOrDefault();
 
-        // C4: enforce visibility via shared policy (anonymous users allowed for public tracks).
-        var audioUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!_visibility.CanAccess(track.Visibility, track.CreatorId, audioUserId, User.IsInRole("Admin")))
-            return NotFoundResponse("Track not found.");
+        if (probeAuthorized && _playbackAccess is not null)
+        {
+            var target = await _playbackAccess.PrepareTicketStreamAsync(id, true, HttpContext.RequestAborted);
+            if (target.Outcome != PlaybackAccessOutcome.Ready)
+            {
+                var status = target.Outcome == PlaybackAccessOutcome.NotFound
+                    ? StatusCodes.Status404NotFound
+                    : StatusCodes.Status409Conflict;
+                return PlaybackFailure(trackId, target.ErrorCode ?? "track_not_ready", target.SafeMessage ?? "Track media is not ready.", "media_state", status);
+            }
+            authoritativeObjectKey = target.ObjectKey;
+        }
+        else if (!string.IsNullOrWhiteSpace(suppliedTicket) && _tickets is not null && _playbackAccess is not null)
+        {
+            var ticket = _tickets.Validate(suppliedTicket, id);
+            if (!ticket.IsValid)
+                return PlaybackFailure(trackId, ticket.FailureCode ?? "ticket_invalid", "Playback authorization is invalid or expired.", "authorization", StatusCodes.Status401Unauthorized);
+
+            var target = await _playbackAccess.PrepareTicketStreamAsync(id, false, HttpContext.RequestAborted);
+            if (target.Outcome != PlaybackAccessOutcome.Ready)
+            {
+                var status = target.Outcome == PlaybackAccessOutcome.NotFound
+                    ? StatusCodes.Status404NotFound
+                    : StatusCodes.Status409Conflict;
+                return PlaybackFailure(trackId, target.ErrorCode ?? "track_not_ready", target.SafeMessage ?? "Track media is not ready.", "media_state", status);
+            }
+            authoritativeObjectKey = target.ObjectKey;
+        }
+        else
+        {
+            // Enforcement rejects before any lookup so 401-vs-404 cannot be used to
+            // enumerate which track IDs exist.
+            if (_mediaOptions.ReadinessEnforcementEnabled || !_mediaOptions.LegacyPublicStreamEnabled)
+                return PlaybackFailure(trackId, "unauthorized", "A valid playback ticket is required.", "authorization", StatusCodes.Status401Unauthorized);
+
+            track = await _tracks.GetByIdAsync(id);
+            if (track is null)
+                return NotFoundResponse("Track not found.");
+
+            var audioUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!_visibility.CanAccess(track.Visibility, track.CreatorId, audioUserId, User.IsInRole("Admin")))
+                return NotFoundResponse("Track not found.");
+        }
+
+        if (HttpMethods.IsHead(Request.Method))
+            return await StreamAudioHeadAsync(trackId, authoritativeObjectKey, track);
 
         var rangeHeader = Request.Headers.Range.ToString();
         var hasRange = !string.IsNullOrWhiteSpace(rangeHeader);
-
         _logger.LogInformation(
-            "StreamAudio: streaming trackId={TrackId} via backend proxy range={Range}",
-            trackId, hasRange ? rangeHeader : "(none)");
+            "StreamAudio: streaming trackId={TrackId} via backend proxy ranged={Ranged}",
+            trackId, hasRange);
 
-        // Always proxy audio through the backend to avoid CORS issues with R2/S3.
-        // The browser's <audio> element follows redirects but cross-origin R2 URLs
-        // lack CORS headers, causing playback to fail silently.
-        //
-        // Call the single-arg overload when no Range header is present so callers
-        // (and tests) that only stub the no-range signature keep working; the
-        // two-arg overload is only used when the client actually sent a Range.
         StorageFile? file;
         try
         {
-            (_, file) = await OpenPlayableAudioAsync(track.AudioUrl, track.CambrianTrackId, track.Id, hasRange ? rangeHeader : null);
+            if (authoritativeObjectKey is not null)
+            {
+                // The validated TrackMedia key is authoritative — never substitute a
+                // guessed fallback object on the ticketed/probe path.
+                file = hasRange
+                    ? await _storage.OpenReadAsync(authoritativeObjectKey, rangeHeader)
+                    : await _storage.OpenReadAsync(authoritativeObjectKey);
+            }
+            else
+            {
+                (_, file) = await OpenPlayableAudioAsync(track!.AudioUrl, track.CambrianTrackId, track.Id, hasRange ? rangeHeader : null);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "EVENT: playback_url_failed trackId:{TrackId} category:storage correlationId:{CorrelationId}",
                 trackId, HttpContext.TraceIdentifier);
-            return PlaybackFailure(trackId, "playback_url_failed", "Playback is temporarily unavailable.", "storage", StatusCodes.Status503ServiceUnavailable);
+            return PlaybackFailure(trackId, "storage_unavailable", "Playback is temporarily unavailable.", "storage", StatusCodes.Status503ServiceUnavailable);
         }
         if (file is null)
         {
-            // For demo/seed tracks whose placeholder audio was never uploaded to
-            // S3 (common on staging after a fresh deploy), generate a valid silent
-            // MP3 on-the-fly so the frontend audio player doesn't break.
-            if (IsSeedTrack(track.CambrianTrackId))
+            if (authoritativeObjectKey is null
+                && IsSeedTrack(track!.CambrianTrackId)
+                && !_mediaOptions.ReadinessEnforcementEnabled)
             {
-                _logger.LogWarning(
-                    "StreamAudio: serving generated silent placeholder for seed trackId={TrackId}",
-                    trackId);
+                _logger.LogWarning("StreamAudio: serving generated silent placeholder for seed trackId={TrackId}", trackId);
                 var placeholder = SilentMp3Generator.Generate();
                 Response.Headers["Accept-Ranges"] = "bytes";
                 return File(placeholder, "audio/mpeg", enableRangeProcessing: true);
             }
-
-            return PlaybackFailure(trackId, "audio_object_missing", "Audio file not found on storage.", "missing_object", StatusCodes.Status404NotFound);
+            return PlaybackFailure(trackId, "media_object_missing", "Audio file not found on storage.", "missing_object", StatusCodes.Status503ServiceUnavailable);
         }
 
-        // If the storage layer returned a seekable stream (e.g. LocalObjectStorage
-        // in development) let ASP.NET Core handle range processing — it emits the
-        // correct Content-Length / Content-Range / 206 headers automatically.
-        //
-        // Deliberately NOT wrapping `file` in `using` on this path: FileStreamResult
-        // takes ownership of the underlying stream and disposes it after writing
-        // the response. Disposing `file` here would close the stream before the
-        // framework reads it. LocalObjectStorage's StorageFile has no OwnedResource,
-        // so there is nothing else to clean up on the seekable branch.
+        if (file.IsRangeNotSatisfiable)
+        {
+            using (file)
+            {
+                Response.StatusCode = StatusCodes.Status416RangeNotSatisfiable;
+                Response.Headers["Accept-Ranges"] = "bytes";
+                if (file.TotalLength.HasValue)
+                    Response.Headers["Content-Range"] = $"bytes */{file.TotalLength.Value}";
+                Response.ContentLength = 0;
+            }
+            return new EmptyResult();
+        }
+
         if (file.Stream.CanSeek)
         {
             Response.Headers["Accept-Ranges"] = "bytes";
             return File(file.Stream, file.ContentType, enableRangeProcessing: true);
         }
 
-        // Non-seekable stream (S3/R2 HTTP proxy). We own the lifetime of `file`
-        // here: write the response manually so Content-Length, Accept-Ranges, and
-        // — for 206 — Content-Range are all present (without these, Safari and
-        // iOS AVPlayer refuse to play), then let the using-block dispose both the
-        // stream and the owned HttpResponseMessage on normal completion or on
-        // exception (e.g. client disconnect mid-transfer).
         using (file)
         {
             Response.Headers["Accept-Ranges"] = "bytes";
             Response.ContentType = file.ContentType;
-
             if (file.IsPartialContent)
             {
                 Response.StatusCode = StatusCodes.Status206PartialContent;
                 if (!string.IsNullOrEmpty(file.ContentRange))
                     Response.Headers["Content-Range"] = file.ContentRange;
             }
-
             if (file.Length.HasValue && file.Length.Value >= 0)
                 Response.ContentLength = file.Length.Value;
-
             await file.Stream.CopyToAsync(Response.Body, HttpContext.RequestAborted);
         }
 
         return new EmptyResult();
     }
 
+    private async Task<IActionResult> StreamAudioHeadAsync(string trackId, string? authoritativeObjectKey, Cambrian.Domain.Entities.Track? track)
+    {
+        try
+        {
+            StorageObjectMetadata? metadata = null;
+            if (authoritativeObjectKey is not null)
+            {
+                metadata = await _storage.GetMetadataAsync(authoritativeObjectKey, HttpContext.RequestAborted);
+            }
+            else
+            {
+                // Mirror the GET candidate order so HEAD reports the same object GET
+                // would serve, including the seed placeholder fallback.
+                foreach (var candidate in GetAudioCandidates(track!.AudioUrl, track.CambrianTrackId))
+                {
+                    metadata = await _storage.GetMetadataAsync(candidate, HttpContext.RequestAborted);
+                    if (metadata is not null)
+                        break;
+                }
+                if (metadata is null && IsSeedTrack(track.CambrianTrackId) && !_mediaOptions.ReadinessEnforcementEnabled)
+                {
+                    Response.Headers["Accept-Ranges"] = "bytes";
+                    Response.ContentType = "audio/mpeg";
+                    Response.ContentLength = SilentMp3Generator.Generate().Length;
+                    return new EmptyResult();
+                }
+            }
+
+            if (metadata is null)
+                return PlaybackFailure(trackId, "media_object_missing", "Audio file not found on storage.", "missing_object", StatusCodes.Status503ServiceUnavailable);
+            Response.Headers["Accept-Ranges"] = "bytes";
+            Response.ContentType = metadata.ContentType ?? "application/octet-stream";
+            Response.ContentLength = metadata.SizeBytes;
+            return new EmptyResult();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or TimeoutException)
+        {
+            return PlaybackFailure(trackId, "storage_unavailable", "Playback storage is temporarily unavailable.", "storage", StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private void ApplyPlaybackResponseHeaders()
+    {
+        Response.Headers["X-Backend-Release"] = _backendRelease;
+        // Always explicit: audio bytes and playback errors must never be shared-cached,
+        // and the same URL serves different bytes after a re-upload.
+        Response.Headers.CacheControl = "private, no-store";
+    }
+
+    private static string ResolveBackendRelease(string configured) =>
+        !string.IsNullOrWhiteSpace(configured) && configured != "unknown"
+            ? configured
+            : Environment.GetEnvironmentVariable("GIT_COMMIT")
+                ?? Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT")
+                ?? "unknown";
+
     /// <summary>
-    /// Records the start of a play. Anonymous is allowed (F7/F1): logged-out listeners'
-    /// plays are counted, attributed to no user. To keep anonymous counts honest, they are
-    /// rate-limited to one counted play per (track, client IP) per hour, so refreshes and
-    /// fire-and-forget retries can't inflate the count. This endpoint is fast (in-process
-    /// dedup + a single insert) and must never gate playback — the frontend fires it
-    /// independently of the &lt;audio&gt; element.
+    /// Creates or resumes a pending playback session. A start never increments play count;
+    /// qualification occurs only on /stream/stop with active-playback evidence.
     /// </summary>
     [AllowAnonymous]
     [HttpPost("start")]
-    public async Task<IActionResult> Start([FromBody] StreamStartRequest? body = null, [FromQuery] string? trackId = null)
+    [EnableRateLimiting("playback")]
+    [ProducesResponseType(typeof(Cambrian.Api.Common.ApiResponse<PlaybackStartResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PlaybackErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(PlaybackErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Start([FromBody] PlaybackStartRequest? body = null, [FromQuery] string? trackId = null)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var rawTrackId = body?.TrackId ?? trackId;
         if (string.IsNullOrWhiteSpace(rawTrackId) || !Guid.TryParse(rawTrackId, out var parsedTrackId))
-            return ErrorResponse("trackId must be a valid GUID.");
+            return PlaybackErrorResult(400, "invalid_track_id", "trackId must be a valid GUID.");
 
-        var track = await _tracks.GetByIdAsync(parsedTrackId);
-        if (track is null)
-            return NotFoundResponse("Track not found.");
+        var anonymousSession = string.IsNullOrEmpty(userId) ? ResolveAnonymousSession(create: true) : null;
+        var idempotencyKey = Request.Headers["Idempotency-Key"].FirstOrDefault() ?? body?.ClientEventId;
 
-        // C4: enforce visibility via shared policy (anonymous users allowed for public tracks).
-        if (!_visibility.CanAccess(track.Visibility, track.CreatorId, userId, User.IsInRole("Admin")))
-            return NotFoundResponse("Track not found.");
-
-        // Anonymous plays are not deduped by the repository (no user to attribute to), so
-        // rate-limit them here: at most one counted play per (track, client IP) per hour.
-        // In-process cache — no extra DB round-trip on the hot path. Authenticated plays
-        // fall through to the repository's own 30-second debounce.
-        if (string.IsNullOrEmpty(userId))
+        try
         {
-            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            var dedupeKey = $"anonplay:{parsedTrackId}:{clientIp}";
-            if (_cache.TryGetValue(dedupeKey, out _))
-                return OkResponse(new { streamId = (string?)null, status = "already_counted" });
-            _cache.Set(dedupeKey, true, TimeSpan.FromHours(1));
-        }
+            var result = await _playback.StartAsync(new PlaybackStartCommand(
+                parsedTrackId,
+                userId,
+                User.IsInRole("Admin"),
+                anonymousSession,
+                Request.Headers.UserAgent.ToString(),
+                idempotencyKey), HttpContext.RequestAborted);
 
-        // Audio availability is checked when the client actually streams via
-        // GET /stream/{trackId}/audio. Verifying here was redundant and caused
-        // 500s when storage was temporarily unreachable (B-03).
-        var session = await _streams.StartAsync(parsedTrackId, userId);
-        return OkResponse(new { streamId = session.Id.ToString(), status = "started" });
+            return OkResponse(new PlaybackStartResponse(
+                result.PlaybackSessionId?.ToString("D"),
+                result.Status,
+                result.QualificationThresholdSeconds,
+                result.DeduplicationWindowMinutes,
+                result.ServerTimeUtc,
+                result.AnonymousSessionAccepted));
+        }
+        catch (PlaybackTrackingException ex)
+        {
+            return PlaybackErrorResult(ex.StatusCode, ex.Code, ex.Message);
+        }
     }
 
     private async Task<(string? AudioKey, StorageFile? File)> OpenPlayableAudioAsync(string? audioUrl, string? cambrianTrackId, Guid trackId, string? rangeHeader = null)
@@ -317,37 +454,84 @@ public class StreamController : BaseController
         return string.IsNullOrWhiteSpace(slug) ? null : $"tracks/demo-{slug}.mp3";
     }
 
-    public class StreamStartRequest
-    {
-        public string? TrackId { get; set; }
-        public string? Title { get; set; }
-    }
-
-    public class StreamStopRequest
-    {
-        public string? StreamId { get; set; }
-    }
-
-    [Authorize]
+    [AllowAnonymous]
     [HttpPost("stop")]
-    public async Task<IActionResult> Stop([FromBody] StreamStopRequest? body = null, [FromQuery] string? streamId = null)
+    [EnableRateLimiting("playback")]
+    [ProducesResponseType(typeof(Cambrian.Api.Common.ApiResponse<PlaybackStopResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PlaybackErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(PlaybackErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(PlaybackErrorResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Stop([FromBody] PlaybackStopRequest? body = null, [FromQuery] string? streamId = null)
     {
         var rawStreamId = body?.StreamId ?? streamId;
         if (string.IsNullOrWhiteSpace(rawStreamId) || !Guid.TryParse(rawStreamId, out var sid))
-            return ErrorResponse("streamId must be a valid GUID.");
+            return PlaybackErrorResult(400, "invalid_stream_id", "streamId must be a valid GUID.");
 
-        var session = await _streams.GetByIdAsync(sid);
-        if (session is null)
-            return NotFoundResponse("Stream session not found.");
-
-        // Ownership check: only the session owner or an admin may stop a stream.
-        // Return 404 rather than 403 to avoid leaking session existence to other users.
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (session.UserId != userId && !User.IsInRole("Admin"))
-            return NotFoundResponse("Stream session not found.");
+        var anonymousSession = string.IsNullOrEmpty(userId) ? ResolveAnonymousSession(create: false) : null;
+        var idempotencyKey = Request.Headers["Idempotency-Key"].FirstOrDefault() ?? body?.ClientEventId;
 
-        await _streams.StopAsync(sid);
+        try
+        {
+            var result = await _playback.StopAsync(new PlaybackStopCommand(
+                sid,
+                userId,
+                User.IsInRole("Admin"),
+                anonymousSession,
+                Request.Headers.UserAgent.ToString(),
+                idempotencyKey,
+                body?.ActivePlaybackSeconds,
+                body?.PausedSeconds,
+                body?.SeekCount,
+                body?.EndingPositionSeconds), HttpContext.RequestAborted);
 
-        return MessageResponse("Stream stopped.");
+            return OkResponse(new PlaybackStopResponse(
+                result.PlaybackSessionId.ToString("D"),
+                result.Status,
+                result.Qualified,
+                result.Counted,
+                result.IdempotentReplay,
+                result.ActivePlaybackSeconds,
+                result.QualificationThresholdSeconds,
+                result.QualifiedAtUtc,
+                result.LifetimePlayCount,
+                result.ServerTimeUtc));
+        }
+        catch (PlaybackTrackingException ex)
+        {
+            return PlaybackErrorResult(ex.StatusCode, ex.Code, ex.Message);
+        }
+    }
+
+    private IActionResult PlaybackErrorResult(int statusCode, string code, string message) =>
+        StatusCode(statusCode, new PlaybackErrorResponse(false,
+            new PlaybackError(code, message, HttpContext.TraceIdentifier)));
+
+    private string? ResolveAnonymousSession(bool create)
+    {
+        const string headerName = "X-Cambrian-Anonymous-Session";
+        const string cookieName = "cambrian_playback_session";
+
+        var supplied = Request.Headers[headerName].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(supplied))
+            return supplied;
+
+        if (Request.Cookies.TryGetValue(cookieName, out var cookie) && !string.IsNullOrWhiteSpace(cookie))
+            return cookie;
+
+        if (!create) return null;
+
+        var generated = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+            .ToLowerInvariant();
+        Response.Cookies.Append(cookieName, generated, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = Request.IsHttps,
+            SameSite = Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
+            IsEssential = true,
+            MaxAge = TimeSpan.FromDays(365),
+            Path = "/"
+        });
+        return generated;
     }
 }

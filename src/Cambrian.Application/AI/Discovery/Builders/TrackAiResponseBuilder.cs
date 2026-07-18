@@ -217,9 +217,6 @@ public static class TrackAiResponseBuilder
         if (!string.IsNullOrEmpty(query.UseCase) && string.Equals(track.UseCase, query.UseCase, StringComparison.OrdinalIgnoreCase))
             parts.Add($"designed for {track.UseCase} use");
 
-        if (track.TrendingScore > 50)
-            parts.Add("currently trending");
-
         if (parts.Count == 0)
             parts.Add(confidence == "high" ? "strong overall match" : "general catalog match");
 

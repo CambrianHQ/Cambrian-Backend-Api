@@ -6,10 +6,10 @@ public class CreatorStatsDto
     public int TotalDownloads { get; set; }
 
     /// <summary>
-    /// Lifetime play count across all of this creator's tracks. Sourced live from
-    /// the StreamSessions table. Public-friendly metric (always returned).
+    /// Lifetime qualified-play count across all of this creator's tracks. Sourced
+    /// from the transactionally maintained TrackStats projection.
     /// </summary>
-    public int TotalPlays { get; set; }
+    public long TotalPlays { get; set; }
 
     /// <summary>Number of users following this creator. Sourced from CreatorFollows.</summary>
     public int FollowerCount { get; set; }

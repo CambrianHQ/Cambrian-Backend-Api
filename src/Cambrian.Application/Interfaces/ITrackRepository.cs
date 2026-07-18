@@ -42,6 +42,10 @@ public interface ITrackRepository
     Task<int> CountAsync(string? genre = null, string? search = null,
         string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null);
 
+    /// <summary>Count only public, playable tracks eligible for trending placement.</summary>
+    Task<int> CountTrendingAsync(string? genre = null,
+        string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null);
+
     /// <summary>
     /// Aggregate live engagement counts (plays, completed sales) for a set of tracks
     /// in two grouped queries — no per-track round-trips. Track IDs with no activity

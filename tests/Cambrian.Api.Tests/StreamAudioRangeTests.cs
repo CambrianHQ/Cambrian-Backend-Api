@@ -35,7 +35,8 @@ public sealed class StreamAudioRangeTests : IClassFixture<StreamAudioRangeTests.
 
         var res = await client.SendAsync(req);
 
-        Assert.Equal(HttpStatusCode.PartialContent, res.StatusCode); // 206
+        Assert.True(res.StatusCode == HttpStatusCode.PartialContent,
+            $"Expected 206, got {(int)res.StatusCode}: {await res.Content.ReadAsStringAsync()}");
         Assert.Contains("bytes", res.Headers.AcceptRanges);
 
         var contentRange = res.Content.Headers.ContentRange;
@@ -59,7 +60,8 @@ public sealed class StreamAudioRangeTests : IClassFixture<StreamAudioRangeTests.
         using var client = _fixture.CreateClient();
         var res = await client.GetAsync($"/stream/{trackId}/audio");
 
-        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.True(res.StatusCode == HttpStatusCode.OK,
+            $"Expected 200, got {(int)res.StatusCode}: {await res.Content.ReadAsStringAsync()}");
         Assert.Contains("bytes", res.Headers.AcceptRanges);
 
         var bytes = await res.Content.ReadAsByteArrayAsync();

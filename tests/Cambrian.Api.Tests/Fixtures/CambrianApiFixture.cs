@@ -648,6 +648,27 @@ internal sealed class FakeObjectStorage : IObjectStorage
         });
     }
 
+    public Task<StorageObjectMetadata?> GetMetadataAsync(string key, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (_objects.TryGetValue(key, out var stored))
+            return Task.FromResult<StorageObjectMetadata?>(new StorageObjectMetadata(key, stored.Bytes.Length, stored.ContentType, null, DateTime.UtcNow));
+        return Task.FromResult<StorageObjectMetadata?>(new StorageObjectMetadata(key, 4, "audio/mpeg", null, DateTime.UtcNow));
+    }
+
+    public async IAsyncEnumerable<StorageObjectMetadata> ListAsync(
+        string? prefix = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        foreach (var item in _objects)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(prefix) || item.Key.StartsWith(prefix, StringComparison.Ordinal))
+                yield return new StorageObjectMetadata(item.Key, item.Value.Bytes.Length, item.Value.ContentType, null, DateTime.UtcNow);
+            await Task.Yield();
+        }
+    }
+
     public Task DeleteAsync(string key)
         => Task.CompletedTask;
 

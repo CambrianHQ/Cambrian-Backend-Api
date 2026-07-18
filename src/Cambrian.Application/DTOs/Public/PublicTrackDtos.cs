@@ -42,8 +42,8 @@ public sealed class PublicTrackDto : PublicSeoResource
     /// <summary>Lightweight reference to the track's creator.</summary>
     public PublicCreatorRef? Creator { get; set; }
 
-    /// <summary>Lifetime play count — real, sourced from stream sessions.</summary>
-    public int Plays { get; set; }
+    /// <summary>Lifetime qualified-play count.</summary>
+    public long Plays { get; set; }
 
     /// <summary>Completed (paid) sales — real, sourced from completed purchases.</summary>
     public int Sales { get; set; }

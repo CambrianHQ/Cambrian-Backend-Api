@@ -2,6 +2,7 @@ using Cambrian.Api.Common;
 using Cambrian.Api.Middleware;
 using Cambrian.Application.DTOs.Catalog;
 using Cambrian.Application.DTOs.CreatorProfile;
+using Cambrian.Application.Exceptions;
 using Cambrian.Application.Interfaces;
 using Cambrian.Application.Validation;
 using Microsoft.AspNetCore.Authorization;
@@ -26,6 +27,7 @@ public class CreatorController : BaseController
     private readonly ITrackReadinessCache _readinessCache;
     private readonly ITrackDetailsRepository _trackDetails;
     private readonly ILogger<CreatorController> _logger;
+    private readonly IMediaReadinessService? _mediaReadiness;
 
     public CreatorController(
         ICreatorService creator,
@@ -35,7 +37,8 @@ public class CreatorController : BaseController
         IUploadService upload,
         ITrackReadinessCache readinessCache,
         ITrackDetailsRepository trackDetails,
-        ILogger<CreatorController> logger)
+        ILogger<CreatorController> logger,
+        IMediaReadinessService? mediaReadiness = null)
     {
         _creator = creator;
         _tracks = tracks;
@@ -45,6 +48,7 @@ public class CreatorController : BaseController
         _readinessCache = readinessCache;
         _trackDetails = trackDetails;
         _logger = logger;
+        _mediaReadiness = mediaReadiness;
     }
 
     [HttpGet("tracks")]
@@ -125,6 +129,26 @@ public class CreatorController : BaseController
             if (visibility is not ("public" or "hidden"))
                 return ErrorResponse("Visibility must be 'public' or 'hidden'.");
 
+            if (visibility == "public")
+            {
+                // Promote-on-publish: fresh uploads sit in Uploaded until something
+                // validates them, so the gate runs validation synchronously and
+                // promotes promotable media to Ready instead of deadlocking every
+                // new upload behind admin reconciliation. Fails closed (409) only
+                // when media is absent, mid-validation, or genuinely invalid.
+                var readiness = _mediaReadiness is null
+                    ? null
+                    : await _mediaReadiness.EnsureReadyAsync(track.Id, HttpContext.RequestAborted);
+                if (readiness is null || !readiness.IsReady)
+                    return StatusCode(409, new
+                    {
+                        success = false,
+                        error = readiness?.SafeMessage
+                            ?? "Track media must be validated and Ready before publishing.",
+                        code = readiness?.FailureCode ?? "track_not_ready",
+                    });
+            }
+
             // Hiding a track that fans already paid for would revoke their
             // streaming access (the visibility policy has no purchaser
             // carve-out) while downloads kept working. Refuse rather than
@@ -183,19 +207,57 @@ public class CreatorController : BaseController
         var ownsUuid = creatorUuid.HasValue && track.CreatorUuid == creatorUuid.Value;
         if (!ownsLegacy && !ownsUuid) return ForbiddenResponse("You can only edit your own tracks.");
 
-        var lyrics = request.Lyrics?.Trim() ?? "";
-        if (lyrics.Length == 0)
+        var existingLyrics = await _trackDetails.GetLyricsAsync(trackId);
+        if (request.DeleteLyrics)
         {
-            await _trackDetails.DeleteLyricsAsync(trackId);
-            return OkResponse<object?>(null, "Lyrics removed.");
+            if (existingLyrics is null)
+                return OkResponse<object?>(null, "Lyrics were already absent.");
+            if (!request.Version.HasValue)
+                return ConflictResponse("Reload the latest lyrics before deleting them.");
+
+            try
+            {
+                await _trackDetails.DeleteLyricsAsync(trackId, request.Version.Value);
+                _logger.LogInformation(
+                    "Track lyrics operation completed TrackId:{TrackId} CreatorId:{CreatorId} Operation:delete Result:success",
+                    trackId, userId);
+                return OkResponse<object?>(null, "Lyrics removed.");
+            }
+            catch (TrackLyricsConcurrencyException)
+            {
+                _logger.LogWarning(
+                    "Track lyrics operation rejected TrackId:{TrackId} CreatorId:{CreatorId} Operation:delete ErrorCode:lyrics_version_conflict",
+                    trackId, userId);
+                return ConflictResponse("These lyrics changed in another session. Reload before deleting them.");
+            }
         }
+
+        var lyrics = request.Lyrics ?? "";
+        if (string.IsNullOrWhiteSpace(lyrics))
+            return ErrorResponse("Lyrics cannot be empty. Use the explicit delete action to remove them.");
+        if (existingLyrics is not null && !request.Version.HasValue)
+            return ConflictResponse("Reload the latest lyrics before saving changes.");
 
         var language = NormalizeLanguageTag(request.Language);
         if (language is null)
             return ErrorResponse("Language must be a valid language tag (e.g. 'en', 'pt-BR').");
 
-        var saved = await _trackDetails.UpsertLyricsAsync(trackId, lyrics, language, request.IsExplicit);
-        return OkResponse(saved);
+        try
+        {
+            var saved = await _trackDetails.UpsertLyricsAsync(
+                trackId, lyrics, language, request.IsExplicit, request.Version);
+            _logger.LogInformation(
+                "Track lyrics operation completed TrackId:{TrackId} CreatorId:{CreatorId} Operation:upsert Result:success Version:{Version}",
+                trackId, userId, saved.Version);
+            return OkResponse(saved);
+        }
+        catch (TrackLyricsConcurrencyException)
+        {
+            _logger.LogWarning(
+                "Track lyrics operation rejected TrackId:{TrackId} CreatorId:{CreatorId} Operation:upsert ErrorCode:lyrics_version_conflict",
+                trackId, userId);
+            return ConflictResponse("These lyrics changed in another session. Reload and review the latest version before saving.");
+        }
     }
 
     // ───── Behind The Track (1:1 companion row — never touches the Track row) ─────

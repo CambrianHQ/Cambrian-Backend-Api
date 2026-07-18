@@ -14,6 +14,18 @@ public class DownloadController : BaseController
     private readonly IEntitlementService _entitlement;
     private readonly ILogger<DownloadController> _logger;
 
+    /// <summary>
+    /// Lifetime of the attachment URL produced by IObjectStorage.GenerateDownloadUrl.
+    /// Mirrors S3ObjectStorage.GenerateDownloadUrl (Expires = UtcNow.AddMinutes(30));
+    /// IObjectStorage.SignedUrlLifetime only describes plain signed URLs, so the
+    /// download lifetime has no abstraction-level property to read from yet. Keep
+    /// this in sync with the storage constant so the advertised expiresAt stays truthful.
+    /// </summary>
+    private static readonly TimeSpan DownloadUrlLifetime = TimeSpan.FromMinutes(30);
+
+    /// <summary>Fallback advertised lifetime when the storage layer reports none (e.g. local storage, whose URLs don't expire).</summary>
+    private static readonly TimeSpan DefaultSignedUrlLifetime = TimeSpan.FromMinutes(15);
+
     public DownloadController(
         ITrackRepository tracks,
         IObjectStorage storage,
@@ -77,7 +89,7 @@ public class DownloadController : BaseController
         if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             url = ResolveAbsoluteUrl($"/download/{trackId}/file");
 
-        return OkResponse(new { url, filename, expiresAt = DateTime.UtcNow.AddMinutes(15) });
+        return OkResponse(new { url, filename, expiresAt = DateTime.UtcNow.Add(DownloadUrlLifetime) });
     }
 
     /// <summary>
@@ -142,7 +154,9 @@ public class DownloadController : BaseController
         if (!signedUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             signedUrl = ResolveAbsoluteUrl($"/download/{trackId}/file");
 
-        return OkResponse(new { signedUrl, expiresAt = DateTime.UtcNow.AddMinutes(15) });
+        // Derive the advertised expiry from the storage layer's actual signing
+        // lifetime so the two can't drift apart.
+        return OkResponse(new { signedUrl, expiresAt = DateTime.UtcNow.Add(_storage.SignedUrlLifetime ?? DefaultSignedUrlLifetime) });
     }
 
     private static string BuildDownloadFilename(string? title, string? audioUrl, string? contentType = null)

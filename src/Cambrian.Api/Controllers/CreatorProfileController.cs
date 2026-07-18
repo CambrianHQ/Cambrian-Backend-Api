@@ -571,6 +571,7 @@ public class CreatorProfileController : BaseController
     [Authorize]
     [RequireCreatorTier]
     [HttpPost("me/collections")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateCollection([FromBody] UpsertCollectionRequest body)
     {
         var userId = GetRequiredUserId()!;
@@ -658,6 +659,7 @@ public class CreatorProfileController : BaseController
     [Authorize]
     [RequireCreatorTier]
     [HttpDelete("me/collections/{collectionId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteCollection(Guid collectionId)
     {
         var userId = GetRequiredUserId()!;

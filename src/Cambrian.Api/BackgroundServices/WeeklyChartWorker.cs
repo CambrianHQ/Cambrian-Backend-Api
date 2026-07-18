@@ -4,33 +4,47 @@ namespace Cambrian.Api.BackgroundServices;
 
 /// <summary>
 /// Scheduled recompute for the weekly Scene chart. Runs once at startup
-/// (catch-up after deploys) and then every <see cref="Interval"/>; recompute
+/// (catch-up after deploys) and then at the configured interval; recompute
 /// is idempotent per week (WeeklyChartService replaces the week's rows in one
 /// transaction), so overlapping admin triggers are harmless. Mirrors the
 /// MasteringWorker pattern: PeriodicTimer + never let one tick kill the loop.
 /// </summary>
 public sealed class WeeklyChartWorker : BackgroundService
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
-    private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(15);
+    private const int DefaultIntervalSeconds = 30;
+    private const int DefaultStartupDelaySeconds = 15;
 
     private readonly IWeeklyChartService _charts;
     private readonly ILogger<WeeklyChartWorker> _logger;
+    private readonly TimeSpan _interval;
+    private readonly TimeSpan _startupDelay;
 
-    public WeeklyChartWorker(IWeeklyChartService charts, ILogger<WeeklyChartWorker> logger)
+    public WeeklyChartWorker(
+        IWeeklyChartService charts,
+        IConfiguration configuration,
+        ILogger<WeeklyChartWorker> logger)
     {
         _charts = charts;
         _logger = logger;
+
+        var intervalSeconds = configuration.GetValue<int?>("Charts:Weekly:WorkerIntervalSeconds")
+            ?? DefaultIntervalSeconds;
+        var startupDelaySeconds = configuration.GetValue<int?>("Charts:Weekly:StartupDelaySeconds")
+            ?? DefaultStartupDelaySeconds;
+        _interval = TimeSpan.FromSeconds(Math.Max(1, intervalSeconds));
+        _startupDelay = TimeSpan.FromSeconds(Math.Max(0, startupDelaySeconds));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("EVENT: WeeklyChartWorkerStarted intervalHours:{Hours}", Interval.TotalHours);
+        _logger.LogInformation(
+            "EVENT: WeeklyChartWorkerStarted intervalSeconds:{Seconds}",
+            _interval.TotalSeconds);
 
         // Small startup delay so we don't compete with app warmup / migrations.
         try
         {
-            await Task.Delay(StartupDelay, stoppingToken);
+            await Task.Delay(_startupDelay, stoppingToken);
         }
         catch (OperationCanceledException)
         {
@@ -39,7 +53,7 @@ public sealed class WeeklyChartWorker : BackgroundService
 
         await RecomputeAsync(stoppingToken);
 
-        using var timer = new PeriodicTimer(Interval);
+        using var timer = new PeriodicTimer(_interval);
         while (await WaitAsync(timer, stoppingToken))
         {
             await RecomputeAsync(stoppingToken);

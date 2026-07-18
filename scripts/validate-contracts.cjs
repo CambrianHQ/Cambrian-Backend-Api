@@ -235,7 +235,7 @@ function checkRoutesInContract(controllerFiles, openApi) {
     // Extract all action-level [HttpGet("...")] / [HttpPost("...")] etc.
     const actionRoutes = [
       ...src.matchAll(
-        /\[Http(Get|Post|Put|Delete|Patch)\s*(?:\("([^"]*)"\))?\s*\]/gi
+        /\[Http(Get|Head|Post|Put|Delete|Patch)\s*(?:\("([^"]*)"\))?\s*\]/gi
       ),
     ];
 

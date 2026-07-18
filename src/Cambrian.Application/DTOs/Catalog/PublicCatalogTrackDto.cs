@@ -75,8 +75,8 @@ public sealed class PublicCatalogTrackDto
 
     public string? Artist { get; init; }
 
-    /// <summary>Lifetime public play count (preview + full plays, incl. anonymous).</summary>
-    public int Plays { get; init; }
+    /// <summary>Lifetime qualified-play count.</summary>
+    public long Plays { get; init; }
 
     /// <summary>Number of completed (paid) purchases for this track.</summary>
     public int Sales { get; init; }

@@ -443,11 +443,13 @@ public sealed class CreatorProfileRepository : ICreatorProfileRepository
                     && t.Id == p.TrackId)
                              && p.Status == "completed");
 
-        // Lifetime plays across all of the creator's tracks (StreamSessions).
-        var totalPlays = await _db.StreamSessions
-            .CountAsync(s => _db.Tracks.Any(t =>
+        // Lifetime qualified plays across all of the creator's tracks.
+        var totalPlays = await _db.TrackStats
+            .AsNoTracking()
+            .Where(s => _db.Tracks.Any(t =>
                 (t.CreatorId == userId || (creatorUuid != null && t.CreatorUuid == creatorUuid))
-                && t.Id == s.TrackId));
+                && t.Id == s.TrackId))
+            .SumAsync(s => (long?)s.PlayCount) ?? 0L;
 
         // Follower count — CreatorFollows keyed by the canonical Creator UUID.
         var followerCount = creatorUuid != null

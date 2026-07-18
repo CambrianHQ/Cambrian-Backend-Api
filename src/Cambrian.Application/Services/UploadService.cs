@@ -21,6 +21,7 @@ public class UploadService : IUploadService
     private readonly ICreatorIdentityRepository _creators;
     private readonly ICreatorProfileRepository? _profiles;
     private readonly ITransactionManager? _transactions;
+    private readonly IMediaStateMachine? _mediaStateMachine;
 
     /// <summary>
     /// Optional so existing direct constructions (unit tests) keep working. When wired
@@ -145,7 +146,8 @@ public class UploadService : IUploadService
         ICreatorProfileRepository? profiles = null,
         IProvenanceService? provenance = null,
         IProvenanceSigner? signer = null,
-        ITransactionManager? transactions = null)
+        ITransactionManager? transactions = null,
+        IMediaStateMachine? mediaStateMachine = null)
     {
         _storage = storage;
         _tracks = tracks;
@@ -156,6 +158,7 @@ public class UploadService : IUploadService
         _provenance = provenance;
         _signer = signer;
         _transactions = transactions;
+        _mediaStateMachine = mediaStateMachine;
     }
 
     public async Task<UploadTrackResponse> Upload(UploadTrackRequest request, string? idempotencyKey = null)
@@ -328,12 +331,15 @@ public class UploadService : IUploadService
         };
         ApplyGenreFields(track, request.PrimaryGenre, request.Subgenre, request.Genre);
 
-        // Bulk-upload drafts: the track row is fully created (same provenance,
-        // same id, same URLs) but stays hidden until the creator publishes it.
-        if (request.SaveAsDraft == true)
+        // Production DI always supplies the media state machine. New uploads remain
+        // hidden until reconciliation validates the object and promotes TrackMedia
+        // to Ready; publishing is a separate, guarded operation.
+        if (_mediaStateMachine is not null || request.SaveAsDraft == true)
             track.Visibility = "hidden";
 
         await _tracks.AddAsync(track);
+        if (_mediaStateMachine is not null)
+            await _mediaStateMachine.InitializeLegacyAsync(track.Id, key);
         trackPersisted = true;
         persistedTrackId = track.Id;
 

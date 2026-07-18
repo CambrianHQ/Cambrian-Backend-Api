@@ -48,6 +48,19 @@ public interface IObjectStorage
     Task<StorageFile?> OpenReadAsync(string key, string? rangeHeader)
         => OpenReadAsync(key);
 
+    /// <summary>Read object metadata without downloading its body.</summary>
+    Task<StorageObjectMetadata?> GetMetadataAsync(string key, CancellationToken ct = default)
+        => Task.FromResult<StorageObjectMetadata?>(null);
+
+    /// <summary>Stream a paginated object listing. Keys are never exposed by public API DTOs.</summary>
+    async IAsyncEnumerable<StorageObjectMetadata> ListAsync(
+        string? prefix = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await Task.CompletedTask;
+        yield break;
+    }
+
     Task DeleteAsync(string key);
 
     /// <summary>
@@ -88,6 +101,13 @@ public sealed class StorageProbeResult
     public string? SampleContentType { get; set; }
 }
 
+public sealed record StorageObjectMetadata(
+    string Key,
+    long SizeBytes,
+    string? ContentType,
+    string? ChecksumOrETag,
+    DateTime? LastModifiedUtc);
+
 /// <summary>
 /// Wrapper for a file retrieved from object storage.
 /// Callers must dispose the <see cref="Stream"/> when finished.
@@ -117,6 +137,12 @@ public sealed class StorageFile : IDisposable
     /// Consumers should emit 206 status and forward <see cref="ContentRange"/>.
     /// </summary>
     public bool IsPartialContent { get; init; }
+
+    /// <summary>True when the origin returned HTTP 416 for the forwarded range.</summary>
+    public bool IsRangeNotSatisfiable { get; init; }
+
+    /// <summary>Origin status code when the storage transport exposes one.</summary>
+    public int? StatusCode { get; init; }
 
     /// <summary>
     /// Raw HTTP Content-Range header value (e.g. "bytes 0-1023/5242880") when

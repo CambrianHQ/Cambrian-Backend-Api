@@ -5,8 +5,4 @@ public interface IStreamService
     Task<IReadOnlyCollection<object>> ListStreamableAsync(int take = 20);
 
     Task<object> GetStreamUrlAsync(string trackId);
-
-    Task<object> StartAsync(string? trackId, string? userId);
-
-    Task StopAsync(string? streamId);
 }

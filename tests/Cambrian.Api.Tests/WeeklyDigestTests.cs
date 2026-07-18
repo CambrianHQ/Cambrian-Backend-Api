@@ -114,10 +114,10 @@ public sealed class WeeklyDigestTests : IClassFixture<CambrianApiFixture>
             var weekStart = now.Date.AddDays(-((7 + (int)now.DayOfWeek - (int)DayOfWeek.Monday) % 7));
             var reportFrom = weekStart.AddDays(-7); // digest reports the completed previous week
 
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddHours(3) });
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddHours(4) });
+            db.QualifiedPlayEvents.Add(QualifiedPlay(userId, trackId, reportFrom.AddHours(3)));
+            db.QualifiedPlayEvents.Add(QualifiedPlay(userId, trackId, reportFrom.AddHours(4)));
             // Outside the window (two months back) — must NOT count.
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, StartedAt = reportFrom.AddDays(-60) });
+            db.QualifiedPlayEvents.Add(QualifiedPlay(userId, trackId, reportFrom.AddDays(-60)));
             await db.SaveChangesAsync();
         }
 
@@ -182,5 +182,24 @@ public sealed class WeeklyDigestTests : IClassFixture<CambrianApiFixture>
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
         Assert.True(data.GetProperty("dryRun").GetBoolean());
+    }
+
+    private static QualifiedPlayEvent QualifiedPlay(string creatorId, Guid trackId, DateTime qualifiedAtUtc)
+    {
+        var id = Guid.NewGuid();
+        return new QualifiedPlayEvent
+        {
+            Id = id,
+            IdempotencyKey = $"digest:{id:N}",
+            TrackId = trackId,
+            CreatorId = creatorId,
+            ListenerKeyHash = $"listener-{id:N}",
+            PlaybackSessionId = Guid.NewGuid(),
+            QualifiedAtUtc = qualifiedAtUtc,
+            ActivePlaybackSeconds = 30,
+            ThresholdSeconds = 30,
+            CreatedAtUtc = qualifiedAtUtc,
+            AggregatedAtUtc = qualifiedAtUtc,
+        };
     }
 }

@@ -1224,6 +1224,97 @@ namespace Cambrian.Persistence.Migrations
                     b.ToTable("MasteringJobs", (string)null);
                 });
 
+            modelBuilder.Entity("Cambrian.Domain.Entities.MediaReconciliationFinding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Detail")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("FindingType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ObjectKey")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("Resolution")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("TrackId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "TrackId")
+                        .HasDatabaseName("ix_media_findings_run_track");
+
+                    b.ToTable("MediaReconciliationFindings", (string)null);
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.MediaReconciliationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("FindingCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ObjectsInspected")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RemediationEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("TracksInspected")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UnresolvedPublishedTrackFailures")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedAtUtc")
+                        .HasDatabaseName("ix_media_reconciliation_runs_started");
+
+                    b.ToTable("MediaReconciliationRuns", (string)null);
+                });
+
             modelBuilder.Entity("Cambrian.Domain.Entities.NewsletterSubscriber", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1445,6 +1536,83 @@ namespace Cambrian.Persistence.Migrations
                     b.ToTable("Purchases");
                 });
 
+            modelBuilder.Entity("Cambrian.Domain.Entities.QualifiedPlayEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("ActivePlaybackSeconds")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("AggregatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AnonymousSessionHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatorId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ListenerKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ListenerUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<Guid>("PlaybackSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("QualificationBasis")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("QualifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("ThresholdSeconds")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("TrackId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AggregatedAtUtc")
+                        .HasDatabaseName("ix_qualified_play_events_aggregated_at");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_qualified_play_events_idempotency_key");
+
+                    b.HasIndex("PlaybackSessionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_qualified_play_events_playback_session");
+
+                    b.HasIndex("TrackId", "QualifiedAtUtc")
+                        .HasDatabaseName("ix_qualified_play_events_track_qualified_at");
+
+                    b.HasIndex("ListenerKeyHash", "TrackId", "QualifiedAtUtc")
+                        .HasDatabaseName("ix_qualified_play_events_listener_track_qualified_at");
+
+                    b.ToTable("QualifiedPlayEvents", (string)null);
+                });
+
             modelBuilder.Entity("Cambrian.Domain.Entities.ReleaseCreditPurchase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1517,6 +1685,40 @@ namespace Cambrian.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<double>("ActivePlaybackSeconds")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("AnonymousSessionHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsOwnerPreview")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastStartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ListenerKeyHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("QualificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("legacy_unqualified");
+
+                    b.Property<double>("QualificationThresholdSeconds")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("QualifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1532,9 +1734,18 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<string>("UserId")
                         .HasColumnType("text");
 
+                    b.Property<bool>("WasEligibleAtStart")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("TrackId");
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_stream_sessions_idempotency_key")
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+                    b.HasIndex("TrackId", "ListenerKeyHash", "StartedAt")
+                        .HasDatabaseName("ix_stream_sessions_track_listener_started");
 
                     b.ToTable("StreamSessions");
                 });
@@ -2216,9 +2427,78 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.HasKey("TrackId");
 
                     b.ToTable("TrackLyrics");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.TrackMedia", b =>
+                {
+                    b.Property<Guid>("TrackId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChecksumSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long?>("DurationMilliseconds")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FailureDetail")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ObjectKey")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<DateTime>("StateChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ValidatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ValidationVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("TrackId");
+
+                    b.HasIndex("ObjectKey")
+                        .HasDatabaseName("ix_track_media_object_key");
+
+                    b.HasIndex("State", "ValidatedAtUtc")
+                        .HasDatabaseName("ix_track_media_state_validated");
+
+                    b.ToTable("TrackMedia", (string)null);
                 });
 
             modelBuilder.Entity("Cambrian.Domain.Entities.TrackStat", b =>
@@ -2229,6 +2509,11 @@ namespace Cambrian.Persistence.Migrations
                     b.Property<DateTime?>("LastPlayedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<long>("LegacyPlayCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
                     b.Property<int>("LikeCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -2238,6 +2523,14 @@ namespace Cambrian.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
                         .HasDefaultValue(0L);
+
+                    b.Property<long>("QualifiedPlayCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.Property<DateTime?>("ReconciledAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("SalesCount")
                         .ValueGeneratedOnAdd()
@@ -2373,8 +2666,14 @@ namespace Cambrian.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<DateTime?>("DataThroughUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int?>("DeltaRank")
                         .HasColumnType("integer");
+
+                    b.Property<long>("LifetimePlays")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("PlaysInWindow")
                         .HasColumnType("integer");
@@ -2401,6 +2700,9 @@ namespace Cambrian.Persistence.Migrations
 
                     b.Property<DateTime>("WeekStartUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("WeeklyQualifiedPlays")
+                        .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
@@ -2657,6 +2959,17 @@ namespace Cambrian.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Cambrian.Domain.Entities.MediaReconciliationFinding", b =>
+                {
+                    b.HasOne("Cambrian.Domain.Entities.MediaReconciliationRun", "Run")
+                        .WithMany("Findings")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
             modelBuilder.Entity("Cambrian.Domain.Entities.Payout", b =>
                 {
                     b.HasOne("Cambrian.Domain.Entities.ApplicationUser", "Creator")
@@ -2694,6 +3007,25 @@ namespace Cambrian.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Buyer");
+
+                    b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.QualifiedPlayEvent", b =>
+                {
+                    b.HasOne("Cambrian.Domain.Entities.StreamSession", "PlaybackSession")
+                        .WithMany()
+                        .HasForeignKey("PlaybackSessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Cambrian.Domain.Entities.Track", "Track")
+                        .WithMany()
+                        .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PlaybackSession");
 
                     b.Navigation("Track");
                 });
@@ -2776,6 +3108,17 @@ namespace Cambrian.Persistence.Migrations
                     b.HasOne("Cambrian.Domain.Entities.Track", "Track")
                         .WithMany()
                         .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Track");
+                });
+
+            modelBuilder.Entity("Cambrian.Domain.Entities.TrackMedia", b =>
+                {
+                    b.HasOne("Cambrian.Domain.Entities.Track", "Track")
+                        .WithOne("Media")
+                        .HasForeignKey("Cambrian.Domain.Entities.TrackMedia", "TrackId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -2882,9 +3225,16 @@ namespace Cambrian.Persistence.Migrations
                     b.Navigation("Tracks");
                 });
 
+            modelBuilder.Entity("Cambrian.Domain.Entities.MediaReconciliationRun", b =>
+                {
+                    b.Navigation("Findings");
+                });
+
             modelBuilder.Entity("Cambrian.Domain.Entities.Track", b =>
                 {
                     b.Navigation("LibraryItems");
+
+                    b.Navigation("Media");
 
                     b.Navigation("Purchases");
                 });

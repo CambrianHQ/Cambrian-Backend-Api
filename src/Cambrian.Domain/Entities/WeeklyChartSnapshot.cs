@@ -36,18 +36,35 @@ public class WeeklyChartSnapshot
 
     public string? CoverArtUrl { get; set; }
 
-    /// <summary>Composite ranking score (primary input: plays in window).</summary>
+    /// <summary>
+    /// Legacy persisted score column. New snapshots set this to the qualified
+    /// weekly play count so existing readers retain the same field.
+    /// </summary>
     public double Score { get; set; }
 
-    /// <summary>Stream sessions started within the chart window.</summary>
+    /// <summary>
+    /// Legacy 32-bit play-count column. New snapshots also populate
+    /// <see cref="WeeklyQualifiedPlays"/> without truncation.
+    /// </summary>
     public int PlaysInWindow { get; set; }
 
+    /// <summary>Qualified play events inside [WeekStartUtc, WeekEndUtc).</summary>
+    public long WeeklyQualifiedPlays { get; set; }
+
+    /// <summary>Authoritative lifetime plays at the snapshot watermark.</summary>
+    public long LifetimePlays { get; set; }
+
     /// <summary>
-    /// What the score was computed from: "weekly_plays" once real in-window
-    /// plays exist, or "catalog_trending" during the bootstrap period.
-    /// The frontend uses this to label the chart honestly.
+    /// What the score was computed from. "weekly_plays" is retained as the
+    /// backward-compatible API value and now means qualified weekly plays.
     /// </summary>
     public string Basis { get; set; } = "weekly_plays";
+
+    /// <summary>
+    /// Inclusive qualified-event timestamp watermark used by this snapshot.
+    /// Null only on snapshots written before watermark tracking was introduced.
+    /// </summary>
+    public DateTime? DataThroughUtc { get; set; }
 
     public DateTime ComputedAtUtc { get; set; } = DateTime.UtcNow;
 }

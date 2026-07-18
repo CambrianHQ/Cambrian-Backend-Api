@@ -252,10 +252,10 @@ public class TrackRankingServiceTests
         Assert.True(withScore > noScore);
     }
 
-    // ── Trending normalization ──
+    // ── Legacy trending score isolation ──
 
     [Fact]
-    public void Trending_HighScore_BoostsRanking()
+    public void LegacyTrendingScore_DoesNotAffectAiRanking()
     {
         var trending = MakeTrack(trendingScore: 500);
         var notTrending = MakeTrack(trendingScore: 0);
@@ -264,8 +264,7 @@ public class TrackRankingServiceTests
         var trendingScore = _sut.ComputeScore(trending, query);
         var flatScore = _sut.ComputeScore(notTrending, query);
 
-        Assert.True(trendingScore > flatScore,
-            $"Trending track ({trendingScore}) should outscore non-trending ({flatScore})");
+        Assert.Equal(flatScore, trendingScore, precision: 6);
     }
 
     [Fact]

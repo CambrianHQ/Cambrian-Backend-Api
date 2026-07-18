@@ -480,7 +480,10 @@ public class AdminRepository : IAdminRepository
         // A purged track's storage is already gone — never resurrect it into a live URL.
         if (track.PurgedAt is not null) return false;
 
-        track.Visibility = track.PreDeleteVisibility ?? "public";
+        var requestedVisibility = track.PreDeleteVisibility ?? "public";
+        var mediaReady = !string.Equals(requestedVisibility, "public", StringComparison.OrdinalIgnoreCase)
+            || await _db.TrackMedia.AnyAsync(x => x.TrackId == trackId && x.State == TrackMediaStates.Ready && x.ObjectKey != null);
+        track.Visibility = mediaReady ? requestedVisibility : "hidden";
         track.Status = track.PreDeleteStatus ?? "available";
         track.DeletedAt = null;
         track.DeletedByUserId = null;
@@ -554,6 +557,9 @@ public class AdminRepository : IAdminRepository
 
         var track = await _db.Tracks.FindAsync(trackId);
         if (track is null) return false;
+        if (string.Equals(visibility, "public", StringComparison.OrdinalIgnoreCase)
+            && !await _db.TrackMedia.AnyAsync(x => x.TrackId == trackId && x.State == TrackMediaStates.Ready && x.ObjectKey != null))
+            return false;
         track.Visibility = visibility;
 
         _db.AuditLogs.Add(new AuditLog

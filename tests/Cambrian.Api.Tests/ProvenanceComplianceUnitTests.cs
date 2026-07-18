@@ -309,6 +309,44 @@ public sealed class ProvenanceComplianceUnitTests
         Assert.All(result.ChecklistItems, i => Assert.False(string.IsNullOrWhiteSpace(i.TargetSection)));
     }
 
+    [Fact]
+    public async Task ComplianceScore_FreeBehindTheTrack_SatisfiesAuthorshipAndAiDisclosure_WithoutPaidRecord()
+    {
+        // Regression (creator report 2026-07-13, "done everything, still 70/100"):
+        // a FREE creator documents human contribution + AI/process notes in the
+        // Behind the Track editor (TrackCreationProcess) — NOT the plan-gated
+        // TrackAuthorship record and NOT the $10 paid AuthorshipRecord. The score
+        // previously read only TrackAuthorship, so those two 20-pt checks could never
+        // pass on the free tier and the standard checklist could not reach 100. Both
+        // must now pass from the free field alone, matching the checklist items.
+        var track = new Track
+        {
+            Id = Guid.NewGuid(), Title = "Behind Closed Doors",
+            PrimaryGenre = "Electronic", Description = "A track", Mood = "moody", Tempo = "120",
+            CoverArtUrl = "covers/x.jpg", CommercialRightsVerified = true, Signature = "sig",
+        };
+        var anchor = new ProvenanceAnchor { TrackId = track.Id, Status = "anchored", Chain = "base" };
+        var creationProcess = new BehindTheTrackDto
+        {
+            TrackId = track.Id.ToString(),
+            HumanContributionNotes = "I wrote the topline, arranged the sections and mixed it by hand.",
+            PromptNotes = "Suno v4, six takes, comped in Reaper.",
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        var result = await CreateComplianceService(anchor, authorship: null, creationProcess: creationProcess)
+            .ComputeAsync(track);
+
+        Assert.Equal("pass", result.Checks.Single(c => c.Name == "authorshipDocumented").Status);
+        Assert.Equal("pass", result.Checks.Single(c => c.Name == "aiDisclosurePresent").Status);
+        // Free data alone reaches a perfect standard score — no paid record required.
+        Assert.Equal(100, result.Score);
+        Assert.Equal("complete", ChecklistItem(result, "human_contribution").Status);
+        Assert.Equal("complete", ChecklistItem(result, "ai_disclosure").Status);
+        // The paid Authorship Record stays optional-paid; it never gates the score.
+        Assert.Equal("optional_paid_verification", ChecklistItem(result, "authorship_record").Status);
+    }
+
     // ── ProvenanceService (pending anchor record; no chain write) ──
 
     [Fact]

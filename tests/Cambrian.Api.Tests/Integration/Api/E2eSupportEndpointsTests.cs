@@ -107,7 +107,7 @@ public sealed class E2eSupportEndpointsTests : IClassFixture<E2eApiFixture>
     }
 
     [Fact]
-    public async Task PlayableTrackStreams200_MissingAudioStreams404()
+    public async Task PlayableTrackStreams200_MissingAudioReturnsSafe503()
     {
         using var client = SecuredClient();
         var manifest = await ReadJsonAsync(await client.PostAsync("/__e2e/seed", null));
@@ -120,7 +120,9 @@ public sealed class E2eSupportEndpointsTests : IClassFixture<E2eApiFixture>
         var missing = await anon.GetAsync($"/stream/{missingId}/audio");
 
         Assert.Equal(HttpStatusCode.OK, playable.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, missing.StatusCode);
+        var missingBody = await missing.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("media_object_missing", missingBody.GetProperty("error").GetProperty("code").GetString());
     }
 
     [Fact]

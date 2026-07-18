@@ -24,6 +24,7 @@ public class ApiKeysController : BaseController
     /// </summary>
     [Authorize(Policy = "VerifiedEmail")]
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<IActionResult> Create([FromBody] CreateApiKeyRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -63,6 +64,7 @@ public class ApiKeysController : BaseController
 
     /// <summary>Revoke (soft-delete) an API key by ID.</summary>
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Revoke(Guid id)
     {
         var userId = GetRequiredUserId();

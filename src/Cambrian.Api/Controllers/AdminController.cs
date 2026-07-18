@@ -453,12 +453,14 @@ public class AdminController : BaseController
     // --- Collections and tags ---
 
     [HttpPost("collections/curate")]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
     public IActionResult CurateCollection()
     {
         return StatusCode(501, new { error = "Collection curation is not yet implemented." });
     }
 
     [HttpPost("tags/manage")]
+    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
     public IActionResult ManageTags()
     {
         return StatusCode(501, new { error = "Tag management is not yet implemented." });

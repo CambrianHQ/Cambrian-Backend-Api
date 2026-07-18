@@ -13,10 +13,30 @@ public sealed class WeeklyChartsResponse
 
     public TrackOfTheWeekResponse? TrackOfTheWeek { get; set; }
 
+    /// <summary>Inclusive UTC start of the ranked weekly window.</summary>
+    public DateTime ChartWindowStart { get; set; }
+
+    /// <summary>Exclusive UTC end of the ranked weekly window.</summary>
+    public DateTime ChartWindowEnd { get; set; }
+
+    /// <summary>UTC time at which this persisted snapshot was generated.</summary>
+    public DateTime GeneratedAt { get; set; }
+
     /// <summary>
-    /// What the ranking was computed from: "weekly_plays" (stream sessions
-    /// inside the chart week) or "catalog_trending" (bootstrap fallback while
-    /// the week has no plays). Lets the frontend label the chart honestly.
+    /// Inclusive event-time watermark used by the aggregation. Null only for a
+    /// legacy snapshot whose refresh failed before watermarks were introduced.
+    /// </summary>
+    public DateTime? DataThrough { get; set; }
+
+    /// <summary>
+    /// True when the snapshot is older than the freshness SLA, is known to be
+    /// behind qualified events, or a requested refresh failed.
+    /// </summary>
+    public bool IsStale { get; set; }
+
+    /// <summary>
+    /// What the ranking was computed from. The backward-compatible value
+    /// "weekly_plays" now specifically means qualified plays in the window.
     /// </summary>
     public string Basis { get; set; } = "weekly_plays";
 
@@ -27,6 +47,12 @@ public sealed class WeeklyChartsResponse
 public sealed class ChartEntryResponse
 {
     public int Rank { get; set; }
+    public long WeeklyQualifiedPlays { get; set; }
+    public long LifetimePlays { get; set; }
+
+    /// <summary>Ranking score; currently exactly WeeklyQualifiedPlays.</summary>
+    public long RankingScore { get; set; }
+
     public string TrackId { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Artist { get; set; } = string.Empty;

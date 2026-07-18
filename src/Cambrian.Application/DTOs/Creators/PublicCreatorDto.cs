@@ -30,6 +30,7 @@ public class SocialLinkItemDto
 public class CreatorStatsResponseDto
 {
     public int TrackCount { get; set; }
+    public long TotalPlays { get; set; }
     public int TotalSales { get; set; }
     public int TotalDownloads { get; set; }
     public decimal AverageRating { get; set; }

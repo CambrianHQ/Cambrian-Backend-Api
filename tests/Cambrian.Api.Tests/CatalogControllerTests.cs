@@ -231,11 +231,19 @@ public sealed class CatalogControllerTests
     [Fact]
     public async Task Trending_DelegatesCorrectly()
     {
-        _catalog.GetDiscoverAsync(1, 20, null, null, null, null, null, null).Returns(new List<TrackResponse>());
+        _catalog.GetTrendingPagedAsync(1, 20, null, null, null, null, null)
+            .Returns(new PagedResult<TrackResponse>
+            {
+                Items = Array.Empty<TrackResponse>(),
+                Page = 1,
+                PageSize = 20,
+                TotalCount = 0,
+            });
 
         var result = await _controller.Trending();
 
         Assert.IsType<OkObjectResult>(result);
+        await _catalog.Received(1).GetTrendingPagedAsync(1, 20, null, null, null, null, null);
     }
 
     // ── ListTracks ──

@@ -16,7 +16,7 @@ public class CatalogController : BaseController
     private readonly IMemoryCache _cache;
     private readonly ITrackVisibilityPolicy _visibility;
     private readonly ITrackDetailsRepository _trackDetails;
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(15);
 
     private readonly IActivityService _activity;
 
@@ -49,8 +49,7 @@ public class CatalogController : BaseController
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
             return await _catalog.GetDiscoverPagedAsync(page, pageSize, genre, search, mood, tempo, instrumental, duration);
         });
-        ResolveTrackUrls(result!.Items);
-        return Ok(ToPublicEnvelope(result));
+        return Ok(ToPublicEnvelope(result!));
     }
 
     [HttpGet("catalog")]
@@ -87,8 +86,7 @@ public class CatalogController : BaseController
                 query.Instrumental,
                 query.Duration);
         });
-        ResolveTrackUrls(result!.Items);
-        return Ok(ToPublicEnvelope(result));
+        return Ok(ToPublicEnvelope(result!));
     }
 
     /// <summary>
@@ -96,10 +94,12 @@ public class CatalogController : BaseController
     /// existing clients are unaffected, but each item is projected through
     /// <see cref="PublicTrackDto"/> (no platform fee / creator earnings — F18) and
     /// total/offset/limit are added for the frontend infinite-scroll contract.
+    /// URLs are resolved on per-request copies (see <see cref="WithResolvedUrls"/>)
+    /// so the 15s-cached items are never mutated.
     /// </summary>
-    private static PublicCatalogPageResponse ToPublicEnvelope(PagedResult<TrackResponse> paged) => new()
+    private PublicCatalogPageResponse ToPublicEnvelope(PagedResult<TrackResponse> paged) => new()
     {
-        Data = paged.Items.Select(PublicCatalogTrackDto.From).ToList(),
+        Data = paged.Items.Select(t => PublicCatalogTrackDto.From(WithResolvedUrls(t))).ToList(),
         Page = paged.Page,
         PageSize = paged.PageSize,
         Offset = (paged.Page - 1) * paged.PageSize,
@@ -109,6 +109,51 @@ public class CatalogController : BaseController
         TotalPages = paged.TotalPages,
         HasNextPage = paged.HasNextPage,
         HasPreviousPage = paged.HasPreviousPage
+    };
+
+    /// <summary>
+    /// Per-request copy of a (possibly cached, shared) <see cref="TrackResponse"/>
+    /// with audio/cover/creator-image URLs resolved for this request. The 15s
+    /// <see cref="IMemoryCache"/> entries behind /discover and /catalog are shared
+    /// across requests, so resolving in place would (a) bake one caller's Host
+    /// header into responses served to everyone else for the cache window
+    /// (host-header poisoning) and (b) mutate an object another request may be
+    /// serializing concurrently. Cached items therefore stay unresolved and are
+    /// never mutated; only these copies carry resolved URLs.
+    /// </summary>
+    private TrackResponse WithResolvedUrls(TrackResponse t) => new()
+    {
+        Id = t.Id,
+        CambrianTrackId = t.CambrianTrackId,
+        Title = t.Title,
+        Description = t.Description,
+        Genre = t.Genre,
+        PrimaryGenre = t.PrimaryGenre,
+        Subgenre = t.Subgenre,
+        Mood = t.Mood,
+        Tempo = t.Tempo,
+        Tags = t.Tags,
+        Instrumental = t.Instrumental,
+        Visibility = t.Visibility,
+        Price = t.Price,
+        NonExclusivePrice = t.NonExclusivePrice,
+        Status = t.Status,
+        Duration = t.Duration,
+        // Point audioUrl at the authenticated streaming proxy so browsers get the
+        // correct Content-Type, Range support, and CORS headers (mirrors ResolveTrackUrls).
+        AudioUrl = ResolveAbsoluteUrl($"/stream/{t.Id}/audio"),
+        StreamAvailable = t.StreamAvailable,
+        CoverArtUrl = string.IsNullOrEmpty(t.CoverArtUrl) ? t.CoverArtUrl : ResolveImageUrl(t.CoverArtUrl),
+        CreatorId = t.CreatorId,
+        CreatorSlug = t.CreatorSlug,
+        CreatorProfileImageUrl = string.IsNullOrEmpty(t.CreatorProfileImageUrl) ? t.CreatorProfileImageUrl : ResolveImageUrl(t.CreatorProfileImageUrl),
+        Artist = t.Artist,
+        Plays = t.Plays,
+        Sales = t.Sales,
+        AuthorshipRecordId = t.AuthorshipRecordId,
+        AiGenerated = t.AiGenerated,
+        ProvenanceStatus = t.ProvenanceStatus,
+        CreatedAt = t.CreatedAt,
     };
 
     [HttpGet("tracks/{trackId}")]
@@ -190,9 +235,9 @@ public class CatalogController : BaseController
     {
         if (page < 1) page = 1;
         if (pageSize is < 1 or > 100) pageSize = 20;
-        var items = await _catalog.GetDiscoverAsync(page, pageSize, genre, null, mood, tempo, instrumental, duration);
-        ResolveTrackUrls(items);
-        return OkResponse(items.Select(PublicCatalogTrackDto.From).ToList());
+        var ranked = await _catalog.GetTrendingPagedAsync(page, pageSize, genre, mood, tempo, instrumental, duration);
+        ResolveTrackUrls(ranked.Items);
+        return OkResponse(ranked.Items.Select(PublicCatalogTrackDto.From).ToList());
     }
 
     [HttpGet("tracks")]

@@ -20,9 +20,13 @@ public sealed class PublicDirectoryRepository : IPublicDirectoryRepository
     private IQueryable<Track> PublicTracks() =>
         _db.Tracks.AsNoTracking().Where(t =>
             !t.ExclusiveSold &&
-            t.Status != "copyright_transferred" &&
-            t.Status != "removed" &&
-            t.Visibility == "public");
+            (t.Status == "available" || t.Status == "active") &&
+            t.Visibility == "public" &&
+            t.DeletedAt == null &&
+            t.PurgeRequestedAt == null &&
+            t.PurgedAt == null &&
+            t.AudioUrl != null &&
+            t.AudioUrl.Trim() != string.Empty);
 
     public async Task<PublicPlatformCounts> GetPlatformCountsAsync()
     {
@@ -34,7 +38,10 @@ public sealed class PublicDirectoryRepository : IPublicDirectoryRepository
             .Select(t => t.CreatorId)
             .Distinct()
             .CountAsync();
-        var totalPlays = await _db.StreamSessions.CountAsync();
+        var totalPlays = await _db.TrackStats
+            .AsNoTracking()
+            .Where(s => pub.Select(t => t.Id).Contains(s.TrackId))
+            .SumAsync(s => (long?)s.PlayCount) ?? 0L;
         var genreCount = await pub
             .Select(t => t.Subgenre ?? t.Genre ?? t.PrimaryGenre)
             .Where(g => g != null && g != "")

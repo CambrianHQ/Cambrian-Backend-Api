@@ -61,15 +61,19 @@ public sealed class TrackLyricsAndBehindTheTrackTests : IClassFixture<CambrianAp
         var (client, userId) = await CreateCreatorAsync("lyr-update");
         var trackId = await _fixture.SeedTrackAsync(userId, "Lyrics Update Beat");
 
-        (await client.PutAsJsonAsync($"/creator/tracks/{trackId}/lyrics", new
+        var createRes = await client.PutAsJsonAsync($"/creator/tracks/{trackId}/lyrics", new
         {
             lyrics = "Original words",
-        })).StatusCode.Should().Be(HttpStatusCode.OK);
+        });
+        createRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var version = (await createRes.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").GetProperty("version").GetInt32();
 
         var putRes = await client.PutAsJsonAsync($"/creator/tracks/{trackId}/lyrics", new
         {
             lyrics = "Letra atualizada",
             language = "pt-BR",
+            version,
         });
         putRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -98,16 +102,20 @@ public sealed class TrackLyricsAndBehindTheTrackTests : IClassFixture<CambrianAp
         var (client, userId) = await CreateCreatorAsync("lyr-delete");
         var trackId = await _fixture.SeedTrackAsync(userId, "Lyrics Delete Beat");
 
-        (await client.PutAsJsonAsync($"/creator/tracks/{trackId}/lyrics", new
+        var createRes = await client.PutAsJsonAsync($"/creator/tracks/{trackId}/lyrics", new
         {
             lyrics = "Soon to be removed",
-        })).StatusCode.Should().Be(HttpStatusCode.OK);
+        });
+        createRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var version = (await createRes.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").GetProperty("version").GetInt32();
         (await CountLyricsRowsAsync(trackId)).Should().Be(1);
 
-        // Whitespace-only lyrics remove the row entirely.
+        // Removal is explicit and version-checked so stale empty writes cannot erase lyrics.
         var deleteRes = await client.PutAsJsonAsync($"/creator/tracks/{trackId}/lyrics", new
         {
-            lyrics = "   ",
+            deleteLyrics = true,
+            version,
         });
         deleteRes.StatusCode.Should().Be(HttpStatusCode.OK);
         var envelope = await deleteRes.Content.ReadFromJsonAsync<JsonElement>();

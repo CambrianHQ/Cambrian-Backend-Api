@@ -99,7 +99,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                 (t.CreatorUuid == m.Id || t.CreatorId == m.UserId)
                 && t.Visibility == "public"
                 && !t.ExclusiveSold
-                && t.Status != "copyright_transferred");
+                && t.Status != "copyright_transferred"
+                && t.Status != "removed");
 
             results.Add(new CreatorSearchResultDto
             {
@@ -152,7 +153,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .Where(t => (t.CreatorUuid == creatorId || t.CreatorId == legacyUserId)
                         && t.Visibility == "public"
                         && !t.ExclusiveSold
-                        && t.Status != "copyright_transferred")
+                        && t.Status != "copyright_transferred"
+                        && t.Status != "removed")
             .OrderByDescending(t => t.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -219,7 +221,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .Where(t => (t.CreatorUuid == creatorId || t.CreatorId == legacyUserId)
                         && t.Visibility == "public"
                         && !t.ExclusiveSold
-                        && t.Status != "copyright_transferred");
+                        && t.Status != "copyright_transferred"
+                        && t.Status != "removed");
 
         var total = await baseQuery.CountAsync();
 
@@ -261,8 +264,8 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
 
     /// <summary>
     /// Populate per-track engagement (plays, sales) on storefront track DTOs.
-    /// Mirrors the catalog path (TrackRepository.GetTrackStatsAsync): plays =
-    /// COUNT(StreamSessions), sales = COUNT(completed Purchases). Without this the
+    /// Mirrors the catalog path (TrackRepository.GetTrackStatsAsync): qualified plays
+    /// come from TrackStats; sales = COUNT(completed Purchases). Without this the
     /// public creator profile shows zero plays even when the catalog shows real
     /// counts (the projection above sets neither field, so both default to 0).
     /// </summary>
@@ -276,11 +279,22 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
             .ToList();
         if (ids.Count == 0) return;
 
-        var plays = await _db.StreamSessions
-            .Where(s => ids.Contains(s.TrackId))
-            .GroupBy(s => s.TrackId)
-            .Select(g => new { g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.Key, x => x.Count);
+        Dictionary<Guid, long> plays;
+        try
+        {
+            plays = await _db.TrackStats
+                .AsNoTracking()
+                .Where(s => ids.Contains(s.TrackId))
+                .ToDictionaryAsync(s => s.TrackId, s => s.PlayCount);
+        }
+        catch (Exception ex) when (IsMissingTrackStatsTable(ex))
+        {
+            // Some supported legacy schemas predate TrackStats. They have no
+            // authoritative qualified-play projection, so fail closed to zero
+            // instead of resurrecting raw StreamSession counts.
+            _logger.LogWarning("TrackStats is unavailable on a legacy schema; storefront play counts default to zero.");
+            plays = new Dictionary<Guid, long>();
+        }
 
         var sales = await _db.Purchases
             .Where(p => ids.Contains(p.TrackId) && p.Status == "completed")
@@ -390,10 +404,26 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
                     (t.CreatorUuid == creatorId || (legacyUserId != null && t.CreatorId == legacyUserId))
                     && t.Id == p.TrackId)
                              && p.Status == "completed");
+        long totalPlays;
+        try
+        {
+            totalPlays = await _db.TrackStats
+                .AsNoTracking()
+                .Where(s => _db.Tracks.Any(t =>
+                    (t.CreatorUuid == creatorId || (legacyUserId != null && t.CreatorId == legacyUserId))
+                    && t.Id == s.TrackId))
+                .SumAsync(s => (long?)s.PlayCount) ?? 0L;
+        }
+        catch (Exception ex) when (IsMissingTrackStatsTable(ex))
+        {
+            _logger.LogWarning("TrackStats is unavailable on a legacy schema; creator play totals default to zero.");
+            totalPlays = 0L;
+        }
 
         return new CreatorStatsResponseDto
         {
             TrackCount = trackCount,
+            TotalPlays = totalPlays,
             TotalSales = totalSales,
             TotalDownloads = totalSales,
             AverageRating = 0,
@@ -516,6 +546,18 @@ public sealed class CreatorIdentityRepository : ICreatorIdentityRepository
         => _db.CreatorFollows.CountAsync(f => f.CreatorId == creatorId);
 
     // ── Helpers ──
+
+    private static bool IsMissingTrackStatsTable(Exception ex)
+    {
+        var message = ex.ToString();
+        var missingRelation =
+            message.Contains("no such table", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("invalid object name", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("undefined table", StringComparison.OrdinalIgnoreCase);
+
+        return missingRelation && message.Contains("TrackStats", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Normalize username: lowercase, trim, collapse whitespace to hyphens.

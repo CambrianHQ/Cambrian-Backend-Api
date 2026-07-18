@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generatedAt": "2026-07-06T02:44:14.341Z",
+  "generatedAt": "2026-07-18T19:10:54.949Z",
   "endpoints": [
     {
       "method": "GET",
@@ -64,7 +64,42 @@
     },
     {
       "method": "GET",
+      "path": "/admin/media-reconciliation/runs",
+      "requiresAuth": true,
+      "tag": "MediaReconciliation",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/media-reconciliation/runs",
+      "requiresAuth": true,
+      "tag": "MediaReconciliation",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/media-reconciliation/runs/{runId}",
+      "requiresAuth": true,
+      "tag": "MediaReconciliation",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "GET",
       "path": "/admin/payouts",
+      "requiresAuth": true,
+      "tag": "Admin",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/payouts/{id}/approve",
+      "requiresAuth": true,
+      "tag": "Admin",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/payouts/{id}/reject",
       "requiresAuth": true,
       "tag": "Admin",
       "requiresRole": "Admin"
@@ -74,6 +109,20 @@
       "path": "/admin/payouts/requests",
       "requiresAuth": true,
       "tag": "Admin",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/play-reconciliation/dry-run",
+      "requiresAuth": true,
+      "tag": "PlayReconciliation",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/play-reconciliation/repair",
+      "requiresAuth": true,
+      "tag": "PlayReconciliation",
       "requiresRole": "Admin"
     },
     {
@@ -93,6 +142,13 @@
     {
       "method": "GET",
       "path": "/admin/reports",
+      "requiresAuth": true,
+      "tag": "Admin",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/reports/{id}/close",
       "requiresAuth": true,
       "tag": "Admin",
       "requiresRole": "Admin"
@@ -163,6 +219,13 @@
     {
       "method": "POST",
       "path": "/admin/tracks/{id}/pin",
+      "requiresAuth": true,
+      "tag": "Admin",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/tracks/{id}/purge",
       "requiresAuth": true,
       "tag": "Admin",
       "requiresRole": "Admin"
@@ -260,6 +323,12 @@
     {
       "method": "GET",
       "path": "/ai-discovery/tracks/{trackId}",
+      "requiresAuth": false,
+      "tag": "AiDiscovery"
+    },
+    {
+      "method": "GET",
+      "path": "/ai-discovery/tracks/{trackId}/licenses",
       "requiresAuth": false,
       "tag": "AiDiscovery"
     },
@@ -612,7 +681,7 @@
       "requiresAuth": true,
       "tag": "Upload",
       "requiresRole": "Creator",
-      "requiresPolicy": "CanUploadTrack,VerifiedEmail"
+      "requiresPolicy": "CanUploadTrack"
     },
     {
       "method": "GET",
@@ -756,6 +825,12 @@
       "tag": "ApiKeys"
     },
     {
+      "method": "POST",
+      "path": "/api/v1/playback/telemetry",
+      "requiresAuth": false,
+      "tag": "PlaybackTelemetryV1"
+    },
+    {
       "method": "GET",
       "path": "/api/v1/public/albums/{slug}",
       "requiresAuth": false,
@@ -778,6 +853,93 @@
       "path": "/api/v1/tracks/{id}",
       "requiresAuth": false,
       "tag": "TracksV1"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tracks/{trackId}/ai-disclosure",
+      "requiresAuth": false,
+      "tag": "TrackAiDisclosureV1"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tracks/{trackId}/ai-disclosure",
+      "requiresAuth": true,
+      "tag": "TrackAiDisclosureV1",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/tracks/{trackId}/ai-disclosure",
+      "requiresAuth": true,
+      "tag": "TrackAiDisclosureV1",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tracks/{trackId}/ai-disclosure/history",
+      "requiresAuth": true,
+      "tag": "TrackAiDisclosureV1",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tracks/{trackId}/ai-disclosure/revoke",
+      "requiresAuth": true,
+      "tag": "TrackAiDisclosureV1",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tracks/{trackId}/behind-the-track",
+      "requiresAuth": false,
+      "tag": "BehindTheTrackV1"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/tracks/{trackId}/behind-the-track",
+      "requiresAuth": true,
+      "tag": "BehindTheTrackV1",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tracks/{trackId}/lyrics",
+      "requiresAuth": false,
+      "tag": "TracksV1"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/tracks/{trackId}/lyrics",
+      "requiresAuth": true,
+      "tag": "TracksV1",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tracks/{trackId}/playback",
+      "requiresAuth": false,
+      "tag": "PlaybackV1"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tracks/{trackId}/proof-videos",
+      "requiresAuth": true,
+      "tag": "BehindTheTrackV1",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tracks/{trackId}/proof-videos/{videoId}",
+      "requiresAuth": true,
+      "tag": "BehindTheTrackV1",
+      "requiresPolicy": "CanEditOwnTrack"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tracks/{trackId}/proof-videos/{videoId}",
+      "requiresAuth": true,
+      "tag": "BehindTheTrackV1",
+      "requiresPolicy": "CanEditOwnTrack"
     },
     {
       "method": "GET",
@@ -1596,6 +1758,12 @@
       "tag": "Stream"
     },
     {
+      "method": "HEAD",
+      "path": "/stream/{trackId}/audio",
+      "requiresAuth": false,
+      "tag": "Stream"
+    },
+    {
       "method": "POST",
       "path": "/stream/start",
       "requiresAuth": false,
@@ -1604,7 +1772,7 @@
     {
       "method": "POST",
       "path": "/stream/stop",
-      "requiresAuth": true,
+      "requiresAuth": false,
       "tag": "Stream"
     },
     {
@@ -1711,7 +1879,15 @@
       "requiresAuth": true,
       "tag": "Upload",
       "requiresRole": "Creator",
-      "requiresPolicy": "CanUploadTrack,VerifiedEmail"
+      "requiresPolicy": "CanUploadTrack"
+    },
+    {
+      "method": "POST",
+      "path": "/uploads/batch",
+      "requiresAuth": true,
+      "tag": "Upload",
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanUploadTrack"
     },
     {
       "method": "POST",

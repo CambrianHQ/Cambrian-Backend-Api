@@ -32,6 +32,7 @@ public sealed class EntitlementsController : BaseController
     /// </summary>
     [HttpPost("grant")]
     [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<IActionResult> Grant([FromBody] GrantEntitlementRequest req, CancellationToken ct)
     {
         if (!ModelState.IsValid)

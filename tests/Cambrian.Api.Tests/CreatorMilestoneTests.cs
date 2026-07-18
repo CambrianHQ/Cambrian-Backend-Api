@@ -14,7 +14,7 @@ namespace Cambrian.Api.Tests;
 /// Creator lifecycle milestones (release-gate task: first_play_received /
 /// first_fan_event emitters). The dashboard exposes earliest-ever timestamps
 /// so the frontend emitter can fire exactly once per creator:
-///  - first play is the EARLIEST stream session (anonymous sessions count)
+///  - first play is the EARLIEST qualified play (anonymous listeners count)
 ///    and never moves once set;
 ///  - first fan is the earliest of follow/save/support/subscription with a
 ///    source label;
@@ -58,18 +58,18 @@ public sealed class CreatorMilestoneTests : IClassFixture<CambrianApiFixture>
     }
 
     [Fact]
-    public async Task First_play_uses_the_earliest_anonymous_session_and_is_stable_across_reads()
+    public async Task First_play_uses_the_earliest_anonymous_qualified_play_and_is_stable_across_reads()
     {
-        var (client, _, trackId) = await SeedCreatorAsync("play");
+        var (client, userId, trackId) = await SeedCreatorAsync("play");
         var earliest = DateTime.UtcNow.AddDays(-3);
 
         using (var scope = _fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-            // Two ANONYMOUS sessions (UserId null) — the milestone belongs to
+            // Two ANONYMOUS qualified plays — the milestone belongs to
             // the creator; listener identity is irrelevant and absent.
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = earliest });
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = earliest.AddHours(5) });
+            db.QualifiedPlayEvents.Add(QualifiedPlay(userId, trackId, earliest));
+            db.QualifiedPlayEvents.Add(QualifiedPlay(userId, trackId, earliest.AddHours(5)));
             await db.SaveChangesAsync();
         }
 
@@ -84,7 +84,7 @@ public sealed class CreatorMilestoneTests : IClassFixture<CambrianApiFixture>
         using (var scope = _fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = null, StartedAt = DateTime.UtcNow });
+            db.QualifiedPlayEvents.Add(QualifiedPlay(userId, trackId, DateTime.UtcNow));
             await db.SaveChangesAsync();
         }
 
@@ -139,7 +139,11 @@ public sealed class CreatorMilestoneTests : IClassFixture<CambrianApiFixture>
         using (var scope = _fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-            db.StreamSessions.Add(new StreamSession { Id = Guid.NewGuid(), TrackId = trackId, UserId = "listener-secret-id", StartedAt = DateTime.UtcNow.AddDays(-1) });
+            db.QualifiedPlayEvents.Add(QualifiedPlay(
+                userId,
+                trackId,
+                DateTime.UtcNow.AddDays(-1),
+                listenerUserId: "listener-secret-id"));
             var creatorGuid = await db.Creators
                 .Where(c => c.UserId == userId)
                 .Select(c => (Guid?)c.Id)
@@ -182,5 +186,29 @@ public sealed class CreatorMilestoneTests : IClassFixture<CambrianApiFixture>
         Assert.True(
             res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden,
             $"anonymous dashboard access must be denied, got {(int)res.StatusCode}");
+    }
+
+    private static QualifiedPlayEvent QualifiedPlay(
+        string creatorId,
+        Guid trackId,
+        DateTime qualifiedAtUtc,
+        string? listenerUserId = null)
+    {
+        var id = Guid.NewGuid();
+        return new QualifiedPlayEvent
+        {
+            Id = id,
+            IdempotencyKey = $"milestone:{id:N}",
+            TrackId = trackId,
+            CreatorId = creatorId,
+            ListenerUserId = listenerUserId,
+            ListenerKeyHash = $"listener-{id:N}",
+            PlaybackSessionId = Guid.NewGuid(),
+            QualifiedAtUtc = qualifiedAtUtc,
+            ActivePlaybackSeconds = 30,
+            ThresholdSeconds = 30,
+            CreatedAtUtc = qualifiedAtUtc,
+            AggregatedAtUtc = qualifiedAtUtc,
+        };
     }
 }

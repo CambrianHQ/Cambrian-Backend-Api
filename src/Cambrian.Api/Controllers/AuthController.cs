@@ -51,6 +51,7 @@ public class AuthController : BaseController
 
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<IActionResult> Register(RegisterRequest request)
     {
         _logger.LogInformation("EVENT: RegisterStarted");

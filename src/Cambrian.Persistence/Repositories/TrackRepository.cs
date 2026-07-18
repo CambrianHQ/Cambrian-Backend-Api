@@ -20,7 +20,7 @@ public class TrackRepository : ITrackRepository
         try
         {
             return await BuildTrackQuery()
-                .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public")
+                .Where(IsPublicCatalogTrack)
                 .OrderByDescending(t => t.CreatedAt)
                 .Take(200)
                 .ToListAsync();
@@ -28,7 +28,7 @@ public class TrackRepository : ITrackRepository
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             return await BuildLegacyCompatibleTrackQuery()
-                .Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public")
+                .Where(IsPublicCatalogTrack)
                 .OrderByDescending(t => t.CreatedAt)
                 .Take(200)
                 .ToListAsync();
@@ -46,7 +46,7 @@ public class TrackRepository : ITrackRepository
         try
         {
             var query = ApplyBrowseFilters(
-                BuildTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
+                BuildTrackQuery().Where(IsPublicCatalogTrack),
                 genre, search, mood, tempo, instrumental, duration,
                 includeTaxonomyColumns: true,
                 includeTagSearch: _db.Database.IsRelational());
@@ -59,7 +59,7 @@ public class TrackRepository : ITrackRepository
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             var query = ApplyBrowseFilters(
-                BuildLegacyCompatibleTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
+                BuildLegacyCompatibleTrackQuery().Where(IsPublicCatalogTrack),
                 genre, search, mood, tempo, instrumental, duration,
                 includeTaxonomyColumns: false,
                 includeTagSearch: _db.Database.IsRelational());
@@ -235,7 +235,7 @@ public class TrackRepository : ITrackRepository
         try
         {
             var query = ApplyBrowseFilters(
-                _db.Tracks.Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
+                _db.Tracks.Where(IsPublicCatalogTrack),
                 genre, search, mood, tempo, instrumental, duration,
                 includeTaxonomyColumns: true,
                 includeTagSearch: _db.Database.IsRelational());
@@ -244,8 +244,31 @@ public class TrackRepository : ITrackRepository
         catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
         {
             var query = ApplyBrowseFilters(
-                BuildLegacyCompatibleTrackQuery().Where(t => !t.ExclusiveSold && t.Status != "copyright_transferred" && t.Visibility == "public"),
+                BuildLegacyCompatibleTrackQuery().Where(IsPublicCatalogTrack),
                 genre, search, mood, tempo, instrumental, duration,
+                includeTaxonomyColumns: false,
+                includeTagSearch: _db.Database.IsRelational());
+            return await query.CountAsync();
+        }
+    }
+
+    public async Task<int> CountTrendingAsync(string? genre = null,
+        string? mood = null, string? tempo = null, bool? instrumental = null, string? duration = null)
+    {
+        try
+        {
+            var query = ApplyBrowseFilters(
+                _db.Tracks.Where(IsEligiblePublicTrack),
+                genre, search: null, mood, tempo, instrumental, duration,
+                includeTaxonomyColumns: true,
+                includeTagSearch: _db.Database.IsRelational());
+            return await query.CountAsync();
+        }
+        catch (Exception ex) when (IsMissingTrackTaxonomyColumn(ex))
+        {
+            var query = ApplyBrowseFilters(
+                BuildLegacyCompatibleTrackQuery().Where(IsEligiblePublicTrack),
+                genre, search: null, mood, tempo, instrumental, duration,
                 includeTaxonomyColumns: false,
                 includeTagSearch: _db.Database.IsRelational());
             return await query.CountAsync();
@@ -263,11 +286,11 @@ public class TrackRepository : ITrackRepository
 
         var ids = trackIds as IList<Guid> ?? trackIds.ToList();
 
-        // Plays — one grouped count over all stream sessions for the page's tracks.
-        var plays = await _db.StreamSessions
+        // Plays — transactionally maintained qualified-play projection.
+        var plays = await _db.TrackStats
+            .AsNoTracking()
             .Where(s => ids.Contains(s.TrackId))
-            .GroupBy(s => s.TrackId)
-            .Select(g => new { TrackId = g.Key, Count = g.Count() })
+            .Select(s => new { s.TrackId, Count = s.PlayCount })
             .ToListAsync();
         foreach (var row in plays)
             if (result.TryGetValue(row.TrackId, out var stats)) stats.Plays = row.Count;
@@ -330,6 +353,9 @@ public class TrackRepository : ITrackRepository
                 OriginalCreatorId = t.OriginalCreatorId,
                 Visibility = t.Visibility,
                 CreatedAt = t.CreatedAt,
+                DeletedAt = t.DeletedAt,
+                PurgeRequestedAt = t.PurgeRequestedAt,
+                PurgedAt = t.PurgedAt,
                 CreatorId = t.CreatorId,
                 CreatorUuid = t.CreatorUuid,
                 Tags = t.Tags,
@@ -453,8 +479,42 @@ public class TrackRepository : ITrackRepository
         return query;
     }
 
-    private static IQueryable<Track> ApplySort(IQueryable<Track> query, string? sort)
-        => TrackSorting.Apply(query, sort);
+    private IQueryable<Track> ApplySort(IQueryable<Track> query, string? sort)
+    {
+        var normalized = sort?.Trim().ToLowerInvariant();
+        if (normalized is "trending" or "popular")
+        {
+            return query
+                .Where(IsEligiblePublicTrack)
+                .OrderByDescending(t => _db.TrackStats
+                    .Where(s => s.TrackId == t.Id)
+                    .Select(s => (long?)s.PlayCount)
+                    .FirstOrDefault() ?? 0L)
+                .ThenByDescending(t => t.CreatedAt)
+                .ThenBy(t => t.Id);
+        }
+
+        return TrackSorting.Apply(query, sort);
+    }
+
+    // Preserve the established additive catalog contract. Legacy public rows can
+    // still be browsed even when they predate today's ranking eligibility fields.
+    private static readonly System.Linq.Expressions.Expression<Func<Track, bool>> IsPublicCatalogTrack = t =>
+        !t.ExclusiveSold
+        && t.Status != "copyright_transferred"
+        && t.Visibility == "public";
+
+    // Ranking is stricter than general browse: only currently playable releases
+    // can compete for chart/trending placement.
+    private static readonly System.Linq.Expressions.Expression<Func<Track, bool>> IsEligiblePublicTrack = t =>
+        !t.ExclusiveSold
+        && (t.Status == "available" || t.Status == "active")
+        && t.Visibility == "public"
+        && t.DeletedAt == null
+        && t.PurgeRequestedAt == null
+        && t.PurgedAt == null
+        && t.AudioUrl != null
+        && t.AudioUrl.Trim() != string.Empty;
 
     // Columns added to the Track entity after the original Tracks schema shipped.
     // The legacy-compatible write path (Insert/UpdateLegacyCompatibleTrackAsync)
@@ -612,7 +672,10 @@ public class TrackRepository : ITrackRepository
             var inMemoryTrack = await _db.Tracks.FindAsync(id);
             if (inMemoryTrack is not null && inMemoryTrack.PurgedAt is null)
             {
-                inMemoryTrack.Visibility = inMemoryTrack.PreDeleteVisibility ?? "public";
+                var requestedVisibility = inMemoryTrack.PreDeleteVisibility ?? "public";
+                var mediaReady = !string.Equals(requestedVisibility, "public", StringComparison.OrdinalIgnoreCase)
+                    || await _db.TrackMedia.AnyAsync(x => x.TrackId == id && x.State == TrackMediaStates.Ready && x.ObjectKey != null);
+                inMemoryTrack.Visibility = mediaReady ? requestedVisibility : "hidden";
                 inMemoryTrack.Status = inMemoryTrack.PreDeleteStatus ?? "available";
                 inMemoryTrack.DeletedAt = null;
                 inMemoryTrack.DeletedByUserId = null;
@@ -630,7 +693,10 @@ public class TrackRepository : ITrackRepository
 
         if (trackedEntry is not null)
         {
-            trackedEntry.Entity.Visibility = trackedEntry.Entity.PreDeleteVisibility ?? "public";
+            var requestedVisibility = trackedEntry.Entity.PreDeleteVisibility ?? "public";
+            var mediaReady = !string.Equals(requestedVisibility, "public", StringComparison.OrdinalIgnoreCase)
+                || await _db.TrackMedia.AnyAsync(x => x.TrackId == id && x.State == TrackMediaStates.Ready && x.ObjectKey != null);
+            trackedEntry.Entity.Visibility = mediaReady ? requestedVisibility : "hidden";
             trackedEntry.Entity.Status = trackedEntry.Entity.PreDeleteStatus ?? "available";
             trackedEntry.Entity.DeletedAt = null;
             trackedEntry.Entity.DeletedByUserId = null;
@@ -643,7 +709,14 @@ public class TrackRepository : ITrackRepository
         // page with a dead audio URL, so PurgedAt permanently blocks restore.
         await _db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE "Tracks"
-            SET "Visibility" = COALESCE("PreDeleteVisibility", 'public'),
+            SET "Visibility" = CASE
+                    WHEN COALESCE("PreDeleteVisibility", 'public') <> 'public' THEN COALESCE("PreDeleteVisibility", 'public')
+                    WHEN EXISTS (
+                        SELECT 1 FROM "TrackMedia" tm
+                        WHERE tm."TrackId" = "Tracks"."Id" AND tm."State" = 'Ready' AND tm."ObjectKey" IS NOT NULL
+                    ) THEN 'public'
+                    ELSE 'hidden'
+                END,
                 "Status" = COALESCE("PreDeleteStatus", 'available'),
                 "DeletedAt" = NULL, "DeletedByUserId" = NULL, "PreDeleteVisibility" = NULL, "PreDeleteStatus" = NULL
             WHERE "Id" = {NormalizeGuid(id)} AND "PurgedAt" IS NULL

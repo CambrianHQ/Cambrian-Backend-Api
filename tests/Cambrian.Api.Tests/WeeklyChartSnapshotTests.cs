@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Cambrian.Api.Tests.Fixtures;
+using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,8 @@ namespace Cambrian.Api.Tests;
 
 /// <summary>
 /// Weekly Scene chart persistence (creator-audit fix 9):
-///  - ranking uses plays INSIDE the chart week, not all-time popularity;
+///  - ranking uses qualified plays INSIDE the chart week, not raw sessions or
+///    all-time popularity;
 ///  - recompute is idempotent per week (no duplicate rows on re-run);
 ///  - movement deltas come from the previous week's persisted snapshot;
 ///  - the response declares its Basis so the frontend can label honestly.
@@ -29,19 +31,56 @@ public sealed class WeeklyChartSnapshotTests : IClassFixture<CambrianApiFixture>
         return date.AddDays(-diff);
     }
 
-    private async Task SeedStreamSessionsAsync(Guid trackId, DateTime startedAtUtc, int count)
+    private async Task SeedQualifiedPlaysAsync(Guid trackId, DateTime qualifiedAtUtc, int count)
     {
         using var scope = _fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+        var track = await db.Tracks.SingleAsync(item => item.Id == trackId);
+
         for (var i = 0; i < count; i++)
         {
+            var eventTime = qualifiedAtUtc.AddMilliseconds(i);
+            var sessionId = Guid.NewGuid();
             db.StreamSessions.Add(new StreamSession
             {
-                Id = Guid.NewGuid(),
+                Id = sessionId,
                 TrackId = trackId,
-                StartedAt = startedAtUtc.AddMinutes(i),
+                StartedAt = eventTime.AddSeconds(-30),
+                StoppedAt = eventTime,
+                ActivePlaybackSeconds = 30,
+                QualificationThresholdSeconds = 30,
+                QualificationStatus = "qualified",
+                QualifiedAtUtc = eventTime,
+                WasEligibleAtStart = true,
+            });
+            db.QualifiedPlayEvents.Add(new QualifiedPlayEvent
+            {
+                Id = Guid.NewGuid(),
+                IdempotencyKey = Guid.NewGuid().ToString("N"),
+                TrackId = trackId,
+                CreatorId = track.CreatorId,
+                ListenerKeyHash = Guid.NewGuid().ToString("N"),
+                PlaybackSessionId = sessionId,
+                QualifiedAtUtc = eventTime,
+                QualificationBasis = "active_playback_threshold",
+                ActivePlaybackSeconds = 30,
+                ThresholdSeconds = 30,
+                CreatedAtUtc = eventTime,
+                AggregatedAtUtc = eventTime,
             });
         }
+
+        var stats = await db.TrackStats.SingleOrDefaultAsync(item => item.TrackId == trackId);
+        if (stats is null)
+        {
+            stats = new TrackStat { TrackId = trackId };
+            db.TrackStats.Add(stats);
+        }
+
+        stats.QualifiedPlayCount += count;
+        stats.PlayCount += count;
+        stats.LastPlayedAt = qualifiedAtUtc.AddMilliseconds(Math.Max(0, count - 1));
+        stats.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
     }
 
@@ -88,8 +127,8 @@ public sealed class WeeklyChartSnapshotTests : IClassFixture<CambrianApiFixture>
 
         var weekStart = StartOfIsoWeekUtc(DateTime.UtcNow);
         // 5 plays inside the current chart week vs 50 plays a month ago.
-        await SeedStreamSessionsAsync(playedThisWeek, weekStart.AddHours(1), 5);
-        await SeedStreamSessionsAsync(playedLastMonth, weekStart.AddDays(-30), 50);
+        await SeedQualifiedPlaysAsync(playedThisWeek, weekStart.AddHours(1), 5);
+        await SeedQualifiedPlaysAsync(playedLastMonth, weekStart.AddDays(-30), 50);
 
         var res = await admin.PostAsync("/admin/charts/aggregate", null);
         res.EnsureSuccessStatusCode();
@@ -100,11 +139,38 @@ public sealed class WeeklyChartSnapshotTests : IClassFixture<CambrianApiFixture>
         var entries = data.GetProperty("entries").EnumerateArray().ToList();
         var hotRank = entries.First(e => e.GetProperty("trackId").GetString() == playedThisWeek.ToString())
             .GetProperty("rank").GetInt32();
-        var oldRank = entries.First(e => e.GetProperty("trackId").GetString() == playedLastMonth.ToString())
-            .GetProperty("rank").GetInt32();
+        var hot = entries.First(e => e.GetProperty("trackId").GetString() == playedThisWeek.ToString());
+        var old = entries.First(e => e.GetProperty("trackId").GetString() == playedLastMonth.ToString());
+        var oldRank = old.GetProperty("rank").GetInt32();
 
         Assert.True(hotRank < oldRank,
             $"in-window plays must outrank stale all-time plays (hot={hotRank}, old={oldRank})");
+        Assert.Equal(5, hot.GetProperty("weeklyQualifiedPlays").GetInt64());
+        Assert.Equal(5, hot.GetProperty("rankingScore").GetInt64());
+        Assert.Equal(50, old.GetProperty("lifetimePlays").GetInt64());
+        Assert.Equal(0, old.GetProperty("weeklyQualifiedPlays").GetInt64());
+    }
+
+    [Fact]
+    public async Task Weekly_window_is_half_open_and_uses_qualified_at_timestamp()
+    {
+        var admin = await CreateAdminAsync("boundary");
+        var creatorId = await _fixture.GetUserIdAsync("chart-admin-boundary@test.com");
+        var trackId = await _fixture.SeedTrackAsync(creatorId, "Boundary track");
+        var weekStart = StartOfIsoWeekUtc(DateTime.UtcNow);
+
+        await SeedQualifiedPlaysAsync(trackId, weekStart, 1);
+        await SeedQualifiedPlaysAsync(trackId, weekStart.AddDays(7), 1);
+
+        var response = await admin.PostAsync("/admin/charts/aggregate", null);
+        response.EnsureSuccessStatusCode();
+        var data = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        var entry = data.GetProperty("entries")
+            .EnumerateArray()
+            .Single(item => item.GetProperty("trackId").GetString() == trackId.ToString());
+
+        Assert.Equal(1, entry.GetProperty("weeklyQualifiedPlays").GetInt64());
+        Assert.Equal(2, entry.GetProperty("lifetimePlays").GetInt64());
     }
 
     [Fact]
@@ -137,7 +203,7 @@ public sealed class WeeklyChartSnapshotTests : IClassFixture<CambrianApiFixture>
         }
 
         // Heavy in-window plays push it to (or near) the top this week.
-        await SeedStreamSessionsAsync(trackId, weekStart.AddHours(2), 25);
+        await SeedQualifiedPlaysAsync(trackId, weekStart.AddHours(2), 25);
 
         var res = await admin.PostAsync("/admin/charts/aggregate", null);
         res.EnsureSuccessStatusCode();
@@ -172,7 +238,202 @@ public sealed class WeeklyChartSnapshotTests : IClassFixture<CambrianApiFixture>
 
         var data = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
         Assert.True(data.TryGetProperty("basis", out var basis), "weekly response must declare its basis");
-        Assert.Contains(basis.GetString(), new[] { "weekly_plays", "catalog_trending" });
+        Assert.Equal("weekly_plays", basis.GetString());
         Assert.False(string.IsNullOrWhiteSpace(data.GetProperty("weekOf").GetString()));
+        Assert.True(data.TryGetProperty("chartWindowStart", out _));
+        Assert.True(data.TryGetProperty("chartWindowEnd", out _));
+        Assert.True(data.TryGetProperty("generatedAt", out _));
+        Assert.True(data.TryGetProperty("dataThrough", out var dataThrough));
+        Assert.NotEqual(JsonValueKind.Null, dataThrough.ValueKind);
+        Assert.True(data.TryGetProperty("isStale", out _));
+    }
+
+    [Fact]
+    public async Task Ranking_uses_required_tie_breakers_and_excludes_ineligible_tracks()
+    {
+        var admin = await CreateAdminAsync("eligibility");
+        var creatorId = await _fixture.GetUserIdAsync("chart-admin-eligibility@test.com");
+        var newer = await _fixture.SeedTrackAsync(creatorId, "Newer tie");
+        var tieA = await _fixture.SeedTrackAsync(creatorId, "GUID tie A");
+        var tieB = await _fixture.SeedTrackAsync(creatorId, "GUID tie B");
+        var zeroPlay = await _fixture.SeedTrackAsync(creatorId, "Eligible zero-play track");
+
+        var hidden = await _fixture.SeedTrackAsync(creatorId, "Hidden", "hidden");
+        var unavailable = await _fixture.SeedTrackAsync(creatorId, "Unavailable");
+        var deleted = await _fixture.SeedTrackAsync(creatorId, "Deleted");
+        var purged = await _fixture.SeedTrackAsync(creatorId, "Purged");
+        var exclusive = await _fixture.SeedTrackAsync(creatorId, "Exclusive");
+        var noAudio = await _fixture.SeedTrackAsync(creatorId, "No audio");
+
+        var commonCreatedAt = DateTime.UtcNow.AddDays(-3);
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            var tracks = await db.Tracks
+                .Where(track => new[]
+                {
+                    newer, tieA, tieB, zeroPlay, hidden, unavailable,
+                    deleted, purged, exclusive, noAudio,
+                }.Contains(track.Id))
+                .ToDictionaryAsync(track => track.Id);
+
+            tracks[newer].CreatedAt = commonCreatedAt.AddMinutes(1);
+            tracks[tieA].CreatedAt = commonCreatedAt;
+            tracks[tieB].CreatedAt = commonCreatedAt;
+            tracks[zeroPlay].CreatedAt = commonCreatedAt.AddDays(-1);
+            tracks[unavailable].Status = "draft";
+            tracks[deleted].DeletedAt = DateTime.UtcNow;
+            tracks[purged].PurgedAt = DateTime.UtcNow;
+            tracks[exclusive].ExclusiveSold = true;
+            tracks[noAudio].AudioUrl = "   ";
+            await db.SaveChangesAsync();
+        }
+
+        var weekStart = StartOfIsoWeekUtc(DateTime.UtcNow);
+        foreach (var eligible in new[] { newer, tieA, tieB })
+        {
+            await SeedQualifiedPlaysAsync(eligible, weekStart.AddHours(3), 3);
+        }
+
+        foreach (var excluded in new[] { hidden, unavailable, deleted, purged, exclusive, noAudio })
+        {
+            await SeedQualifiedPlaysAsync(excluded, weekStart.AddHours(4), 4);
+        }
+
+        var response = await admin.PostAsync("/admin/charts/aggregate", null);
+        response.EnsureSuccessStatusCode();
+        var data = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        var entries = data.GetProperty("entries").EnumerateArray().ToList();
+        var orderedIds = entries
+            .Select(entry => Guid.Parse(entry.GetProperty("trackId").GetString()!))
+            .ToList();
+
+        Assert.True(orderedIds.IndexOf(newer) < orderedIds.IndexOf(tieA));
+        Assert.True(orderedIds.IndexOf(newer) < orderedIds.IndexOf(tieB));
+
+        var expectedGuidOrder = new[] { tieA, tieB }.OrderBy(id => id).ToArray();
+        var actualGuidOrder = new[] { tieA, tieB }.OrderBy(id => orderedIds.IndexOf(id)).ToArray();
+        Assert.Equal(expectedGuidOrder, actualGuidOrder);
+        Assert.Contains(zeroPlay, orderedIds);
+
+        foreach (var excluded in new[] { hidden, unavailable, deleted, purged, exclusive, noAudio })
+        {
+            Assert.DoesNotContain(excluded, orderedIds);
+        }
+    }
+
+    [Fact]
+    public async Task Public_read_recomputes_when_snapshot_is_behind_qualified_events()
+    {
+        var admin = await CreateAdminAsync("behind");
+        var creatorId = await _fixture.GetUserIdAsync("chart-admin-behind@test.com");
+        var trackId = await _fixture.SeedTrackAsync(creatorId, "Behind watermark");
+
+        var initial = await admin.PostAsync("/admin/charts/aggregate", null);
+        initial.EnsureSuccessStatusCode();
+
+        var weekStart = StartOfIsoWeekUtc(DateTime.UtcNow);
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            var rows = await db.WeeklyChartSnapshots
+                .Where(snapshot => snapshot.WeekStartUtc == weekStart)
+                .ToListAsync();
+            foreach (var row in rows)
+            {
+                row.DataThroughUtc = weekStart;
+                row.ComputedAtUtc = DateTime.UtcNow;
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await SeedQualifiedPlaysAsync(trackId, weekStart.AddHours(1), 1);
+
+        var response = await _fixture.CreateClient().GetAsync("/api/charts/weekly");
+        response.EnsureSuccessStatusCode();
+        var data = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        var track = data.GetProperty("entries")
+            .EnumerateArray()
+            .Single(entry => entry.GetProperty("trackId").GetString() == trackId.ToString());
+
+        Assert.Equal(1, track.GetProperty("weeklyQualifiedPlays").GetInt64());
+        Assert.False(data.GetProperty("isStale").GetBoolean());
+        Assert.True(data.GetProperty("dataThrough").GetDateTime() > weekStart);
+    }
+
+    [Fact]
+    public async Task Empty_snapshot_metadata_marker_never_leaks_as_a_chart_entry()
+    {
+        var weekStart = StartOfIsoWeekUtc(DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
+            var existing = await db.WeeklyChartSnapshots
+                .Where(snapshot => snapshot.WeekStartUtc == weekStart)
+                .ToListAsync();
+            db.WeeklyChartSnapshots.RemoveRange(existing);
+            db.WeeklyChartSnapshots.Add(new WeeklyChartSnapshot
+            {
+                Id = Guid.NewGuid(),
+                WeekStartUtc = weekStart,
+                WeekEndUtc = weekStart.AddDays(7),
+                Rank = 0,
+                TrackId = Guid.Empty,
+                CreatorId = string.Empty,
+                Title = string.Empty,
+                Artist = string.Empty,
+                Basis = "weekly_plays",
+                DataThroughUtc = now,
+                ComputedAtUtc = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _fixture.CreateClient().GetAsync("/api/charts/weekly");
+        response.EnsureSuccessStatusCode();
+        var data = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+
+        Assert.Empty(data.GetProperty("entries").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, data.GetProperty("trackOfTheWeek").ValueKind);
+    }
+
+    [Fact]
+    public async Task Older_concurrent_calculation_cannot_replace_newer_snapshot()
+    {
+        var weekStart = StartOfIsoWeekUtc(DateTime.UtcNow);
+        var newerWatermark = DateTime.UtcNow;
+        var newer = Snapshot("Newer calculation", newerWatermark, newerWatermark);
+        // This calculation started with an older event watermark but finished
+        // after the newer calculation. Finish time must not make stale data win.
+        var older = Snapshot(
+            "Older calculation that finished late",
+            newerWatermark.AddMinutes(-1),
+            newerWatermark.AddMinutes(1));
+
+        using var scope = _fixture.Services.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IWeeklyChartRepository>();
+        await repo.ReplaceWeekAsync(weekStart, new[] { newer });
+        await repo.ReplaceWeekAsync(weekStart, new[] { older });
+
+        var persisted = await repo.GetWeekAsync(weekStart);
+        var winner = Assert.Single(persisted);
+        Assert.Equal("Newer calculation", winner.Title);
+        Assert.Equal(newerWatermark, winner.DataThroughUtc);
+
+        WeeklyChartSnapshot Snapshot(string title, DateTime dataThrough, DateTime computedAt) => new()
+        {
+            Id = Guid.NewGuid(),
+            WeekStartUtc = weekStart,
+            WeekEndUtc = weekStart.AddDays(7),
+            Rank = 1,
+            TrackId = Guid.NewGuid(),
+            CreatorId = "concurrency-test",
+            Title = title,
+            Artist = "Test",
+            Basis = "weekly_plays",
+            DataThroughUtc = dataThrough,
+            ComputedAtUtc = computedAt,
+        };
     }
 }

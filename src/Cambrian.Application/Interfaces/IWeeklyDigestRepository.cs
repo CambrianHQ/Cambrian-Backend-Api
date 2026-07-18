@@ -14,10 +14,10 @@ public sealed class DigestCandidate
 /// <summary>Aggregated weekly numbers for one creator.</summary>
 public sealed class DigestWeeklyNumbers
 {
-    public int Plays { get; set; }
+    public long Plays { get; set; }
     public int NewFollowers { get; set; }
     public string? TopTrackTitle { get; set; }
-    public int TopTrackPlays { get; set; }
+    public long TopTrackPlays { get; set; }
 }
 
 public interface IWeeklyDigestRepository

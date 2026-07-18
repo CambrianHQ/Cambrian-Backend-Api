@@ -157,10 +157,10 @@ public class CreatorService : ICreatorService
         var tracks = await _tracks.GetDashboardTrackSummariesAsync(userId, creatorUuid);
         var trackIds = tracks.Select(t => t.Id).ToList();
 
-        // Plays = COUNT(*) FROM StreamSessions WHERE TrackId IN (creator tracks)
+        // Plays = qualified lifetime counts from the TrackStats projection.
         var playCounts = trackIds.Count > 0
             ? await _streams.GetPlayCountsByTrackIdsAsync(trackIds)
-            : new Dictionary<Guid, int>();
+            : new Dictionary<Guid, long>();
 
         // Sales = COUNT(*) FROM Purchases WHERE Status='completed' AND TrackId IN (creator tracks)
         var saleCounts = trackIds.Count > 0

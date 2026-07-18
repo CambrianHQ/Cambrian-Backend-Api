@@ -280,7 +280,19 @@ internal static class StartupExtensions
                 policy.SetIsOriginAllowed(origin => IsOriginAllowed(origin, originSet, vercelSlug, cfSlug))
                       .AllowAnyHeader()
                       .AllowAnyMethod()
-                      .AllowCredentials();
+                      .WithExposedHeaders(
+                          "Accept-Ranges",
+                          "Content-Length",
+                          "Content-Range",
+                          "X-Request-ID",
+                          "X-Backend-Release")
+                      .AllowCredentials()
+                      // Range is not a CORS-safelisted request header, so every
+                      // cross-origin ranged audio fetch preflights; without an
+                      // explicit max-age browsers cache the preflight for only ~5s.
+                      // Cache it for an hour so a listen doesn't re-preflight per
+                      // range request.
+                      .SetPreflightMaxAge(TimeSpan.FromHours(1));
             });
         });
     }

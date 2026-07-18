@@ -106,6 +106,9 @@ public class Track
 
     public ApplicationUser Creator { get; set; } = null!;
 
+    /// <summary>Persisted media lifecycle and validated object metadata.</summary>
+    public TrackMedia? Media { get; set; }
+
     /// <summary>Navigation to the first-class Creator entity via CreatorUuid.</summary>
     public Creator? CreatorEntity { get; set; }
 

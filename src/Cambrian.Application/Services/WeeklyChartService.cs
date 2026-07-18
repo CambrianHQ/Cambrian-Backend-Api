@@ -1,53 +1,121 @@
 using Cambrian.Application.DTOs.Charts;
 using Cambrian.Application.Interfaces;
+using Cambrian.Application.Observability;
 using Cambrian.Domain.Entities;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Cambrian.Application.Services;
 
 /// <summary>
-/// Weekly Scene chart — persisted, time-windowed, idempotent.
-///
-/// Ranking input is stream sessions started INSIDE the chart week (Monday
-/// 00:00 UTC → +7d), so all-time popularity cannot dominate. While a week has
-/// no plays yet (bootstrap), the catalog's trending order is used and the
-/// snapshot is marked Basis = "catalog_trending" so the frontend can label it
-/// honestly. Rank deltas come from the PREVIOUS week's persisted rows.
-/// Recompute replaces the week's rows in one transaction — safe to run any
-/// number of times (scheduled worker, admin trigger, or both).
+/// Persisted weekly Scene chart ranked only by qualified play events inside the
+/// current Monday-UTC half-open window. Every eligible public/playable track is
+/// considered, including tracks with zero weekly plays. Snapshot replacement is
+/// delegated to the repository's transactional, cross-instance-safe boundary.
 /// </summary>
 public sealed class WeeklyChartService : IWeeklyChartService
 {
     private const int ChartSize = 50;
+    private const int DefaultStaleAfterSeconds = 60;
+
+    /// <summary>
+    /// Backward-compatible basis value. Its current semantics are specifically
+    /// qualified plays inside the chart window, never raw sessions or catalog score.
+    /// </summary>
     public const string BasisWeeklyPlays = "weekly_plays";
+
+    /// <summary>Retained for source compatibility; new snapshots never use it.</summary>
+    [Obsolete("The Scene chart no longer falls back to catalog popularity.")]
     public const string BasisCatalogTrending = "catalog_trending";
 
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly TimeProvider _timeProvider;
+    private readonly ILogger<WeeklyChartService> _logger;
+    private readonly TimeSpan _staleAfter;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public WeeklyChartService(IServiceScopeFactory scopeFactory)
+    public WeeklyChartService(
+        IServiceScopeFactory scopeFactory,
+        TimeProvider timeProvider,
+        IConfiguration configuration,
+        ILogger<WeeklyChartService> logger)
     {
         _scopeFactory = scopeFactory;
+        _timeProvider = timeProvider;
+        _logger = logger;
+
+        var configuredSeconds = configuration.GetValue<int?>("Charts:Weekly:StaleAfterSeconds")
+            ?? DefaultStaleAfterSeconds;
+        _staleAfter = TimeSpan.FromSeconds(Math.Max(1, configuredSeconds));
     }
 
     public async Task<WeeklyChartsResponse> GetCurrentAsync(CancellationToken ct = default)
     {
+        var observedAt = UtcNow();
+        var weekStart = StartOfIsoWeekUtc(observedAt);
+        var weekEnd = weekStart.AddDays(7);
+
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IWeeklyChartRepository>();
-
-        var weekStart = StartOfIsoWeekUtc(DateTime.UtcNow);
         var rows = await repo.GetWeekAsync(weekStart, ct);
+
+        // Never substitute the previous week for a missing current-week chart.
+        // A fresh deployment calculates the exact requested week or fails visibly.
         if (rows.Count == 0)
         {
-            // No snapshot for the running week yet — serve the latest persisted
-            // week rather than an empty chart (the worker will catch up).
-            rows = await repo.GetLatestWeekAsync(ct);
+            return await AggregateAsync(ct);
         }
 
-        if (rows.Count > 0) return ToResponse(rows);
+        try
+        {
+            var generatedAt = rows.Max(row => row.ComputedAtUtc);
+            var dataThrough = rows.Max(row => row.DataThroughUtc);
+            var staleByAge = generatedAt < observedAt.Subtract(_staleAfter);
+            var behind = dataThrough is null
+                || await repo.HasQualifiedPlaysAfterAsync(
+                    weekStart,
+                    weekEnd,
+                    dataThrough.Value,
+                    observedAt,
+                    ct);
 
-        // Nothing persisted at all (fresh deploy) — compute once, persisted.
-        return await AggregateAsync(ct);
+            if (!staleByAge && !behind)
+            {
+                return ToResponse(rows, weekStart, observedAt, forceStale: false);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "EVENT: WeeklyChartFreshnessCheckFailed weekStart:{WeekStart}",
+                weekStart);
+            return ToResponse(rows, weekStart, observedAt, forceStale: true);
+        }
+
+        try
+        {
+            return await AggregateAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Aggregation reads all inputs before transactional replacement. If an
+            // input query fails, the prior current-week snapshot remains intact.
+            _logger.LogWarning(
+                ex,
+                "EVENT: WeeklyChartLazyRefreshFailed weekStart:{WeekStart}",
+                weekStart);
+            return ToResponse(rows, weekStart, observedAt, forceStale: true);
+        }
     }
 
     public async Task<WeeklyChartsResponse> AggregateAsync(CancellationToken ct = default)
@@ -57,78 +125,104 @@ public sealed class WeeklyChartService : IWeeklyChartService
         {
             using var scope = _scopeFactory.CreateScope();
             var repo = scope.ServiceProvider.GetRequiredService<IWeeklyChartRepository>();
-            var catalog = scope.ServiceProvider.GetRequiredService<ICatalogService>();
 
-            var now = DateTime.UtcNow;
-            var weekStart = StartOfIsoWeekUtc(now);
+            // Capture the inclusive event-time watermark before querying. Events
+            // after it are intentionally left for the next lazy/worker refresh.
+            var dataThrough = UtcNow();
+            var weekStart = StartOfIsoWeekUtc(dataThrough);
             var weekEnd = weekStart.AddDays(7);
 
-            // Previous week's persisted ranks drive movement deltas.
             var previousWeekRows = await repo.GetWeekAsync(weekStart.AddDays(-7), ct);
-            var previousRanks = previousWeekRows.ToDictionary(r => r.TrackId, r => r.Rank);
+            var previousRanks = previousWeekRows
+                .Where(row => row.Rank > 0)
+                .GroupBy(row => row.TrackId)
+                .ToDictionary(group => group.Key, group => group.First().Rank);
 
-            // The catalog list supplies title/artist/cover + the bootstrap order.
-            IReadOnlyCollection<DTOs.Catalog.TrackResponse> catalogTop;
-            try
-            {
-                catalogTop = await catalog.GetCatalogAsync(page: 1, pageSize: 200, genre: null, search: null, sort: "popular");
-            }
-            catch
-            {
-                catalogTop = Array.Empty<DTOs.Catalog.TrackResponse>();
-            }
+            var candidates = await repo.GetEligibleCandidatesAsync(
+                weekStart,
+                weekEnd,
+                dataThrough,
+                ct);
 
-            var playsByTrack = await repo.GetTrackPlaysInWindowAsync(weekStart, weekEnd, ct);
-            var basis = playsByTrack.Count > 0 ? BasisWeeklyPlays : BasisCatalogTrending;
-
-            // Score: in-window plays are the metric; the catalog's trending order
-            // is only a stable tiebreak (and the whole order during bootstrap).
-            var catalogIndex = catalogTop
-                .Select((t, i) => (t, i))
-                .ToDictionary(x => x.t.Id, x => x.i);
-
-            var ranked = catalogTop
-                .Select(t =>
-                {
-                    Guid.TryParse(t.Id, out var trackGuid);
-                    var plays = playsByTrack.TryGetValue(trackGuid, out var p) ? p : 0;
-                    return (Track: t, TrackGuid: trackGuid, Plays: plays);
-                })
-                .Where(x => x.TrackGuid != Guid.Empty)
-                .OrderByDescending(x => x.Plays)
-                .ThenBy(x => catalogIndex.TryGetValue(x.Track.Id, out var i) ? i : int.MaxValue)
+            var ranked = candidates
+                .OrderByDescending(candidate => candidate.WeeklyQualifiedPlays)
+                .ThenByDescending(candidate => candidate.CreatedAtUtc)
+                .ThenBy(candidate => candidate.TrackId)
                 .Take(ChartSize)
                 .ToList();
 
-            var computedAt = DateTime.UtcNow;
-            var rows = new List<WeeklyChartSnapshot>(ranked.Count);
+            var generatedAt = UtcNow();
+            var rows = new List<WeeklyChartSnapshot>(Math.Max(1, ranked.Count));
             var rank = 1;
-            foreach (var (track, trackGuid, plays) in ranked)
+            foreach (var candidate in ranked)
             {
-                var previousRank = previousRanks.TryGetValue(trackGuid, out var prev) ? prev : (int?)null;
+                var previousRank = previousRanks.GetValueOrDefault(candidate.TrackId);
                 rows.Add(new WeeklyChartSnapshot
                 {
                     Id = Guid.NewGuid(),
                     WeekStartUtc = weekStart,
                     WeekEndUtc = weekEnd,
                     Rank = rank,
-                    PreviousRank = previousRank,
-                    DeltaRank = previousRank is int p2 ? p2 - rank : null,
-                    TrackId = trackGuid,
-                    CreatorId = track.CreatorId,
-                    Title = track.Title,
-                    Artist = track.Artist ?? string.Empty,
-                    CoverArtUrl = track.CoverArtUrl,
-                    Score = plays,
-                    PlaysInWindow = plays,
-                    Basis = basis,
-                    ComputedAtUtc = computedAt,
+                    PreviousRank = previousRank == 0 ? null : previousRank,
+                    DeltaRank = previousRank == 0 ? null : previousRank - rank,
+                    TrackId = candidate.TrackId,
+                    CreatorId = candidate.CreatorId,
+                    Title = candidate.Title,
+                    Artist = candidate.Artist,
+                    CoverArtUrl = candidate.CoverArtUrl,
+                    Score = candidate.WeeklyQualifiedPlays,
+                    PlaysInWindow = ToLegacyCount(candidate.WeeklyQualifiedPlays),
+                    WeeklyQualifiedPlays = candidate.WeeklyQualifiedPlays,
+                    LifetimePlays = candidate.LifetimePlays,
+                    Basis = BasisWeeklyPlays,
+                    DataThroughUtc = dataThrough,
+                    ComputedAtUtc = generatedAt,
                 });
                 rank++;
             }
 
+            if (rows.Count == 0)
+            {
+                // An internal rank-zero marker persists the current week's
+                // freshness metadata even when no tracks are eligible. It is never
+                // included in public entries or previous-week movement calculations.
+                rows.Add(new WeeklyChartSnapshot
+                {
+                    Id = Guid.NewGuid(),
+                    WeekStartUtc = weekStart,
+                    WeekEndUtc = weekEnd,
+                    Rank = 0,
+                    TrackId = Guid.Empty,
+                    CreatorId = string.Empty,
+                    Title = string.Empty,
+                    Artist = string.Empty,
+                    Basis = BasisWeeklyPlays,
+                    DataThroughUtc = dataThrough,
+                    ComputedAtUtc = generatedAt,
+                });
+            }
+
             await repo.ReplaceWeekAsync(weekStart, rows, ct);
-            return ToResponse(rows);
+
+            // A different application instance may have committed a newer snapshot
+            // while this one was calculating. Return the transaction winner.
+            var persistedRows = await repo.GetWeekAsync(weekStart, ct);
+            var response = ToResponse(
+                persistedRows.Count == 0 ? rows : persistedRows,
+                weekStart,
+                generatedAt,
+                forceStale: false);
+            CambrianMetrics.WeeklyChartRecomputed.Add(1);
+            return response;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            CambrianMetrics.WeeklyChartRecomputeFailed.Add(1);
+            throw;
         }
         finally
         {
@@ -136,51 +230,84 @@ public sealed class WeeklyChartService : IWeeklyChartService
         }
     }
 
-    private static WeeklyChartsResponse ToResponse(IReadOnlyList<WeeklyChartSnapshot> rows)
+    private WeeklyChartsResponse ToResponse(
+        IReadOnlyList<WeeklyChartSnapshot> rows,
+        DateTime expectedWeekStart,
+        DateTime observedAt,
+        bool forceStale)
     {
-        var entries = rows
-            .OrderBy(r => r.Rank)
-            .Select(r => new ChartEntryResponse
+        var metadata = rows
+            .OrderBy(row => row.Rank)
+            .FirstOrDefault();
+        var chartWindowStart = metadata?.WeekStartUtc ?? expectedWeekStart;
+        var chartWindowEnd = metadata?.WeekEndUtc ?? expectedWeekStart.AddDays(7);
+        var generatedAt = rows.Count == 0
+            ? observedAt
+            : rows.Max(row => row.ComputedAtUtc);
+        var dataThrough = rows.Count == 0
+            ? null
+            : rows.Max(row => row.DataThroughUtc);
+
+        var rankedRows = rows
+            .Where(row => row.Rank > 0)
+            .OrderBy(row => row.Rank)
+            .ToList();
+
+        var entries = rankedRows
+            .Select(row => new ChartEntryResponse
             {
-                Rank = r.Rank,
-                TrackId = r.TrackId.ToString(),
-                Title = r.Title,
-                Artist = r.Artist,
-                CreatorId = r.CreatorId,
-                CoverArtUrl = r.CoverArtUrl,
-                DeltaRank = r.DeltaRank,
+                Rank = row.Rank,
+                WeeklyQualifiedPlays = row.WeeklyQualifiedPlays,
+                LifetimePlays = row.LifetimePlays,
+                RankingScore = row.WeeklyQualifiedPlays,
+                TrackId = row.TrackId.ToString(),
+                Title = row.Title,
+                Artist = row.Artist,
+                CreatorId = row.CreatorId,
+                CoverArtUrl = row.CoverArtUrl,
+                DeltaRank = row.DeltaRank,
             })
             .ToList();
 
-        var top1 = rows.OrderBy(r => r.Rank).FirstOrDefault();
-        // An EMPTY chart must not claim it was ranked by weekly plays — default
-        // the basis to the honest bootstrap label when there are no rows.
-        var basis = top1?.Basis ?? BasisCatalogTrending;
+        var top = rankedRows.FirstOrDefault();
+        var basis = metadata?.Basis ?? BasisWeeklyPlays;
+        var isStale = forceStale
+            || dataThrough is null
+            || generatedAt < observedAt.Subtract(_staleAfter);
 
         return new WeeklyChartsResponse
         {
-            WeekOf = (top1?.WeekStartUtc ?? StartOfIsoWeekUtc(DateTime.UtcNow)).ToString("o"),
+            // Legacy aliases retained additively for existing clients.
+            WeekOf = chartWindowStart.ToString("o"),
+            ComputedAt = generatedAt.ToString("o"),
             Entries = entries,
             Basis = basis,
-            ComputedAt = top1?.ComputedAtUtc.ToString("o"),
-            TrackOfTheWeek = top1 is null ? null : new TrackOfTheWeekResponse
+            ChartWindowStart = chartWindowStart,
+            ChartWindowEnd = chartWindowEnd,
+            GeneratedAt = generatedAt,
+            DataThrough = dataThrough,
+            IsStale = isStale,
+            TrackOfTheWeek = top is null ? null : new TrackOfTheWeekResponse
             {
-                TrackId = top1.TrackId.ToString(),
-                Title = top1.Title,
-                Artist = top1.Artist,
-                CreatorId = top1.CreatorId,
-                CoverArtUrl = top1.CoverArtUrl,
-                Description = basis == BasisWeeklyPlays
-                    ? "This week's most-played track on The Scene."
-                    : "Top of the catalog while this week's chart is forming.",
+                TrackId = top.TrackId.ToString(),
+                Title = top.Title,
+                Artist = top.Artist,
+                CreatorId = top.CreatorId,
+                CoverArtUrl = top.CoverArtUrl,
+                Description = "This week's most-played track by qualified plays on The Scene.",
             },
         };
     }
 
+    private DateTime UtcNow() => _timeProvider.GetUtcNow().UtcDateTime;
+
+    private static int ToLegacyCount(long count) =>
+        count >= int.MaxValue ? int.MaxValue : (int)Math.Max(0, count);
+
     private static DateTime StartOfIsoWeekUtc(DateTime utc)
     {
         var date = DateTime.SpecifyKind(utc.Date, DateTimeKind.Utc);
-        int diff = (7 + (int)date.DayOfWeek - (int)DayOfWeek.Monday) % 7;
+        var diff = (7 + (int)date.DayOfWeek - (int)DayOfWeek.Monday) % 7;
         return date.AddDays(-diff);
     }
 }

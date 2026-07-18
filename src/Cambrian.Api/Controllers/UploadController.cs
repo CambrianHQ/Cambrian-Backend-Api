@@ -186,6 +186,7 @@ public class UploadController : BaseController
     [RequireUsername]
     [HttpPost("/api/tracks")]
     [RequestSizeLimit(150 * 1024 * 1024)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateTrack([FromForm] UploadTrackRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

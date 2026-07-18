@@ -269,10 +269,9 @@ public sealed class SecurityPatchTests
 
         public C4StreamFixture()
         {
-            var streams = Substitute.For<IStreamRepository>();
+            var playback = Substitute.For<IPlaybackTrackingService>();
             var logger = Substitute.For<ILogger<StreamController>>();
-            Controller = new StreamController(Tracks, Storage, streams, new TrackVisibilityPolicy(),
-                new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()), logger);
+            Controller = new StreamController(Tracks, Storage, new TrackVisibilityPolicy(), logger, playback);
         }
 
         public void SetAnonymousUser()

@@ -5,10 +5,9 @@ using Xunit;
 namespace Cambrian.Api.Tests.Regression;
 
 /// <summary>
-/// Regression: AI discovery search hardcodes the "trending" sort, which orders by the decimal
-/// <c>TrendingScore</c>. SQLite cannot ORDER BY a decimal expression and threw a 500
-/// ("SQLite does not support expressions of type 'decimal' in ORDER BY"). The sort now casts to
-/// double (CAST(... AS REAL)), so the endpoint returns a controlled status on every provider.
+/// Regression: AI discovery search requests the "trending" sort. The repository now resolves
+/// that token through the bigint TrackStats projection instead of the legacy decimal
+/// TrendingScore column, so the endpoint remains provider-safe.
 /// </summary>
 [Trait("Category", "Regression")]
 public sealed class AiSearchSortRegressionTests : IClassFixture<CambrianApiFixture>

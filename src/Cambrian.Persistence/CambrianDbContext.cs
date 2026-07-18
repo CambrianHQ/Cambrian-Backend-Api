@@ -15,6 +15,12 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<Track> Tracks => Set<Track>();
 
+    public DbSet<TrackMedia> TrackMedia => Set<TrackMedia>();
+
+    public DbSet<MediaReconciliationRun> MediaReconciliationRuns => Set<MediaReconciliationRun>();
+
+    public DbSet<MediaReconciliationFinding> MediaReconciliationFindings => Set<MediaReconciliationFinding>();
+
     public DbSet<TrackAiDisclosure> TrackAiDisclosures => Set<TrackAiDisclosure>();
 
     public DbSet<TrackAiDisclosureRevision> TrackAiDisclosureRevisions => Set<TrackAiDisclosureRevision>();
@@ -38,6 +44,8 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<StripeWebhookEvent> StripeWebhookEvents => Set<StripeWebhookEvent>();
 
     public DbSet<StreamSession> StreamSessions => Set<StreamSession>();
+
+    public DbSet<QualifiedPlayEvent> QualifiedPlayEvents => Set<QualifiedPlayEvent>();
 
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
 
@@ -316,11 +324,27 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<StreamSession>(e =>
         {
             e.HasKey(s => s.Id);
+            e.Property(s => s.ListenerKeyHash).HasMaxLength(64);
+            e.Property(s => s.AnonymousSessionHash).HasMaxLength(64);
+            e.Property(s => s.IdempotencyKey).HasMaxLength(64);
+            e.Property(s => s.QualificationStatus).HasMaxLength(32).HasDefaultValue("legacy_unqualified");
+            e.HasIndex(s => s.IdempotencyKey)
+                .IsUnique()
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL")
+                .HasDatabaseName("ux_stream_sessions_idempotency_key");
+            e.HasIndex(s => new { s.TrackId, s.ListenerKeyHash, s.StartedAt })
+                .HasDatabaseName("ix_stream_sessions_track_listener_started");
             e.HasOne(s => s.Track)
                 .WithMany()
                 .HasForeignKey(s => s.TrackId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        builder.ApplyConfiguration(new TrackMediaConfiguration());
+        builder.ApplyConfiguration(new MediaReconciliationRunConfiguration());
+        builder.ApplyConfiguration(new MediaReconciliationFindingConfiguration());
+
+        builder.ApplyConfiguration(new QualifiedPlayEventConfiguration());
 
         builder.Entity<WalletTransaction>(e =>
         {
@@ -400,6 +424,7 @@ public class CambrianDbContext : IdentityDbContext<ApplicationUser>
             e.Property(tl => tl.Lyrics).HasMaxLength(20000).IsRequired();
             e.Property(tl => tl.Language).HasMaxLength(16).IsRequired().HasDefaultValue("en");
             e.Property(tl => tl.IsExplicit);
+            e.Property(tl => tl.Version).IsConcurrencyToken().HasDefaultValue(1);
         });
 
         builder.Entity<TrackCreationProcess>(e =>

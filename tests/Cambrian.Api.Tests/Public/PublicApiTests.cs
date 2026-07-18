@@ -68,7 +68,7 @@ public sealed class PublicApiTests : IClassFixture<CambrianApiFixture>
             t.SignedAt = DateTime.UtcNow;
             t.CommercialRightsVerified = true;
         });
-        await SeedStreamSessionAsync(id);
+        await SeedQualifiedPlayCountAsync(id, 1);
 
         var data = await GetDataAsync($"/api/public/tracks/{camb}");
 
@@ -77,7 +77,7 @@ public sealed class PublicApiTests : IClassFixture<CambrianApiFixture>
         Assert.Equal($"{SiteBase}/track/{camb}", data.GetProperty("canonicalUrl").GetString());
         Assert.Equal("MusicRecording", data.GetProperty("structuredDataType").GetString());
         Assert.Equal(1999, data.GetProperty("priceCents").GetInt32());
-        Assert.True(data.GetProperty("plays").GetInt32() >= 1, "play count should be real/live");
+        Assert.True(data.GetProperty("plays").GetInt64() >= 1, "qualified play count should be real/live");
         Assert.Equal("verified", data.GetProperty("provenanceStatus").GetString());
         Assert.False(string.IsNullOrEmpty(data.GetProperty("metaTitle").GetString()));
         Assert.False(string.IsNullOrEmpty(data.GetProperty("metaDescription").GetString()));
@@ -382,15 +382,14 @@ public sealed class PublicApiTests : IClassFixture<CambrianApiFixture>
         return (id, track.CambrianTrackId);
     }
 
-    private async Task SeedStreamSessionAsync(Guid trackId)
+    private async Task SeedQualifiedPlayCountAsync(Guid trackId, long playCount)
     {
         using var scope = _fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CambrianDbContext>();
-        db.StreamSessions.Add(new StreamSession
+        db.TrackStats.Add(new TrackStat
         {
-            Id = Guid.NewGuid(),
             TrackId = trackId,
-            StartedAt = DateTime.UtcNow,
+            PlayCount = playCount,
         });
         await db.SaveChangesAsync();
     }

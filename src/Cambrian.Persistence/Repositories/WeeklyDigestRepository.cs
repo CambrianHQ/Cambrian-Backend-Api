@@ -31,17 +31,21 @@ public sealed class WeeklyDigestRepository : IWeeklyDigestRepository
 
     public async Task<DigestWeeklyNumbers> GetWeeklyNumbersAsync(string userId, DateTime fromUtc, DateTime toUtc, CancellationToken ct = default)
     {
-        var playRows = await _db.StreamSessions
+        var playRows = await _db.QualifiedPlayEvents
             .AsNoTracking()
-            .Where(s => s.StartedAt >= fromUtc && s.StartedAt < toUtc)
+            .Where(p => p.CreatorId == userId
+                        && p.QualifiedAtUtc >= fromUtc
+                        && p.QualifiedAtUtc < toUtc)
             .Join(
-                _db.Tracks.Where(t => t.CreatorId == userId),
-                s => s.TrackId,
+                _db.Tracks.AsNoTracking(),
+                p => p.TrackId,
                 t => t.Id,
-                (s, t) => new { t.Id, t.Title })
+                (_, t) => new { t.Id, t.Title })
             .GroupBy(x => new { x.Id, x.Title })
-            .Select(g => new { g.Key.Title, Plays = g.Count() })
+            .Select(g => new { TrackId = g.Key.Id, g.Key.Title, Plays = g.LongCount() })
             .OrderByDescending(x => x.Plays)
+            .ThenBy(x => x.Title)
+            .ThenBy(x => x.TrackId)
             .ToListAsync(ct);
 
         var creatorGuids = await _db.Creators

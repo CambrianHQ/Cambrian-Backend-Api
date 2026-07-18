@@ -1,3 +1,5 @@
+using Cambrian.Api.Common;
+using Cambrian.Application.DTOs.Charts;
 using Cambrian.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,9 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace Cambrian.Api.Controllers;
 
 /// <summary>
-/// "The Scene" weekly charts. Reads are public; aggregation is admin-triggered
-/// on demand (residue R17) — there is no scheduled job yet, so the admin POST
-/// is how the chart is (re)populated and made testable.
+/// "The Scene" weekly charts. Reads are public, stale/missing charts are
+/// refreshed lazily, a background worker keeps them current, and admins retain
+/// an explicit recompute endpoint.
 /// </summary>
 public sealed class ChartsController : BaseController
 {
@@ -24,20 +26,22 @@ public sealed class ChartsController : BaseController
     /// <summary>GET /api/charts/weekly — the canonical weekly chart.</summary>
     [AllowAnonymous]
     [HttpGet("/api/charts/weekly")]
-    public async Task<IActionResult> Weekly(CancellationToken ct)
+    [ProducesResponseType(typeof(ApiResponse<WeeklyChartsResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<WeeklyChartsResponse>>> Weekly(CancellationToken ct)
     {
         var chart = await _charts.GetCurrentAsync(ct);
-        return OkResponse(chart);
+        return Ok(ApiResponse<WeeklyChartsResponse>.Ok(chart));
     }
 
     /// <summary>POST /admin/charts/aggregate — recompute the weekly chart now.</summary>
     [HttpPost("/admin/charts/aggregate")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> Aggregate(CancellationToken ct)
+    [ProducesResponseType(typeof(ApiResponse<WeeklyChartsResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<WeeklyChartsResponse>>> Aggregate(CancellationToken ct)
     {
         _logger.LogInformation("EVENT: WeeklyChartAggregationTriggered");
         var chart = await _charts.AggregateAsync(ct);
         _logger.LogInformation("EVENT: WeeklyChartAggregated entries:{Count}", chart.Entries.Count);
-        return OkResponse(chart);
+        return Ok(ApiResponse<WeeklyChartsResponse>.Ok(chart));
     }
 }
