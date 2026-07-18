@@ -55,7 +55,7 @@ public sealed class ComplianceScoreService : IComplianceScoreService
         {
             CommercialRights(track),
             AuthorshipDocumented(authorship, creationProcess),
-            AiDisclosure(authorship, track, creationProcess),
+            AiDisclosure(authorship, track),
             ProvenanceAnchored(anchor, stamped: !string.IsNullOrWhiteSpace(track.Signature)),
             MetadataComplete(track),
         };
@@ -90,36 +90,35 @@ public sealed class ComplianceScoreService : IComplianceScoreService
             ? Check("commercialRightsVerified", "pass", "Commercial rights have been attested for this track.")
             : Check("commercialRightsVerified", "fail", "Commercial rights have not been verified yet.");
 
-    // Free creators document their human contribution in the Behind the Track editor
-    // (TrackCreationProcess). The richer TrackAuthorship record is written only via the
-    // plan-gated authorship suite, so scoring it alone stranded free creators who "did
-    // everything" at a sub-100 score. Count either source — matching the checklist item
-    // (BuildChecklist.hasHumanContribution) so the item and the score never disagree.
     private static ComplianceCheck AuthorshipDocumented(TrackAuthorship? a, BehindTheTrackDto? creation)
     {
-        var hasNarrative =
-            (a is not null && (
-                !string.IsNullOrWhiteSpace(a.Edits) ||
-                !string.IsNullOrWhiteSpace(a.ArrangementNotes) ||
-                !string.IsNullOrWhiteSpace(a.ProcessNotes) ||
-                a.LyricsAuthored))
+        // Mirrors the checklist's hasHumanContribution: the free Behind-the-Track
+        // human-contribution note documents authorship just as the plan-gated
+        // TrackAuthorship narrative does. Without this, a free creator's completed
+        // "human contribution" checklist item never moved the score.
+        var hasNarrative = (a is not null && (
+            !string.IsNullOrWhiteSpace(a.Edits) ||
+            !string.IsNullOrWhiteSpace(a.ArrangementNotes) ||
+            !string.IsNullOrWhiteSpace(a.ProcessNotes) ||
+            a.LyricsAuthored))
             || !string.IsNullOrWhiteSpace(creation?.HumanContributionNotes);
 
-        return hasNarrative
-            ? Check("authorshipDocumented", "pass", "Human contribution / authorship has been documented.")
-            : Check("authorshipDocumented", "fail",
-                "Describe the human work behind this release in Behind the Track (arrangement, vocals, edits, or production).");
+        if (hasNarrative)
+            return Check("authorshipDocumented", "pass", "Authorship details have been documented.");
+
+        return a is null
+            ? Check("authorshipDocumented", "fail", "No authorship documentation has been provided.")
+            : Check("authorshipDocumented", "warn", "Authorship record exists but has no details.");
     }
 
-    // AI-use disclosure is satisfied by the free Behind the Track prompt/process notes
-    // (creation.PromptNotes) or the DDEX field, not just the plan-gated authorship record.
-    private static ComplianceCheck AiDisclosure(TrackAuthorship? a, Track track, BehindTheTrackDto? creation) =>
+    // Mirrors the checklist's hasAiDisclosure: an explicit disclosure — the free
+    // AiDisclosureDdex or the TrackAuthorship disclosure — satisfies this. Prompt /
+    // process notes deliberately do NOT: an AI-use disclosure has to be explicit.
+    private static ComplianceCheck AiDisclosure(TrackAuthorship? a, Track track) =>
         !string.IsNullOrWhiteSpace(track.AiDisclosureDdex)
-        || !string.IsNullOrWhiteSpace(a?.AiDisclosure)
-        || !string.IsNullOrWhiteSpace(creation?.PromptNotes)
+        || (a is not null && !string.IsNullOrWhiteSpace(a.AiDisclosure))
             ? Check("aiDisclosurePresent", "pass", "An AI-use disclosure has been provided.")
-            : Check("aiDisclosurePresent", "fail",
-                "Add an AI-use disclosure — the prompt / process notes in Behind the Track satisfy this.");
+            : Check("aiDisclosurePresent", "fail", "No AI-use disclosure has been provided.");
 
     // Progressive: anchored (pass) > signed stamp but anchor pending (warn) > nothing (fail).
     private static ComplianceCheck ProvenanceAnchored(ProvenanceAnchor? anchor, bool stamped)
@@ -165,8 +164,7 @@ public sealed class ComplianceScoreService : IComplianceScoreService
         AuthorshipRecord? authorshipRecord,
         bool hasCreatorProfile)
     {
-        var hasAiDisclosure = HasText(track.AiDisclosureDdex) || HasText(authorship?.AiDisclosure)
-            || HasText(creationProcess?.PromptNotes);
+        var hasAiDisclosure = HasText(track.AiDisclosureDdex) || HasText(authorship?.AiDisclosure);
         var hasHumanContribution = HasNarrativeAuthorship(authorship)
             || HasText(creationProcess?.HumanContributionNotes);
         var hasBehindTheTrackStory = HasText(creationProcess?.Story);

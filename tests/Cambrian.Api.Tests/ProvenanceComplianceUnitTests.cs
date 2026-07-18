@@ -261,6 +261,53 @@ public sealed class ProvenanceComplianceUnitTests
         Assert.Contains("not a paid verification", item.Explanation.ToLowerInvariant());
     }
 
+    // ── Release-readiness contradiction regression (observed on a live prod track) ──
+    // A creator filled Behind-the-Track prompt notes (which the UI used to claim
+    // satisfied AI disclosure) and could never complete ai_disclosure/rights.
+    // These pin the EXACT source fields each requirement reads.
+
+    [Theory]
+    [InlineData(null, false)]                                  // no authorship row semantics via empty text
+    [InlineData("", false)]                                    // saved but empty
+    [InlineData("   ", false)]                                 // whitespace only
+    [InlineData("No generative AI was used.", true)]           // explicit "no AI" counts
+    [InlineData("Suno v5 for stems; vocals + mix are mine.", true)]
+    public async Task ComplianceChecklist_AiDisclosure_EvaluatesAuthorshipText(string? disclosure, bool expectedComplete)
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat" };
+        var authorship = new TrackAuthorship { TrackId = track.Id, AiDisclosure = disclosure };
+
+        var result = await CreateComplianceService(null, authorship).ComputeAsync(track);
+
+        Assert.Equal(expectedComplete ? "complete" : "incomplete", ChecklistItem(result, "ai_disclosure").Status);
+    }
+
+    [Fact]
+    public async Task ComplianceChecklist_BttPromptNotesAlone_DoNotSatisfyAiDisclosure()
+    {
+        // The prod contradiction: prompt notes count for daw_tools but must not
+        // silently satisfy ai_disclosure — disclosure has to be explicit.
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat" };
+        var btt = new BehindTheTrackDto { TrackId = track.Id.ToString(), PromptNotes = "942 chars of prompts…" };
+
+        var result = await CreateComplianceService(null, authorship: null, creationProcess: btt).ComputeAsync(track);
+
+        Assert.Equal("incomplete", ChecklistItem(result, "ai_disclosure").Status);
+        Assert.Equal("complete", ChecklistItem(result, "daw_tools").Status);
+    }
+
+    [Theory]
+    [InlineData(false, "incomplete")]
+    [InlineData(true, "complete")]
+    public async Task ComplianceChecklist_Rights_EvaluatesTrackCommercialRightsFlag(bool attested, string expected)
+    {
+        var track = new Track { Id = Guid.NewGuid(), Title = "Beat", CommercialRightsVerified = attested };
+
+        var result = await CreateComplianceService(null, null).ComputeAsync(track);
+
+        Assert.Equal(expected, ChecklistItem(result, "rights").Status);
+    }
+
     [Fact]
     public async Task ComplianceScore_BackwardCompatibility_KeepsExistingScoreAndChecks()
     {
@@ -313,27 +360,27 @@ public sealed class ProvenanceComplianceUnitTests
     public async Task ComplianceScore_FreeBehindTheTrack_SatisfiesAuthorshipAndAiDisclosure_WithoutPaidRecord()
     {
         // Regression (creator report 2026-07-13, "done everything, still 70/100"):
-        // a FREE creator documents human contribution + AI/process notes in the
-        // Behind the Track editor (TrackCreationProcess) — NOT the plan-gated
-        // TrackAuthorship record and NOT the $10 paid AuthorshipRecord. The score
-        // previously read only TrackAuthorship, so those two 20-pt checks could never
-        // pass on the free tier and the standard checklist could not reach 100. Both
-        // must now pass from the free field alone, matching the checklist items.
+        // the score's authorship + AI-disclosure checks read only the plan-gated
+        // TrackAuthorship record, while the checklist items already accept the free
+        // Behind-the-Track human-contribution note and the free AiDisclosureDdex — so
+        // a free creator's completed checklist items never moved the score. The two
+        // score checks must accept the same free inputs the checklist does.
         var track = new Track
         {
             Id = Guid.NewGuid(), Title = "Behind Closed Doors",
             PrimaryGenre = "Electronic", Description = "A track", Mood = "moody", Tempo = "120",
             CoverArtUrl = "covers/x.jpg", CommercialRightsVerified = true, Signature = "sig",
+            AiDisclosureDdex = """{"aiGenerated":true,"tools":["Suno"]}""",
         };
         var anchor = new ProvenanceAnchor { TrackId = track.Id, Status = "anchored", Chain = "base" };
         var creationProcess = new BehindTheTrackDto
         {
             TrackId = track.Id.ToString(),
             HumanContributionNotes = "I wrote the topline, arranged the sections and mixed it by hand.",
-            PromptNotes = "Suno v4, six takes, comped in Reaper.",
             UpdatedAt = DateTime.UtcNow,
         };
 
+        // No TrackAuthorship record, no paid AuthorshipRecord.
         var result = await CreateComplianceService(anchor, authorship: null, creationProcess: creationProcess)
             .ComputeAsync(track);
 
@@ -343,8 +390,37 @@ public sealed class ProvenanceComplianceUnitTests
         Assert.Equal(100, result.Score);
         Assert.Equal("complete", ChecklistItem(result, "human_contribution").Status);
         Assert.Equal("complete", ChecklistItem(result, "ai_disclosure").Status);
-        // The paid Authorship Record stays optional-paid; it never gates the score.
         Assert.Equal("optional_paid_verification", ChecklistItem(result, "authorship_record").Status);
+    }
+
+    [Fact]
+    public async Task ComplianceScore_FreeHumanContribution_ButNoExplicitAiDisclosure_LeavesAiCheckFailing()
+    {
+        // Score-level guard for BttPromptNotesAlone_DoNotSatisfyAiDisclosure: the free
+        // human-contribution note documents authorship, but AI disclosure stays
+        // explicit — prompt/process notes must NOT silently satisfy the AI-disclosure
+        // check, so the score sits at 80 until a real disclosure is added.
+        var track = new Track
+        {
+            Id = Guid.NewGuid(), Title = "Beat",
+            PrimaryGenre = "Electronic", Description = "A track", Mood = "moody", Tempo = "120",
+            CoverArtUrl = "covers/x.jpg", CommercialRightsVerified = true, Signature = "sig",
+        };
+        var anchor = new ProvenanceAnchor { TrackId = track.Id, Status = "anchored" };
+        var creationProcess = new BehindTheTrackDto
+        {
+            TrackId = track.Id.ToString(),
+            HumanContributionNotes = "Wrote and arranged it by hand.",
+            PromptNotes = "Suno v4, six takes.",
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        var result = await CreateComplianceService(anchor, authorship: null, creationProcess: creationProcess)
+            .ComputeAsync(track);
+
+        Assert.Equal("pass", result.Checks.Single(c => c.Name == "authorshipDocumented").Status);
+        Assert.Equal("fail", result.Checks.Single(c => c.Name == "aiDisclosurePresent").Status);
+        Assert.Equal(80, result.Score); // 100 minus the missing 20-pt AI disclosure
     }
 
     // ── ProvenanceService (pending anchor record; no chain write) ──

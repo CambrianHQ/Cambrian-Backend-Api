@@ -3558,6 +3558,51 @@
         }
       }
     },
+    "/api/charts/weekly/archive": {
+      "get": {
+        "tags": [
+          "Charts"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 104
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/charts/weekly/archive/{isoWeek}": {
+      "get": {
+        "tags": [
+          "Charts"
+        ],
+        "parameters": [
+          {
+            "name": "isoWeek",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/admin/charts/aggregate": {
       "post": {
         "tags": [
@@ -3725,6 +3770,27 @@
       }
     },
     "/creator/tracks/{trackId}": {
+      "get": {
+        "tags": [
+          "Creator"
+        ],
+        "parameters": [
+          {
+            "name": "trackId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
       "put": {
         "tags": [
           "Creator"
@@ -9787,6 +9853,10 @@
             "type": "string",
             "nullable": true
           },
+          "creatorUsername": {
+            "type": "string",
+            "nullable": true
+          },
           "coverArtUrl": {
             "type": "string",
             "nullable": true
@@ -9795,6 +9865,10 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "playsInWindow": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -10169,6 +10243,15 @@
           "visibility": {
             "maxLength": 20,
             "type": "string",
+            "nullable": true
+          },
+          "aiDisclosure": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "rightsConfirmed": {
+            "type": "boolean",
             "nullable": true
           }
         },

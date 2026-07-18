@@ -53,4 +53,21 @@ public class EditTrackRequest
     /// </summary>
     [MaxLength(20)]
     public string? Visibility { get; set; }
+
+    /// <summary>
+    /// AI-use disclosure text — the free attestation the compliance checklist's
+    /// <c>ai_disclosure</c> item reads (stored on <c>TrackAuthorship.AiDisclosure</c>).
+    /// "No generative AI was used" must be stated as explicit text, not inferred.
+    /// Omit (null) to keep the stored value; whitespace-only clears it.
+    /// </summary>
+    [MaxLength(2000)]
+    [SafeMetadata]
+    public string? AiDisclosure { get; set; }
+
+    /// <summary>
+    /// Rights/ownership attestation — the free creator confirmation the compliance
+    /// checklist's <c>rights</c> item reads (stored on <c>Track.CommercialRightsVerified</c>).
+    /// A self-attestation, not a paid verification. Omit to keep the stored value.
+    /// </summary>
+    public bool? RightsConfirmed { get; set; }
 }

@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generatedAt": "2026-07-18T19:10:54.949Z",
+  "generatedAt": "2026-07-18T20:10:11.389Z",
   "endpoints": [
     {
       "method": "GET",
@@ -427,6 +427,18 @@
     {
       "method": "GET",
       "path": "/api/charts/weekly",
+      "requiresAuth": false,
+      "tag": "Charts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/charts/weekly/archive",
+      "requiresAuth": false,
+      "tag": "Charts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/charts/weekly/archive/{isoWeek}",
       "requiresAuth": false,
       "tag": "Charts"
     },
@@ -1285,6 +1297,14 @@
       "tag": "Creator",
       "requiresRole": "Creator",
       "requiresPolicy": "CanDeleteOwnTrack"
+    },
+    {
+      "method": "GET",
+      "path": "/creator/tracks/{trackId}",
+      "requiresAuth": true,
+      "tag": "Creator",
+      "requiresRole": "Creator",
+      "requiresPolicy": "CanEditOwnTrack"
     },
     {
       "method": "PUT",
