@@ -65,6 +65,42 @@ public sealed class CorpHeaderTests : IClassFixture<CambrianApiFixture>
     }
 
     [Fact]
+    public async Task ImageProxyMissingImage_IsNeverCacheable()
+    {
+        // REGRESSION (2026-07, creator avatar "not rendering" for some browsers):
+        // a 404 stamped `public, max-age=31536000, immutable` pinned a transient
+        // failure (mid-upload race, cold start) in the viewer's browser for a
+        // year — fresh clients saw the image fine, poisoned ones never retried.
+        var client = _factory.CreateClient();
+
+        var res = await client.GetAsync("/images/avatars/does-not-exist.jpg");
+
+        Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
+        Assert.NotNull(res.Headers.CacheControl);
+        Assert.True(res.Headers.CacheControl!.NoStore,
+            $"missing image must be no-store, got: {res.Headers.CacheControl}");
+        Assert.Null(res.Headers.ETag);
+    }
+
+    [Fact]
+    public async Task ImageProxyConditionalRequest_ForMissingImage_DoesNot304()
+    {
+        // The key-derived ETag used to be emitted on 404s too, so a browser
+        // holding a poisoned cached failure revalidated, got 304, and kept the
+        // broken entry forever. A conditional request for a missing object must
+        // answer 404 (uncacheable), never 304.
+        var client = _factory.CreateClient();
+        var conditional = new HttpRequestMessage(HttpMethod.Get, "/images/avatars/does-not-exist.jpg");
+        conditional.Headers.TryAddWithoutValidation("If-None-Match", "*");
+
+        var res = await client.SendAsync(conditional);
+
+        Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
+        Assert.True(res.Headers.CacheControl?.NoStore == true,
+            $"conditional miss must stay no-store, got: {res.Headers.CacheControl}");
+    }
+
+    [Fact]
     public async Task NonMediaResponse_DoesNotGetCorpHeader()
     {
         // Sanity: regular API responses (e.g. /health) should NOT carry CORP,

@@ -640,6 +640,12 @@ internal sealed class FakeObjectStorage : IObjectStorage
             });
         }
 
+        // Sentinel for genuinely-absent objects (cache-header regression tests
+        // need a real miss); every other unknown key keeps the permissive
+        // fallback so upload/stream tests don't have to seed storage.
+        if (key.Contains("does-not-exist", StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult<StorageFile?>(null);
+
         return Task.FromResult<StorageFile?>(new StorageFile
         {
             Stream = new MemoryStream(new byte[] { 0xFF, 0xFB, 0x90, 0x00 }),

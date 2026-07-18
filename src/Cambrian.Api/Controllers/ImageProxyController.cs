@@ -56,12 +56,21 @@ public class ImageProxyController : BaseController
     // public API contract. Hidden from Swagger/OpenAPI so the contract validator
     // and breaking-change detector both ignore the catch-all route template
     // (OpenAPI cannot cleanly represent ASP.NET Core's {**key} catch-all).
+    //
+    // CACHE RULE: only a 2xx with real image bytes may carry the immutable
+    // year-long Cache-Control. Stamping it on 404/error responses pinned a
+    // transient failure (mid-upload race, cold start, storage blip) in every
+    // viewer's browser for a year — and because the key-derived ETag rode
+    // along, conditional revalidation answered 304 and re-blessed the broken
+    // entry forever (regression: creator avatars "not rendering" for some
+    // browsers while fine on fresh clients).
     [ApiExplorerSettings(IgnoreApi = true)]
     [HttpGet("{**key}")]
-    [ResponseCache(Duration = 31536000, Location = ResponseCacheLocation.Any)]
     public async Task<IActionResult> GetImage(string key)
     {
         ApplyCorsHeaders();
+        // Failures must never be cached — a retry has to reach the server.
+        Response.Headers.CacheControl = "no-store";
 
         if (string.IsNullOrWhiteSpace(key))
             return NotFoundResponse("No image key provided.");
@@ -79,13 +88,6 @@ public class ImageProxyController : BaseController
         var ext = Path.GetExtension(key);
         if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
             return NotFoundResponse("Image not found.");
-
-        // ETag based on the key — same key always serves the same content.
-        // Allows browsers to skip re-download on subsequent renders.
-        var etag = $"\"{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key)))[..16]}\"";
-        ApplyCacheHeaders(etag);
-        if (MatchesIfNoneMatch(etag, Request.Headers.IfNoneMatch.ToString()))
-            return StatusCode(304);
 
         StorageFile? file;
         try
@@ -105,6 +107,17 @@ public class ImageProxyController : BaseController
 
         if (file is null)
             return NotFoundResponse("Image not found.");
+
+        // The object exists — NOW it is safe to promise immutability. ETag is
+        // key-derived (same key always serves the same content), which lets
+        // browsers revalidate without re-downloading.
+        var etag = $"\"{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key)))[..16]}\"";
+        ApplyCacheHeaders(etag);
+        if (MatchesIfNoneMatch(etag, Request.Headers.IfNoneMatch.ToString()))
+        {
+            file.Stream.Dispose();
+            return StatusCode(304);
+        }
 
         // Set Content-Length so browsers can render progressively and cache correctly.
         // S3 response streams are non-seekable, so FileStreamResult won't infer the length.
