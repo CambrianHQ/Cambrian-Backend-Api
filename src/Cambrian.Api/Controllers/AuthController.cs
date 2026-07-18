@@ -274,15 +274,28 @@ public class AuthController : BaseController
         var isProduction = HttpContext.RequestServices
             .GetRequiredService<IHostEnvironment>().IsProduction();
 
-        Response.Cookies.Append("auth_token", jwt, new CookieOptions
+        Response.Cookies.Append("auth_token", jwt, BuildAuthCookieOptions(
+            isProduction, DateTimeOffset.UtcNow.AddDays(7)));
+    }
+
+    /// <summary>
+    /// Production login is a cross-site fetch (cambrianmusic.com → the API host):
+    /// browsers refuse to STORE a Lax cookie from a cross-site response, which
+    /// silently broke every navigation-based authorized flow (e.g. mastered-download
+    /// redirects). None+Secure is storable cross-site and still first-party on
+    /// top-level navigations to this host; unsafe methods stay guarded by
+    /// CookieCsrfProtectionMiddleware. Dev keeps Lax (HTTP cannot carry None+Secure).
+    /// </summary>
+    public static CookieOptions BuildAuthCookieOptions(bool isProduction, DateTimeOffset? expires = null)
+    {
+        return new CookieOptions
         {
             HttpOnly = true,
-            // Secure=true in production (HTTPS); allow HTTP in dev for local testing
             Secure   = isProduction,
-            SameSite = SameSiteMode.Lax,
-            Expires  = DateTimeOffset.UtcNow.AddDays(7),
+            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
+            Expires  = expires,
             Path     = "/"
-        });
+        };
     }
 
     private static object ToSession(AuthResponse auth, IReadOnlyList<string> capabilities)
@@ -326,13 +339,11 @@ public class AuthController : BaseController
     [HttpPost("logout")]
     public IActionResult Logout()
     {
-        Response.Cookies.Delete("auth_token", new CookieOptions
-        {
-            HttpOnly = true,
-            Secure   = true,
-            SameSite = SameSiteMode.Lax,
-            Path     = "/"
-        });
+        var isProduction = HttpContext.RequestServices
+            .GetRequiredService<IHostEnvironment>().IsProduction();
+
+        // Delete attributes must match Append's or the browser keeps the cookie.
+        Response.Cookies.Delete("auth_token", BuildAuthCookieOptions(isProduction));
         return MessageResponse("Logged out successfully.");
     }
 

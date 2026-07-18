@@ -185,6 +185,43 @@ public sealed class ReleaseReadyController : BaseController
         return NotFoundResponse("Mastered asset not found.");
     }
 
+    /// <summary>Bearer-friendly variant of <c>Download</c>: returns the signed URL as
+    /// JSON instead of a 302, so browser clients can fetch it with an Authorization
+    /// header and then navigate to the returned URL. The 302 route requires ambient
+    /// cookie auth on a top-level navigation, which not every browser can provide
+    /// for a cross-site API host.</summary>
+    [HttpGet("jobs/{id}/download-url")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> DownloadUrl(Guid id, [FromQuery] string format = "wav", CancellationToken ct = default)
+    {
+        var userId = GetRequiredUserId()!;
+        var download = await _service.GetDownloadAsync(id, userId, format, ct);
+        if (download is null)
+            return NotFoundResponse("Mastered asset not found.");
+
+        Response.Headers["Cache-Control"] = "private, no-store";
+        if (!string.IsNullOrWhiteSpace(download.SignedUrl))
+        {
+            return OkResponse(new
+            {
+                url = download.SignedUrl,
+                fileName = download.FileName,
+                // Mirrors S3ObjectStorage.GenerateDownloadUrl's 30-minute signature.
+                expiresAt = DateTime.UtcNow.AddMinutes(30),
+            });
+        }
+
+        // Local/streaming storage has no signable URL — hand back the streaming
+        // route; local environments are same-site so cookie navigation works there.
+        download.Content?.Dispose();
+        return OkResponse(new
+        {
+            url = $"/release-ready/jobs/{id:D}/download?format={Uri.EscapeDataString(format)}",
+            fileName = download.FileName,
+            expiresAt = (DateTime?)null,
+        });
+    }
+
     private static async Task<MemoryStream> BufferAsync(IFormFile file, CancellationToken ct)
     {
         var ms = new MemoryStream();
