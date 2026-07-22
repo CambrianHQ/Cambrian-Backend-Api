@@ -1,6 +1,6 @@
 using Cambrian.Domain.Entities;
 
-namespace Cambrian.Api.Common;
+namespace Cambrian.Application.Common;
 
 /// <summary>
 /// Centralised logic for determining whether a user has completed username setup.

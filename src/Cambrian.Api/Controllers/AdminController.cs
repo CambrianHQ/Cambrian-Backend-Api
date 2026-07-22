@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Cambrian.Api.Common;
+using Cambrian.Application.Common;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Admin;
+using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Interfaces;
 using Cambrian.Domain.Entities;
 using Cambrian.Infrastructure.Options;
@@ -293,6 +295,34 @@ public class AdminController : BaseController
         var users = await _admin.GetUsersAsync();
         var updated = users.FirstOrDefault(u => u.Id == id);
         return OkResponse(new { success = true, message = "Creator verified and upgraded to Pro tier.", user = updated });
+    }
+
+    /// <summary>
+    /// Admin repair path for accounts stuck by a client/server username-onboarding desync
+    /// (e.g. a failed post-registration repair that the frontend swallowed). Runs the exact
+    /// same validation/normalization/uniqueness/provisioning logic as the self-service
+    /// POST /auth/set-username endpoint via IUsernameOnboardingService — never a raw DB write.
+    /// </summary>
+    [HttpPost("users/{id}/set-username")]
+    public async Task<IActionResult> SetUsernameForUser(string id, [FromBody] SetUsernameRequest request)
+    {
+        _logger.LogInformation("[Admin] SetUsernameForUser id={UserId} username={Username}", id, request.Username);
+        var result = await _admin.SetUsernameAsync(id, request.Username, GetAdminActor());
+        if (!result.Success)
+        {
+            return result.FailureCode switch
+            {
+                "user_not_found" => NotFound(new { success = false, message = result.SafeMessage ?? MsgUserNotFound }),
+                "username_taken" or "already_set" or "reserved_username"
+                    => Conflict(new { success = false, message = result.SafeMessage }),
+                "invalid_username" => BadRequest(new { success = false, message = result.SafeMessage }),
+                _ => StatusCode(500, new { success = false, message = result.SafeMessage ?? "Failed to set username." }),
+            };
+        }
+
+        var users = await _admin.GetUsersAsync();
+        var updated = users.FirstOrDefault(u => u.Id == id);
+        return OkResponse(new { success = true, message = "Username set.", user = updated });
     }
 
     public record UpgradeTierRequest(string Tier);

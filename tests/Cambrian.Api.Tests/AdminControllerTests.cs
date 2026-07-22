@@ -297,6 +297,76 @@ public sealed class AdminControllerTests
         Assert.IsType<NotFoundObjectResult>(result);
     }
 
+    // ── SetUsernameForUser (admin repair for onboarding-desync accounts) ──
+    // Runs through IUsernameOnboardingService (mocked here via IAdminService), never a raw DB write.
+
+    [Fact]
+    public async Task SetUsernameForUser_Success_ReturnsOkWithUpdatedUser()
+    {
+        _admin.SetUsernameAsync("user-1", "electric-evo", Arg.Any<string>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Ok("electric-evo", "electric-evo", "Creator"));
+        _admin.GetUsersAsync().Returns(new List<AdminUser>
+        {
+            new() { Id = "user-1", Email = "electric-evo@test.com", Role = "Creator" }
+        });
+
+        var result = await _controller.SetUsernameForUser("user-1",
+            new Application.DTOs.Auth.SetUsernameRequest { Username = "electric-evo" });
+
+        Assert.IsType<OkObjectResult>(result);
+        await _admin.Received(1).SetUsernameAsync("user-1", "electric-evo", Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task SetUsernameForUser_UserNotFound_ReturnsNotFound()
+    {
+        _admin.SetUsernameAsync("missing", "somename", Arg.Any<string>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Failure("user_not_found", "User not found."));
+
+        var result = await _controller.SetUsernameForUser("missing",
+            new Application.DTOs.Auth.SetUsernameRequest { Username = "somename" });
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SetUsernameForUser_UsernameTaken_ReturnsConflict()
+    {
+        _admin.SetUsernameAsync("user-2", "taken", Arg.Any<string>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Failure("username_taken", "That username is already taken."));
+
+        var result = await _controller.SetUsernameForUser("user-2",
+            new Application.DTOs.Auth.SetUsernameRequest { Username = "taken" });
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(409, conflict.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetUsernameForUser_AlreadySet_ReturnsConflict()
+    {
+        _admin.SetUsernameAsync("user-3", "newname", Arg.Any<string>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Failure("already_set", "Username cannot be changed once set."));
+
+        var result = await _controller.SetUsernameForUser("user-3",
+            new Application.DTOs.Auth.SetUsernameRequest { Username = "newname" });
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(409, conflict.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetUsernameForUser_InvalidUsername_ReturnsBadRequest()
+    {
+        _admin.SetUsernameAsync("user-4", "!!", Arg.Any<string>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Failure("invalid_username", "Username may only contain letters, numbers, hyphens, and underscores."));
+
+        var result = await _controller.SetUsernameForUser("user-4",
+            new Application.DTOs.Auth.SetUsernameRequest { Username = "!!" });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
     // ── UpgradeUserTier ──
 
     [Fact]

@@ -701,6 +701,7 @@ builder.Services.AddScoped<IMediaStateMachine, Cambrian.Persistence.Services.Med
 builder.Services.AddScoped<IPlaybackAccessService, Cambrian.Persistence.Services.PlaybackAccessService>();
 builder.Services.AddScoped<IMediaReconciliationService, Cambrian.Persistence.Services.MediaReconciliationService>();
 builder.Services.AddScoped<IMediaReadinessService, Cambrian.Persistence.Services.MediaReadinessService>();
+builder.Services.AddScoped<IUsernameOnboardingService, Cambrian.Persistence.Services.UsernameOnboardingService>();
 var playbackMediaOptions = builder.Configuration.GetSection(PlaybackMediaOptions.SectionName)
     .Get<PlaybackMediaOptions>() ?? new PlaybackMediaOptions();
 if (playbackMediaOptions.ReconciliationWorkerEnabled

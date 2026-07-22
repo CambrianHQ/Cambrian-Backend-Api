@@ -30,6 +30,7 @@ public sealed class AuthControllerTests
     private readonly ICreatorIdentityRepository _creators = Substitute.For<ICreatorIdentityRepository>();
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ITransactionManager _tx = Substitute.For<ITransactionManager>();
+    private readonly IUsernameOnboardingService _usernameOnboarding = Substitute.For<IUsernameOnboardingService>();
     private readonly ILogger<AuthController> _logger = Substitute.For<ILogger<AuthController>>();
     private readonly AuthController _controller;
 
@@ -43,7 +44,7 @@ public sealed class AuthControllerTests
 
         var profiles = Substitute.For<ICreatorProfileRepository>();
         var capabilities = Substitute.For<ICapabilityResolver>();
-        _controller = new AuthController(_auth, _subscriptions, _creators, profiles, capabilities, _userManager, _tx, _logger);
+        _controller = new AuthController(_auth, _subscriptions, _creators, profiles, capabilities, _userManager, _tx, _usernameOnboarding, _logger);
 
         // Provide a default HttpContext so AppendAuthCookie can resolve IHostEnvironment
         var env = Substitute.For<IHostEnvironment>();
@@ -336,86 +337,63 @@ public sealed class AuthControllerTests
         Assert.Contains("token is required", envelope.Error);
     }
 
-    // ── SetUsername atomicity (F19) ──
+    // ── SetUsername delegation (F19 atomicity coverage moved to UsernameOnboardingServiceTests,
+    //    since the validation/uniqueness/transaction/provisioning logic now lives in
+    //    IUsernameOnboardingService, shared with POST /admin/users/{id}/set-username) ──
 
     [Fact]
-    public async Task SetUsername_RollsBack_WhenCreatorUpsertFails()
-    {
-        var userId = "user-f19";
-        SetupUser(userId);
-
-        // Creator-row provisioning (and thus the rollback-on-failure path) only runs for
-        // accounts that are already creators — listeners never touch the Creators table.
-        var user = new ApplicationUser { Id = userId, Email = "f19@test.com", Role = "Creator" };
-        _userManager.FindByIdAsync(userId).Returns(user);
-        _userManager.FindByNameAsync("testcreator").Returns((ApplicationUser?)null);
-        _userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
-        _creators.IsUsernameTakenAsync("testcreator").Returns(false);
-        _creators.UpsertAsync(Arg.Any<string>(), Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>())
-            .ThrowsAsync(new InvalidOperationException("DB timeout"));
-
-        var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "testcreator" });
-
-        // Should return error, not success
-        var bad = Assert.IsType<BadRequestObjectResult>(result);
-        var envelope = Assert.IsType<ApiResponse<object?>>(bad.Value);
-        Assert.Contains("Failed to complete username setup", envelope.Error);
-
-        // Transaction must have been rolled back
-        await _tx.Received(1).RollbackAsync();
-        await _tx.DidNotReceive().CommitAsync();
-    }
-
-    [Fact]
-    public async Task SetUsername_CommitsTransaction_OnSuccess()
+    public async Task SetUsername_DelegatesToOnboardingService_AndReturnsFreshToken_OnSuccess()
     {
         var userId = "user-ok";
         SetupUser(userId);
 
-        // A listener (Role == "User") setting a username: the transaction still commits,
-        // but the role must NOT change and NO creator artifacts may be provisioned.
-        var user = new ApplicationUser { Id = userId, Email = "ok@test.com", Role = "User" };
-        _userManager.FindByIdAsync(userId).Returns(user);
-        _userManager.FindByNameAsync("goodname").Returns((ApplicationUser?)null);
-        _userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
-        _creators.IsUsernameTakenAsync("goodname").Returns(false);
+        _usernameOnboarding.CompleteAsync(userId, "goodname", Arg.Any<CancellationToken>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Ok("goodname", "goodname", "User"));
         _auth.GenerateFreshTokenAsync(userId).Returns("fresh-jwt");
 
         var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "goodname" });
 
         Assert.IsType<OkObjectResult>(result);
-        await _tx.Received(1).CommitAsync();
-        await _tx.DidNotReceive().RollbackAsync();
-
-        // The bug: setting a username silently promoted listeners to Creator and gave them
-        // a public storefront. A listener must stay a listener.
-        Assert.Equal("User", user.Role);
-        await _creators.DidNotReceive()
-            .UpsertAsync(Arg.Any<string>(), Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>());
+        await _usernameOnboarding.Received(1).CompleteAsync(userId, "goodname", Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task SetUsername_DoesNotChangeRole_ButProvisions_ForCreatorAccount()
+    public async Task SetUsername_Returns409_WhenUsernameTaken()
     {
-        var userId = "user-creator";
+        var userId = "user-taken";
         SetupUser(userId);
+        _usernameOnboarding.CompleteAsync(userId, "taken", Arg.Any<CancellationToken>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Failure("username_taken", "That username is already taken."));
 
-        var user = new ApplicationUser { Id = userId, Email = "creator@test.com", Role = "Creator" };
-        _userManager.FindByIdAsync(userId).Returns(user);
-        _userManager.FindByNameAsync("creatorname").Returns((ApplicationUser?)null);
-        _userManager.UpdateAsync(Arg.Any<ApplicationUser>()).Returns(IdentityResult.Success);
-        _creators.IsUsernameTakenAsync("creatorname").Returns(false);
-        _creators.UpsertAsync(Arg.Any<string>(), Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>())
-            .Returns(new Application.DTOs.Creators.PublicCreatorDto { Id = Guid.NewGuid().ToString(), Username = "creatorname" });
-        _auth.GenerateFreshTokenAsync(userId).Returns("fresh-jwt");
+        var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "taken" });
 
-        var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "creatorname" });
+        var conflict = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(409, conflict.StatusCode);
+    }
 
-        Assert.IsType<OkObjectResult>(result);
-        await _tx.Received(1).CommitAsync();
-        // An existing creator keeps their role and DOES get the Creators-row provisioned.
-        Assert.Equal("Creator", user.Role);
-        await _creators.Received(1)
-            .UpsertAsync(userId, Arg.Any<Application.DTOs.Creators.UpdateCreatorProfileRequest>());
+    [Fact]
+    public async Task SetUsername_Returns404_WhenUserNotFound()
+    {
+        var userId = "user-missing";
+        SetupUser(userId);
+        _usernameOnboarding.CompleteAsync(userId, "anything", Arg.Any<CancellationToken>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Failure("user_not_found", "User not found."));
+
+        var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "anything" });
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task SetUsername_Returns400_OnInvalidUsername()
+    {
+        var userId = "user-invalid";
+        SetupUser(userId);
+        _usernameOnboarding.CompleteAsync(userId, "!!", Arg.Any<CancellationToken>())
+            .Returns(Application.Interfaces.UsernameOnboardingResult.Failure("invalid_username", "Username may only contain letters, numbers, hyphens, and underscores."));
+
+        var result = await _controller.SetUsername(new Application.DTOs.Auth.SetUsernameRequest { Username = "!!" });
+
+        Assert.IsType<BadRequestObjectResult>(result);
     }
 }

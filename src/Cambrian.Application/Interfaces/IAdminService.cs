@@ -25,6 +25,8 @@ public interface IAdminService
     Task<bool> VerifyCreatorAsync(string userId, string adminActor);
     Task<bool> UpgradeCreatorTierAsync(string userId, string tier, string adminActor);
 
+    Task<UsernameOnboardingResult> SetUsernameAsync(string userId, string username, string adminActor);
+
     /// <summary>Returns the generated temporary password, or null if user not found.</summary>
     Task<string?> ResetUserPasswordAsync(string userId, string adminActor);
 
