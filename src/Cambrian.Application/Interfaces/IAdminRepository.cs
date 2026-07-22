@@ -29,6 +29,13 @@ public interface IAdminRepository
     Task<bool> UpgradeCreatorTierAsync(string userId, string tier, string adminActor);
 
     /// <summary>
+    /// Admin-repair path for accounts stuck by a client/server username-onboarding desync.
+    /// Delegates the actual validation/normalization/assignment to IUsernameOnboardingService
+    /// (the same logic POST /auth/set-username uses) and records an audit log entry on success.
+    /// </summary>
+    Task<UsernameOnboardingResult> SetUsernameAsync(string userId, string username, string adminActor);
+
+    /// <summary>
     /// Generates a random temporary password, resets the user's password via Identity, and returns the temp password.
     /// </summary>
     Task<string?> ResetUserPasswordAsync(string userId, string adminActor);

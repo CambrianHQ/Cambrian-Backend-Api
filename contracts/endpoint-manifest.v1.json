@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generatedAt": "2026-07-18T20:56:55.581Z",
+  "generatedAt": "2026-07-22T03:13:41.463Z",
   "endpoints": [
     {
       "method": "GET",
@@ -289,6 +289,13 @@
     {
       "method": "POST",
       "path": "/admin/users/{id}/role",
+      "requiresAuth": true,
+      "tag": "Admin",
+      "requiresRole": "Admin"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{id}/set-username",
       "requiresAuth": true,
       "tag": "Admin",
       "requiresRole": "Admin"

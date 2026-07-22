@@ -21,18 +21,21 @@ public class AdminRepository : IAdminRepository
     private readonly IEmailService _email;
     private readonly IPaymentGateway _gateway;
     private readonly IFeatureFlagRepository _flags;
+    private readonly IUsernameOnboardingService _usernameOnboarding;
 
     public AdminRepository(
         CambrianDbContext db,
         UserManager<ApplicationUser> users,
         IEmailService email,
         IPaymentGateway gateway,
-        IFeatureFlagRepository flags)
+        IFeatureFlagRepository flags,
+        IUsernameOnboardingService usernameOnboarding)
     {
         _db = db;
         _users = users;
         _email = email;
         _gateway = gateway;
+        _usernameOnboarding = usernameOnboarding;
         _flags = flags;
     }
 
@@ -249,6 +252,23 @@ public class AdminRepository : IAdminRepository
         });
         await _db.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<UsernameOnboardingResult> SetUsernameAsync(string userId, string username, string adminActor)
+    {
+        var result = await _usernameOnboarding.CompleteAsync(userId, username);
+        if (!result.Success)
+            return result;
+
+        var user = await _users.FindByIdAsync(userId);
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Action = "admin_set_username",
+            Admin = adminActor,
+            Details = $"Set username '{result.Username}' for {user?.Email ?? userId} (admin repair)"
+        });
+        await _db.SaveChangesAsync();
+        return result;
     }
 
     public async Task<bool> UpgradeCreatorTierAsync(string userId, string tier, string adminActor)

@@ -220,7 +220,8 @@ public sealed class PublishReadinessGateTests : IClassFixture<PublishReadinessGa
             users,
             Substitute.For<IEmailService>(),
             Substitute.For<IPaymentGateway>(),
-            Substitute.For<IFeatureFlagRepository>());
+            Substitute.For<IFeatureFlagRepository>(),
+            Substitute.For<IUsernameOnboardingService>());
 
         var ok = await repo.RestoreTrackAsync(trackId, "admin@test.com");
 

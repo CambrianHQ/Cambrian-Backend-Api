@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Cambrian.Api.Common;
+using Cambrian.Application.Common;
 using Cambrian.Domain.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Identity;

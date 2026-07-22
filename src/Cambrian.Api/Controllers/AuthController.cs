@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Cambrian.Api.Common;
 using Cambrian.Application.Auth;
+using Cambrian.Application.Common;
 using Cambrian.Application.Configuration;
 using Cambrian.Application.DTOs.Auth;
 using Cambrian.Application.Exceptions;
@@ -26,18 +27,12 @@ public class AuthController : BaseController
     private readonly ICapabilityResolver _capabilities;
     private readonly UserManager<Cambrian.Domain.Entities.ApplicationUser> _userManager;
     private readonly ITransactionManager _tx;
+    private readonly IUsernameOnboardingService _usernameOnboarding;
     private readonly ILogger<AuthController> _logger;
-
-    private static readonly HashSet<string> _reservedUsernames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "admin", "api", "www", "support", "help", "mail", "blog", "app",
-        "creator", "cambrian", "marketplace", "verify", "press", "business",
-        "developers", "embed", "sync", "pricing", "about"
-    };
 
     private readonly ICreatorProfileRepository _profiles;
 
-    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, ICapabilityResolver capabilities, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, ILogger<AuthController> logger)
+    public AuthController(IAuthService auth, ISubscriptionRepository subscriptions, ICreatorIdentityRepository creators, ICreatorProfileRepository profiles, ICapabilityResolver capabilities, UserManager<Cambrian.Domain.Entities.ApplicationUser> userManager, ITransactionManager tx, IUsernameOnboardingService usernameOnboarding, ILogger<AuthController> logger)
     {
         _auth = auth;
         _subscriptions = subscriptions;
@@ -46,6 +41,7 @@ public class AuthController : BaseController
         _capabilities = capabilities;
         _userManager = userManager;
         _tx = tx;
+        _usernameOnboarding = usernameOnboarding;
         _logger = logger;
     }
 
@@ -370,137 +366,24 @@ public class AuthController : BaseController
     /// <summary>
     /// Set or update the current user's username during onboarding.
     /// Does not require Creator tier — available to any authenticated user.
+    /// Delegates to IUsernameOnboardingService — the same business logic the
+    /// admin repair endpoint (POST /admin/users/{id}/set-username) uses, so the
+    /// two call sites can never drift apart.
     /// </summary>
     [Authorize]
     [HttpPost("set-username")]
     public async Task<IActionResult> SetUsername([FromBody] SetUsernameRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Username))
-            return ErrorResponse("Username is required.");
-
-        var normalized = request.Username.Trim().ToLowerInvariant();
-
-        if (normalized.Length < 3 || normalized.Length > 40)
-            return ErrorResponse("Username must be between 3 and 40 characters.");
-
-        // Only allow alphanumeric, hyphens, underscores
-        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^[a-z0-9_-]+$"))
-            return ErrorResponse("Username may only contain letters, numbers, hyphens, and underscores.");
-
-        if (_reservedUsernames.Contains(normalized))
-            return ErrorResponse("That username is reserved.");
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user is null)
-            return NotFoundResponse("User not found.");
-
-        // Once a creator has chosen a username it is permanent — reject further changes.
-        if (UsernameHelper.IsSet(user))
-            return ErrorResponse("Username cannot be changed once set.");
-
-        // Choosing a username is a generic onboarding step available to ANY authenticated
-        // account (listeners included) — it must NOT change the user's role. Previously this
-        // endpoint silently promoted every "User" to "Creator", which both granted creator
-        // capabilities and provisioned a public storefront for plain listeners. A listener
-        // stays a listener; an account becomes a creator only through an explicit path
-        // (registration with role=creator, admin promotion, or admin/billing tier upgrade).
-        var isCreatorAccount = string.Equals(user.Role, "Creator", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase);
-
-        // Wrap ALL uniqueness checks + writes in a transaction so concurrent requests
-        // cannot both pass checks and commit duplicate usernames.
-        await using var transaction = await _tx.BeginTransactionAsync();
-        try
+        var result = await _usernameOnboarding.CompleteAsync(userId, request.Username);
+        if (!result.Success)
         {
-            // Check uniqueness via Identity UserName (inside transaction)
-            var existingByName = await _userManager.FindByNameAsync(normalized);
-            if (existingByName is not null && existingByName.Id != userId)
+            return result.FailureCode switch
             {
-                await _tx.RollbackAsync();
-                return ConflictResponse("That username is already taken.");
-            }
-
-            // Also check Creators table — username must be globally unique
-            var takenInCreators = await _creators.IsUsernameTakenAsync(normalized);
-            if (takenInCreators)
-            {
-                await _tx.RollbackAsync();
-                return ConflictResponse("That username is already taken.");
-            }
-
-            user.UserName = normalized;
-            user.NormalizedUserName = normalized.ToUpperInvariant();
-            // Preserve original casing for display; pass to Creator row too (BUG #4 fix)
-            var displayName = user.DisplayName;
-            if (string.IsNullOrWhiteSpace(displayName))
-            {
-                displayName = MetadataSanitizer.NormalizeRequired(request.Username, "Display name");
-                user.DisplayName = displayName;
-            }
-
-            var result = await _userManager.UpdateAsync(user);
-            if (!result.Succeeded)
-            {
-                await _tx.RollbackAsync();
-                var msgs = new List<string>();
-                foreach (var e in result.Errors) msgs.Add(e.Description);
-                var errors = string.Join("; ", msgs);
-                _logger.LogWarning("EVENT: SetUsernameFailed userId:{UserId} errors:{Errors}", userId, errors);
-                return ErrorResponse(errors);
-            }
-
-            _logger.LogInformation("EVENT: UsernameSet userId:{UserId} username:{Username}", userId, normalized);
-
-            // Creator artifacts (the Creators row that powers /creator/username/{slug} and
-            // the public storefront profile) are only provisioned for accounts that are
-            // actually creators. Provisioning them for a listener would make the listener
-            // publicly discoverable as a creator even though no public creator lookup filters
-            // on role.
-            if (isCreatorAccount)
-            {
-                // Pass DisplayName so Creator row gets the human-readable name, not just the normalized username
-                await _creators.UpsertAsync(userId, new Cambrian.Application.DTOs.Creators.UpdateCreatorProfileRequest
-                {
-                    Username = normalized,
-                    DisplayName = displayName
-                });
-                _logger.LogInformation("EVENT: CreatorUsernameSynced userId:{UserId} username:{Username}", userId, normalized);
-
-                // Auto-provision CreatorProfile so the storefront, collections, and
-                // /creator/username/{slug} endpoints work immediately after registration
-                // without requiring a separate creatorProfileApi.upsert() call.
-                try
-                {
-                    var existingProfile = await _profiles.GetByUserIdAsync(userId);
-                    if (existingProfile is null)
-                    {
-                        await _profiles.UpsertAsync(userId, normalized, "", null, null, false, true);
-                        _logger.LogInformation("EVENT: CreatorProfileProvisioned userId:{UserId} slug:{Slug}", userId, normalized);
-                    }
-                }
-                catch (Exception profileEx)
-                {
-                    // Non-critical — log but don't fail the set-username transaction
-                    _logger.LogWarning(profileEx, "CreatorProfile auto-provision failed for userId={UserId}; user can create it manually", userId);
-                }
-            }
-
-            await _tx.CommitAsync();
-        }
-        catch (DbUpdateException dbEx) when (
-            dbEx.InnerException?.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) == true ||
-            dbEx.InnerException?.Message.Contains("23505", StringComparison.Ordinal) == true)
-        {
-            await _tx.RollbackAsync();
-            _logger.LogWarning("EVENT: CreatorUsernameConflict userId:{UserId} username:{Username} — DB unique violation", userId, normalized);
-            return ConflictResponse("That username is already taken.");
-        }
-        catch (Exception ex)
-        {
-            await _tx.RollbackAsync();
-            _logger.LogError(ex, "EVENT: SetUsernameFailed userId:{UserId} — rolling back Identity + Creator changes", userId);
-            return ErrorResponse("Failed to complete username setup. Please try again.");
+                "username_taken" => ConflictResponse(result.SafeMessage!),
+                "user_not_found" => NotFoundResponse(result.SafeMessage!),
+                _ => ErrorResponse(result.SafeMessage!),
+            };
         }
 
         // Return a fresh JWT with updated role/username claims
@@ -508,9 +391,9 @@ public class AuthController : BaseController
 
         return OkResponse(new
         {
-            username = normalized,
-            displayName = user.DisplayName,
-            role = user.Role,
+            username = result.Username,
+            displayName = result.DisplayName,
+            role = result.Role,
             token = freshToken
         });
     }
@@ -541,7 +424,7 @@ public class AuthController : BaseController
         if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^[a-z0-9_-]+$"))
             return OkResponse(new { username = normalized, available = false, reason = "Username may only contain letters, numbers, hyphens, and underscores." });
 
-        if (_reservedUsernames.Contains(normalized))
+        if (ReservedUsernames.All.Contains(normalized))
             return OkResponse(new { username = normalized, available = false, reason = "That username is reserved." });
 
         var existing = await _userManager.FindByNameAsync(normalized);
